@@ -3284,7 +3284,9 @@ test('the solar screen is wired end to end and never prints a headline without i
       `${name} renders no Solar pane -- the rail section is 'always', so a route without the pane shows a button that opens nothing`);
   }
   assert.match(paths, /pv:\s*`\$\{DATA\}pv-\$\{area\}\.json`/, 'paths.ts names no solar file');
-  assert.match(app, /pvCache\[name\] = asPvFile\(pvRaw, d\.b\.length, areaOf\(name\)\)/,
+  /* The ward boundary joined the call on 2026-10-03 (KMC Ward 68): a polygon area's file
+     must also carry the ward's own totals, sized to the boundary's roof count. */
+  assert.match(app, /pvCache\[name\] = asPvFile\(pvRaw, d\.b\.length, areaOf\(name\), maskCache\[name\] \?\? null\)/,
     'the ward loader does not validate the solar file against the ward -- '
     + "a wrong-ward file would hand every roof a stranger's figures");
   assert.match(app, /pv\.loss_strict\[i\]/,
@@ -3398,10 +3400,13 @@ test('the payback sheet says "quote" only to deny it, and the ward line carries 
   const app = await readFile(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
   /* "Conservative" overclaimed: valuing every kWh flatters in West Bengal (audit fix 3). */
   assert.doesNotMatch(app, /Conservative city case/, 'the ward line calls a flattering case conservative');
-  assert.match(app, /Whole-ward estimate: every roof that can take \$\{MIN_SYSTEM_KW\} kW or more, at its floor capacity, no subsidy, every kWh valued at \$\{fmtRate\(tariff, COSTS\)\} as if all of it is used: \$\{verdict\}/,
+  /* Since KMC Ward 68 (2026-10-03) the case names the ward and its roofs where a polygon
+     exists ("KMC Ward 68 estimate: every roof in the ward …"), and reads as before elsewhere. */
+  assert.match(app, /\$\{wardMask \? `\$\{wardMask\.name\} estimate` : 'Whole-ward estimate'\}: every roof\$\{wardMask \? ' in the ward' : ''\} that can take \$\{MIN_SYSTEM_KW\} kW or more, at its floor capacity, no subsidy, every kWh valued at \$\{fmtRate\(tariff, COSTS\)\} as if all of it is used: \$\{verdict\}/,
     'the ward payback line no longer states its case, valuation and tariff');
   assert.match(app, /per kW, today's prices`\s*\+ ` · reference defaults as of/, "the ward line drops \"today's prices\"");
-  assert.match(app, /const r = wardRoi\(pv, SOLAR_BASIS, tariff\);/, 'the ward line is computed in the app, not by the tested wardRoi');
+  /* `rows` since Ward 68: the ward's roofs, every roof where there is no polygon. */
+  assert.match(app, /const r = wardRoi\(pv, SOLAR_BASIS, tariff, rows\);/, 'the ward line is computed in the app, not by the tested wardRoi');
   assert.doesNotMatch(app, /wardInput\(/, 'the app builds the ward input itself again, outside the tested wardRoi');
   assert.match(app, /reference defaults as of \$\{oldestAsOf\(SOLAR_BASIS\)\} · \$\{ESTIMATE_TAG\}/,
     'the ward payback line no longer carries the as-of date and the estimate tag');

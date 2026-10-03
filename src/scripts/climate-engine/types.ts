@@ -58,6 +58,19 @@ export const ADMITTED_GRIDS: readonly AdmittedGrid[] = [
      measurement. */
   { n: 192, sizeM: 1400, version: 'hm-grid-192-v1' },
   { n: 384, sizeM: 2800, version: 'hm-grid-384-2800-v1' },
+  /* BALLYGUNGE AS KMC WARD 68 (founder decision 2026-10-02): a 1800 m square
+     centred on the Ward 68 bounding box. 247 cells is 7.2874 m, 0.057 % finer
+     than 1400/192 = 7.2917 m — the nearest whole n to the shared cell size.
+
+     WHY NOT AN EXACT MULTIPLE. 7.2917 m is 175/24 m, so an exact pair needs a
+     size that is a multiple of 175 m: 1750 m (240 cells) or 1925 m (264). 1750 m
+     leaves only 148 m between Ward 68 and the north and south edges, under the
+     150 m margin the founder set; 1925 m is not the 1.8 km domain the founder
+     accepted, and buys 14 % more cells for no physical gain. The physics runs in
+     CELL units (GridSpec.cellMeters is a label), so a 0.057 % shorter cell is a
+     0.057 % change in what one cell of diffusion means — two orders of magnitude
+     inside any calibration uncertainty this repo records. */
+  { n: 247, sizeM: 1800, version: 'hm-grid-247-1800-v1' },
 ];
 
 /** Cells per side for a ward of this size, or undefined if unsupported. */
@@ -357,6 +370,24 @@ export interface SimStats {
  * published yield bracket and packing interval the per-roof ranges scale by, plus
  * the `validated` slot — null until measure-pv-validation.py fills it (§6.3).
  */
+export interface PvTotals {
+  readonly capacity_mwp: number;
+  readonly capacity_mwp_range: readonly [number, number];
+  readonly generation_gwh_yr: number;
+  readonly shading_loss_gwh_yr: number;
+  readonly mean_loss: number;
+  readonly mean_loss_strict: number;
+  readonly mean_loss_trees: number;
+  readonly mean_loss_raised: number;
+}
+
+export interface PvStratum {
+  readonly threshold_kwp: number;
+  readonly n: number;
+  readonly share_losing_5pct: number;
+  readonly mean_loss: number;
+}
+
 export interface PvFile {
   readonly ward: string;
   readonly kwp: readonly number[];
@@ -369,22 +400,18 @@ export interface PvFile {
   readonly specific_yield: number;
   readonly packing_factor: number;
   readonly basis: string;
-  readonly totals: {
-    readonly capacity_mwp: number;
-    readonly capacity_mwp_range: readonly [number, number];
-    readonly generation_gwh_yr: number;
-    readonly shading_loss_gwh_yr: number;
-    readonly mean_loss: number;
-    readonly mean_loss_strict: number;
-    readonly mean_loss_trees: number;
-    readonly mean_loss_raised: number;
-  };
-  readonly stratum: {
-    readonly threshold_kwp: number;
-    readonly n: number;
-    readonly share_losing_5pct: number;
-    readonly mean_loss: number;
-  };
+  readonly totals: PvTotals;
+  readonly stratum: PvStratum;
+  /**
+   * THE WARD'S OWN FIGURES, for an area whose statistics are taken over an
+   * administrative polygon (ward-mask.ts). The arrays above still cover every roof
+   * in the compute square — context roofs shade and are shaded — so `totals` and
+   * `stratum` are the SQUARE's; these two are over the roofs whose footprint
+   * touches the polygon, `buildings` of them. Absent for an area without a polygon,
+   * where `totals` already is the area's. Written by scripts/build-pv-yield.py.
+   */
+  readonly totals_in_ward?: PvTotals & { readonly buildings: number };
+  readonly stratum_in_ward?: PvStratum;
   readonly tiers: {
     readonly screened: boolean;
     readonly yield_bracket_kwh_per_kwp: readonly [number, number];

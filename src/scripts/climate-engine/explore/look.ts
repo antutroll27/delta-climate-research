@@ -180,6 +180,34 @@ export function lookAmounts(studio: boolean, phone: boolean): LookAmounts {
   };
 }
 
+/**
+ * THE WARD BOUNDARY (ward-mask.ts), in both looks: the outline drawn on the
+ * ground, and how the context outside the polygon is held back so a reader sees
+ * the ward's heat first.
+ *
+ * NO HUE. The line is ink on paper in Clay and paper on ink in Dark — one new
+ * neutral (`ink`) and the paper already in `CLAY.hazeCol` — so it can never read
+ * as a heat class, and no warm colour enters the base (the palette test reads
+ * this file). The veil DESATURATES and THINS the heat outside the polygon; it
+ * never shifts a ramp colour inside it, and the ward's own pixels are untouched
+ * (the same rule as contact shading: value and visibility, never the heat colour).
+ */
+export const WARD = {
+  /** The outline's dark neutral. */
+  ink: '#1c2326',
+  /** Drawn widths of the outline's core and its contrasting halo, metres. */
+  lineM: 6, haloM: 14,
+  /** Opacity of the see-through pass: where a roof stands on the line, the line still
+      shows through it this faintly, so the boundary reads whole without reading as a HUD. */
+  xrayAlpha: 0.38,
+  /** Metres above the ground: over the roads' and water's ribbons, under every roof. */
+  liftM: 1.6,
+  /** Outside the polygon, the heat overlay is desaturated by this share and its opacity scaled by `veilAlpha`. */
+  veilDesat: 0.35, veilAlpha: 0.6,
+  /** Out-of-ward buildings: their tint desaturated by this share, then faded toward the paper (Clay) or dimmed (Dark). */
+  buildingDesat: 0.35, buildingFadeClay: 0.2, buildingDimDark: 0.82,
+} as const;
+
 /** Below this height the glint holds a high sun, so a night lake keeps a faint sheen. */
 export const GLINT_MIN_SUN_Y = 0.25;
 

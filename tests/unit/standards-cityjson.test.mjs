@@ -7,14 +7,14 @@ import { buildCityJSON } from '../../src/scripts/standards/cityjson.ts';
 import { wardCollection, wardFeature } from '../../src/scripts/standards/geojson.ts';
 import { MATRIX, PROHIBITED } from '../../src/scripts/standards/matrix.ts';
 
-const cj = buildCityJSON(WARDS[0]);   // ballygunge — 3,527 buildings
+const cj = buildCityJSON(WARDS[0]);   // ballygunge — 7,931 buildings (Ward 68 square, re-pinned 2026-10-02)
 
 test('CityJSON envelope is 2.0 with a transform and one Building per shipped footprint', () => {
   assert.equal(cj.type, 'CityJSON');
   assert.equal(cj.version, '2.0');
   assert.equal(cj.transform.scale.length, 3);
   assert.equal(cj.transform.translate.length, 3);
-  assert.equal(Object.keys(cj.CityObjects).length, 3527, 'one CityObject per row of ballygunge.json');
+  assert.equal(Object.keys(cj.CityObjects).length, 7931, 'one CityObject per row of ballygunge.json');
   for (const o of Object.values(cj.CityObjects)) assert.equal(o.type, 'Building');
 });
 

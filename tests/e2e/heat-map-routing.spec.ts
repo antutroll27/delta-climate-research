@@ -65,7 +65,8 @@ test('each area URL renders its OWN ward, not the default', async ({ page }) => 
   const baruipurCoord = await page.locator('#coord').textContent();
   await page.goto(BALLYGUNGE);
   await expect(page.locator('#pname')).toHaveText('Ballygunge');
-  await expect(page.locator('#coord')).toHaveText('22.528° N · 88.366° E');
+  // Ballygunge's centre is the KMC Ward 68 bbox centre since 2026-10-02.
+  await expect(page.locator('#coord')).toHaveText('22.523° N · 88.369° E');
   expect(await page.locator('#coord').textContent()).not.toBe(baruipurCoord);
 });
 

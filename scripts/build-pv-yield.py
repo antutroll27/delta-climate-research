@@ -43,6 +43,7 @@ import sys
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import pvlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -447,6 +448,52 @@ def main() -> None:
     print(f"  lost to shading      : {(kwp*y).sum()/1e6 - kwh.sum()/1e6:.2f} GWh/yr "
           f"({loss.mean()*100:.2f}% mean)")
 
+    def web_totals(sel: npt.NDArray[np.bool_]) -> dict[str, Any]:
+        """The ward panel's totals over the roofs in `sel` — ONE definition, so the
+        square's block and the ward's block cannot be computed two ways."""
+        return {"capacity_mwp": round(float(kwp[sel].sum()) / 1000, 3),
+                "capacity_mwp_range": [round(float(kwp[sel].sum()) / PACKING_FACTOR * pf / 1000, 3)
+                                       for pf in PACKING_RANGE],
+                "generation_gwh_yr": round(float(kwh[sel].sum()) / 1e6, 3),
+                "shading_loss_gwh_yr": round(float((kwp[sel] * y).sum() - kwh[sel].sum()) / 1e6, 3),
+                "mean_loss": round(float(loss[sel].mean()), 4),
+                "mean_loss_strict": round(float(loss_strict[sel].mean()), 4),
+                "mean_loss_trees": round(float(loss_t[sel].mean()), 4),
+                "mean_loss_raised": round(float(loss_raised[sel].mean()), 4)}
+
+    def web_stratum(sel: npt.NDArray[np.bool_]) -> dict[str, Any]:
+        """Roofs of 3 kWp or more within `sel`: how many, and how badly shaded."""
+        big = sel & (kwp >= 3.0)
+        return {"threshold_kwp": 3.0, "n": int(big.sum()),
+                "share_losing_5pct": round(float((loss[big] >= 0.05).mean()), 4),
+                "mean_loss": round(float(loss[big].mean()), 4)}
+
+    every_roof: npt.NDArray[np.bool_] = np.ones(len(area), dtype=np.bool_)
+    in_ward_sel: npt.NDArray[np.bool_] | None = None
+
+    # WARD 68 (2026-10-02): for a ward with an administrative polygon the per-building
+    # arrays still cover every roof in the compute square (context roofs shade and are
+    # shaded), but the WARD total is over the roofs that touch the polygon -- the
+    # `inWard` flag fetch-buildings.py writes, row-aligned with these arrays.
+    in_ward_block: dict[str, Any] = {}
+    fp_path = os.path.join(ROOT, "data", "geometry", f"{args.ward}-footprints.json")
+    with open(fp_path) as fh:
+        fp_rows = json.load(fh)["b"]
+    if fp_rows and "inWard" in fp_rows[0]:
+        if len(fp_rows) != len(area):
+            sys.exit(f"  {len(fp_rows)} footprints vs {len(area)} shaded roofs — the inWard "
+                     f"flags would not line up")
+        sel = np.asarray([bool(r["inWard"]) for r in fp_rows])
+        in_ward_sel = sel
+        in_ward_block = {"totals_in_ward": {
+            "rule": "roofs whose footprint INTERSECTS the ward polygon (inWard)",
+            "buildings": int(sel.sum()),
+            "gross_roof_ha": round(float(area[sel].sum()) / 1e4, 2),
+            "usable_roof_ha": round(float(usable[sel].sum()) / 1e4, 2),
+            **web_totals(sel)}}
+        print(f"  in the ward polygon  : {int(sel.sum())} roofs · "
+              f"{kwp[sel].sum()/1000:.2f} MWp · {kwh[sel].sum()/1e6:.2f} GWh/yr")
+
     if args.check:
         print("\n  --check: not written")
         return
@@ -497,6 +544,7 @@ def main() -> None:
                        "capacity_mwp": round(float(kwp.sum()) / 1000, 3),
                        "generation_gwh_yr": round(float(kwh.sum()) / 1e6, 3),
                        "shading_loss_gwh_yr": round(float((kwp * y).sum() - kwh.sum()) / 1e6, 3)},
+            **in_ward_block,
             "per_building_kwp": [round(float(v), 3) for v in kwp],
             "per_building_kwh_yr": [round(float(v), 0) for v in kwh],
         }, fh, indent=2)
@@ -537,17 +585,12 @@ def main() -> None:
             "packing_factor": PACKING_FACTOR,
             "tiers": tiers_block(existing_web),
             # A5: the ward panel prints the laboratory's numbers, never re-derived in the browser
-            "totals": {"capacity_mwp": round(float(kwp.sum()) / 1000, 3),
-                       "capacity_mwp_range": [round(float(kwp.sum()) / PACKING_FACTOR * pf / 1000, 3) for pf in PACKING_RANGE],
-                       "generation_gwh_yr": round(float(kwh.sum()) / 1e6, 3),
-                       "shading_loss_gwh_yr": round(float((kwp * y).sum() - kwh.sum()) / 1e6, 3),
-                       "mean_loss": round(float(loss.mean()), 4),
-                       "mean_loss_strict": round(float(loss_strict.mean()), 4),
-                       "mean_loss_trees": round(float(loss_t.mean()), 4),
-                       "mean_loss_raised": round(float(loss_raised.mean()), 4)},
-            "stratum": {"threshold_kwp": 3.0, "n": int((kwp >= 3.0).sum()),
-                        "share_losing_5pct": round(float((loss[kwp >= 3.0] >= 0.05).mean()), 4),
-                        "mean_loss": round(float(loss[kwp >= 3.0].mean()), 4)},
+            "totals": web_totals(every_roof),
+            "stratum": web_stratum(every_roof),
+            # WARD 68: the ward panel's headline. `totals`/`stratum` above are the
+            # compute SQUARE's (every roof drawn); a ward with a polygon reports these.
+            **({"totals_in_ward": {**web_totals(in_ward_sel), "buildings": int(in_ward_sel.sum())},
+                "stratum_in_ward": web_stratum(in_ward_sel)} if in_ward_sel is not None else {}),
             "basis": "screening estimate - NASA POWER irradiance, Mumbai packing factor, canopy "
                      "shading from Meta/WRI CHM v2 (A1 mask, crowns 70% opaque, canopy heights carry the model's 3 m MAE, not propagated, 0.5 m grid), "
                      "no site uncertainty model, not bankable",

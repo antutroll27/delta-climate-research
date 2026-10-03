@@ -51,7 +51,7 @@ interface Product {
 export const PRODUCTS: readonly Product[] = [
   {
     id: 'surface', title: 'Surface: vegetation fraction and broadband albedo',
-    description: 'Per-cell vegetation fraction and Liang (2001) broadband albedo on the 140x140 ward grid, '
+    description: 'Per-cell vegetation fraction and Liang (2001) broadband albedo on each ward\'s own 10 m grid, '
       + 'from a multi-year Sentinel-2 L2A median composite.',
     licence: 'proprietary',
     start: '2021-01-01T00:00:00Z', end: '2025-12-31T23:59:59Z',
@@ -160,6 +160,16 @@ function assetsFor(w: Ward, p: Product): Record<string, unknown> {
   };
 }
 
+/**
+ * The surface raster's grid for this ward, cells per side: 10 m cells over the ward's
+ * own square (scripts/_sentinel.py `grid_for`). PER WARD, because the wards are no
+ * longer one size: 140 over a 1.4 km window, 180 over Ballygunge's 1.8 km square
+ * (KMC Ward 68). A test holds it to each shipped PNG's real size.
+ */
+export function surfaceGridN(w: Pick<Ward, 'footprintM'>): number {
+  return Math.round(w.footprintM / 10);
+}
+
 export function stacItem(w: Ward, p: Product) {
   const [west, south, east, north] = wardBbox(w);
   return {
@@ -169,7 +179,9 @@ export function stacItem(w: Ward, p: Product) {
     bbox: [west, south, east, north],
     properties: {
       title: `${plain(w.name)} — ${p.title}`,
-      description: p.description,
+      description: p.id === 'surface'
+        ? `${p.description} This ward: ${surfaceGridN(w)} × ${surfaceGridN(w)} cells over its ${(w.footprintM / 1000).toFixed(1)} km square.`
+        : p.description,
       // null with start/end is the correct STAC form for a composite: there is no
       // single acquisition instant, and inventing one would be a fabricated date
       datetime: null,

@@ -71,7 +71,7 @@ The work was built on branch `feat/aqi-kolkata` and merged to `main` in PR #33 o
 
 - **Every CPCB monitor in India stopped reporting to OpenAQ at 2026-09-24 17:30 UTC.** On the same day, data.gov.in's CPCB API returned 502/504. The outage was still in place on 26 September.
 - As a result, **both stations are stale**. On the first live run, Ballygunge showed AQI 38 and Barrackpore AQI 34, both "Not Live · 45 h Old" (AQI-R41). If the outage passes 7 days (2026-10-01 17:30 UTC), both will show "Government feed unavailable". That is the designed behaviour, not a fault.
-- Ballygunge (`10918`) and Barrackpore (`3409509`) are WBPCB monitors about 1.0 km from their OBOS centres, inside the 3 km windows. Baruipur has no station.
+- Ballygunge (`10918`) and Barrackpore (`3409509`) are WBPCB monitors. Barrackpore's is 1.0 km from its OBOS centre, inside the 3 km window. Ballygunge's was too until 3 October; since Ballygunge became KMC Ward 68 (founder, 2 October) and its centre moved to the ward's, the monitor is 1.7 km away, in KMC Ward 69, outside Ward 68 and 53 m beyond the 3 km window. It is kept as the nearest official monitor and labelled so (AQI-R20). Baruipur has no station.
 - OpenAQ's raw values match the OpenCity archive reading for reading, but its completeness varies. It was about 89 % of quarter-hours at Ballygunge over the 31 days before the outage (AQI-R42). Hourly means are built from raw data, never from OpenAQ's `/hours`.
 - Both stations lost the same hours on 27–29 Aug 2026. The gap was upstream of OBOS (AQI-R45).
 - A cold fetch takes about 7 s, and the CDN cache carries the load (AQI-R43).

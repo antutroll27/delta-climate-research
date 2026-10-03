@@ -27,8 +27,11 @@ const date = (x: unknown): boolean => str(x) && Number.isFinite(Date.parse(x));
 const oneOf = (xs: readonly string[], x: unknown): boolean => str(x) && xs.includes(x);
 const arrOf = (x: unknown, ok: (v: unknown) => boolean): boolean => Array.isArray(x) && x.every(ok);
 
+/* A monitor outside the window must say where it is: a body claiming `outside_window`
+   with no placement would paint a distance with nothing saying it is not in the area. */
 const isStation = (s: unknown): boolean =>
-  obj(s) && str(s['id']) && str(s['name']) && fin(s['lat']) && fin(s['lon']) && fin(s['distance_m']) && s['inside'] === 'window_3km';
+  obj(s) && str(s['id']) && str(s['name']) && fin(s['lat']) && fin(s['lon']) && fin(s['distance_m'])
+  && (s['inside'] === 'window_3km' || (s['inside'] === 'outside_window' && str(s['placement']) && s['placement'] !== ''));
 
 const isReading = (q: unknown): boolean =>
   obj(q) && oneOf(POLLUTANTS, q['parameter']) && finOrNull(q['value']) && oneOf(UNITS, q['unit']) &&

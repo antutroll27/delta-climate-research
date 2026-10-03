@@ -80,11 +80,11 @@ function compileOverlay(frag) {
   assert.doesNotMatch(body, /\bvec[234]\b|texture2D|gl_/, 'overlay shader: GLSL left after the rewrite');
   // eslint-disable-next-line no-new-func
   const fn = new Function('col', 'uOp', 'uOpK', 'cool', 'edge', 'AO', 'uAOW', 'uAOAmt', 'lookHaze', 'uHaze', 'uHazeCol',
-    'smoothstep', 'clamp', 'min', body);
+    'smoothstep', 'clamp', 'min', 'wIn', body);
   const smoothstep = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
   const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
   return (p) => fn(p.col, p.uOp, p.uOpK, p.cool ?? 0, p.edge ?? 1, p.ao2, p.uAOW, p.uAOAmt, () => p.haze ?? 0, p.uHaze ?? 0,
-    p.uHazeCol ?? 0, smoothstep, clamp, Math.min);
+    p.uHazeCol ?? 0, smoothstep, clamp, Math.min, p.wIn ?? 1);
 }
 
 /** What the framebuffer holds after the material's own blend factors are applied. */
@@ -347,4 +347,35 @@ test('the ?lab=1 map hook is local-only', async () => {
   const app = await readFile(new URL('heat-map-app.ts', ENGINE_ROOT), 'utf8');
   assert.match(app, /if \(LAB_HOOK\) labWindow\.__obosMap = map;/, 'the hook is no longer gated by LAB_HOOK');
   assert.match(app, /if \(labWindow\.__obosMap === map\) delete labWindow\.__obosMap;/, 'the hook is not cleared on dispose');
+});
+
+/* ── the KMC Ward 68 veil (2026-10-03) ──────────────────────────────────────────
+   `wIn` is the heat texture's alpha: the ward mask. Inside the ward the overlay must
+   be exactly what it was; outside, the tint thins by WARD.veilAlpha and the two rules
+   above still hold. */
+test('the ward veil changes no pixel inside the ward, and only thins the context outside it', async () => {
+  const { WARD } = await import('../../src/scripts/climate-engine/explore/look.ts');
+  const material = overlayMaterial();
+  const run = compileOverlay(OVERLAY_FRAG);
+  for (const col of [0.204, 0.435, 0.69, 0.898]) {
+    for (const ao2 of AO_SAMPLES) {
+      for (const haze of [0, 0.8]) {
+        const p = { col, ...HEAT_ON, ao2, haze, ...AO_UNIFORMS, uHazeCol: 0.9 };
+        const inside = run({ ...p, wIn: 1 }), plain = run(p);
+        assert.deepEqual(inside, plain, 'inside the ward the veil moved a pixel');
+        const outside = run({ ...p, wIn: 0 });
+        const a = Math.min(0.92, HEAT_ON.uOp * HEAT_ON.uOpK);
+        /* the tint term outside is c·a·veilAlpha — still no AO or haze in it */
+        assert.ok(Math.abs(composite(material, run({ ...p, uHazeCol: 0, wIn: 0 }), 0) - col * a * WARD.veilAlpha) < 1e-9, 'outside, the tint carries AO or haze');
+        assert.ok(outside[1] < inside[1], 'outside the ward the context is not thinner');
+      }
+    }
+  }
+  /* and with the tint drawn outside, the AO still changes no pixel */
+  for (const dst of PAPER) {
+    const ref = composite(material, run({ col: 0.69, ...HEAT_ON, ao2: AO_SAMPLES[0], ...AO_UNIFORMS, uHaze: 0, wIn: 0 }), dst);
+    for (const ao2 of AO_SAMPLES.slice(1)) {
+      assert.ok(Math.abs(composite(material, run({ col: 0.69, ...HEAT_ON, ao2, ...AO_UNIFORMS, uHaze: 0, wIn: 0 }), dst) - ref) < 1e-9, 'outside the ward the AO moved a tinted pixel');
+    }
+  }
 });

@@ -10,7 +10,9 @@ import { test, expect, type Page } from '@playwright/test';
    selected building never projects, so the tests that need the card force the
    layer first, as a reader on a weak GPU can by pressing "3D Relief". */
 const BALLYGUNGE = '/heat-map/in/kolkata/ballygunge/';
-const HEADER = 'idx,lat,lon,footprint_m2,kwp,kwh_yr,kwh_low,kwh_high,kwp_high,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,tier,basis';
+/* `in_ward` since Ballygunge became KMC Ward 68 (2026-10-02): the square holds context
+   roofs, and the column marks the ward's. Only an area with a polygon has it. */
+const HEADER = 'idx,lat,lon,footprint_m2,kwp,kwh_yr,kwh_low,kwh_high,kwp_high,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,tier,in_ward,basis';
 
 async function boot(page: Page) {
   await page.goto(BALLYGUNGE);
@@ -97,7 +99,8 @@ test.describe('the solar screen', () => {
     const text = await readFile((await download.path()) as string, 'utf8');
     const lines = text.trim().split('\n');
     expect(lines[0]).toBe(HEADER);
-    expect(lines.length).toBe(1 + 3527);           // one row per Ballygunge building
+    // one row per Ballygunge building: 7,931 since it became the KMC Ward 68 square (2026-10-02)
+    expect(lines.length).toBe(1 + 7931);
     /* FIELD COUNT, WITHOUT A CSV PARSER. `basis` is the one quoted field and the
        only one that can carry a comma of its own, and it is always LAST -- so
        every field before it is comma-safe, and slicing there instead of counting
@@ -115,6 +118,9 @@ test.describe('the solar screen', () => {
     expect(fixed[columns.indexOf('tariff_per_kwh')]).toBe('10.00');   // the tariff the reader set
     expect(fixed[columns.indexOf('currency')]).toBe('INR');           // the scope's currency, never typed
     expect(fixed[columns.indexOf('tier')]).toBe('screened');          // Ballygunge ships tiers.validated: null
+    // the ward's roofs are marked: 2,207 of the square's 7,931 touch KMC Ward 68
+    const inWard = lines.slice(1).filter((l) => l.split(',')[columns.indexOf('in_ward')] === '1').length;
+    expect(inWard).toBe(2207);
     // the basis rides EVERY row, not just row 0 -- the join reassembles the one
     // quoted field, which carries commas of its own.
     expect(lines[2].split(',').slice(headerFieldCount - 1).join(',')).toContain('screening');
@@ -152,10 +158,17 @@ test.describe('the solar screen', () => {
        measured, before the camera move existed). */
     await page.mouse.move(canvas.x + 40, canvas.y + 40);
     for (let i = 0; i < 6; i += 1) { await page.mouse.wheel(0, -400); await page.waitForTimeout(150); }
-    await page.waitForTimeout(800);
+    /* PAST THE ORBIT'S RESUME, ON PURPOSE. The idle orbit restarts 2.5 s after the last
+       touch of the canvas, and its per-frame setBearing (a jumpTo, which stop()s) used
+       to cancel this row's easeTo — measured, 2 ms after it began — leaving the camera
+       zoomed away and the card at opacity 0. This used to wait 800 ms, so whether the
+       click landed before or after the orbit came back was decided by machine load:
+       the flake. Waiting past it makes the test exercise that path every run. */
+    await page.waitForTimeout(3_000);
     await page.locator('#solList tr').nth(2).click();
-    await page.waitForTimeout(1_800);
-    await expect(page.locator('#bcard')).toHaveCSS('opacity', '1');
+    /* Polled, not slept: the ease is 700 ms, but on a software renderer a frame can
+       take 400 ms; the camera has arrived when the card is shown. */
+    await expect.poll(async () => page.locator('#bcard').evaluate((el) => getComputedStyle(el).opacity), { timeout: 8_000 }).toBe('1');
     const after = (await page.locator('#bcard').boundingBox())!;
     expect(after.x).toBeGreaterThanOrEqual(canvas.x);
     expect(after.x + after.width).toBeLessThanOrEqual(canvas.x + canvas.width);

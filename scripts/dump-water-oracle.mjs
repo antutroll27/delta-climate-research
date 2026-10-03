@@ -46,15 +46,19 @@ const OUT_DIR = 'tests/fixtures/water-oracle';
 const DATA_DIR = 'public/heat-map/data';
 const WARDS = ['ballygunge', 'baruipur', 'barrackpore'];
 
-/** The Sentinel-2 surface grid measure-spatial-accuracy.py works at — there it is
- *  _sentinel.uniform_grid(_types.WARDS.values()), derived from the 1400 m ward
- *  footprint rather than a baked constant. Every ward in this oracle is 1400 m. */
+/** The Sentinel-2 surface grid and the solver grid for a 1400 m ward — the
+ *  top-level `surfaceGrid` / `simGrid` of the fixture, kept for the synthetic
+ *  cases' context. Taken from the admitted set rather than written as a literal,
+ *  so the fixture cannot drift from the shipped contract. */
 const SURFACE_GRID = 140;
-
-/** The solver grid these wards run on. Every ward in this oracle is 1400 m, so
- *  the pair is 192-over-1400 — taken from the admitted set rather than written
- *  as a literal, so the fixture cannot drift from the shipped contract. */
 const SIM_GRID = requireGrid(1400).n;
+
+/** EACH SHIPPED WARD AT ITS OWN TWO GRIDS since 2026-10-02, when Ballygunge became
+ *  the 1800 m square around KMC Ward 68 (247 solver cells, 180 surface cells). A
+ *  1400 m grid laid over an 1800 m ward would still be a valid parity case, but it
+ *  would not be the grid the browser or the laboratory ever run that ward at. The
+ *  1400 m wards get exactly the 192 / 140 they always had. */
+const gridsFor = (sizeM) => [requireGrid(sizeM).n, sizeM / 10];
 
 /** Plain array of doubles, so JSON round-trips the float32 values exactly. */
 const nums = (a) => Array.from(a, (v) => v);
@@ -166,7 +170,7 @@ for (const ward of WARDS) {
   const water = JSON.parse(readFileSync(`${DATA_DIR}/${ward}-water.json`, 'utf8'));
   const sizeM = JSON.parse(readFileSync(`${DATA_DIR}/${ward}.json`, 'utf8')).sizeM;
   const grids = {};
-  for (const n of [SIM_GRID, SURFACE_GRID]) {
+  for (const n of gridsFor(sizeM)) {
     const out = rasterizeWardWater(water, sizeM, n);
     const rowSums = new Float64Array(n), colSums = new Float64Array(n);
     let sum = 0, wet = 0;
@@ -218,8 +222,9 @@ for (const [name, c] of Object.entries(cases)) {
     + `  area ${c.sum.toFixed(2)} cells`);
 }
 for (const [ward, c] of Object.entries(wardCases)) {
-  const g = c.grids[SIM_GRID];
+  const sim = gridsFor(c.sizeM)[0];
+  const g = c.grids[sim];
   console.log(`    ${ward.padEnd(28)} ${c.rings} rings  mean fraction `
-    + `${(g.sum / (SIM_GRID ** 2)).toFixed(5)}  wet cells ${g.wet}`);
+    + `${(g.sum / (sim ** 2)).toFixed(5)}  wet cells ${g.wet}`);
 }
 console.log(`\n  wrote ${OUT_DIR}/oracle.json`);

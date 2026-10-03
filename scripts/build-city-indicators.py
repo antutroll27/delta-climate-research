@@ -55,6 +55,9 @@ from PIL import Image
 
 from _stamp import stamp
 
+import _types
+import _wardmask
+
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 DATA = os.path.join(ROOT, "public", "heat-map", "data")
 OUT = os.path.join(ROOT, "data", "indicators", "iso-city-indicators.json")
@@ -85,13 +88,23 @@ def ward_indicators(ward: str, albedo_range: tuple[float, float]) -> dict[str, A
     albedo = _band(os.path.join(DATA, f"{ward}-surface.png"), 1, *albedo_range)
     if canopy.shape != albedo.shape:
         raise ValueError(f"{ward}: canopy {canopy.shape} vs surface {albedo.shape} -- grids must match")
+    # A ward with an administrative polygon is measured over the polygon's cells
+    # (centre inside, north-up like the PNGs) -- its land area, not the square's.
+    inside = _wardmask.mask_grid(_types.WARDS[ward], canopy.shape[0], rows="north-up")
+    if inside is not None:
+        canopy, albedo = canopy[inside], albedo[inside]
 
     def pct(mask: "np.ndarray[Any, Any]") -> float:
         return round(float(np.mean(mask)) * 100.0, 2)
 
+    extra: dict[str, Any] = {}
+    if inside is not None:
+        extra["domain"] = (f"KMC Ward {_wardmask.POLYGONS[ward][1]} polygon: the {int(inside.sum()):,} "
+                           f"of {inside.size:,} grid cells whose centre lies inside it")
     return {
         "ward": ward,
         "gridCells": int(canopy.size),
+        **extra,
         "iso37123_8_8": {
             "indicator": "Percentage of city land area covered by tree canopy",
             "standard": "ISO 37123:2019, 8.8",
@@ -146,6 +159,8 @@ def main() -> int:
             [os.path.join(DATA, f"{w}-{k}.png") for w in WARDS for k in ("canopy", "surface")]
             + [os.path.join(DATA, "surface-meta.json"),
                os.path.join(os.path.dirname(os.path.abspath(__file__)), "build-city-indicators.py")]
+            # the ward polygons the masked wards are measured over
+            + sorted({os.path.join(ROOT, rel) for rel, _n in _wardmask.POLYGONS.values()})
         ),
         "deliberatelyNotPublished": [
             {"standard": "ISO 37123:2019, 8.1",

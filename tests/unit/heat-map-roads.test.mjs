@@ -175,9 +175,12 @@ const meshHash = (mesh) => createHash('sha256')
   .update(Buffer.from(mesh.indices.buffer, mesh.indices.byteOffset, mesh.indices.byteLength))
   .digest('hex');
 
+/* Ballygunge re-pinned 2026-10-02: its roads file was REGENERATED (scripts/fetch-roads.py)
+   for the 1800 m Ward 68 square, 1,091 ways — different input, so a different mesh. The
+   builder is unchanged: the other five wards' hashes below are the original capture. */
 const ROAD_MESH_HASHES = {
-  'ballygunge/flat': 'cfcef5df4033745a43001f9610c41042210912cc66aea78636d55c0d5d935e02',
-  'ballygunge/slope': '01ab6f862feea2e21c518e00cde4d6a94d2f748f9fee8e0c3fa970e30e75eabf',
+  'ballygunge/flat': '5b305bd6f9adf73a71cc3d670d7077935eeac7e2c28a9e62ed289fc01cef9dc2',
+  'ballygunge/slope': '7b074e7556976f409ca4d26c31cc2acee887ec9254d2a574ffba79b9ee6040a8',
   'baruipur/flat': 'ced004ce3763f4520efdb6077630cf69d32752f5fa931b6afcb8f568472ce803',
   'baruipur/slope': 'e3d76b1596cf2e45bbbe0c12e60b7c2ef27c9ca077c199195401f5397edd76ad',
   'barrackpore/flat': 'a1c6f0a386f17546b1b10fc8ea6da0c3aea725850c796356421f99059ac77146',

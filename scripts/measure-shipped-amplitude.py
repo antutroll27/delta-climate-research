@@ -48,13 +48,30 @@ if HERE not in sys.path:
 import _types  # noqa: E402
 import _physics  # noqa: E402
 import _water  # noqa: E402
+import _wardmask  # noqa: E402
 from _ecostress import target_grid, token  # noqa: E402
 
 ROOT = os.path.join(HERE, "..")
 OUT = os.path.join(ROOT, "data", "calibration", "shipped-amplitude.json")
 
-#: Must match SIM_N in heat-map-model.ts. Asserted against the dump, not trusted.
+#: Kolkata's 1400 m solver grid. PER WARD SINCE 2026-10-03: Ballygunge's 1800 m
+#: square runs at 247 (ADMITTED_GRIDS in types.ts), so the grid each ward is driven
+#: at comes from `sim_n`, which asks the shipped `requireGrid` rather than keeping
+#: a second table here. This constant is the 1400 m answer, kept for reference.
 SIM_N = 192
+
+
+def sim_n(ward: _types.Ward) -> int:
+    """The solver grid the BROWSER runs this ward at — `requireGrid(sizeM).n` from
+    types.ts, read through node so there is no mirrored table to drift."""
+    js = ("const T = await import('./src/scripts/climate-engine/types.ts');"
+          f"console.log(T.requireGrid({int(ward.footprint_m)}).n);")
+    r = subprocess.run(["node", "--experimental-strip-types", "--input-type=module", "-e", js],
+                       capture_output=True, text=True, cwd=ROOT)
+    if r.returncode != 0:
+        sys.exit(f"  could not read requireGrid({ward.footprint_m}) from types.ts:\n"
+                 f"{r.stderr[-800:]}")
+    return int(r.stdout.strip().splitlines()[-1])
 
 
 def _load_sibling() -> Any:
@@ -79,12 +96,12 @@ def upsample(a: npt.NDArray[np.float32], n: int) -> npt.NDArray[np.float32]:
 
 
 def run_shipped(layers: dict[str, npt.NDArray[np.float32]], params: dict[str, float],
-                steps: int) -> npt.NDArray[np.float64]:
-    """Drive the real TsHeatSim and read its field back."""
+                steps: int, n: int = SIM_N) -> npt.NDArray[np.float64]:
+    """Drive the real TsHeatSim on an n x n grid and read its field back."""
     with tempfile.TemporaryDirectory() as td:
         ip, op = os.path.join(td, "in.json"), os.path.join(td, "out.json")
         with open(ip, "w") as fh:
-            json.dump({"n": SIM_N, "steps": steps, "params": params,
+            json.dump({"n": n, "steps": steps, "params": params,
                        "layers": {k: v.astype(float).ravel().tolist()
                                   for k, v in layers.items()}}, fh)
         r = subprocess.run(
@@ -93,9 +110,9 @@ def run_shipped(layers: dict[str, npt.NDArray[np.float32]], params: dict[str, fl
         if r.returncode != 0:
             sys.exit(f"  sim-field-dump failed:\n{r.stderr[-1500:]}")
         d = json.load(open(op))
-    if d["n"] != SIM_N:
-        sys.exit(f"  the shipped SIM_N is {d['n']}, not {SIM_N} — fix the constant here")
-    return np.asarray(d["field"], dtype=np.float64).reshape(SIM_N, SIM_N)
+    if d["n"] != n:
+        sys.exit(f"  the solver ran at {d['n']}, not the requested {n}")
+    return np.asarray(d["field"], dtype=np.float64).reshape(n, n)
 
 
 def main() -> None:
@@ -113,7 +130,11 @@ def main() -> None:
     full: dict[str, dict[str, npt.NDArray[np.float32]]] = {}
     coarse: dict[str, dict[str, npt.NDArray[np.float32]]] = {}
     grid_wh: tuple[int, int] | None = None
+    n_of = {wid: sim_n(w) for wid, w in _types.WARDS.items()}
+    # The ward's own ECOSTRESS pixels (Ward 68's polygon for Ballygunge), or None.
+    pixels = {wid: msa.ward_pixels(w) for wid, w in _types.WARDS.items()}
     for wid, w in _types.WARDS.items():
+        n = n_of[wid]
         veg, alb = msa.surface_layers(wid)
         built = msa.built_layer(wid)
         # WATER COMES THROUGH `msa.water_layer`, WHICH APPLIES THE SHIPPED GATE. This
@@ -128,9 +149,9 @@ def main() -> None:
         # the other three. They have no choice — a 140-grid PNG and a 140-grid cache.
         # Polygons have no native resolution, so asking for the solver's grid gives the
         # browser's answer exactly instead of a nearest-neighbour approximation to it.
-        full[wid] = {"veg": upsample(veg, SIM_N), "albedo": upsample(alb, SIM_N),
-                     "built": upsample(built, SIM_N),
-                     "water": msa.water_layer(wid, SIM_N)}
+        full[wid] = {"veg": upsample(veg, n), "albedo": upsample(alb, n),
+                     "built": upsample(built, n),
+                     "water": msa.water_layer(wid, n)}
         _tf, W, H = target_grid(_types.ward_bounds(w))
         grid_wh = (W, H)
         coarse[wid] = {"veg": msa.area_downsample(veg, H, W),
@@ -140,8 +161,8 @@ def main() -> None:
     # non-empty. It always is, so this was never a live failure — but the empty
     # case is now stated rather than left to a NameError.
     assert grid_wh is not None, "no wards configured"
-    print(f"  layers at {SIM_N}x{SIM_N} for the sim, "
-          f"{grid_wh[0]}x{grid_wh[1]} for the comparison\n")
+    print(f"  layers at {n_of} cells per side for the sim, "
+          f"{grid_wh[0]}x{grid_wh[1]} (last ward) for the comparison\n")
 
     rows: list[dict[str, Any]] = []
     for i, sc in enumerate(scenes, 1):
@@ -164,11 +185,11 @@ def main() -> None:
             obs = msa.measured_field(w, sc.date, sc.phase, tok)
             if obs is None:
                 continue
-            m = np.isfinite(obs)
+            m = msa.scored_cells(w, obs, pixels[wid])
             if int(m.sum()) < msa.MIN_CELLS:
                 continue
 
-            shipped = run_shipped(full[wid], params, 600)
+            shipped = run_shipped(full[wid], params, 600, n_of[wid])
             # LIKE-FOR-LIKE NULL. Diffusion raises r against a coarse, noisy
             # target for ANY field, so scoring a diffused model against an
             # UN-diffused vegetation map would hand the model a free win. This
@@ -184,7 +205,7 @@ def main() -> None:
                 "built": np.full_like(full[wid]["built"], float(full[wid]["built"].mean())),
                 "water": np.full_like(full[wid]["water"], float(full[wid]["water"].mean())),
             }
-            veg_shipped = run_shipped(flat, params, 600)
+            veg_shipped = run_shipped(flat, params, 600, n_of[wid])
             vegs_c = msa.area_downsample(veg_shipped.astype(np.float32), obs.shape[0], obs.shape[1])
             # to the ECOSTRESS grid, the same area-mean the offline path uses
             ship_c = msa.area_downsample(shipped.astype(np.float32), obs.shape[0], obs.shape[1])
@@ -251,7 +272,7 @@ def main() -> None:
             # The ward's REAL open water, not the layer the solver was handed — those
             # differ whenever WATER_LAYER_ENABLED is off, and the label has to say what
             # the ward contains for the split to mean anything.
-            "open_water_fraction": round(float(msa.water_coverage(wid, SIM_N).mean()), 5),
+            "open_water_fraction": round(float(msa.water_coverage(wid, n_of[wid]).mean()), 5),
             "water_in_solve": bool(_water.LAYER_ENABLED),
             "sd_shipped_at_obs_k": round(mean("sd_shipped_at_obs_k", s), 3),
             "sd_observed_k": round(mean("sd_observed_k", s), 3),
@@ -280,6 +301,12 @@ def main() -> None:
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump({"summary": summary, "by_ward": by_ward, "rows": rows,
+                   # What each ward is scored on (2026-10-03) and the solver grid it ran at.
+                   "domain": {wid: {"sim_n": n_of[wid],
+                                    "scored_on": (f"KMC ward {_wardmask.POLYGONS[wid][1]} polygon, "
+                                                  f"{int(px.sum())} of {px.size} ECOSTRESS pixels"
+                                                  if px is not None else "the whole square")}
+                              for wid, px in pixels.items()},
                    "note": ("The shipped map runs TsHeatSim (diffusion, RESET_BURST steps); "
                             "the published within-ward figures score the per-cell equilibrium. "
                             "This measures both against the same observation."),

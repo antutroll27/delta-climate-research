@@ -322,3 +322,24 @@ test('the deployed handler reads AIR_CPCB_FEED: unset means no CPCB request, "on
     if (saved.flag === undefined) delete process.env.AIR_CPCB_FEED; else process.env.AIR_CPCB_FEED = saved.flag;
   }
 });
+
+/* ── Ballygunge as KMC Ward 68: EVERY response path carries the honest station ── */
+import { stationFor, stationPayload } from '../../src/lib/aqi/stations.ts';
+import { currentFromFeed, parseFeed, pick } from '../../src/lib/aqi/cpcb-feed.ts';
+
+test('every path that names Ballygunge\'s monitor says it is outside Ward 68, at its true distance', async () => {
+  const st = stationFor('in/kolkata/ballygunge');
+  const honest = stationPayload(st);
+  assert.equal(honest.inside, 'outside_window');
+  /* 1. the upstream-error state, built in the handler itself */
+  const r = res();
+  const orig = console.error; console.error = () => {};
+  try { await handle({ method: 'GET', query: { area: 'in/kolkata/ballygunge' } }, r, { key: 'k', fetch: async () => new Response('x', { status: 503 }), cache: new Map(), inflight: new Map(), feedCache: freshFeed(), cpcbFeed: true }); }
+  finally { console.error = orig; }
+  assert.deepEqual(r.body.current.station, honest, 'the upstream-error path asserts a different station');
+  /* 2. CPCB's own feed */
+  const feed = parseFeed(FEED_XML);
+  const fromFeed = currentFromFeed(pick(feed, st), 'in/kolkata/ballygunge', st, new Date('2026-09-27T00:30:00Z'));
+  assert.ok(fromFeed, 'the fixture feed gives no current state for Ballygunge');
+  assert.deepEqual(fromFeed.station, honest, 'the CPCB-feed path asserts a different station');
+});

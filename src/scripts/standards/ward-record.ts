@@ -21,10 +21,10 @@
  * bbox published on the wire that differs from the one the science ran on would
  * be the quiet kind of wrong. The unit test pins the two together.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { WARDS, type Ward } from '../../data/wards.ts';
-import { ACCURACY, HEIGHTS, SPATIAL } from '../climate-engine/accuracy.ts';
+import { WARDS, wardLatLon, type Ward } from '../../data/wards.ts';
+import { ACCURACY, HEIGHTS, HEIGHTS_EVIDENCE_BASIS, PEAK_EVIDENCE_BASIS, SPATIAL } from '../climate-engine/accuracy.ts';
 
 /** Mirrors scripts/_types.py:m_per_deg — spherical WGS-84, good to <0.1 % over km. */
 const M_PER_DEG_LON_EQUATOR = 111_320;
@@ -96,6 +96,10 @@ export const LICENCES: Readonly<Record<string, { readonly licence: string; reado
     licence: 'NLOD-2.0 / CC-BY-4.0', holder: 'Norwegian Meteorological Institute', url: 'https://api.met.no/doc/License',
     note: 'live ambient readout only.',
   },
+  'DataMeet Municipal Spatial Data': {
+    licence: 'CC-BY-SA-2.5-IN', holder: 'DataMeet community', url: 'https://github.com/datameet/Municipal_Spatial_Data',
+    note: 'Kolkata/kolkata.geojson, the KMC 141-ward scheme (commit cd52891). Defines Ballygunge as KMC Ward 68: every ward statistic is taken inside this polygon. KMC now has 144 wards; this is the 2018 map. Share-alike: a derivative of the polygon itself carries CC BY-SA 2.5 India.',
+  },
   'WSF3D': {
     licence: 'CC-BY-4.0', holder: 'DLR — World Settlement Footprint 3D (WSF3D) © DLR', url: 'https://geoservice.dlr.de/web/datasets/wsf_3d',
     note: 'Dubai building heights (TanDEM-X). Not yet shipped in a ward record.',
@@ -151,6 +155,29 @@ const KOLKATA_LAYERS: readonly { readonly layer: string; readonly dataset: strin
   { layer: 'height validation',           dataset: 'ICESat-2' },
 ];
 
+/* ---------------------------------------------------------------- boundary */
+
+/** The fields of public/heat-map/data/{id}-ward.json this record reads. */
+interface WardMaskFile {
+  readonly name: string;
+  readonly kmcWard: number;
+  readonly licence: string;
+  readonly licenceUri: string;
+  readonly attribution: string;
+  readonly areaM2: number;
+  readonly sizeM: number;
+  readonly ring: readonly number[];
+  readonly grid: { readonly cells: number; readonly n: number };
+  readonly inWardCount: number;
+  readonly inWard: readonly number[];
+}
+
+/** The boundary artefact for a ward that has one (scripts/build-ward-mask.py), else null. */
+function readWardMask(id: string): WardMaskFile | null {
+  const file = resolve(`public/heat-map/data/${id}-ward.json`);
+  return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) as WardMaskFile : null;
+}
+
 /* -------------------------------------------------------------------- record */
 
 export interface WardRecord {
@@ -175,11 +202,41 @@ export interface WardRecord {
     readonly isNot: readonly string[];
     readonly note: string;
   };
+  /**
+   * THE ADMINISTRATIVE BOUNDARY the ward's statistics are taken over, for a ward
+   * that has one (Ballygunge = KMC Ward 68 since 2026-10-02); null where the
+   * square `bbox` is itself the study area. With one, `bbox` and `footprintM`
+   * describe the COMPUTE DOMAIN, which also holds neighbouring wards' buildings,
+   * drawn as context and counted in no ward figure.
+   */
+  readonly boundary: null | {
+    readonly name: string;
+    readonly source: string;
+    /** THE POLYGON'S OWN LICENCE, which is NOT the record's. Everything else here
+     *  derives from ODbL building data; `polygon` below is DataMeet's CC BY-SA 2.5
+     *  India boundary, carried with its licence, URI (CC BY-SA 2.5 §4(a)), credit
+     *  and share-alike term so that a consumer reading only this block — or the OGC
+     *  item, whose feature-level licence is ODbL — still sees it. */
+    readonly licence: string;
+    readonly licenceId: 'CC-BY-SA-2.5-IN';
+    readonly licenceUri: string;
+    readonly attribution: string;
+    readonly shareAlike: string;
+    readonly areaM2: number;
+    readonly statistics: string;
+    readonly buildingsInWard: number;
+    readonly buildingsInDomain: number;
+    readonly inWardRule: string;
+    /** The polygon, [lon, lat] pairs, closed — CC BY-SA 2.5 India, as its source. */
+    readonly polygon: readonly (readonly [number, number])[];
+  };
   readonly confidence: {
     readonly night: { readonly tier: 'quantitative' | 'indicative'; readonly bandK: number; readonly n: number; readonly modelRmseK: number; readonly ceilingRmseK: number };
-    readonly peak:  { readonly tier: 'quantitative' | 'indicative'; readonly bandK: number; readonly n: number; readonly modelRmseK: number; readonly ceilingRmseK: number };
+    /** `basis` says which evidence set the peak figures are: NOT the current one. */
+    readonly peak:  { readonly tier: 'quantitative' | 'indicative'; readonly bandK: number; readonly n: number; readonly modelRmseK: number; readonly ceilingRmseK: number; readonly basis: string };
     readonly spatial: { readonly n: number; readonly rModel: number; readonly rVegOnly: number; readonly note: string };
-    readonly heights: { readonly verdict: string; readonly nBuildings: number; readonly minBuildings: number };
+    /** `basis`: where the ICESat-2 sweep was run — the earlier 1.4 km box, not Ward 68. */
+    readonly heights: { readonly verdict: string; readonly nBuildings: number; readonly minBuildings: number; readonly basis: string };
   };
   readonly provenance: {
     readonly footprints: {
@@ -227,6 +284,22 @@ export function wardRecord(w: Ward): WardRecord {
     traced: prov.datasets[name]!.traced,
   }));
   const bbox = wardBbox(w);
+  const mask = readWardMask(w.id);
+  const boundary = mask === null ? null : {
+    name: mask.name,
+    source: mask.attribution,
+    licence: mask.licence,
+    licenceId: 'CC-BY-SA-2.5-IN' as const,
+    licenceUri: mask.licenceUri,
+    attribution: 'DataMeet (Municipal_Spatial_Data)',
+    shareAlike: 'Share-alike: this polygon, and any adaptation of it, may be redistributed only under CC BY-SA 2.5 India (or a later or compatible CC BY-SA licence), with this attribution. It is not covered by the ODbL that governs the rest of this record.',
+    areaM2: mask.areaM2,
+    statistics: 'Every ward statistic (mean surface temperature, area above 40 °C, the heat-stress histogram, rooftop solar totals, building counts) is taken inside this polygon: field statistics over solver cells whose centre lies inside it, per-building statistics over footprints that touch it.',
+    buildingsInWard: mask.inWardCount,
+    buildingsInDomain: mask.inWard.length,
+    inWardRule: 'footprint intersects the polygon',
+    polygon: closedLonLat(w, mask.ring),
+  };
   return {
     status: 'prototype',
     id: w.id,
@@ -238,6 +311,7 @@ export function wardRecord(w: Ward): WardRecord {
     bbox,
     crs: 'EPSG:4326',
     analysisCrs: utmEpsg(w.lon, w.lat),
+    boundary,
     quantity: {
       measured: 'land surface temperature (LST) — the radiometric temperature of the ground and roof surfaces, as an infrared satellite sees it',
       units: 'K (error bands) / °C (displayed values)',
@@ -250,9 +324,9 @@ export function wardRecord(w: Ward): WardRecord {
     },
     confidence: {
       night: { tier: ACCURACY.night.confidence, bandK: ACCURACY.night.bandK, n: ACCURACY.night.n, modelRmseK: ACCURACY.night.modelRmseK, ceilingRmseK: ACCURACY.night.ceilingRmseK },
-      peak:  { tier: ACCURACY.peak.confidence,  bandK: ACCURACY.peak.bandK,  n: ACCURACY.peak.n,  modelRmseK: ACCURACY.peak.modelRmseK,  ceilingRmseK: ACCURACY.peak.ceilingRmseK },
+      peak:  { tier: ACCURACY.peak.confidence,  bandK: ACCURACY.peak.bandK,  n: ACCURACY.peak.n,  modelRmseK: ACCURACY.peak.modelRmseK,  ceilingRmseK: ACCURACY.peak.ceilingRmseK, basis: PEAK_EVIDENCE_BASIS },
       spatial: { n: SPATIAL.n, rModel: SPATIAL.rModel, rVegOnly: SPATIAL.rVegOnly, note: SPATIAL.note },
-      heights: { verdict: HEIGHTS.verdict, nBuildings: HEIGHTS.nBuildings, minBuildings: HEIGHTS.minBuildings },
+      heights: { verdict: HEIGHTS.verdict, nBuildings: HEIGHTS.nBuildings, minBuildings: HEIGHTS.minBuildings, basis: HEIGHTS_EVIDENCE_BASIS },
     },
     provenance: {
       footprints: { source: prov.source, count: prov.count, byDataset },
@@ -262,6 +336,9 @@ export function wardRecord(w: Ward): WardRecord {
           layer: 'building footprints', dataset: d, ...pick(licenceFor(d)),
           governingLicence: VIA_OVERTURE.governing, via: VIA_OVERTURE.via,
         })),
+        // the administrative boundary, where the ward has one: taken direct, share-alike
+        ...(boundary === null ? [] : [{ layer: 'ward boundary', dataset: 'DataMeet Municipal Spatial Data',
+          ...pick(licenceFor('DataMeet Municipal Spatial Data')), governingLicence: licenceFor('DataMeet Municipal Spatial Data').licence }]),
         // everything else is taken direct, so source and governing are the same
         ...KOLKATA_LAYERS.map(({ governing, ...x }) => {
           const l = pick(licenceFor(x.dataset));
@@ -277,6 +354,18 @@ export function wardRecord(w: Ward): WardRecord {
       ],
     },
   };
+}
+
+/** The ward-local ring (metres, x east / y north) as closed [lon, lat] pairs, 6 dp (~0.1 m). */
+function closedLonLat(w: Ward, ring: readonly number[]): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = 0; i + 1 < ring.length; i += 2) {
+    const p = wardLatLon(w, ring[i], ring[i + 1]);
+    out.push([Number(p.lon.toFixed(6)), Number(p.lat.toFixed(6))]);
+  }
+  const [a, b] = [out[0], out[out.length - 1]];
+  if (a && b && (a[0] !== b[0] || a[1] !== b[1])) out.push(a);
+  return out;
 }
 
 function pick(l: { licence: string; holder: string; url: string }) {

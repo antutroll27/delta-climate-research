@@ -16,23 +16,41 @@
  * Sampling both with Sentinel-2 showed they are the same landscape (FVC 0.678
  * against 0.654, the urban side marginally the greener), so their 0.34 K
  * difference was delta-with-villages against delta-with-crops, not an urban
- * heat island. The product renders 1400 m wards at FVC 0.31–0.45. The old
- * numbers described a different surface than the one on screen.
+ * heat island. The product renders wards at FVC 0.22–0.45 (KMC Ward 68 0.220,
+ * the two 1400 m wards 0.31 and 0.45). The old numbers described a different
+ * surface than the one on screen.
  *
  * WHY DAY AND NIGHT DIFFER. `ceilingRmseK` is the error of the best possible
  * empirical predictor built from the same forcing AND the ward's own measured
  * surface, scored leave-one-out. It is an upper bound on what ANY model on
- * these inputs can achieve. At night it is 2.117 K; by day 3.34 K, because
- * daytime surface temperature turns on site-level insolation, cloud timing and
- * soil moisture that a 50 km reanalysis cell cannot resolve. No amount of
- * tuning moves the daytime ceiling — that limit is the forcing data.
+ * these inputs can achieve. At night it is 2.166 K; by day 3.34 K in the older
+ * evidence set the peak entry still publishes, because daytime surface
+ * temperature turns on site-level insolation, cloud timing and soil moisture
+ * that a 50 km reanalysis cell cannot resolve. No amount of tuning moves the
+ * daytime ceiling — that limit is the forcing data.
  *
- * WHERE WE SIT AGAINST IT. Night is 0.56 K off its ceiling, and the model runs
- * 0.36 K warmer than the measured surface on average (bias +0.36 K, model
- * minus measured; re-measured 2026-09-24 after the forcing-date correction).
- * Day is 1.08 K off, so the daytime structure is genuinely incomplete and
- * that gap is ours, not the data's. Two different situations; the notes below
- * say so rather than averaging them into one reassuring sentence.
+ * WHERE WE SIT AGAINST IT. Night is 0.50 K off its ceiling, and the model runs
+ * 0.41 K warmer than the measured surface on average (bias +0.41 K, model
+ * minus measured). Day, in the older evidence set, was 1.08 K off, so the
+ * daytime structure is genuinely incomplete and that gap is ours, not the
+ * data's. Two different situations; the notes below say so rather than
+ * averaging them into one reassuring sentence.
+ *
+ * BALLYGUNGE IS KMC WARD 68 (re-measured 2026-10-03). Every ward-scale figure
+ * here that is copied from model-accuracy.json — all of night, and the peak
+ * leave-one-overpass-out error — was re-measured with Ballygunge's rows taken
+ * over the Ward 68 POLYGON (189 ECOSTRESS pixels, ~1,050 Landsat pixels;
+ * surface and built fraction over the polygon's cells) instead of the old
+ * 1400 m box. Barrackpore and Baruipur stay on their 1400 m boxes and their
+ * rows are byte-identical. Night moved little (RMSE 2.677 -> 2.662 K, LOO
+ * 2.801 -> 2.777 K, bias +0.36 -> +0.41 K, ceiling 2.117 -> 2.166 K, n = 50
+ * unchanged), because at night Ward 68 reads only +0.17 K warmer than the old
+ * box did. The physics constants were NOT refitted: fit-ward-scale.py on the
+ * new rows would move candidate G to q_day 0.433 and STORE_NIGHT 0.093, and
+ * ward-scale-fit.json is deliberately left as the run the shipped constants
+ * came from (the shipped Q 0.419 stays inside the new admissible interval
+ * [0.07, 0.60]). The peak entry's n, RMSE, ceiling and band are NOT Ward 68's;
+ * see the comment on it.
  *
  * So the product reports night quantitatively and day as indicative.
  *
@@ -59,8 +77,8 @@ export interface PhaseAccuracy {
 export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
   night: {
     n: 50,
-    ceilingRmseK: 2.117,
-    modelRmseK: 2.677,
+    ceilingRmseK: 2.166,
+    modelRmseK: 2.662,
     /**
      * Leave-one-overpass-out RMSE, from data/calibration/model-accuracy.json
      * ward_scale.strata.night. THIS is the number the band must cover.
@@ -73,18 +91,19 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
      * compared the band to the in-sample figure, so ±3.0 had passed while
      * understating the error the page named. Today's ±3.0 is a re-measurement, not a
      * reversion: after the 2026-09-24 forcing-date correction the out-of-sample error
-     * is 2.801 K, which it covers (known-limitations §15). Of
+     * was 2.801 K, which it covers (known-limitations §15). Re-measured 2026-10-03 with
+     * Ballygunge as the KMC Ward 68 polygon it is 2.777 K, still covered. Of
      * every possible defect on a site whose product is its error bars, an error
      * bar that is too small is the worst one.
      */
-    looOverpassRmseK: 2.801,
+    looOverpassRmseK: 2.777,
     bandK: 3.0,
     confidence: 'quantitative',
     note: 'Night surface temperature tracks air temperature closely, which is why '
         + 'night is the quantitative view: over 50 ward-scenes the model\'s error is '
-        + '2.677 K against a best-achievable 2.117 K, and it runs 0.36 K warmer than '
-        + 'the measured surface on average (bias +0.36 K). The displayed band is '
-        + '+/-3.0 K because it must cover the leave-one-overpass-out error of 2.801 K, '
+        + '2.662 K against a best-achievable 2.166 K, and it runs 0.41 K warmer than '
+        + 'the measured surface on average (bias +0.41 K). The displayed band is '
+        + '+/-3.0 K because it must cover the leave-one-overpass-out error of 2.777 K, '
         + 'not the in-sample fit.',
   },
   peak: {
@@ -92,27 +111,57 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
     ceilingRmseK: 3.338,
     modelRmseK: 4.42,
     /**
-     * The current artefact measures peak_ecostress at n=23, RMSE 2.183,
-     * leave-one-overpass-out 2.389 — far BETTER than these published constants,
-     * which trace to an older evidence set (n=29 matches nothing that now exists).
+     * n, ceilingRmseK, modelRmseK AND bandK ARE THE OLDER EVIDENCE SET, NOT WARD 68.
+     * They trace to an earlier ECOSTRESS set (n=29 matches nothing that now exists),
+     * scored when Ballygunge was the old 1400 m box. Only this leave-one-overpass-out
+     * figure is current: it is copied from model-accuracy.json
+     * strata.peak_ecostress, which a test holds it to.
      *
-     * Deliberately NOT recalibrated here. Adopting the measured values would make
-     * daytime out-measure night and qualify as `quantitative`, which trips two
-     * pre-registered guards below; model-accuracy.json's own
-     * `pending_recalibration` reserves that for "a reviewed change". Publishing a
-     * WIDER band than measured overstates our error, which is the safe direction
-     * — unlike night, which understated. Left standing, and flagged.
+     * THE CURRENT MEASUREMENT (2026-10-03, Ballygunge = the KMC Ward 68 polygon):
+     * peak_ecostress n = 23 ward-scenes over 8 overpasses, RMSE 2.233 K,
+     * leave-one-overpass-out 2.358 K, bias +0.66 K, ceiling 1.967 K, bootstrap
+     * 95 % CI 1.39-2.92 K. On the old 1400 m box the same stratum read RMSE 2.183,
+     * LOO 2.389, bias +0.42, ceiling 2.027. Only Ballygunge's rows moved: its peak
+     * bias went +0.83 -> +1.51 K, because the Ward 68 surface (FVC 0.220, built
+     * 0.3645, against the old box's 0.329 / 0.319) warms the modelled peak by
+     * +1.25 K over those 8 scenes while the satellite measured +0.57 K. The standing
+     * ±4.5 K band covers the current out-of-sample error about 1.9 times over.
+     *
+     * Deliberately NOT recalibrated here. Adopting the measured values would give a
+     * 2.5 K band, narrower than night's 3.0, on a ceiling (1.967 K) below night's
+     * (2.166 K): daytime would out-measure night and trip two pre-registered guards
+     * below; model-accuracy.json's own `pending_recalibration` reserves that for "a
+     * reviewed change". Publishing a WIDER band than measured overstates our error,
+     * which is the safe direction — unlike night, which once understated. Left
+     * standing, labelled as the older evidence set, and flagged.
      */
-    looOverpassRmseK: 2.389,
+    looOverpassRmseK: 2.358,
     bandK: 4.5,
     confidence: 'indicative',
     note: 'Daytime is indicative only. Surface temperature at noon depends on local '
         + 'insolation, cloud timing and soil moisture that 50 km reanalysis forcing '
-        + 'cannot resolve — no model on this data does better than ±3.3 K. Ours is '
-        + '4.42 K, so unlike the night view it is NOT at that limit and the daytime '
-        + 'structure is still incomplete. Use the night view for quantitative comparison.',
+        + 'cannot resolve. The ±4.5 K band comes from an older, smaller evidence set, '
+        + 'scored before Ballygunge became KMC Ward 68, in which no model did better than '
+        + '±3.3 K and ours was 4.42 K. The current measurement, over Ward 68 and the two '
+        + 'other wards, is 2.23 K across 23 ward-scenes (2.36 K out of sample); the band '
+        + 'is kept wider than that until a reviewed recalibration, because overstating '
+        + 'our error is the safe direction. Use the night view for quantitative comparison.',
   },
 };
+
+/**
+ * WHICH EVIDENCE SET A PUBLISHED FIGURE IS (pre-ship audit, 2026-10-03). The peak
+ * band and n above, and HEIGHTS below, were measured before Ballygunge became KMC
+ * Ward 68 and were deliberately not re-adopted; these strings say so wherever the
+ * figures travel without their notes — the ward record's `basis` fields, and the
+ * readout chip's "earlier set" (`PEAK_CHIP_BASIS`).
+ */
+export const PEAK_EVIDENCE_BASIS = 'Earlier evidence set, measured before Ballygunge became KMC Ward 68: '
+  + 'Ballygunge was then the 1.4 km box around 22.528 N, 88.366 E. Not re-adopted; the current '
+  + 'measurement over Ward 68 is in /uncertainty and model-accuracy.json strata.peak_ecostress.';
+export const PEAK_CHIP_BASIS = 'earlier set';
+export const HEIGHTS_EVIDENCE_BASIS = 'Measured on the earlier 1.4 km Ballygunge box, before Ballygunge became '
+  + 'KMC Ward 68; its ICESat-2 transects stop short of Ward 68\'s southern blocks. Not re-measured.';
 
 /**
  * Shown on the resilience score while an indicator that can move it is unmeasured.
@@ -163,10 +212,12 @@ export function unmeasuredNote(fields: readonly string[], points: number): strin
  * with the ward mean removed from both sides, and mirrored here from
  * `data/calibration/spatial-accuracy.json`.
  *
- * THE NULL MODEL IS WHY THIS IS READABLE. r = 0.297 on its own sounds like "some
+ * THE NULL MODEL IS WHY THIS IS READABLE. r = 0.26 on its own sounds like "some
  * skill". Put vegetation through the SAME solver — the like-for-like null — and it
- * gets 0.313. So the full model is still worse at placing heat than one of the
- * layers it is built from, and the within-ward pattern is not validated.
+ * gets 0.31 (0.297 against 0.313 on the old 1400 m Ballygunge box; Ward 68
+ * figures since 2026-10-03, see below). So the full model is still worse at
+ * placing heat than one of the layers it is built from, and the within-ward
+ * pattern is not validated.
  *
  * WHY IT FAILS: the built-fraction term carries the LARGEST spatial amplitude
  * while correlating with measured heat the worst. So the term that dominates what
@@ -263,19 +314,41 @@ export function unmeasuredNote(fields: readonly string[], points: number): strin
  *
  * Regenerate with: python3 scripts/measure-scale-skill.py
  *
- * PRE-CORRECTION FORCING, like SPATIAL below: not re-run after the 2026-09-24
- * forcing-date correction (docs/evidence/known-limitations.md §15).
+ * RE-MEASURED 2026-10-03, Ballygunge = the KMC Ward 68 polygon, on the corrected
+ * forcing (the table above is the 2026-08-05 run: old 1400 m box, pre-correction
+ * forcing, stale built cache). Ward 68's pixels are scored like the old box's, and
+ * cells outside the polygon are excluded from every block exactly as cloud is:
+ *
+ *     scale   m/cell    n   physics     veg   built     gap   wards in the row
+ *     x1          68   85     0.184   0.225   0.135  -0.041   all three
+ *     x2         135   85     0.271   0.307   0.205  -0.036   all three
+ *     x3         203   85     0.334   0.369   0.264  -0.035   all three
+ *     x5         338   84     0.392   0.431   0.325  -0.039   all three
+ *     x7         473   55     0.561   0.566   0.533  -0.005   Barrackpore, Baruipur ONLY
+ *
+ * x7 HAS NO BALLYGUNGE ROWS: a 0.93 km² polygon cannot hold the nine 470 m blocks
+ * a correlation needs. So the x7 gap, and the artefact's own `verdict` line (which
+ * compares x1 against x7 and now reads "closes"), compare different ward mixes and
+ * must not be read as the gap closing. Like for like, x1-x5 over all three wards,
+ * the gap is flat at -0.035 to -0.041 — the 2026-08-05 conclusion stands, and
+ * Ward 68 alone is further behind the vegetation null at every scale (-0.09 x1,
+ * -0.15 x5; physics r 0.09 -> 0.21) than the old box was (-0.03, -0.04; r 0.20 ->
+ * 0.41). `gapAtCoarsest` below is therefore the coarsest factor ALL THREE wards
+ * reach, x5, not x7. On the old 1400 m box with the corrected forcing the same
+ * sweep read x1 0.217 / x5 0.456, gaps -0.021 / -0.024 (x7), so the move is the
+ * ward, not the forcing.
  */
 export const SCALE_SKILL = Object.freeze({
   /** the published comparison: one ECOSTRESS cell */
-  blockM: 67,
-  rModelBlock: 0.216,
+  blockM: 68,
+  rModelBlock: 0.184,
   /** coarsened to ~5x5 ECOSTRESS cells — neighbourhood scale */
-  neighbourhoodM: 333,
-  rModelNeighbourhood: 0.468,
-  /** the gap to the vegetation null, at the two ends of the sweep */
-  gapAtBlock: -0.022,
-  gapAtCoarsest: -0.005,
+  neighbourhoodM: 338,
+  rModelNeighbourhood: 0.392,
+  /** the gap to the vegetation null at x1 and at x5, the coarsest factor all three
+   *  wards reach (see the 2026-10-03 note above: x7 holds no Ward 68 rows) */
+  gapAtBlock: -0.041,
+  gapAtCoarsest: -0.039,
 });
 /*
  * CORRECTED 2026-08-05: WE WERE SCORING A FIELD THE MAP NEVER DRAWS.
@@ -313,25 +386,51 @@ export const SCALE_SKILL = Object.freeze({
  * not a raw layer.
  */
 /*
- * PRE-CORRECTION FORCING. The night and all-phase figures below
- * (spatial-accuracy.json, shipped-amplitude.json) were computed before the
- * 2026-09-24 forcing-date correction: 32 of their 50 night ward-scenes fall on
- * passes whose forcing it changed. They are to be re-run in the follow-up re-fit
- * (docs/evidence/known-limitations.md §15).
+ * RE-MEASURED 2026-10-03: BALLYGUNGE IS THE KMC WARD 68 POLYGON, AND THE FORCING IS
+ * THE CORRECTED ONE. The model still runs over Ballygunge's whole 1800 m square at
+ * the browser's 247 grid; a ward-scene is SCORED on the ECOSTRESS pixels inside the
+ * polygon. Barrackpore and Baruipur are unchanged in method, and the two effects
+ * were separated by re-running the old 1400 m box on today's forcing:
+ *
+ *                            n   r ship  r veg(diff)  amplitude  r built  anom RMSE
+ *   old box, old forcing    87    0.297        0.313      1.17x    0.177     1.59 K
+ *   old box, new forcing    87    0.297        0.313      1.17x    0.177     1.59 K
+ *   Ward 68, new forcing    85    0.261        0.308      1.11x    0.135     1.53 K
+ *
+ * THE FORCING CORRECTION MOVED NOTHING HERE (no figure by more than 0.005, though
+ * 32 of the 50 night ward-scenes were re-forced), so the whole change is the ward. Barrackpore's and
+ * Baruipur's rows are identical between the old-box and Ward 68 runs. Ballygunge
+ * alone: r ship 0.263 -> 0.145, vegetation null 0.283 -> 0.265, observed SD 0.86 ->
+ * 0.68 K, 29 -> 27 scenes (two fall below 12 clear polygon pixels).
+ *
+ * WHY WARD 68 SCORES LOWER, MEASURED RATHER THAN ASSUMED. It is the ward, not the
+ * pipeline: on the OLD grid with the OLD layers, the Ward 68 part of the old box
+ * already scored built r +0.05 against +0.14 for the rest of the box, with observed
+ * SD 0.66 K against 0.87 K. Ward 68 is uniformly dense (built 0.36, FVC 0.22) and
+ * leaves the satellite little within-ward contrast to find. Registration was
+ * checked (vegetation peaks un-shifted and un-mirrored; built is oriented to
+ * vegetation), and the Overture release swap was ruled out (old and new footprint
+ * sets score r 0.073 against 0.076 on identical pixels).
+ *
+ * The 2026-08-13 night-forcing caveat that stood here is retired: these are the
+ * corrected-forcing figures.
  */
 export const SPATIAL = {
-  /** ward-scenes scored (3 wards x near-nadir scenes, after cloud/QC masking) */
-  n: 87,
+  /** ward-scenes scored (3 wards x near-nadir scenes, after cloud/QC masking; Ballygunge
+   *  on the Ward 68 polygon's pixels) */
+  n: 85,
   /** correlation of the SHIPPED field — TsHeatSim, diffused — with ECOSTRESS */
-  rModel: 0.297,
+  rModel: 0.261,
   /** vegetation through the SAME solver: the like-for-like null, which still wins */
-  rVegOnly: 0.313,
+  rVegOnly: 0.308,
   /** built fraction alone, raw */
-  rBuiltOnly: 0.177,
+  rBuiltOnly: 0.135,
   /**
-   * The map's within-ward spread against the observation's. 1.17 means the colour
-   * range inside a ward is about a sixth wider than ECOSTRESS measures — the one
-   * defect here a reader can actually SEE, which is why it is now stated.
+   * The map's within-ward spread against the observation's. 1.11 means the colour
+   * range inside a ward is about a tenth wider than ECOSTRESS measures — the one
+   * defect here a reader can actually SEE, which is why it is now stated. (1.17 on
+   * the old 1400 m Ballygunge box; Ward 68 alone draws 0.70 K against an observed
+   * 0.68 K, and the night phase on its own is 0.99x.)
    *
    * Was 1.44 until 2026-08-13. That figure was not a physics change: the raster it
    * was scored against still held Microsoft footprints nine days after the shipped
@@ -339,9 +438,9 @@ export const SPATIAL = {
    * contrast to draw. Do not read the drop as a model improvement — it is a
    * measurement that had been wrong. See docs/evidence/known-limitations.md.
    */
-  amplitudeRatio: 1.17,
+  amplitudeRatio: 1.11,
   /** RMSE that remains once ward-mean bias is removed, K */
-  anomalyRmseK: 1.59,
+  anomalyRmseK: 1.53,
   /**
    * User-facing, shown wherever the field's detail could be over-read.
    *
@@ -350,12 +449,14 @@ export const SPATIAL = {
    * where they could. The scale sweep earned the middle tier.
    */
   note: 'Ward-level temperature is calibrated against ECOSTRESS. The pattern WITHIN a '
-      + 'ward is not: block by block it scores r = 0.30, still below the r = 0.31 of a '
+      + 'ward is not: block by block it scores r = 0.26, still below the r = 0.31 of a '
       + 'vegetation map given the same treatment, and coarsening the comparison does not '
       + 'close that gap at any scale. At neighbourhood scale (~300-500 m) it reaches '
-      + 'r = 0.5. The colour range inside a ward is also about 1.2x wider than the '
-      + 'satellite measures, so read contrasts as exaggerated. Ward figures are measured, '
-      + 'neighbourhood contrast is indicative, block-by-block detail is illustrative.',
+      + 'r = 0.4, but only about 0.2 in KMC Ward 68, whose dense, uniform fabric leaves '
+      + 'the satellite little pattern to match. The colour range inside a ward is also '
+      + 'about 1.1x wider than the satellite measures, so read contrasts as exaggerated. '
+      + 'Ward figures are measured, neighbourhood contrast is indicative, block-by-block '
+      + 'detail is illustrative.',
 } as const;
 
 /**
@@ -399,14 +500,31 @@ export const SPATIAL = {
  *
  * AND THE SAMPLE IS THE LARGEST BUILDINGS ONLY — two selections, not one. A
  * footprint has to survive a 5 m erosion, the geolocation error, before a photon
- * may be assigned to it: 995 of 3,527 survive in Ballygunge (28.2 %), 719 of
- * 4,702 in Barrackpore (15.3 %), 326 of 4,538 in Baruipur (7.2 %) — in Baruipur,
- * the largest one building in fourteen. Then the beam has to have put at least
- * MIN_ROOF_PH = 5 photons on the roof, which removed 26 of the 59 crossed
- * buildings here. Neither can be relaxed to widen the sample: shrinking the
- * erosion admits photons that may belong to the neighbour, and dropping the
- * photon bar makes the per-building p75 lean on its single highest photon. So
- * the wording is "along satellite transects", never "all buildings" (spec §5.4).
+ * may be assigned to it: 995 survive in Ballygunge's OLD 1400 m box (28.2 % of
+ * its buildings), 719 of 4,702 in Barrackpore (15.3 %), 326 of 4,538 in Baruipur
+ * (7.2 %) — in Baruipur, the largest one building in fourteen. Then the beam
+ * has to have put at least MIN_ROOF_PH = 5 photons on the roof, which removed 26
+ * of the 59 crossed buildings here. Neither can be relaxed to widen the sample:
+ * shrinking the erosion admits photons that may belong to the neighbour, and
+ * dropping the photon bar makes the per-building p75 lean on its single highest
+ * photon. So the wording is "along satellite transects", never "all buildings"
+ * (spec §5.4).
+ *
+ * THIS WHOLE BLOCK DESCRIBES THE OLD 1400 m BALLYGUNGE BOX, and was not
+ * re-measured when Ballygunge became KMC Ward 68 (2026-10-03). It cannot be
+ * from what is committed: the photon subsets in data/calibration/icesat2/ were
+ * clipped to the old box plus 200 m and reach only 22.5199 N, while Ward 68 runs
+ * south to 22.5161 N, so its southern ~420 m has no photons at all; and a
+ * re-score against the regenerated footprints is refused by design — tried
+ * 2026-10-03, measure-height-accuracy.py raises GroundLineDrift on the first
+ * Ballygunge subset (ground median 4.251 m against the 4.35 m it was gated on,
+ * tolerance 0.05 m). The honest re-run is a fresh fetch-icesat2.py sweep over
+ * the new square (multi-GB ATL03 downloads), not a re-score. What CAN be re-measured offline is the erosion
+ * survivor share on the new building set, by the same rule
+ * (`_icesat2.assign_footprints`, -5 m): 1,866 of the square's 7,931 (23.5 %),
+ * and 542 of Ward 68's 2,207 `inWard` buildings (24.6 %). The same rule
+ * reproduces the old box's 995 (28.2 %). `survivorPctRange` and every count
+ * below stay the artefact's, because the test holds them to it.
  *
  * WIN 4 SURVIVES INTACT, and it is the one measurement here that is not about
  * building heights at all: the shipped ~30 m relief surface sits ~6.6 m ABOVE
@@ -581,7 +699,9 @@ export const HEIGHTS = {
       + '~11 m spot on the ground, so a spot on a roof edge blends roof and street '
       + 'however well it is aimed. It runs along satellite transects, '
       + 'over only those buildings large enough to survive a 5 m erosion (the largest '
-      + '7-28 % of each ward) and hit by at least 5 roof photons. That leaves '
+      + '7-28 % of each ward) and hit by at least 5 roof photons. It was run before '
+      + 'Ballygunge became KMC Ward 68, over the earlier 1.4 km Ballygunge area, and its '
+      + 'transects stop short of Ward 68\'s southern blocks. That leaves '
       + 'n = 28 buildings against a pre-registered minimum of 30, and 25 of the 28 sit '
       + 'in one ward, so the outcome is underpowered and no difference, interval or test '
       + 'statistic is published from it. A cohort of 28 is ordinary for this field — '
@@ -613,6 +733,13 @@ export function bandLabel(phase: 'peak' | 'night'): string {
  *     morning_landsat     hours 10.39–10.41  LOO-overpass 2.25 K   n=213
  *     peak_ecostress      hours 11.76–17.45  LOO-overpass 2.40 K   n=24
  *     night               hours 0.7–23.84    LOO-overpass 2.79 K   n=50
+ *
+ * That table is the 2026-08-02 campaign, scored with Ballygunge as the OLD 1400 m
+ * box and before the sun-up bar and the forcing-date correction. The artefact
+ * today (Ballygunge = KMC Ward 68 polygon, 2026-10-03) reads morning_ecostress
+ * LOO 6.29 K n=9, morning_landsat 2.13 K n=212, peak_ecostress 2.36 K n=23,
+ * night 2.78 K n=50. TRANSITION_RMSE_K keeps the campaign's 7.54 K, the larger
+ * and so the more cautious of the two; moving it is a reviewed change.
  *
  * Sunrise to mid-morning is where a STEADY-STATE model has least to work with:
  * the surface is still shedding stored heat while the sun is already loading it,

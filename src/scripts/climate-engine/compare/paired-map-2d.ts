@@ -20,6 +20,8 @@ interface Scene {
   field: Float32Array;
   ward: WardData;
   roads: RoadsData;
+  /** The ward boundary, ward-local metres (x east, y north), or null. */
+  ring: readonly number[] | null;
   view: MapView;
   frame: number | null;
   dispose?: () => void;
@@ -174,6 +176,27 @@ function paintScene(canvas: HTMLCanvasElement, scene: Scene): void {
     context.stroke();
   }
 
+  /* THE WARD BOUNDARY, where the area has one: every figure beside this map is
+     taken inside it (ward-plan.ts), so the map shows where that is. Drawn on the
+     terrain like the roads, a paper halo under an ink core, before the buildings so
+     a block standing on the line still reads as standing there. */
+  if (scene.ring && scene.ring.length >= 6) {
+    const outline: Point2[] = [];
+    for (let index = 0; index + 1 < scene.ring.length; index += 2) {
+      const x = scene.ring[index], y = scene.ring[index + 1];
+      outline.push(project({ x, y, z: thermalHeight(fieldAt(field, ward, x, y)) + 3 }));
+    }
+    context.lineJoin = 'round';
+    for (const [stroke, lineWidth] of [['rgb(245 244 241 / 0.85)', 4.5 * dpr], ['rgb(16 30 32 / 0.95)', 1.8 * dpr]] as const) {
+      context.beginPath();
+      outline.forEach((point, index) => (index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y)));
+      context.closePath();
+      context.strokeStyle = stroke;
+      context.lineWidth = lineWidth;
+      context.stroke();
+    }
+  }
+
   // The real footprint data gains a controlled, illustrative vertical lift.
   // Sampling bounds work on dense wards while preserving their morphology.
   const stride = Math.max(1, Math.ceil(ward.b.length / 850));
@@ -241,12 +264,14 @@ export function renderPairedMap(
   field: Float32Array,
   ward: WardData,
   roads: RoadsData,
+  ring: readonly number[] | null = null,
 ): void {
   const existing = scenes.get(canvas);
-  const scene: Scene = existing ?? { field, ward, roads, view: { ...DEFAULT_VIEW }, frame: null };
+  const scene: Scene = existing ?? { field, ward, roads, ring, view: { ...DEFAULT_VIEW }, frame: null };
   scene.field = field;
   scene.ward = ward;
   scene.roads = roads;
+  scene.ring = ring;
   scenes.set(canvas, scene);
   paintScene(canvas, scene);
 }

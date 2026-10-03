@@ -13,10 +13,10 @@
  * different buildings.
  *
  * So the rasteriser stays in one place and this writes its output to a cache the
- * Python side reads. 140 x 140, matching the Sentinel-2 surface grid exactly, so
- * both downsample to the ECOSTRESS grid through identical arithmetic.
+ * Python side reads. sizeM/10 per side (140 x 140 for a 1400 m ward), matching the
+ * Sentinel-2 surface grid exactly, so both downsample to the ECOSTRESS grid through identical arithmetic.
  *
- * Output: ~/.cache/delta-climate/built/<ward>-built-140.f32  (raw little-endian
+ * Output: ~/.cache/delta-climate/built/<ward>-built-<sizeM/10>.f32  (raw little-endian
  *         Float32, row-major — an intermediate, deliberately not in the repo)
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -27,11 +27,17 @@ import { join } from 'node:path';
 // .ts import directly, so no loader registration is needed here.
 import { rasterizeWardBuilt } from '../src/scripts/climate-engine/ward-raster.ts';
 
-/** Matches _sentinel.grid_for(1400) — a ward footprint over Sentinel-2's 10 m
- *  posting, which is no longer a module constant on the Python side. Both sides
- *  must agree or the
- *  downsample to the ECOSTRESS grid silently compares offset cells. */
-const GRID = 140;
+/** Matches _sentinel.grid_for(sizeM) — a ward footprint over Sentinel-2's 10 m
+ *  posting, PER WARD: 140 for a 1400 m ward, 180 for Ballygunge's 1800 m square
+ *  (2026-10-03; it was one `GRID = 140` for every ward until then). Both sides
+ *  must agree or the downsample to the ECOSTRESS grid silently compares offset
+ *  cells. */
+const gridFor = (sizeM) => {
+  if (!Number.isInteger(sizeM) || sizeM <= 0 || sizeM % 10 !== 0) {
+    throw new Error(`ward size ${sizeM} m is not a whole number of 10 m cells`);
+  }
+  return sizeM / 10;
+};
 const WARDS = ['ballygunge', 'baruipur', 'barrackpore'];
 
 const outDir = join(homedir(), '.cache', 'delta-climate', 'built');
@@ -44,6 +50,7 @@ for (const ward of WARDS) {
   const geomDir = process.env.GEOM_DIR ?? 'public/heat-map/data';
   const geomRaw = readFileSync(`${geomDir}/${ward}.json`);
   const data = JSON.parse(geomRaw.toString('utf8'));
+  const GRID = gridFor(data.sizeM);
   const built = rasterizeWardBuilt(data, GRID);
   if (built.length !== GRID * GRID) throw new Error(`${ward}: expected ${GRID ** 2} cells, got ${built.length}`);
 

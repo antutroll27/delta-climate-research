@@ -7,8 +7,11 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WARDS = ['ballygunge', 'baruipur', 'barrackpore'];
 
-/** Mirrors CLIP_M in scripts/fetch-water.py — vertices may not escape the box. */
-const CLIP_M = 760;
+/** Mirrors _types.osm_clip_m in scripts/_types.py — the ward half-width + 60 m: 760 m for
+ *  a 1400 m ward, 960 m for Ballygunge's 1800 m Ward 68 square (re-pinned 2026-10-02).
+ *  Vertices may not escape the box. */
+const clipFor = async (ward) => JSON.parse(await readFile(
+  join(ROOT, `public/heat-map/data/${ward}.json`), 'utf8')).sizeM / 2 + 60;
 
 test('every ward ships a water artefact honouring the roads-family contract', async () => {
   for (const ward of WARDS) {
@@ -19,6 +22,7 @@ test('every ward ships a water artefact honouring the roads-family contract', as
       'attribution travels with the data, not just the UI');
     assert.equal(d.count, d.polys.length);
     assert.ok(d.polys.length > 0, `${ward} has OSM water in frame — a zero here means the fetch regressed`);
+    const CLIP_M = await clipFor(ward);
     for (const poly of d.polys) {
       assert.ok(['water', 'river', 'pool'].includes(poly.k));
       assert.ok(poly.p.length >= 6 && poly.p.length % 2 === 0,

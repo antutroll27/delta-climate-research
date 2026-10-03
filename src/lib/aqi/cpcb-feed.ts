@@ -18,7 +18,7 @@
  * a tag longer than MAX_TAG is skipped whole, and the attribute pattern is anchored
  * on whitespace with capped name and value lengths, so it only ever runs on ≤ 1 KB.
  */
-import type { StationEntry } from './stations.ts';
+import { stationPayload, type StationEntry } from './stations.ts';
 import { category } from './cpcb.ts';
 import { LIVE_H, STALE_DAYS } from './build.ts';
 import { SCHEMA, type AirQualityResponse, type AqiStation, type CpcbResult, type CpcbSubIndex, type Pollutant } from './types.ts';
@@ -255,7 +255,7 @@ export function currentFromFeed(f: FeedStation, areaKey: string, st: StationEntr
   const ageMs = now.getTime() - Date.parse(f.published_at);
   if (ageMs < -FUTURE_SLACK_MS || ageMs > STALE_DAYS * DAY_MS) return null;
   const fresh = ageMs <= LIVE_H * HOUR_MS;
-  const station: AqiStation = { id: st.id, name: st.name, lat: st.lat, lon: st.lon, distance_m: st.distance_m, inside: 'window_3km' };
+  const station: AqiStation = stationPayload(st);
   const common = { schema: SCHEMA, area_id: areaKey, served_at: now.toISOString(),
     source: { owner: st.owner, via: 'CPCB', standard: 'CPCB National AQI' as const } };
   if (f.aqi === null || f.dominant === null) {

@@ -1,5 +1,6 @@
 import { runTsFieldCooperatively, type CooperativeFieldRequest } from '../sim-cooperative.ts';
 import { requireGrid, gridVersion, HEAT_METRICS_VERSION, greenReferenceContrastC, type SimLayers, type SimParams, type SimStats } from '../types.ts';
+import { fieldStats, type WardMask } from '../ward-mask.ts';
 import { applyInterventions, buildSpatial, computeCost, currentParamsForReference, RESET_BURST, type Ambient, type RoadsData, type Spatial, type WardData } from '../heat-map-model.ts';
 import { loadArea } from '../ward-loader.ts';
 import { rasterWardBase } from '../ward-raster.ts';
@@ -11,6 +12,7 @@ import { SimulationCancelled } from '../sim-cooperative.ts';
 import { assertPairedResult, type MetricValue, type PairedBackendVersion, type PairedJobStage, type PairedResult, type ReleaseEvidence, type WardScenarioResult } from './paired-protocol.ts';
 import { resolveReferenceForcing, type CompareReferenceForcing } from './reference-forcing.ts';
 import { resolve, requireCosts } from '../scope/resolve.ts';
+import { confineToWard, wardSpatial } from './ward-plan.ts';
 
 /* ────────────────────────────────────────────────────────────────────────────
    THE SCOPE COMPARE RUNS IN — the city's park-cooling radius and the country's
@@ -43,6 +45,11 @@ interface PreparedWard {
   roads: RoadsData;
   base: SimLayers;
   spatial: Spatial;
+  /** Where the PLAN goes, what it costs and what it delivers: `spatial` restricted
+   *  to the boundary (ward-plan.ts), or `spatial` itself where there is none. */
+  planSpatial: Spatial;
+  /** The polygon the ward's statistics are taken over, or null (the square is the area). */
+  boundary: WardMask | null;
 }
 
 interface FieldResult { field: Float32Array; stats: SimStats; }
@@ -96,7 +103,9 @@ export function createPairedScenarioCache(): PairedScenarioCache {
       const pending = (async () => {
         const [loaded, surface] = await Promise.all([loadArea(id), loadAreaSurface(id)]);
         const base = rasterWardBase(loaded.ward, surface.means, surface.surface, null, loaded.water);
-        return { wardData: loaded.ward, roads: loaded.roads, base, spatial: buildSpatial(loaded.ward, base, loaded.roads) };
+        const spatial = buildSpatial(loaded.ward, base, loaded.roads);
+        const planSpatial = wardSpatial(spatial, loaded.boundary, loaded.ward, loaded.roads, base, resolve(id).climate.parkRadiusM);
+        return { wardData: loaded.ward, roads: loaded.roads, base, spatial, planSpatial, boundary: loaded.boundary };
       })();
       prepared.set(id, pending);
       evictOnRejection(prepared, id, pending);
@@ -137,7 +146,18 @@ function baselineKey(id: AreaKey, forcing: CompareReferenceForcing, phase: Paire
   return [id, forcing.id, phase, 'heat-model-v1', gridVersion(sizeM)].join(':');
 }
 
-async function field(layers: SimLayers, params: SimParams, sizeM: number, options: PairedRunOptions): Promise<FieldResult> {
+/**
+ * Solve, and take the statistics over the ward. With a boundary (KMC Ward 68) the
+ * solver's whole-square stats are replaced by the polygon's — the same rule the
+ * instrument applies, so Compare and the ward page print the same ward. Without
+ * one the solver's own stats stand, untouched.
+ */
+async function field(layers: SimLayers, params: SimParams, sizeM: number, options: PairedRunOptions, boundary: WardMask | null = null): Promise<FieldResult> {
+  const solved = await solve(layers, params, sizeM, options);
+  return boundary ? { field: solved.field, stats: fieldStats(solved.field, boundary, solved.stats.thresholdC) } : solved;
+}
+
+function solve(layers: SimLayers, params: SimParams, sizeM: number, options: PairedRunOptions): Promise<FieldResult> {
   const grid = requireGrid(sizeM);
   return (options.runField ?? runTsFieldCooperatively)({
     grid: { n: grid.n, cellMeters: sizeM / grid.n },
@@ -170,11 +190,15 @@ async function runWard(
   const baselineParams = currentParamsForReference(forcingValues, phase, { trees: 0, roof: 0, parks: 0, facades: 0 });
   const scenarioParams = currentParamsForReference(forcingValues, phase, interventions);
   options.onStage?.('solving-baselines');
-  const baseline = await cache.baseline(baselineKey(id, forcing, state.phase, prepared.wardData.sizeM), () => field(prepared.base, baselineParams, prepared.wardData.sizeM, options));
+  const baseline = await cache.baseline(baselineKey(id, forcing, state.phase, prepared.wardData.sizeM), () => field(prepared.base, baselineParams, prepared.wardData.sizeM, options, prepared.boundary));
   assertNotCancelled(options);
   options.onStage?.('solving-scenarios');
-  const scenarioLayers = applyInterventions(prepared.base, interventions, prepared.spatial, scope.climate.parkRadiusM);
-  const scenario = await field(scenarioLayers, scenarioParams, prepared.wardData.sizeM, options);
+  /* THE PLAN GOES WHERE THE FIGURES ARE TAKEN: inside the boundary, for an area
+     that has one (ward-plan.ts). Without one, `planSpatial` IS `spatial` and
+     `confineToWard` returns its input, so the other areas run as before. */
+  const scenarioLayers = confineToWard(prepared.base,
+    applyInterventions(prepared.base, interventions, prepared.planSpatial, scope.climate.parkRadiusM), prepared.boundary);
+  const scenario = await field(scenarioLayers, scenarioParams, prepared.wardData.sizeM, options, prepared.boundary);
   assertNotCancelled(options);
   const baselineHot = hotMetric(baseline.stats.fracAbove, state.phase);
   const scenarioHot = hotMetric(scenario.stats.fracAbove, state.phase);
@@ -204,8 +228,10 @@ async function runWard(
     scenarioHotAreaPct: scenarioHot,
     hotAreaChangePp: hotAreaChange,
     greenReferenceContrastC: greenReferenceContrastC(scenario.stats.meanC, scenarioParams),
-    capitalCost: computeCost(interventions, prepared.spatial, costs),
-    delivered: deliveredQuantities(state.coverage, prepared.spatial),
+    capitalCost: computeCost(interventions, prepared.planSpatial, costs),
+    delivered: deliveredQuantities(state.coverage, prepared.planSpatial),
+    statsOver: prepared.boundary ? { name: prepared.boundary.name, areaM2: prepared.boundary.areaM2 } : null,
+    boundaryRing: prepared.boundary?.ring ?? null,
     evidence,
   };
 }

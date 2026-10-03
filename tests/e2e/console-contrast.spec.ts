@@ -155,8 +155,17 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
          Ceiling: a partial cover — the box edge across an element — is not. */
       const cardNow = document.querySelector('#bcard');
       const cbb = (window as unknown as { __cardBoxBefore?: number[] | null }).__cardBoxBefore;
-      if (cbb && cardNow && !cardNow.contains(el)
-        && cx >= cbb[0] && cx <= cbb[2] && cy >= cbb[1] && cy <= cbb[3]) continue;
+      /* PARTIAL COVERS TOO: the centre and four inset corners are tested, not the
+         centre alone, so the opaque card's edge across an element (a tint chip)
+         skips it instead of scoring the card.
+         THE MAP-BORNE CHIPS ARE NOT SKIPPED (pre-ship audit 2026-10-03). The greenery
+         tag and the ring labels were once excused here as covers, which hid real
+         overlaps — the tag over #wardScope and the LST unit, a ring label on the
+         tag. The app now keeps them clear of the HUD and of each other
+         (heat-map-app.ts hudKeepOut), so text under one of them is a failure. */
+      const probes = [[cx, cy], [r.left + 2, r.top + 2], [r.right - 2, r.top + 2], [r.left + 2, r.bottom - 2], [r.right - 2, r.bottom - 2]];
+      const inBox = (b: number[]) => probes.some(([x, y]) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]);
+      if (cbb && cardNow && !cardNow.contains(el) && inBox(cbb)) continue;
 
       /* MOTION. The screenshot and this read are two frames apart, and the
          selection's ring labels are repositioned on every map render — on the
@@ -274,12 +283,16 @@ test.describe('console legibility', () => {
        what puts the card on screen at opacity 1, where it IS sampled. */
     await page.locator('#modechip button[data-m="relief"]').click();
     await page.waitForTimeout(4_000);
+    /* CLAY FIRST, THEN THE CARD. The card opens beside the best roof, and since
+       Ballygunge became KMC Ward 68 (2026-10-02) that roof — the ward's best, not the
+       old box's — puts a 730 px card over the env chip, so clicking Clay after the
+       card hit the card. The state measured is the same: Clay, with a card open. */
+    await page.locator('#envchip button[data-e="studio"]').click();
+    await page.waitForTimeout(4_000);
     await page.locator('[data-rail="solar"]').click();
     await expect(page.locator('#solList tr')).toHaveCount(10, { timeout: 15_000 });
     await page.locator('#solList tr').first().click();
-    await page.waitForTimeout(1_500);
-    await page.locator('#envchip button[data-e="studio"]').click();
-    await page.waitForTimeout(4_000);
+    await page.waitForTimeout(2_500);
     const findings = await contrastFailures(page);
     expect(findings, report('Clay studio, card open', findings)).toEqual([]);
   });

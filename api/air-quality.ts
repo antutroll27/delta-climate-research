@@ -24,7 +24,7 @@ import { buildPayload } from '../src/lib/aqi/build.ts';
 import { currentFromFeed, fetchFeed, FeedError, pick, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import type { Raw } from '../src/lib/aqi/hours.ts';
 import { fetchSensorWindow, OpenAqError } from '../src/lib/aqi/openaq.ts';
-import { isAirArea, POLLUTANTS, stationFor, type StationEntry } from '../src/lib/aqi/stations.ts';
+import { isAirArea, POLLUTANTS, stationFor, stationPayload, type StationEntry } from '../src/lib/aqi/stations.ts';
 import { SCHEMA, type AirQualityPayload, type Pollutant } from '../src/lib/aqi/types.ts';
 
 /** Vercel reads this: the handler's own deadline is 20 s, so 30 s leaves room to answer. */
@@ -158,7 +158,7 @@ function rawFor(area: string, st: StationEntry, now: Date, d: Deps): Promise<Raw
 }
 
 function upstreamError(area: string, st: StationEntry, now: Date): AirQualityPayload {
-  const station = { id: st.id, name: st.name, lat: st.lat, lon: st.lon, distance_m: st.distance_m, inside: 'window_3km' as const };
+  const station = stationPayload(st);
   return { current: { schema: SCHEMA, area_id: area, served_at: now.toISOString(),
     source: { owner: st.owner, via: 'CPCB via OpenAQ', standard: 'CPCB National AQI' },
     state: 'unavailable', station, last_observed_at: null, reason: 'upstream_error' }, history: null };

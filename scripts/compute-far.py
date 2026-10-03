@@ -34,6 +34,13 @@ Output: data/dc-urs/far.json
 
     python3 scripts/compute-far.py --icesat2-correction
 
+WARD 68 (2026-10-02). For a ward with an administrative polygon
+(scripts/_wardmask.py) the reported FAR is the POLYGON's: every footprint that
+intersects the ward contributes only its area INSIDE the polygon, times its
+floors, over the polygon's own area. The same storey rule, the same fill
+handling, the same shoelace rings as the square. The square's figures are kept
+under `square`.
+
 A SENSITIVITY MODE, not a second way to compute FAR. It measures how far FAR
 would move if the 2.5 m fill cohort were replaced by the height distribution
 ICESat-2 actually measured over those buildings (spec §1 win 3, §5.3), and
@@ -45,7 +52,9 @@ from typing import Any, NamedTuple, Sequence, TypedDict, cast
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _types
+import _wardmask
 from _types import FarFile, FarWard, WardId
+from shapely.geometry import Polygon
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -228,6 +237,74 @@ def ward_far(path: str) -> FarWard:
     }
 
 
+def polygon_far(path: str, ward_id: WardId, square: FarWard) -> FarWard:
+    """FAR over the ward POLYGON, with the square's record kept under `square`.
+
+    Same admission rules as ward_far (the degenerate and non-positive rows it
+    drops are dropped here too), same floors_for, same fill exclusion from the
+    height statistics. The only change is the domain: each admitted footprint
+    contributes its area inside the polygon, and the land is the polygon.
+    """
+    poly = _wardmask.polygon_local(_types.WARDS[ward_id])
+    assert poly is not None
+    with open(path) as fh:
+        d = cast(WardGeometry, json.load(fh))
+    footprint_m2 = floor_m2 = 0.0
+    heights: list[float] = []
+    floors_seen: list[int] = []
+    at_fill = nonpositive = degenerate = 0
+    for b in d["b"]:
+        h = float(b[0])
+        xs, ys = b[1::2], b[2::2]
+        if polygon_area(xs, ys) <= 0:
+            degenerate += 1
+            continue
+        ring = Polygon(list(zip(xs, ys)))
+        if not ring.is_valid:
+            ring = ring.buffer(0)        # a self-touching simplified ring; area unchanged
+        inside = ring.intersection(poly).area
+        if inside <= 0:
+            continue
+        if h <= 0:
+            nonpositive += 1
+            continue
+        floors = floors_for(h)
+        footprint_m2 += inside
+        floor_m2 += inside * floors
+        floors_seen.append(floors)
+        if h == FILL_HEIGHT_M:
+            at_fill += 1
+        else:
+            heights.append(h)
+    land_m2 = poly.area
+    kmc = _wardmask.POLYGONS[ward_id][1]
+    return {
+        "far": round(floor_m2 / land_m2, 4),
+        "built_fraction": round(footprint_m2 / land_m2, 4),
+        "buildings": len(floors_seen),
+        "degenerate_polygons": degenerate,
+        "land_m2": round(land_m2),
+        "footprint_m2": round(footprint_m2),
+        "floor_m2": round(floor_m2),
+        "height_m": {
+            "min": round(min(heights), 1), "median": round(statistics.median(heights), 1),
+            "max": round(max(heights), 1),
+            "n_measured": len(heights),
+            "fill_value": FILL_HEIGHT_M,
+            "n_at_fill_value": at_fill,
+            "n_nonpositive": nonpositive,
+        },
+        "floors": {"median": statistics.median(floors_seen), "max": max(floors_seen)},
+        "domain": (f"KMC Ward {kmc} polygon: footprints that intersect it, counted by "
+                   f"their area inside it, over the polygon's area"),
+        "square": {
+            "far": square["far"], "built_fraction": square["built_fraction"],
+            "buildings": float(square["buildings"]), "land_m2": square["land_m2"],
+            "footprint_m2": square["footprint_m2"], "floor_m2": square["floor_m2"],
+        },
+    }
+
+
 def committed_far() -> dict[WardId, float]:
     """The FAR the repo actually ships, read back for the baseline self-check.
 
@@ -240,7 +317,10 @@ def committed_far() -> dict[WardId, float]:
                          "sensitivity mode checks itself against it")
     with open(OUT) as fh:
         far = cast(FarFile, json.load(fh))
-    return {w: float(v["far"]) for w, v in far["wards"].items()}
+    # The sensitivity mode recomputes the SQUARE (far_of over every admitted
+    # building); for a ward masked to a polygon, the square's FAR is under `square`.
+    return {w: float(v["square"]["far"] if "square" in v else v["far"])
+            for w, v in far["wards"].items()}
 
 
 def icesat2_sensitivity() -> None:
@@ -503,7 +583,7 @@ def main() -> None:
         raise SystemExit(f"ward geometry missing in {GEOM}: {', '.join(missing)}")
 
     out: FarFile = {
-        "source": "Microsoft ML Building Footprints (ODbL) + Google Open Buildings 2.5D heights (CC BY 4.0)",
+        "source": "Overture Maps buildings (OSM + Google + Microsoft footprints, ODbL) + Google Open Buildings 2.5D heights (CC BY 4.0)",
         "method": "FAR = Σ(footprint area × floors) / land area; shoelace polygon area",
         "assumption": f"floors = round(height / {STOREY_M} m), min {MIN_FLOORS}. "
                       "3.2 m floor-to-floor is the midpoint of the 3.0–3.3 m typical range implied "
@@ -513,7 +593,10 @@ def main() -> None:
         "wards": {},
     }
     for w in wards:
-        out["wards"][w] = ward_far(os.path.join(GEOM, f"{w}.json"))
+        rec = ward_far(os.path.join(GEOM, f"{w}.json"))
+        if _wardmask.has_polygon(w):
+            rec = polygon_far(os.path.join(GEOM, f"{w}.json"), w, rec)
+        out["wards"][w] = rec
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as fh:

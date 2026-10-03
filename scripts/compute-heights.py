@@ -21,6 +21,7 @@ its height statistics for exactly this reason.
     export GOOGLE_APPLICATION_CREDENTIALS=~/.config/delta-climate/ee-service-account.json
     python3 scripts/compute-heights.py --mode parity      # must pass first
     python3 scripts/compute-heights.py --mode overture
+    python3 scripts/compute-heights.py --mode overture --ward ballygunge   # one ward, merged
 """
 from __future__ import annotations
 
@@ -48,11 +49,9 @@ SCALE_M = 4                              # the product's native ~4 m posting
 PAGE = 300                               # features per reduceRegions call
 FILL_M = 2.5
 
-WARDS = {
-    "ballygunge": (22.528, 88.3659),
-    "barrackpore": (22.7621, 88.3713),
-    "baruipur": (22.3654, 88.4319),
-}
+#: _types.WARDS, not a private copy: this script's centres must be the ones
+#: fetch-buildings.to_local used, or to_lonlat below inverts the wrong frame.
+WARDS = _types.WARDS
 
 #: GATE A -- distribution parity. p50/p75/p90/mean per ward against the shipped
 #: set. These are what FAR and the DC-URS exposure pillar consume; per-building
@@ -96,9 +95,9 @@ def to_lonlat(x: float, y: float, ward: str) -> list[float]:
     every building about the ward centre line, which sampled a neighbour instead
     of the building itself -- 27 % within 2 m, at every statistic.
     """
-    clat, clon = WARDS[ward]
-    mx, my = _types.m_per_deg(clat)
-    return [clon + x / mx, clat + y / my]
+    w = WARDS[ward]
+    mx, my = _types.m_per_deg(w.centre.lat)
+    return [w.centre.lon + x / mx, w.centre.lat + y / my]
 
 
 def parity_features(ward: str) -> list[dict[str, Any]]:
@@ -215,12 +214,18 @@ def gates(doc: dict[str, Any], stat: str = "p65") -> int:
     return 1 if failures else 0
 
 
-def run(mode: str) -> int:
+def run(mode: str, only: str | None = None) -> int:
     init_ee()
     img = height_image()
     doc: dict[str, Any] = {"mode": mode, "collection": COLLECTION,
                            "epoch": EPOCH[0][:4], "scale_m": SCALE_M, "wards": {}}
-    for ward in WARDS:
+    out_path = os.path.join(GEOM, f"heights-{mode}.json")
+    if only and os.path.exists(out_path):
+        # One ward re-measured, the others carried verbatim: their footprints did
+        # not change, so re-asking Earth Engine could only add drift, not truth.
+        with open(out_path, encoding="utf-8") as fh:
+            doc["wards"] = json.load(fh)["wards"]
+    for ward in ([only] if only else list(WARDS)):
         feats = parity_features(ward) if mode == "parity" else overture_features(ward)
         rows: list[dict[str, Any]] = []
         for i in range(0, len(feats), PAGE):
@@ -231,7 +236,6 @@ def run(mode: str) -> int:
     # The artefact is written BEFORE the gates run. The first attempt gated first
     # and returned early, discarding twenty minutes of Earth Engine measurement --
     # a failed gate must leave evidence to diagnose, not a clean slate.
-    out_path = os.path.join(GEOM, f"heights-{mode}.json")
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(doc, separators=(",", ":")) + "\n")
     wards_out: dict[str, list[dict[str, Any]]] = doc["wards"]
@@ -244,7 +248,9 @@ def run(mode: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=["parity", "overture"], required=True)
-    return run(parser.parse_args().mode)
+    parser.add_argument("--ward", choices=sorted(WARDS), default=None)
+    args = parser.parse_args()
+    return run(args.mode, args.ward)
 
 
 if __name__ == "__main__":

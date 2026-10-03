@@ -61,8 +61,14 @@ function demote(c: Current, now: Date): Current {
 
 const head = (title: string, chip: string): string => `<div class="k legend-head"><span>${title}</span>${chip}</div>`;
 
+/* A MONITOR OUTSIDE THE AREA SAYS SO, in the same line as its distance: "nearest
+   official monitor", the true distance, and where it stands. Never just the distance,
+   which alone would read as a monitor in the area. */
 function stationLine(s: AqiStation, owner: string | null, place: string): string {
-  return `<p class="meta"><b>${esc(s.name.replace(' – WBPCB', ''))}</b> · ${esc((owner && OWNER_SHORT[owner]) ?? owner ?? '')} monitor · ${km(s.distance_m)} from the ${esc(place)} centre</p>`;
+  const who = `${esc((owner && OWNER_SHORT[owner]) ?? owner ?? '')} monitor`;
+  return s.inside === 'outside_window'
+    ? `<p class="meta"><b>${esc(s.name.replace(' – WBPCB', ''))}</b> · nearest official ${who} · ${km(s.distance_m)} from the ${esc(place)} centre, ${esc(s.placement ?? 'outside the area')}</p>`
+    : `<p class="meta"><b>${esc(s.name.replace(' – WBPCB', ''))}</b> · ${who} · ${km(s.distance_m)} from the ${esc(place)} centre</p>`;
 }
 
 /** O₃ and CO are the maximum rolling 8-hour mean; every other pollutant the 24-hour mean. Read from the dominant reading itself. */
@@ -244,7 +250,7 @@ const HATCH_KEY = '<svg width="10" height="10" aria-hidden="true"><defs><pattern
 /** Whose figure the pane shows: CPCB's, CPCB's absence of one, or OBOS's own calculation. */
 type Origin = 'cpcb' | 'cpcb-none' | 'obos';
 
-function method(owner: string | null, origin: Origin): string {
+function method(owner: string | null, origin: Origin, station: AqiStation | null = null): string {
   const chart = `The 30-day chart and the PM2.5 line are calculated by OBOS with CPCB's method from OpenAQ's copy of the station's readings. `;
   const who = !owner ? ''
     : origin === 'cpcb'
@@ -252,7 +258,10 @@ function method(owner: string | null, origin: Origin): string {
       : origin === 'cpcb-none'
         ? `CPCB published no AQI for this hour (source: CPCB). Measured by the ${esc(owner)}. ${chart}`
       : `AQI calculated by OBOS with CPCB's National AQI method from the station's readings (received via CPCB and OpenAQ); it can differ slightly from CPCB's own published figure. Measured by the ${esc(owner)}. `;
-  return `<p class="pane-note">${who}A monitor counts for a place when it stands inside the 3 km window around the OBOS centre. Air quality is a separate layer: it does not enter the heat model.</p>`;
+  const where = station?.inside === 'outside_window'
+    ? `No monitor stands inside the 3 km window around the OBOS centre; this is the nearest official one, ${km(station.distance_m)} away ${esc(station.placement ?? 'outside the area')}, shown as the nearest official reading, not as a measurement inside the area. `
+    : 'A monitor counts for a place when it stands inside the 3 km window around the OBOS centre. ';
+  return `<p class="pane-note">${who}${where}Air quality is a separate layer: it does not enter the heat model.</p>`;
 }
 
 const originOf = (c: Current): Origin =>
@@ -283,7 +292,7 @@ export function paneHtml(p: AirQualityPayload, placeName: string, now: Date = ne
     const label = old ? '24 hours to the last OpenAQ reading' : 'last 24 hours';
     s += `<p class="pane-h">PM2.5 · ${label}</p>` + line24(h.pm25_24h, label, old);
   }
-  return s + method(c.source.owner, originOf(c));
+  return s + method(c.source.owner, originOf(c), c.station);
 }
 
 /** One bar's tooltip. Exported so the escaping is testable without a DOM. */

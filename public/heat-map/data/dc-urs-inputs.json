@@ -26,16 +26,16 @@
         "cite": "ECOSTRESS urban-rural, GHS-SMOD masks"
       },
       "popDensity": {
-        "value": 68810.2,
+        "value": 53284.8,
         "source": "measured",
         "vintage": "2020",
         "cite": "WorldPop"
       },
       "far": {
-        "value": 1.1595,
+        "value": 1.0718,
         "source": "measured",
         "vintage": "2023-2025",
-        "cite": "MS footprints + Google Open Buildings 2.5D"
+        "cite": "Overture buildings (OSM + Google + Microsoft) + Google Open Buildings 2.5D heights"
       },
       "socioVuln": {
         "value": 4.263,
@@ -44,7 +44,7 @@
         "cite": "Census 2011 age + slum, NITI Aayog MPI (NFHS-5)"
       },
       "fvc": {
-        "value": 0.3291,
+        "value": 0.2199,
         "source": "measured",
         "vintage": "5 yr",
         "cite": "Sentinel-2 L2A"
@@ -55,25 +55,25 @@
         "cite": "v2 only \u2014 inert in the v1 greenness formula"
       },
       "ndviMean": {
-        "value": 0.2968,
+        "value": 0.2149,
         "source": "measured",
         "vintage": "5 yr",
         "cite": "Sentinel-2 L2A"
       },
       "ndviStd": {
-        "value": 0.0302,
+        "value": 0.0224,
         "source": "measured",
         "vintage": "5 yr",
         "cite": "Sentinel-2 L2A, across-year std of annual medians"
       },
       "albedo": {
-        "value": 0.1248,
+        "value": 0.1225,
         "source": "measured",
         "vintage": "5 yr",
         "cite": "Sentinel-2, source doc \u00a73B coefficients"
       },
       "distCoolM": {
-        "value": 77.8,
+        "value": 363.1,
         "source": "measured",
         "vintage": "2021",
         "cite": "ESA WorldCover, patches >= 0.77 ha"
@@ -108,7 +108,7 @@
         "value": 0.3464,
         "source": "measured",
         "vintage": "2023-2025",
-        "cite": "MS footprints + Google Open Buildings 2.5D"
+        "cite": "Overture buildings (OSM + Google + Microsoft) + Google Open Buildings 2.5D heights"
       },
       "socioVuln": {
         "value": 4.624,
@@ -181,7 +181,7 @@
         "value": 0.4848,
         "source": "measured",
         "vintage": "2023-2025",
-        "cite": "MS footprints + Google Open Buildings 2.5D"
+        "cite": "Overture buildings (OSM + Google + Microsoft) + Google Open Buildings 2.5D heights"
       },
       "socioVuln": {
         "value": 3.354,

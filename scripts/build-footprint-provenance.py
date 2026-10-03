@@ -43,7 +43,7 @@ import os
 import sys
 from typing import Any
 
-import pyarrow.parquet as pq
+import duckdb
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -74,8 +74,14 @@ def build(ward_id: str) -> dict[str, Any]:
     if not raw:
         sys.exit(f"  no raw parquet for {ward_id} — data/geometry/raw/ is the source of truth "
                  f"for provenance and is committed; do not regenerate it to run this.")
-    table = pq.read_table(raw[0], columns=["id", "sources"])
-    lut = dict(zip(table.column("id").to_pylist(), table.column("sources").to_pylist()))
+    # DuckDB, not pyarrow, since 2026-10-02: the 2026-09-23.1 Ballygunge download
+    # was written by a newer Arrow whose page-index histograms the pinned
+    # pyarrow 19 rejects ("Repetition level histogram size mismatch"). DuckDB is
+    # what fetch-buildings.py already reads these files with, so both ends of
+    # the GERS join now go through the same reader.
+    rows = duckdb.connect().execute(
+        "SELECT id, sources FROM read_parquet(?)", [raw[0]]).fetchall()
+    lut: dict[str, Any] = {str(gid): src for gid, src in rows}
 
     src, conf, unknown = [], [], 0
     for row in fp["b"]:

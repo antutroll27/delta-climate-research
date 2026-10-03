@@ -2,6 +2,7 @@ import type maplibregl from 'maplibre-gl';
 import type { Ambient, RoadsData, WaterData, WardData } from '../heat-map-model.ts';
 import type { TerrainField } from '../terrain.ts';
 import type { TreesFile } from '../vegetation-layer.ts';
+import type { WardMask } from '../ward-mask.ts';
 import type { WardFrame } from '../ward-frame.ts';
 import type { BuildingMeta } from './building-pick.ts';
 /* Type-only, and it has to stay that way: landmark-layer.ts is pure arithmetic
@@ -25,6 +26,13 @@ export interface ReliefWardBundle {
   mercatorOrigin: { x: number; y: number; z: number };
   frame: WardFrame;
   veg: TreesFile | null;
+  /**
+   * The administrative boundary the ward's statistics are taken over, or null for
+   * an area whose square is its study area. With one, the renderer outlines the
+   * polygon, veils the heat outside it and dims the buildings that are context.
+   * Drawing only — the solve never reads it.
+   */
+  boundary: Pick<WardMask, 'cells' | 'inWard' | 'ring'> | null;
 }
 
 export interface ReliefFieldUpdate {

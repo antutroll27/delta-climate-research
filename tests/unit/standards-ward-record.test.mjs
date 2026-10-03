@@ -10,7 +10,9 @@ import { LICENCES, allWardRecords, utmEpsg, wardBbox, wardRecord } from '../../s
    a centre or _types.py changes m_per_deg, ONE of them changes and this fails —
    which is the point: the two must be changed together or not at all. */
 const PY_ORACLE = {
-  ballygunge:  [88.3590923461, 22.5216674507, 88.3727076539, 22.5343325493],
+  /* Ballygunge re-captured 2026-10-02 from _types.ward_bounds after it became the
+     1800 m square around KMC Ward 68 — both sides moved together, as required. */
+  ballygunge:  [88.3604206377, 22.5145621509, 88.3779253623, 22.5308458491],
   baruipur:    [88.4251003228, 22.3590674507, 88.4386996772, 22.3717325493],
   barrackpore: [88.3644807323, 22.7557674507, 88.3781192677, 22.7684325493],
 };
@@ -207,4 +209,30 @@ test('the heat-map card has no dead controls, and its record link is real', asyn
      number out. */
   assert.match(app, /state\.ward = name; state\.climate = resolve\(name\)\.climate;/,
     'state.climate must be re-resolved wherever the ward changes');
+});
+
+/* ── KMC Ward 68 (founder, 2026-10-02): the record names the boundary its figures use ── */
+
+test('Ballygunge\'s record carries the Ward 68 boundary, credits DataMeet, and the other wards carry none', () => {
+  const byId = Object.fromEntries(allWardRecords().map((r) => [r.id, r]));
+  const b = byId.ballygunge.boundary;
+  assert.ok(b, 'Ballygunge has no boundary block');
+  assert.equal(b.name, 'KMC Ward 68');
+  assert.equal(b.licence, 'CC BY-SA 2.5 India');
+  assert.match(b.source, /DataMeet/);
+  assert.equal(b.buildingsInWard, 2207);
+  assert.equal(b.buildingsInDomain, 7931);
+  assert.ok(b.polygon.length >= 4);
+  assert.deepEqual(b.polygon[0], b.polygon[b.polygon.length - 1], 'the polygon is not closed');
+  /* Every vertex sits inside the record's own compute bbox: the polygon and the square agree. */
+  const [w, s, e, n] = byId.ballygunge.bbox;
+  for (const [lon, lat] of b.polygon) assert.ok(lon > w && lon < e && lat > s && lat < n, `${lon},${lat} outside the bbox`);
+  const layer = byId.ballygunge.provenance.layers.find((l) => l.layer === 'ward boundary');
+  assert.ok(layer, 'no ward-boundary layer, so /attribution would not credit DataMeet');
+  assert.equal(layer.dataset, 'DataMeet Municipal Spatial Data');
+  assert.equal(layer.governingLicence, 'CC-BY-SA-2.5-IN');
+  for (const id of ['baruipur', 'barrackpore']) {
+    assert.equal(byId[id].boundary, null, `${id} claims a boundary it does not have`);
+    assert.ok(!byId[id].provenance.layers.some((l) => l.layer === 'ward boundary'));
+  }
 });

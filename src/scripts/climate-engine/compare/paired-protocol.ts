@@ -50,6 +50,13 @@ export interface WardScenarioResult {
   greenReferenceContrastC: number;
   capitalCost: number;
   delivered: DeliveredQuantities;
+  /** The boundary EVERY figure on this side is taken over — the mean, the hot area,
+   *  the cost and the delivered quantities (ward-plan.ts) — with its area; or null
+   *  where they are all the whole study square's. */
+  statsOver: { name: string; areaM2: number } | null;
+  /** That boundary as a ring in ward-local metres (x east, y north), for the maps'
+   *  outline; null with `statsOver`. CC BY-SA 2.5 India, as its source. */
+  boundaryRing: readonly number[] | null;
   evidence: ReleaseEvidence;
 }
 
@@ -101,22 +108,39 @@ export function isAbortError(error: unknown): boolean {
   return (error as Error | undefined)?.name === 'AbortError';
 }
 
+/** Two admitted grids describe the same physical cell when their cell sizes differ by at most this share. */
+export const SAME_CELL_TOLERANCE = 0.001;
+
+/** Whether two cell sizes, metres, are the same physical cell under SAME_CELL_TOLERANCE.
+ *  Its own function so the tolerance can be tested on pairs no admitted grid makes yet. */
+export function sameCell(cellA: number, cellB: number): boolean {
+  return Math.abs(cellA - cellB) / Math.max(cellA, cellB) <= SAME_CELL_TOLERANCE;
+}
+
 export function assertPairedResult(result: PairedResult): void {
   if (result.a.ward === result.b.ward) throw new Error('A paired result requires two distinct wards.');
-  /* Both fields are sized against A's ward, and the two checks divide the work
-     by era. TODAY no two admitted pairs share an `n`, so a mixed-grid pair
-     cannot reach the gridVersion comparison below: B's field length will not
-     match A's grid and THIS check throws, naming A's size — the only size it
-     can vouch for. Once a coarse tier lands (192 cells over a 2800 m ward, the
-     case ADMITTED_GRIDS anticipates) two pairs DO share an `n`, the lengths
-     agree, and the gridVersion comparison becomes the one that catches it. */
-  const expect = requireGrid(result.a.wardData.sizeM).n;
-  if (result.a.field.length !== expect * expect || result.b.field.length !== expect * expect) {
-    throw new Error(`The paired result does not match the ${result.a.wardData.sizeM} m ward's admitted grid.`);
+  /* EACH FIELD AGAINST ITS OWN WARD'S ADMITTED GRID. Since 2026-10-02 two areas of one
+     city can sit on different admitted pairs — Ballygunge is KMC Ward 68 in an 1800 m
+     square (247 cells), Baruipur a 1400 m one (192) — so sizing B against A's grid
+     refused every Ballygunge pair, the default one included. The field-length check
+     catches a field solved on the wrong grid for its own ward; whether the two grids
+     may be compared at all is the cell-size check below, not this one. */
+  for (const side of [result.a, result.b]) {
+    const expect = requireGrid(side.wardData.sizeM).n;
+    if (side.field.length !== expect * expect) {
+      throw new Error(`The paired result does not match the ${side.wardData.sizeM} m ward's admitted grid.`);
+    }
   }
+  /* THE SHARED CONTRACT IS THE SAME PHYSICAL CELL, not the same version string. The
+     model runs in cell units, so what makes two fields comparable is the cell's size:
+     1800/247 = 7.2874 m against 1400/192 = 7.2917 m is 0.06 %, the tolerance the
+     cross-city "same cell" tests hold (types.ts ADMITTED_GRIDS). A pair of grids
+     further apart than 0.1 % is refused as a broken contract. */
+  const cellA = result.a.wardData.sizeM / requireGrid(result.a.wardData.sizeM).n;
+  const cellB = result.b.wardData.sizeM / requireGrid(result.b.wardData.sizeM).n;
   const evidence = [result.a.evidence, result.b.evidence];
   if (evidence[0].forcingId !== evidence[1].forcingId
-    || evidence[0].gridVersion !== evidence[1].gridVersion
+    || !sameCell(cellA, cellB)
     || evidence[0].modelVersion !== evidence[1].modelVersion
     || evidence[0].metricsVersion !== evidence[1].metricsVersion) {
     throw new Error('The paired result failed its shared analytical contract.');
@@ -146,4 +170,16 @@ export function fromPairedWireResult(result: PairedWireResult, assets: ReadonlyM
   const full = { ...result, a: fromWire(result.a), b: fromWire(result.b) };
   assertPairedResult(full);
   return full;
+}
+
+/**
+ * What one side's figures are taken over, in words: "inside KMC Ward 68 (0.93 km²)"
+ * for an area with a boundary, "1.4 km study window" where the square is the area.
+ * Compare's caption and the Brief print this, so neither can call two unequal areas
+ * equal.
+ */
+export function statsOverLabel(ward: Pick<WardScenarioResult, 'statsOver' | 'wardData'>): string {
+  return ward.statsOver
+    ? `inside ${ward.statsOver.name} (${(ward.statsOver.areaM2 / 1e6).toFixed(2)} km²)`
+    : `${(ward.wardData.sizeM / 1000).toFixed(1)} km study window`;
 }

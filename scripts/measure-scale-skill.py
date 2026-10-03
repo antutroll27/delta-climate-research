@@ -125,6 +125,10 @@ def main() -> None:
 
     layers: dict[str, dict[str, npt.NDArray[np.float32]]] = {}
     cell_m: dict[str, float] = {}
+    # The ward's own ECOSTRESS pixels (Ward 68's polygon for Ballygunge, 2026-10-03),
+    # or None for a ward scored over its whole square. Cells outside the ward are
+    # treated exactly like cloud: excluded from every block, every field.
+    pixels = {wid: msa.ward_pixels(w) for wid, w in wards.items()}
     for wid, w in wards.items():
         _tf, W, H = target_grid(_types.ward_bounds(w))
         veg, alb = msa.surface_layers(wid)
@@ -139,6 +143,11 @@ def main() -> None:
     # factor -> list of per-ward-scene correlations
     acc: dict[int, dict[str, list[float]]] = {
         k: {"physics": [], "veg": [], "built": [], "cells": []} for k in FACTORS}
+    # Which ward each scored row came from, per factor. DESCRIPTIVE ONLY (added
+    # 2026-10-03): Ward 68's polygon is too small to hold MIN_BLOCK_CELLS blocks at
+    # the coarsest factors, so those rows can hold a different ward mix from the
+    # finest one, and a reader comparing the two must be able to see that.
+    by_ward: dict[int, dict[str, int]] = {k: {} for k in FACTORS}
 
     scored = 0
     for n, sc in enumerate(scenes, 1):
@@ -149,7 +158,8 @@ def main() -> None:
             lay = layers[wid]
             if obs.shape != lay["veg"].shape:
                 continue
-            if int(np.isfinite(obs).sum()) < msa.MIN_CELLS:
+            scored_m = msa.scored_cells(w, obs, pixels[wid])
+            if int(scored_m.sum()) < msa.MIN_CELLS:
                 continue
 
             mod = msa.modelled_field(sc, lay["veg"], lay["alb"], lay["built"],
@@ -163,7 +173,7 @@ def main() -> None:
             # NaN the observation's masked cells so block_mean can exclude them,
             # and mask the SAME cells in every candidate — a field scored on more
             # cells than another is not a comparison.
-            invalid = ~np.isfinite(o)
+            invalid = ~scored_m
             o_masked = o.copy()
             o_masked[invalid] = np.nan
             scored += 1
@@ -184,6 +194,7 @@ def main() -> None:
                         continue
                     acc[k][name].append(msa.pearson(fb, ov))
                 acc[k]["cells"].append(float(good.sum()))
+                by_ward[k][wid] = by_ward[k].get(wid, 0) + 1
         if n % 5 == 0 or n == len(scenes):
             print(f"  [{n:>3}/{len(scenes)}] {scored} ward-scenes")
 
@@ -203,6 +214,7 @@ def main() -> None:
             "mean_cells": round(cells, 1),
             "r_physics": round(p, 4), "r_veg": round(v, 4), "r_built": round(b, 4),
             "gap_physics_minus_veg": round(p - v, 4),
+            "n_by_ward": dict(sorted(by_ward[k].items())),
         }
 
     gaps = [(f["approx_m"], f["gap_physics_minus_veg"]) for f in out["factors"].values()]

@@ -54,7 +54,9 @@ test.describe.serial('the payback sheet', () => {
     await expect(page.locator('#solTariff')).toHaveValue('8.00');
     const ward = page.locator('#solPanePay');
     await expect(ward).toBeVisible({ timeout: 15_000 });
-    await expect(ward).toContainText(/^Whole-ward estimate: every roof that can take 1 kW or more, at its floor capacity,/);
+    /* Ballygunge is KMC Ward 68 (2026-10-02): the case is the ward's roofs, not the square's,
+       and the line names the ward. An area without a polygon still says "Whole-ward estimate". */
+    await expect(ward).toContainText(/^KMC Ward 68 estimate: every roof in the ward that can take 1 kW or more, at its floor capacity,/);
     await expect(ward).toContainText('no subsidy');
     await expect(ward).toContainText('as if all of it is used');
     await expect(ward).toContainText("per kW, today's prices");

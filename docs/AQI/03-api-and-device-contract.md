@@ -10,7 +10,10 @@
 > (§3) governs. It differs from this draft as follows:
 >
 > - States are `live`, `stale`, `unavailable`, `insufficient_data` and `no_station`;
->   `nearby` is not used, because both Kolkata stations lie inside their 3 km windows.
+>   `nearby` is not used. Both Kolkata stations lay inside their 3 km windows on 26
+>   September; since 3 October Ballygunge's lies outside (Ballygunge became KMC Ward 68
+>   and its centre moved), and the station block says so with `inside: 'outside_window'`
+>   and a `placement` rather than a new state (AQI-R20).
 > - `stale` carries the last valid AQI and its age for up to 7 days.
 > - History is in scope: `GET /api/air-quality?area_id=…&view=history` returns 30 days
 >   of daily AQI and the last 24 h of PM2.5.

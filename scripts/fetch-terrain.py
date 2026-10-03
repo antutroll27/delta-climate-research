@@ -19,6 +19,7 @@ JSON artefact, and nothing it does ever executes in a browser.
 
     python3 scripts/fetch-terrain.py            # bake all three wards
     python3 scripts/fetch-terrain.py --check    # assert over the committed artefacts
+    python3 scripts/fetch-terrain.py --ward ballygunge   # bake one ward
 """
 from __future__ import annotations
 
@@ -34,31 +35,51 @@ import sys
 import requests
 from PIL import Image
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _types  # noqa: E402
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
 OUT_DIR = os.path.join(ROOT, "public", "heat-map", "data")
 
 TILE = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
 Z = 15                       # ~4.4 m/px at this latitude; the window spans ~317 px
-N = 128                      # texels per side -> ~11 m/texel over 1400 m
-SIZE_M = 1400.0              # the instrument's ward window, edge to edge
+#: Texel pitch, metres: 128 texels over the original 1400 m window. Held FIXED
+#: across ward sizes (an 1800 m ward gets 165 texels, not 128 stretched to
+#: 14 m), so the median filter and the clamp mean the same thing in every ward.
+TEXEL_M = 1400.0 / 128
 SMOOTH_RADIUS_M = 40.0       # median-filter radius: wider than a building, narrower than the embankment
 CLAMP_M = 12.0               # residual clamped to +/- this around the window median
 RETRIEVED = "2026-08-04"     # constant, not date.today() -- byte-stable regeneration
 
-#: lat, lon of each ward window centre (same values the instrument uses)
-WARDS = {
-    "ballygunge": (22.528, 88.3659),
-    "barrackpore": (22.7621, 88.3713),
-    "baruipur": (22.3654, 88.4319),
+#: The ward table: _types.WARDS, the window centres and sizes the instrument uses.
+#: This file carried a private copy of the centres until Ballygunge moved.
+WARDS = _types.WARDS
+
+
+#: The windows the GLO-30 cross-check (`crossCheck` below) was MEASURED on,
+#: 2026-08. A ward whose window has since moved says so in its artefact rather
+#: than carrying a comparison of ground it no longer covers.
+CROSS_CHECKED: dict[str, tuple[float, float, int]] = {
+    "ballygunge": (22.528, 88.3659, 1400),
+    "barrackpore": (22.7621, 88.3713, 1400),
+    "baruipur": (22.3654, 88.4319, 1400),
 }
+
+
+def grid_n(ward: str) -> int:
+    """Texels per side for this ward: 128 at 1400 m, 165 at 1800 m."""
+    return round(WARDS[ward].footprint_m / TEXEL_M)
+
 
 #: RAW p5-p95 relief measured 2026-08-03 on these exact windows, BEFORE smoothing.
 #: The tripwire: if a future re-run's raw span drifts past +/-30 % of these, the
 #: tile source changed under us and the artefact must not be silently accepted.
 #: It compares the RAW span deliberately -- the median filter exists to shrink the
 #: smoothed one, so asserting that against these constants would always fail.
-RAW_SPAN_M = {"ballygunge": 8.9, "barrackpore": 6.4, "baruipur": 7.5}
+#: Ballygunge re-measured 2026-10-02 on its 1800 m Ward 68 window: 8.5 m (was 8.9 m over
+#: the old 1400 m box).
+RAW_SPAN_M = {"ballygunge": 8.5, "barrackpore": 6.4, "baruipur": 7.5}
 
 
 # -- pure helpers ------------------------------------------------------------
@@ -98,8 +119,8 @@ def median_filter(field: list[float], n: int, radius: int) -> list[float]:
 
 # -- acquisition -------------------------------------------------------------
 
-def fetch_window(lat: float, lon: float) -> list[float]:
-    """RAW N^2 heightfield over the SIZE_M window, nearest-sampled from z15 tiles.
+def fetch_window(lat: float, lon: float, size_m: float, n: int) -> list[float]:
+    """RAW n^2 heightfield over the size_m window, nearest-sampled from z15 tiles.
 
     Nearest, not bilinear: at ~4.4 m/px source against ~11 m/texel output the median
     filter downstream swallows any sampling difference, and nearest keeps this loop
@@ -107,7 +128,7 @@ def fetch_window(lat: float, lon: float) -> list[float]:
     """
     cx, cy = tile_xy(lat, lon)
     m_per_px = 40075016.7 * math.cos(math.radians(lat)) / (2 ** Z * 256)
-    half_px = (SIZE_M / 2) / m_per_px
+    half_px = (size_m / 2) / m_per_px
 
     tiles: dict[tuple[int, int], Image.Image] = {}
 
@@ -122,21 +143,35 @@ def fetch_window(lat: float, lon: float) -> list[float]:
         return decode(px)
 
     field = []
-    for row in range(N):
-        for col in range(N):
-            gx = cx * 256 - half_px + (col + 0.5) / N * 2 * half_px
-            gy = cy * 256 - half_px + (row + 0.5) / N * 2 * half_px
+    for row in range(n):
+        for col in range(n):
+            gx = cx * 256 - half_px + (col + 0.5) / n * 2 * half_px
+            gy = cy * 256 - half_px + (row + 0.5) / n * 2 * half_px
             field.append(px_at(gx, gy))
     return field
 
 
+def cross_check(ward: str) -> str:
+    """The GLO-30 comparison sentence, or that sentence plus where it was measured."""
+    text = ("vs Copernicus GLO-30 over the same window: shape agreement "
+            "r=0.49/0.48/0.67, per-cell RMSE 1.5-2.1 m against a 4.9-7.7 m "
+            "relief. Two instruments disagree by ~a quarter of the signal.")
+    w = WARDS[ward]
+    lat, lon, size = CROSS_CHECKED[ward]
+    if (w.centre.lat, w.centre.lon, w.footprint_m) == (lat, lon, size):
+        return text
+    return (text + f" MEASURED 2026-08 on the earlier {size} m window centred {lat} N, "
+            f"{lon} E; not re-measured for this {w.footprint_m} m window.")
+
+
 def build_artefact(ward: str) -> dict[str, Any]:
-    lat, lon = WARDS[ward]
-    raw = fetch_window(lat, lon)
+    w = WARDS[ward]
+    size_m, n = float(w.footprint_m), grid_n(ward)
+    raw = fetch_window(w.centre.lat, w.centre.lon, size_m, n)
     raw_lo, raw_hi = p5_p95(raw)
 
-    radius_tx = max(1, round(SMOOTH_RADIUS_M / (SIZE_M / N)))
-    smooth = median_filter(raw, N, radius_tx)
+    radius_tx = max(1, round(SMOOTH_RADIUS_M / (size_m / n)))
+    smooth = median_filter(raw, n, radius_tx)
     med = statistics.median(smooth)
     h = [round(max(-CLAMP_M, min(CLAMP_M, v - med)), 1) for v in smooth]
     sm_lo, sm_hi = p5_p95(h)
@@ -146,8 +181,8 @@ def build_artefact(ward: str) -> dict[str, Any]:
         "source": "AWS Open Data terrain tiles (terrarium z15; SRTM-derived over India)",
         "licence": "elevation public domain (SRTM/NASA); tile assembly per Mapzen attribution list",
         "retrieved": RETRIEVED,
-        "n": N,
-        "sizeM": SIZE_M,
+        "n": n,
+        "sizeM": size_m,
         "medianM": round(med, 1),
         "smoothRadiusM": SMOOTH_RADIUS_M,
         "clampM": CLAMP_M,
@@ -156,9 +191,7 @@ def build_artefact(ward: str) -> dict[str, Any]:
         "confidence": "indicative",
         "note": "smoothed surface model, indicative broad-scale form -- NOT surveyed "
                 "ground and NOT used by the simulation",
-        "crossCheck": "vs Copernicus GLO-30 over the same window: shape agreement "
-                      "r=0.49/0.48/0.67, per-cell RMSE 1.5-2.1 m against a 4.9-7.7 m "
-                      "relief. Two instruments disagree by ~a quarter of the signal.",
+        "crossCheck": cross_check(ward),
         "h": h,
     }
 
@@ -178,8 +211,13 @@ def check() -> int:
             continue
         with open(path, encoding="utf-8") as fh:
             d = json.load(fh)
-        if len(d["h"]) != N * N:
-            failures.append(f"{ward}: expected {N*N} texels, found {len(d['h'])}")
+        n = grid_n(ward)
+        if d["n"] != n or len(d["h"]) != n * n:
+            failures.append(f"{ward}: expected {n}x{n} texels, found n={d['n']} "
+                            f"and {len(d['h'])} values")
+        if d["sizeM"] != float(WARDS[ward].footprint_m):
+            failures.append(f"{ward}: artefact is {d['sizeM']} m, the ward is "
+                            f"{WARDS[ward].footprint_m} m -- regenerate it")
         if any(abs(v) > CLAMP_M for v in d["h"]):
             failures.append(f"{ward}: a texel escapes the +/-{CLAMP_M} m clamp")
         expect = RAW_SPAN_M[ward]
@@ -203,10 +241,12 @@ def check() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
-    if parser.parse_args().check:
+    parser.add_argument("--ward", choices=sorted(WARDS), default=None)
+    args = parser.parse_args()
+    if args.check:
         return check()
     os.makedirs(OUT_DIR, exist_ok=True)
-    for ward in WARDS:
+    for ward in ([args.ward] if args.ward else list(WARDS)):
         doc = build_artefact(ward)
         path = os.path.join(OUT_DIR, f"{ward}-terrain.json")
         with open(path, "w", encoding="utf-8") as fh:

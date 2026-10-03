@@ -16,7 +16,7 @@ import { detectHeatCaps } from './caps';
 import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
-import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
+import { ACCURACY, SPATIAL, HEIGHTS, PEAK_CHIP_BASIS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
 import { solarElevationFactor, solarDayHours } from './sky';
 import { loadLayerManifest } from './provenance';
 import * as U from './dc-urs';
@@ -45,7 +45,7 @@ import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from '
 import {
   dayOfYearUtc, maplibreSky, representativeSolarHour, sunPlacement, wardMonthHour,
 } from './explore/sun-lighting';
-import { createCoreFieldLayer, CORE_FIELD_SOURCE } from './explore/core-field-layer';
+import { createCoreFieldLayer, CORE_FIELD_SOURCE, WARD_OUTLINE_SOURCE } from './explore/core-field-layer';
 import { CLASSIC, LAB_HOOK } from './explore/look';
 import { paperStyle } from './explore/look-paper';
 import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
@@ -65,7 +65,8 @@ import { wardSummary, validatedSentence, noteFor, sharePct, ESTIMATE_TAG, paybac
 import { costBasisFor } from './solar-cost.ts';
 import { wardRoi, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
 import { mountPaybackSheet, type PaybackSheet } from './solar-payback-sheet.ts';
-import { areaPath, paths, cityPaths } from './scope/paths.ts';
+import { areaPath, paths, cityPaths, wardMaskPath } from './scope/paths.ts';
+import { asWardMask, buildingInWard, fieldHistogram, fieldStats, wardRows, type WardMask } from './ward-mask.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
 import { toLegacyWard } from './scope/legacy.ts';
@@ -360,13 +361,26 @@ export function mountHeatMap(): () => void {
        easeTo, flyTo and reset in this file still says 60 or 0. */
     maxPitch: 78,
   });
-  map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+  /* The attribution control is REBUILT when the open area's boundary credit changes
+     (`setMapCredit`, from paintWardScope): MapLibre reads `customAttribution` only at
+     construction. */
+  let attribution = new maplibregl.AttributionControl({ compact: true });
+  let attributionCredit: string | null = null;
+  map.addControl(attribution, 'bottom-right');
+  function setMapCredit(credit: string | null): void {
+    if (credit === attributionCredit) return;
+    attributionCredit = credit;
+    map.removeControl(attribution);
+    attribution = new maplibregl.AttributionControl({ compact: true, ...(credit ? { customAttribution: credit } : {}) });
+    map.addControl(attribution, 'bottom-right');
+  }
   /* `?lab=1` on localhost only (look.ts `labHookAllowed`): a capture harness pins
      the camera and drives the perf orbit. Never set on the production host. */
   const labWindow = window as unknown as { __obosMap?: maplibregl.Map };
   if (LAB_HOOK) labWindow.__obosMap = map;
-  /* A distance reference. The instrument shows a 1.4 km window at a pitch that
-     foreshortens it, and until now nothing on screen said how big anything was. */
+  /* A distance reference. The instrument shows the open area's square (1.4 km, or
+     1.8 km around KMC Ward 68) at a pitch that foreshortens it, and until now
+     nothing on screen said how big anything was. */
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 104, unit: 'metric' }), 'bottom-left');
 
   /* The analytical core is intentionally Three-free. Its canvas raster remains
@@ -413,10 +427,20 @@ export function mountHeatMap(): () => void {
   /* ── idle auto-orbit (pauses on any interaction, resumes after 2.5 s) ── */
   let orbit = !reduceMotion, orbitResume = 0, lastT = 0;
   const ORBIT_DEG_PER_SEC = -1.4;
+  /* THE ORBIT NEVER CANCELS A CAMERA MOVE. `setBearing` is `jumpTo`, and MapLibre's
+     `jumpTo` begins with `stop()`, so a running orbit killed any easeTo/flyTo on its
+     next frame. MEASURED (pre-ship audit 2026-10-03, solar-pane:129): a ranked row
+     clicked once the orbit had resumed — 2.5 s after the last touch of the CANVAS;
+     the row is in the side pane, so it never paused it — logged `easeTo` and, 2 ms
+     later, the orbit's `jumpTo → stop`; the camera stayed where it was and the card,
+     projected behind it, stayed at opacity 0. Deterministic once the orbit runs;
+     flaky in the suite, where load decided which side of 2.5 s the click landed.
+     The orbit now steps only while no animation owns the camera, and resumes from
+     wherever the move left it. */
   function advanceOrbit(t: number): boolean {
     const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0; lastT = t;
     const active = Boolean(orbit && mode === 'relief' && map.isStyleLoaded());
-    if (active) map.setBearing(map.getBearing() + ORBIT_DEG_PER_SEC * dt);
+    if (active && !map.isEasing()) map.setBearing(map.getBearing() + ORBIT_DEG_PER_SEC * dt);
     return active;
   }
   function nudgeOrbit() { orbit = false; clearTimeout(orbitResume); orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') { orbit = true; requestRuntimeFrame('orbit'); } }, 2500); }
@@ -606,6 +630,9 @@ export function mountHeatMap(): () => void {
       else { vel.b = -dragAcc.dx * 0.4; vel.p = -dragAcc.dy * 0.35; map.jumpTo({ bearing: map.getBearing() + vel.b, pitch: Math.min(78, Math.max(0, map.getPitch() + vel.p)) }); }
       dragAcc = null;
     } else if (drag) { vel.b *= 0.5; vel.p *= 0.5; }
+    /* Inertia is a jumpTo too: it yields to a camera animation (see advanceOrbit) and
+       is spent, not resumed, when one starts. A drag in progress still wins above. */
+    else if (map.isEasing()) { vel.b = vel.p = 0; }
     else if (Math.abs(vel.b) > 0.02 || Math.abs(vel.p) > 0.02) { vel.b *= 0.88; vel.p *= 0.88; map.jumpTo({ bearing: map.getBearing() + vel.b, pitch: Math.min(78, Math.max(0, map.getPitch() + vel.p)) }); }
     return !!drag || Math.abs(vel.b) > 0.02 || Math.abs(vel.p) > 0.02;
   }
@@ -769,6 +796,9 @@ export function mountHeatMap(): () => void {
       if (cooling) parts.push('No vegetated cooling surface of 0.77 ha or more in this ward');
     }
     parts.push('Block detail illustrative — within-ward pattern is not validated');
+    /* A context building is drawn, solved and selectable, and counted in nothing:
+       say so on the card rather than let its roof read as one of the ward's. */
+    if (wardMask && !buildingInWard(wardMask, b.idx)) parts.unshift(`Outside ${wardMask.name} · drawn as context, not in the ward figures`);
     setHTML('bcIns', parts.join('<br>'));
     paintSolarCard(b);
   }
@@ -1054,6 +1084,22 @@ export function mountHeatMap(): () => void {
      Solar pane (its home) and into the legend's folded block. The right panel no
      longer carries it — a block stacked there pushed the colour legend below the
      fold (2026-09-06). */
+  /**
+   * THE ROOFS A WARD FIGURE IS TAKEN OVER, and the laboratory's totals for them.
+   *
+   * With a polygon the arrays cover every roof in the square but the WARD is the
+   * roofs touching the polygon: `totals_in_ward`/`stratum_in_ward` are their
+   * figures (asPvFile refuses a polygon area's file without them), `rows` is their
+   * indices, and `label` names the ward wherever a figure is printed. Without a
+   * polygon it is every roof and the file's own `totals`, as before.
+   */
+  function pvScope(pv: PvFile): { t: PvFile['totals']; s: PvFile['stratum']; n: number; rows: readonly number[]; label: string } {
+    if (wardMask && pv.totals_in_ward && pv.stratum_in_ward) {
+      return { t: pv.totals_in_ward, s: pv.stratum_in_ward, n: wardMask.inWardCount, rows: wardRows(wardMask, pv.kwp.length), label: wardMask.name };
+    }
+    return { t: pv.totals, s: pv.stratum, n: pv.kwp.length, rows: [...pv.kwp.keys()], label: 'whole ward' };
+  }
+
   function paintSolarWard() {
     const pv = pvCache[state.ward];
     const has = pv != null;
@@ -1068,7 +1114,9 @@ export function mountHeatMap(): () => void {
     show('solPaneBlock', has);
     show('solBlock', has);
     if (!has) { show('solPanePay', false); setSolarOpen(false); paintSolarPane(null); return; }
-    const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
+    const { t, s, n, rows, label } = pvScope(pv);
+    setText('solHead', `Rooftop solar · ${label}`);
+    setText('solPaneHead', `Rooftop solar · installable, ${label}`);
     /* The pane's own chip and summary: the card's tier is per-roof and cannot
        stand in for the whole ward, so these are painted independently rather than
        reusing the card's pattern -- but rewritten only when the ward's own
@@ -1102,13 +1150,13 @@ export function mountHeatMap(): () => void {
     if (wardPay) {
       if (!SOLAR_BASIS) wardPay.setAttribute('hidden', '');
       else {
-        const r = wardRoi(pv, SOLAR_BASIS, tariff);
+        const r = wardRoi(pv, SOLAR_BASIS, tariff, rows);
         /* "pays back in" only when it does; otherwise the sentence already says what happens, in words (spec §4 rule 4). */
         const said = paybackText(r, SOLAR_BASIS.horizonYears.value);
         const verdict = r.status === 'ok' ? `pays back in ${said}` : `${said.charAt(0).toLowerCase()}${said.slice(1)}`;
         /* Its own assumptions, not assumptionsLine's: that would name the owner ("Business"),
            and this is a ward case. Valuation, tariff, price and as-of all travel with it (§4 rules 2, 5, 6). */
-        wardPay.textContent = `Whole-ward estimate: every roof that can take ${MIN_SYSTEM_KW} kW or more, at its floor capacity, no subsidy, every kWh valued at ${fmtRate(tariff, COSTS)} as if all of it is used: ${verdict}`
+        wardPay.textContent = `${wardMask ? `${wardMask.name} estimate` : 'Whole-ward estimate'}: every roof${wardMask ? ' in the ward' : ''} that can take ${MIN_SYSTEM_KW} kW or more, at its floor capacity, no subsidy, every kWh valued at ${fmtRate(tariff, COSTS)} as if all of it is used: ${verdict}`
           + ` at ${fmtMoney(SOLAR_BASIS.costPerKw.value[0], COSTS)}–${fmtMoney(SOLAR_BASIS.costPerKw.value[1], COSTS)} per kW, today's prices`
           + ` · reference defaults as of ${oldestAsOf(SOLAR_BASIS)} · ${ESTIMATE_TAG}`;
         wardPay.removeAttribute('hidden');
@@ -1219,15 +1267,21 @@ export function mountHeatMap(): () => void {
       link.setAttribute('hidden', '');
       return;
     }
-    const t = pv.totals, s = pv.stratum, n = pv.kwp.length;
-    sum.innerHTML = `<b>${t.capacity_mwp.toFixed(1)} MWp</b> installable across <b>${n.toLocaleString()}</b> real roofs, `
+    const { t, s, n, rows } = pvScope(pv);
+    /* WITH A POLYGON THE SENTENCE NAMES IT, and says what the rest of the map is:
+       the roofs between the boundary and the square's edge are drawn, shaded and
+       shading, and are in no figure here. */
+    const where = wardMask ? ` in ${escHtml(wardMask.name)}` : '';
+    sum.innerHTML = `<b>${t.capacity_mwp.toFixed(1)} MWp</b> installable across <b>${n.toLocaleString()}</b> real roofs${where}, `
       + `the floor of a <b>${t.capacity_mwp_range[0].toFixed(1)}–${t.capacity_mwp_range[1].toFixed(1)} MWp</b> interval. `
       + `<b>${Math.round(s.share_losing_5pct * 100)}%</b> of the roofs that could carry ${s.threshold_kwp} kWp or more lose at least 5% of their yield to shade. `
       + `On the average roof, shading takes <b>${(t.mean_loss * 100).toFixed(1)}%</b> of the yield — <b>at least ${(t.mean_loss_strict * 100).toFixed(1)}%</b> `
       + `under a strict roof mask; trees are <b>${(t.mean_loss_trees * 100).toFixed(1)} points</b> of it. `
-      + `Across the ward that is <b>${t.shading_loss_gwh_yr.toFixed(1)} GWh</b> a year.`;
+      + `Across the ward that is <b>${t.shading_loss_gwh_yr.toFixed(1)} GWh</b> a year.`
+      + (wardMask ? ` The ${(pv.kwp.length - n).toLocaleString()} roofs outside the boundary are drawn as context and counted in none of this; the best-roofs list is the ward's, and the download marks every roof <code>in_ward</code>.` : '');
     const byIdx = new Map(registry.map((b) => [b.idx, b] as const));
-    const order = [...pv.kwh.keys()].sort((a, b) => pv.kwh[b] - pv.kwh[a]).slice(0, 10);
+    /* The ward's ten best, never a neighbour's: the list is "this ward's roofs". */
+    const order = [...rows].sort((a, b) => pv.kwh[b] - pv.kwh[a]).slice(0, 10);
     list.innerHTML = order.map((i) => {
       const meta = byIdx.get(i);
       const area = meta ? Math.round(meta.areaM2) : 0;
@@ -1278,6 +1332,12 @@ export function mountHeatMap(): () => void {
         ['tariff_per_kwh', tariff.toFixed(2)],
         ['currency', COSTS.currency],
         ['tier', tier],
+        /* Only where a polygon exists: there the square holds context roofs, and a
+           sheet that cannot tell them apart from the ward's would let the ward's
+           totals be re-summed over the neighbours'. Elsewhere every row is the area.
+           BEFORE `basis`, which stays last: it is the one quoted field that can carry
+           commas, and a reader splitting on commas relies on it closing the row. */
+        ...(wardMask ? [['in_ward', buildingInWard(wardMask, i) ? 1 : 0] as [string, number]] : []),
         ['basis', basis],
       ];
     };
@@ -1305,6 +1365,9 @@ export function mountHeatMap(): () => void {
        Ease there at the current zoom, pitch and bearing; instant under reduced
        motion. */
     const ll = wardLatLon(wardOf(state.ward), b.cx, b.cz);
+    /* A row click is an interaction, so it pauses the idle orbit like a touch of the
+       map does; the orbit also yields while this ease runs (advanceOrbit). */
+    nudgeOrbit();
     map.easeTo({ center: [ll.lon, ll.lat], duration: reduceMotion ? 0 : 700, essential: true });
   };
   const tariffInput = el('solTariff') as HTMLInputElement | null;
@@ -1356,6 +1419,28 @@ export function mountHeatMap(): () => void {
     dropCsv();
   });
 
+  /* THE HUD THE MAP-BORNE CHIPS MUST NOT SIT ON. The greenery tag and the ring labels
+     are z-index 6 over the panels, so wherever they land on one they cover its text —
+     MEASURED by the pre-ship audit (2026-10-03): the tag over #wardScope and the LST
+     unit, a ring label on the tag at 3.64:1. They are placed clear of these boxes, and
+     hidden when nowhere is clear. Read at most every 250 ms: the HUD moves on a pane
+     toggle or a resize, not per frame, and placeCard runs per frame. */
+  const HUD_KEEP_OUT = '.rail-r > *, #clockw, #vegw, #svw, .chiprow, .synthetic, .stamp-slot, #sunLine, #compass';
+  let hudRects: DOMRect[] = [], hudReadAt = -Infinity;
+  function hudKeepOut(): DOMRect[] {
+    const now = performance.now();
+    if (now - hudReadAt < 250) return hudRects;
+    hudReadAt = now;
+    hudRects = [...document.querySelectorAll<HTMLElement>(HUD_KEEP_OUT)]
+      .filter((e) => !e.hidden && e.offsetParent !== null && getComputedStyle(e).visibility !== 'hidden')
+      .map((e) => e.getBoundingClientRect())
+      .filter((r) => r.width > 0 && r.height > 0);
+    return hudRects;
+  }
+  /** Client-space boxes [left, top, right, bottom]: do they overlap? Touching is not overlapping. */
+  const overlaps = (a: readonly number[], b: { left: number; top: number; right: number; bottom: number }) =>
+    a[0] < b.right && a[2] > b.left && a[1] < b.bottom && a[3] > b.top;
+
   /** Move the card, brackets and ring labels onto the selection, and keep the
       compass needle honest. Transform only — no layout. */
   function placeCard() {
@@ -1389,6 +1474,9 @@ export function mountHeatMap(): () => void {
        both land under the card does it hide — the card carries the same fact
        in prose, so nothing is lost. Exact rectangles, no slop margins: a
        near-miss is not a collision. */
+    const hud = hudKeepOut();
+    /* The tag is placed FIRST, and its box is what the ring labels then avoid. */
+    let tagBox: number[] | null = null;
     if (nearestCool) {
       const tag = el('coolTag');
       if (tag) {
@@ -1401,7 +1489,14 @@ export function mountHeatMap(): () => void {
              146 wide, ~41 tall. These are the chip's real dimensions — a stale
              width here silently tests a rectangle the tag no longer occupies. */
           const TAG_W = 146, TAG_H = 41, TAG_DX = 73, TAG_DY = 16;
+          const boxAt = (x: number, y: number) => {
+            const L = x + cvB.left - TAG_DX, T = y + cvB.top - TAG_DY;
+            return [L, T, L + TAG_W, T + TAG_H];
+          };
+          /* Clear of the HUD everywhere; clear of the card except on the docked rung. */
+          const clearOfHud = (x: number, y: number) => !hud.some((r) => overlaps(boxAt(x, y), r));
           const fits = (y: number) => {
+            if (!clearOfHud(q.x, y)) return false;
             if (!cardB) return true;
             const L = q.x + cvB.left - TAG_DX, T = y + cvB.top - TAG_DY;
             return L + TAG_W < cardB.left || L > cardB.right
@@ -1423,9 +1518,14 @@ export function mountHeatMap(): () => void {
                ty - TAG_DY to ty - TAG_DY + TAG_H. */
             ty = cardB.top - cvB.top - (TAG_H - TAG_DY) - 9;
             if (ty < 44) ty = cardB.bottom - cvB.top + TAG_DY + 9;
+            /* docked over a panel is still over its text: hidden instead */
+            if (!clearOfHud(tx, ty)) ty = null;
           }
           tag.style.visibility = ty === null ? 'hidden' : 'visible';
-          if (ty !== null) tag.style.transform = `translate3d(${Math.round(tx)}px, ${Math.round(ty)}px, 0)`;
+          if (ty !== null) {
+            tag.style.transform = `translate3d(${Math.round(tx)}px, ${Math.round(ty)}px, 0)`;
+            tagBox = boxAt(Math.round(tx), Math.round(ty));
+          }
         }
       }
     }
@@ -1434,12 +1534,19 @@ export function mountHeatMap(): () => void {
       /* Gather every on-screen candidate, then choose in two passes: topmost
          among those clear of the card, else topmost overall. Two cheap loops
          beat one clever one nobody can read six months from now. */
+      /* A label NEVER sits on the greenery tag or on the HUD — both are text it would
+         cover (or be covered by) at z 6. Under the card is the one tolerated fallback:
+         the card is z 7 and opaque, so a label beneath it is simply not seen. */
       const cands: { x: number; y: number; free: boolean }[] = [];
       for (const [dx, dz] of [[0, r], [0, -r], [r, 0], [-r, 0]] as const) {
         const q = relief?.project(selected.cx + dx, 1, selected.cz + dz, w, h) ?? { x: 0, y: 0, w: -1 };
         /* The chip is taller now, so it needs more headroom before it would be
            clipped by the top edge or buried under the footer strip. */
         if (q.w <= 0 || q.y > h - 46 || q.y < 44) continue;
+        /* .ringlab box: margin -9px 0 0 -52px, 104 × ~22. */
+        const L = q.x + cvBox.left - 52, T = q.y + cvBox.top - 9, box = [L, T, L + 104, T + 22];
+        if ((tagBox && overlaps(box, { left: tagBox[0], top: tagBox[1], right: tagBox[2], bottom: tagBox[3] }))
+          || hud.some((rect) => overlaps(box, rect))) continue;
         cands.push({ x: q.x, y: q.y, free: clearsCard(q.x, q.y) });
       }
       const pool = cands.filter(c => c.free);
@@ -1903,7 +2010,13 @@ export function mountHeatMap(): () => void {
      index with no id: a wrong-ward file would hand every roof a stranger's
      figures without a single error, and the card would print them in good faith. */
   const pvCache: Record<string, PvFile | null> = {};
-  function asPvFile(raw: unknown, buildings: number, area: string): PvFile | null {
+  /* THE WARD BOUNDARY, for an area whose statistics are taken over a polygon
+     (ward-mask.ts). `null` is "this area's square is its study area" — every
+     statistic below then reads the whole field, exactly as before. `wardMask` is
+     the OPEN area's, assigned with `state.ward` so the two can never disagree. */
+  const maskCache: Record<string, WardMask | null> = {};
+  let wardMask: WardMask | null = null;
+  function asPvFile(raw: unknown, buildings: number, area: string, mask: WardMask | null): PvFile | null {
     if (!raw || typeof raw !== 'object') return null;
     const f = raw as PvFile;
     const arrays = [f.kwp, f.kwh, f.loss, f.loss_buildings, f.loss_trees, f.loss_raised, f.loss_strict];
@@ -1936,7 +2049,17 @@ export function mountHeatMap(): () => void {
           && typeof f.tiers.validated?.months === 'number'
           && typeof f.tiers.validated?.median_ratio === 'number'
           && typeof f.tiers.validated?.within_15pct_share === 'number'
-          && typeof f.tiers.validated?.date === 'string'));
+          && typeof f.tiers.validated?.date === 'string'))
+      /* A WARD WITH A POLYGON MUST SHIP THE WARD'S OWN FIGURES. Without them the
+         panel would print the square's totals under the ward's name — the exact
+         defect the polygon exists to end — so the file is refused rather than
+         read. The roof count is checked against the boundary's own, because the
+         block and the mask are written by two scripts. */
+      && (mask === null
+        || (typeof f.totals_in_ward?.capacity_mwp === 'number' && Array.isArray(f.totals_in_ward?.capacity_mwp_range)
+          && typeof f.totals_in_ward?.mean_loss_strict === 'number'
+          && f.totals_in_ward?.buildings === mask.inWardCount
+          && typeof f.stratum_in_ward?.n === 'number' && typeof f.stratum_in_ward?.share_losing_5pct === 'number'));
     if (!ok) {
       console.warn(`solar screen "${String(f.ward ?? '?')}" does not match ${area} (${buildings} buildings) — ignored`);
       return null;
@@ -1995,6 +2118,8 @@ export function mountHeatMap(): () => void {
        layer is off and forgetting the mode — would leave the 2-D raster painted
        under the 3-D scene in relief mode. */
     coreField.setVisible(!showRelief && surfaceOn);
+    /* The 2-D outline whenever the 2-D path draws the map; the 3-D scene draws its own. */
+    coreField.setOutlineVisible(!showRelief);
     if (relief && map.getLayer(relief.layer.id)) {
       map.setLayoutProperty(relief.layer.id, 'visibility', showRelief ? 'visible' : 'none');
     }
@@ -2181,7 +2306,8 @@ export function mountHeatMap(): () => void {
       /* Fetch the complete immutable ward bundle before changing shared state. A
          superseded request therefore cannot replace geometry, labels, or metrics
          part way through a newer ward selection. */
-      const [d, terrain, water, wardSurface, roads, labels, provenance, canopy, trees, pvRaw] = await Promise.all([
+      const maskUrl = wardMaskPath(name);
+      const [d, terrain, water, wardSurface, roads, labels, provenance, canopy, trees, pvRaw, maskRaw] = await Promise.all([
         cache[name]
           ? Promise.resolve(cache[name])
           : fetch(P.ward, { signal: token.signal }).then(async (r) => {
@@ -2220,18 +2346,34 @@ export function mountHeatMap(): () => void {
           ? Promise.resolve(pvCache[name] as unknown)
           : optional(fetch(P.pv, { signal: token.signal })
             .then(async (r) => (r.ok ? await r.json() as unknown : null)), null as unknown),
+        /* NOT `optional`. An area that DECLARES a boundary and cannot load it must
+           not fall back to its square: every statistic would then be the square's,
+           printed under the ward's name. The load fails loudly instead. */
+        maskUrl === null || maskCache[name] !== undefined
+          ? Promise.resolve(null as unknown)
+          : fetch(maskUrl, { signal: token.signal }).then(async (r) => {
+            if (!r.ok) throw new Error(`Ward boundary unavailable (${r.status}).`);
+            return await r.json() as unknown;
+          }),
       ]);
       if (!wardSession.isCurrent(token)) return;
       cache[name] = d; terrainCache[name] = terrain; waterCache[name] = water;
       surfaceCache[name] = wardSurface; roadsCache[name] = roads; labelCache[name] = labels; provCache[name] = provenance;
       canopyCache[name] = canopy;
-      pvCache[name] = asPvFile(pvRaw, d.b.length, areaOf(name));
+      if (maskCache[name] === undefined) {
+        const mask = maskUrl === null ? null
+          : asWardMask(maskRaw, { area: areaOf(name), sizeM: d.sizeM, n: requireGrid(d.sizeM).n, buildings: d.b.length });
+        if (maskUrl !== null && mask === null) throw new Error(`${areaOf(name)}: the ward boundary does not match this ward's data.`);
+        maskCache[name] = mask;
+      }
+      if (pvCache[name] === undefined) pvCache[name] = asPvFile(pvRaw, d.b.length, areaOf(name), maskCache[name] ?? null);
       void loadDcUrs(name); void loadHeatwave(name);
       /* The scope moves WITH the area. `state.climate` is what `currentParams`
          and `applyInterventions` read, so leaving it behind would run the new
          city's geometry through the old city's fallback temperature and
          park-cooling radius — cleanly, and with a plausible number out. */
       state.ward = name; state.climate = resolve(name).climate;
+      wardMask = maskCache[name] ?? null;
       projectWard();
 
     /* Rebuild the pick registry from the SAME rows the extrusions come from, and
@@ -2256,8 +2398,9 @@ export function mountHeatMap(): () => void {
       mercatorOrigin: { x: mc.x, y: mc.y, z: mc.z ?? 0 },
       frame: wardMercatorScale(w.lat),
       veg: trees,
+      boundary: wardMask,
     };
-    coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined);
+    coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined, wardMask);
     relief?.setWard(reliefWard);
     /* `setWard` has just rebuilt the city mesh and the tree group, both of them
        new and therefore fully on. This was one line — the trees — for as long as
@@ -2311,7 +2454,12 @@ export function mountHeatMap(): () => void {
     resetSim();
 
     setHTML('pname', w.name); setText('pzone', w.zone); setText('coord', formatLatLon(w.lat, w.lon, ' · ', 3));
-    setText('bcount', `${d.count.toLocaleString()} real buildings`);
+    /* THE WARD'S COUNT FIRST, the drawn count beside it: with a polygon, most of the
+       buildings on screen are the neighbours' and are there as context. */
+    setText('bcount', wardMask
+      ? `${wardMask.inWardCount.toLocaleString()} buildings in ${wardMask.name} · ${d.count.toLocaleString()} drawn`
+      : `${d.count.toLocaleString()} real buildings`);
+    paintWardScope();
     /* `data-w` IS A BARE WARD ID in HeatMapStage.astro, so it is compared against
        the bare id and never against the key. Comparing it to `name` would match
        nothing at all: the strip would lose its highlight on the first switch and
@@ -2499,6 +2647,38 @@ export function mountHeatMap(): () => void {
    * stay hidden. The Mapillary token stays ANDed in for street view, so the
    * feature still disappears cleanly when it has tree-shaken out of the build.
    */
+  /**
+   * SAY WHAT THE WARD FIGURES ARE TAKEN OVER, and credit the boundary.
+   *
+   * With a polygon the readouts are the polygon's (refreshStats), the map shows the
+   * square, and nothing else on screen would tell a reader which of the two a
+   * number describes. The boundary is CC BY-SA, so wherever it is drawn its
+   * attribution is ON SCREEN too — written from the artefact, never typed here —
+   * in three places, because each of the others is hidden somewhere:
+   *   · the scope line under the mean (#wardScope), in the readout panel, which is
+   *     on screen at every width — the one place a phone shows it;
+   *   · the map's attribution control, bottom-right (desktop; phones hide it);
+   *   · the legend's credit line (#attrWard; below the fold on desktop, hidden on
+   *     phones — it was the ONLY credit until the pre-ship audit, 2026-10-03).
+   */
+  function paintWardScope(): void {
+    const scope = el('wardScope'), credit = el('attrWard');
+    if (scope) {
+      scope.hidden = wardMask === null;
+      scope.innerHTML = wardMask
+        ? `Inside ${wardMask.name} (${(wardMask.areaM2 / 1e6).toFixed(2)} km²) · the faint ground around it is context`
+          + ` · <span class="ward-credit">boundary © DataMeet, <a href="${wardMask.licenceUri}" target="_blank" rel="noopener noreferrer">CC BY-SA 2.5 IN</a></span>`
+        : '';
+    }
+    if (credit) {
+      credit.hidden = wardMask === null;
+      credit.textContent = wardMask ? `Ward boundary © DataMeet (${wardMask.licence}) · ` : '';
+    }
+    setMapCredit(wardMask
+      ? `Ward boundary © DataMeet, <a href="${wardMask.licenceUri}" target="_blank" rel="noopener noreferrer">CC BY-SA 2.5 IN</a>`
+      : null);
+  }
+
   function paintWardTools(): void {
     const ready = state.base !== null;
     const vegw = el('vegw');
@@ -2720,7 +2900,11 @@ export function mountHeatMap(): () => void {
         ? `Outside validation · ${fig(`~±${TRANSITION_RMSE_K.toFixed(1)} °C`)} at this hour`
         : a.confidence === 'quantitative'
           ? `Calibrated · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}`
-          : `Indicative only · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}`;
+          /* THE PEAK BAND IS THE EARLIER EVIDENCE SET (accuracy.ts PEAK_EVIDENCE_BASIS):
+             measured before Ballygunge became KMC Ward 68, kept because it is the wider,
+             safer band, and said so ON the chip — a tooltip nobody hovers was the only
+             place it was said (pre-ship audit 2026-10-03). */
+          : `Indicative only · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}${state.phase === 'peak' ? ` · ${PEAK_CHIP_BASIS}` : ''}`;
       tag.className = `conf ${transition ? 'indicative' : a.confidence}`;
       if (transition) {
         (tag as HTMLElement).title =
@@ -2810,7 +2994,13 @@ export function mountHeatMap(): () => void {
 
   function refreshStats(snapshot: HeatSimSnapshot | null = latestSnapshot) {
     if (!snapshot) return;
-    const st = snapshot.stats, t = snapshot.field;
+    /* THE WARD'S STATISTICS, NOT THE SQUARE'S. The solver returns stats over its
+       whole domain; for an area with a polygon that domain is a square holding the
+       ward and its neighbours, so the mean, the share above 40 °C and the histogram
+       are re-taken over the polygon's cells (ward-mask.ts). Without a polygon the
+       solver's own figures stand, untouched — no second arithmetic, no drift. */
+    const t = snapshot.field;
+    const st = wardMask ? fieldStats(t, wardMask, snapshot.stats.thresholdC) : snapshot.stats;
     const lst = el('lst');
     if (lst) {
       // The band is measured, not decorative: it is this model's out-of-sample
@@ -2828,8 +3018,7 @@ export function mountHeatMap(): () => void {
     const uhi = greenReferenceContrastC(st.meanC, p);
     setText('uhi', `${uhi >= 0 ? '+' : ''}${uhi.toFixed(1)}°`);
     setText('area', `${(st.fracAbove * 100).toFixed(0)}%`);
-    const bins = new Array(12).fill(0);
-    for (let i = 0; i < t.length; i++) { const b = Math.min(11, Math.max(0, ((t[i] - ramp[0]) / (ramp[1] - ramp[0]) * 12) | 0)); bins[b]++; }
+    const bins = fieldHistogram(t, wardMask, ramp[0], ramp[1], 12);
     const mx = Math.max(...bins, 1);
     /* AN EMPTY BIN DRAWS NOTHING, AND THAT IS THE POINT OF A DISTRIBUTION.
        This was `Math.max(4, …)`, which gave every bin a floor whether or not any
@@ -3672,9 +3861,12 @@ export function mountHeatMap(): () => void {
       source: CORE_FIELD_SOURCE,
       restore: () => {
         const wardData = cache[state.ward];
-        if (wardData) coreField.rehydrate(wardOf(state.ward), wardData.sizeM);
+        if (wardData) coreField.rehydrate(wardOf(state.ward), wardData.sizeM, undefined, wardMask);
       },
     },
+    /* The ward outline on the 2-D path. After the field, so the line sits over it;
+       before relief, which hides it whenever the 3-D scene draws its own. */
+    { source: WARD_OUTLINE_SOURCE, restore: () => coreField.restoreOutline() },
     { source: null, restore: () => { attachReliefLayer(); syncRendererVisibility(); } },
     {
       /* Our own street names, in the BASEMAP's frame. */

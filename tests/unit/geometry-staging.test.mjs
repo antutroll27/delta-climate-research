@@ -19,7 +19,9 @@ test('the shipped geometry IS the Overture set, with its provenance intact', () 
   // reviewed step. That guarantee has now been deliberately spent, so the test
   // pins what shipped instead of pinning that nothing had. Deleting it would
   // have removed the only assertion that the served geometry is what we measured.
-  const EXPECTED = { ballygunge: 3527, barrackpore: 4702, baruipur: 4538 };
+  // Ballygunge re-pinned 2026-10-02 (3,527 -> 7,931): it became KMC Ward 68, an
+  // 1800 m square of Overture 2026-09-23.1 footprints admitted by centroid.
+  const EXPECTED = { ballygunge: 7931, barrackpore: 4702, baruipur: 4538 };
   for (const w of WARDS) {
     assert.equal(shipped[w].count, EXPECTED[w],
       `${w}: served count is not the measured Overture count`);

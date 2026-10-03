@@ -190,7 +190,7 @@ def main() -> None:
                                   "measured" if p else "placeholder",
                                   pop["vintage"] if pop and p else None, "WorldPop"),
             "far": sourced(f["far"], "measured", "2023-2025",
-                           "MS footprints + Google Open Buildings 2.5D"),
+                           "Overture buildings (OSM + Google + Microsoft) + Google Open Buildings 2.5D heights"),
             "socioVuln": sourced(so["hvi"] if so else 0,
                                  "measured" if so else "placeholder",
                                  socio["vintage"] if socio and so else None,

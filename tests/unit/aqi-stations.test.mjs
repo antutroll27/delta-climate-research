@@ -1,7 +1,7 @@
 // tests/unit/aqi-stations.test.mjs
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AREAS, stationFor } from '../../src/lib/aqi/stations.ts';
+import { AREAS, stationFor, stationPayload } from '../../src/lib/aqi/stations.ts';
 import { allWards } from '../../src/data/cities.ts';
 
 /* _types.py ward_bounds, restated: the square OBOS reads is built with this spherical factor. */
@@ -13,14 +13,46 @@ test('every Kolkata area is registered, Baruipur deliberately without a station'
   assert.equal(stationFor('in/kolkata/baruipur'), null);
 });
 
-test('each station lies inside its area\'s 3 km window, at the distance it claims', () => {
+/* THE HONEST STATUS, TESTED FROM THE COORDINATES. A monitor either stands inside its
+   area's 3 km window, and says `window_3km`, or it does not, and says `outside_window`
+   with where it stands. The status is DERIVED here from the station's own position
+   and compared with what the registry declares, so neither half can drift: moving an
+   area's centre (Ballygunge became KMC Ward 68 on 2026-10-02) turns a stale claim into
+   a failure here, and the fix is the honest label, never a wider window. */
+test('each station declares where it stands against its area\'s 3 km window, at the distance it claims', () => {
   for (const [key, st] of Object.entries(AREAS)) {
     if (!st) continue;
     const w = allWards().find((x) => x.id === key.split('/')[2]);
     const [mx, my] = mPerDeg(w.lat);
-    assert.ok(Math.abs(st.lon - w.lon) * mx <= 1500 && Math.abs(st.lat - w.lat) * my <= 1500, `${key}: station outside the 3 km window`);
+    const inWindow = Math.abs(st.lon - w.lon) * mx <= 1500 && Math.abs(st.lat - w.lat) * my <= 1500;
+    assert.equal(st.inside, inWindow ? 'window_3km' : 'outside_window',
+      `${key}: the station is ${inWindow ? 'inside' : 'outside'} the 3 km window but declares ${st.inside}`);
+    if (inWindow) assert.equal(st.placement, null, `${key}: a monitor inside the window carries no placement note`);
+    else assert.ok(typeof st.placement === 'string' && st.placement.length > 0, `${key}: a monitor outside the window must say where it stands`);
     assert.ok(Math.abs(havM(w.lat, w.lon, st.lat, st.lon) - st.distance_m) <= 10, `${key}: distance_m disagrees with the coordinates`);
+    /* What the wire carries is what the registry declares, by the one builder every path uses. */
+    const wire = stationPayload(st);
+    assert.equal(wire.inside, st.inside, `${key}: the payload asserts a different status from the registry`);
+    assert.equal(wire.distance_m, st.distance_m);
+    if (st.inside === 'outside_window') assert.equal(wire.placement, st.placement);
+    else assert.ok(!('placement' in wire), `${key}: an inside monitor's payload carries a placement`);
   }
+});
+
+test('Ballygunge keeps the WBPCB monitor as its nearest official one, labelled outside Ward 68; Barrackpore\'s SVSPA stays inside', () => {
+  /* Founder, 2026-10-03: KEEP the monitor and say what it is. Pinned by value, so a
+     future "fix" that drops it, widens the window or quietly restores the old
+     993 m / window_3km claim fails here by name. */
+  const b = stationFor('in/kolkata/ballygunge');
+  assert.equal(b.id, 'openaq:10918');
+  assert.equal(b.inside, 'outside_window');
+  assert.match(b.placement, /Ward 69/);
+  assert.match(b.placement, /outside Ward 68/);
+  assert.ok(b.distance_m > 1500 && b.distance_m < 1700, `Ballygunge's monitor is ${b.distance_m} m away, not the old 993`);
+  const r = stationFor('in/kolkata/barrackpore');
+  assert.equal(r.id, 'openaq:3409509');
+  assert.equal(r.inside, 'window_3km');
+  assert.equal(r.distance_m, 995);
 });
 
 test('no sensor is declared in ppb: units come from verification, never from OpenAQ labels', () => {

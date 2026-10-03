@@ -284,3 +284,28 @@ test('a ward with no scalar AND no measured level still gets no surface', async 
   assert.equal(means.fvc, 0, 'the fallback level is unchanged — it is just no longer reachable '
     + 'by a ward that HAS a measurement');
 });
+
+/* WARD 68 (2026-10-02). Ballygunge's DC-URS scalars are statistics of the KMC Ward 68
+   POLYGON, and its texture is pinned over the polygon's cells — the 1800 m square
+   around it reads 0.030 greener (fvc 0.2499 vs 0.2199). Checking the whole square
+   against the polygon scalar would discard a correct texture and drop the ward to a
+   flat field, so the check reads `pinCells` from surface-meta.json. This pins both
+   halves: the self-check (mask flip + masked mean) and the shipped artefacts agreeing
+   only over the pinned cells. */
+test('Ballygunge is pinned over the Ward 68 cells, and only over them', async () => {
+  const sr = await import('../../src/scripts/climate-engine/surface-raster.ts');
+  sr.assertSurfaceLogic();
+  const meta = JSON.parse(await readFile(join(DATA, 'surface-meta.json'), 'utf8')).wards.ballygunge;
+  assert.equal(meta.pinCells.rows, 'north-up');
+  const cells = sr.pinCellsSouthUp(meta.pinCells.rle, meta.grid);
+  assert.ok(cells, 'the pin cells must decode onto the 180 x 180 grid');
+  const { surface } = await loadAreaSurface(key('ballygunge'));
+  assert.ok(surface && surface.n === meta.grid);
+  sr.assertSurfaceMatches(surface, meta.fvc_target, meta.albedo_target, 0.01, cells);
+  assert.throws(() => sr.assertSurfaceMatches(surface, meta.fvc_target, meta.albedo_target),
+    'over the whole square the polygon scalar must NOT match — or the mask is doing nothing');
+  for (const ward of ['baruipur', 'barrackpore']) {
+    const m = JSON.parse(await readFile(join(DATA, 'surface-meta.json'), 'utf8')).wards[ward];
+    assert.equal(m.pinCells, undefined, `${ward} has no polygon, so it is pinned over its whole square`);
+  }
+});

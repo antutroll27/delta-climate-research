@@ -199,7 +199,8 @@ def _ward_scale_validation() -> dict[str, Any] | None:
     if not (os.path.exists(obs_path) and os.path.exists(fit_path)):
         return None
     with open(obs_path) as fh:
-        raw = json.load(fh)["rows"]
+        obs_doc = json.load(fh)
+    raw = obs_doc["rows"]
     # SCORE THE MODEL THAT SHIPS, AND PROVE IT IS THAT MODEL.
     #
     # This read `candidates[0]` — candidate A, labelled "shipping structure" when
@@ -411,11 +412,23 @@ def _ward_scale_validation() -> dict[str, Any] | None:
         "ecostress_rows_now": {"night": n_eco_night, "day": n_eco_day},
         "action": "recalibrate and update accuracy.ts in a reviewed change; this "
                   "campaign deliberately does not move published constants",
+        # 2026-10-03: Ballygunge became KMC Ward 68 and the strata above were
+        # re-measured over its polygon. The held-back peak constants were not, and
+        # cannot be: they trace to an older evidence set scored with Ballygunge as
+        # the old 1400 m box. Saying so here keeps them from being read as Ward 68's.
+        "published_peak_evidence": "accuracy.ts peak n=29 (RMSE 4.42 K, ceiling 3.338 K, "
+                                   "band 4.5 K) is an older ECOSTRESS evidence set, scored "
+                                   "with Ballygunge as the old 1400 m box; strata."
+                                   "peak_ecostress is the current measurement, with "
+                                   "Ballygunge as the KMC Ward 68 polygon",
     }
 
     return {
         "method": ("leave-one-OVERPASS-out; scene- and ward-level splits leak "
                    "through shared overpasses and are not published"),
+        # What each ward's rows are a mean OF, carried from ward-observations.json
+        # so these figures cannot be read as describing a different ward footprint.
+        "domain": obs_doc.get("domain"),
         # The constants these figures describe, so a test can hold them to what ships.
         "scored": {k: params[k] for k in ("q_day", "ratio", "c", "l_et",
                                           "release_base", "release_built")},

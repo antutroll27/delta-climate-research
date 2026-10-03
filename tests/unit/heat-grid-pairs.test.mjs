@@ -39,10 +39,15 @@ test('cellMeters must actually equal sizeM / n', () => {
     'a cell size that disagrees with sizeM/n is incoherent even on an admitted pair');
 });
 
+/* RE-PINNED 2026-10-02 from "exactly equal" to "within 0.1 %". Ballygunge's KMC Ward 68
+   domain is 1800 m; the nearest whole grid is 247 cells = 7.2874 m, 0.057 % finer than
+   1400/192. An exact 175/24 m multiple would need 1750 m (breaks the 150 m margin) or
+   1925 m (not the accepted 1.8 km domain) — the reasoning is beside the row in types.ts.
+   0.1 % still refuses every wrong pairing below: the nearest wrong one is 3.65 m. */
 test('every admitted pair yields the same cell size, so cities are comparable', () => {
   const sizes = ADMITTED_GRIDS.map((g) => g.sizeM / g.n);
-  for (const s of sizes) assert.ok(Math.abs(s - sizes[0]) < 1e-9,
-    `admitted pairs must share one cell size; got ${sizes.join(', ')}`);
+  for (const s of sizes) assert.ok(Math.abs(s - 1400 / 192) / (1400 / 192) < 1e-3,
+    `admitted pairs must share one cell size to within 0.1 %; got ${sizes.join(', ')}`);
 });
 
 /* `gridFor` FINDS ON `sizeM`, which makes it the lookup key: a duplicate ward
@@ -59,5 +64,6 @@ test('the grid version names the pair, not just the grid', () => {
   assert.equal(gridVersion(1400), 'hm-grid-192-v1', 'Kolkata keeps its existing version string');
   assert.equal(gridVersion(2800), 'hm-grid-384-2800-v1',
     'a version added now names BOTH halves: 384 alone stops identifying a pair the moment a coarse tier exists');
+  assert.equal(gridVersion(1800), 'hm-grid-247-1800-v1', 'Ward 68 names both halves too');
   assert.throws(() => gridVersion(999), /admitted/i);
 });

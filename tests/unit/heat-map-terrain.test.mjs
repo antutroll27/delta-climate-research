@@ -24,9 +24,12 @@ test('every ward ships a well-formed field', () => {
   for (const w of WARDS) {
     const f = asTerrainField(fields[w]);
     assert.ok(f, `${w} failed to narrow to a field`);
-    assert.equal(f.n, TERRAIN_N);
-    assert.equal(f.h.length, TERRAIN_N * TERRAIN_N);
-    assert.equal(f.sizeM, 1400);
+    /* Re-pinned 2026-10-02: Ballygunge is an 1800 m window at 165 texels (fetch-terrain
+       holds the TEXEL at 1400/128 m, not the count). The 1400 m wards keep TERRAIN_N. */
+    const sizeM = w === 'ballygunge' ? 1800 : 1400;
+    assert.equal(f.sizeM, sizeM);
+    assert.equal(f.n, Math.round(sizeM / (1400 / TERRAIN_N)));
+    assert.equal(f.h.length, f.n * f.n);
     assert.ok(f.h.every(Number.isFinite), `${w} has a non-finite texel`);
   }
 });

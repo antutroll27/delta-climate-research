@@ -64,7 +64,7 @@
     "buildings": 4538,
     "inputsHash": {
       "data/geometry/baruipur-footprints.json": "0f1f8da129dcd40441058ebc78b35fc365b79afbcdceb205171e679932a52ad2",
-      "data/geometry/heights-overture.json": "81e2750f86d750803704c0f188e41f877d9a90194ac40c9b5c68691fc37fa478",
+      "data/geometry/heights-overture.json": "4953cff12f9cef0d47800680a5e759f0015567696913037a12429e3cb472d4da",
       "scripts/_gltf.py": "764cce725db055542e6c608c864d4ad6a326df3b708015bfb0ae3b5568535cfd",
       "scripts/build-3d-tiles.py": "0ea053b819abce13723d1a5dbdf8713ce67bfa8179fef8a5d5c1888256894835"
     }

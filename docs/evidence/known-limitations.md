@@ -972,6 +972,79 @@ within 10 minutes of each other.
 
 ---
 
+## 16. Ballygunge is KMC Ward 68: a 2018 boundary, a square of context, and figures taken inside the polygon
+
+**Status:** shipped on `feat/ballygunge-ward68` (data 2026-10-02, app 2026-10-03), not yet merged · **See:**
+`scripts/_wardmask.py`, `scripts/build-ward-mask.py`, `src/scripts/climate-engine/ward-mask.ts`,
+`public/heat-map/data/ballygunge-ward.json`, `docs/evidence/data-sources.md` (DataMeet entry).
+
+**What changed.** Until 2026-10-02 "Ballygunge, Ward 68" was a 1,400 m box at 22.528 N, 88.3659 E. It held only
+28.9 % Ward 68, was centred in Ward 69, and every Ballygunge figure was the box's. Ballygunge is now the real KMC
+Ward 68: the compute domain is a 1,800 m square centred on the ward (22.522704 N, 88.369173 E), and every figure the
+site reports **as the ward's** is taken inside the polygon. Field statistics (mean surface temperature, area above
+40 °C, the heat-stress histogram, Compare's means) use the solver cells whose **centre** lies inside it (17,442 of
+61,009). Per-building statistics (building counts, rooftop-PV totals, the stratum, the best-roofs list, the CSV's
+`in_ward` column, CityJSON's `in_ward`) use the footprints that **touch** it (2,207 of 7,931). The DC-URS inputs are
+polygon-masked in the data. Buildings in the square but outside the ward are drawn as context: dimmed, under a
+desaturated veil, and counted in nothing.
+
+**What it does not fix, and what to watch.**
+
+- **The boundary is 2018's.** DataMeet's file is the KMC 141-ward scheme (commit `cd52891`, 2018-10-14). KMC now
+  has 144 wards (kmcgov.in, read 2026-09-23), so numbering and edges may have shifted. Its alignment with today's
+  streets was checked numerically, not assumed: the boundary cuts 21 footprints at zero offset against a mean of 96
+  over a ±40 m shift grid, best offset (−5 m E, +5 m N); a north–south mirror would cut 138.
+- **Neighbours are shown, not measured as wards.** Wards 65, 66, 67, 69, 85, 86, 90, 91 and 92 cover 71.4 % of the
+  square (shares in `kmc-wards-around-ballygunge.geojson`). Their buildings shade the ward's roofs and the ward's
+  air, which is why they are in the solve, but no figure is reported for them.
+- **Two rules for "in the ward".** A cell is in by its centre; a building is in if any of it is. The two agree to
+  within the boundary's width but not exactly, and both are stated wherever a figure is printed.
+- **Three areas for one ward.** 0.9263 km² in the ward-local frame (what the scope line prints), 0.9284 km² WGS84
+  geodesic, 0.933 km² in Mollweide (the population density's denominator). The spread is about 0.7 %.
+- **The air monitor is outside the ward.** The WBPCB "Ballygunge" station stands in Ward 69, 1,657 m from the new
+  centre and 53 m beyond the 3 km window. It is kept as the nearest official monitor and labelled so
+  (`inside: 'outside_window'`, register AQI-R20); the window was not widened.
+- **The DC-URS inputs moved a lot.** `distCoolM` 78 → 363 m, `fvc` 0.33 → 0.22, `popDensity` 68.8k → 53.3k per km²:
+  the old box was mostly greener neighbouring wards. The score is withdrawn ("Coming soon"), but the v3 engine will
+  read these. Its scenario sizing (`applyScenario`, `REFERENCE_WARD_M`) still scales park gains by the 1,800 m
+  square, not by the 0.93 km² polygon the inputs are measured over; that needs deciding before the score returns.
+- **Compare now pairs grids of different sizes.** Ballygunge solves 247 cells over 1,800 m, its siblings 192 over
+  1,400 m. Compare's shared contract was relaxed from "the same grid version" to "the same physical cell within
+  0.1 %" (7.2874 m against 7.2917 m, 0.06 %); without it every Ballygunge pair was refused.
+- **`?look=classic` draws the outline but not the veil or the dimming**: the classic shaders are frozen byte for
+  byte as the rollback, so the context is not held back there.
+- **The landing page's console screenshots** (`public/images/obos/console-*.webp`) predate Ward 68 and show the old
+  box; the caption beside them now states Ward 68's figures.
+
+**Calibration re-measured for KMC Ward 68 (2026-10-03).** The ward-scale observations and accuracy figures were
+re-measured with Ballygunge's ward means taken over the polygon: 189 of 676 ECOSTRESS 70 m pixels and about 1,050
+Landsat 30 m pixels in the 1,800 m square, with surface and built fraction over the polygon's cells (FVC 0.220
+against the old box's 0.329). Methods, physics constants and the evidence window are unchanged. Barrackpore's and
+Baruipur's rows are byte-identical, and with the old ward table the pipeline reproduces every committed ECOSTRESS
+row. Ward 68 reads warmer than the old box: +0.54 K by day, +0.17 K at night, +0.82 K on Landsat; the old box had
+been mostly the greener Wards 69 and 65. Night accuracy barely moved (RMSE 2.677 → 2.662 K, leave-one-overpass-out
+2.801 → 2.777 K, bias +0.36 → +0.41 K; the band stays ±3.0 K). The daytime peak now measures RMSE 2.233 K and
+2.358 K out of sample over n = 23; the published ±4.5 K / n = 29 band is an older evidence set scored on the old
+box, is labelled so in `accuracy.ts`, and is kept (wider than measured, the safe direction) until a reviewed
+recalibration — adopting the new figures would trip two pre-registered guards. Within-ward skill fell: the shipped
+field's r 0.297 → 0.261 over 85 ward-scenes (was 87) against a vegetation null of 0.308, amplitude 1.17 → 1.11×.
+That is the ward's own ground, not the pipeline: Ward 68 is uniformly dense, and the part of it inside the old box
+already scored built-fraction r +0.05 against +0.14 for the rest of that box; misregistration and the Overture
+release were tested and ruled out. Ward 68 is too small for 470 m blocks, so the coarsest scale-sweep row holds the
+other two wards only, and the published neighbourhood gap is the ~340 m one (−0.039). **ICESat-2 heights were not
+re-measured**: the committed photon subsets end about 420 m short of Ward 68's southern edge, the check refuses to
+re-score them against the new footprints, and a fresh multi-GB ATL03 download did not fit on the machine; the
+`HEIGHTS` figures are labelled as the old 1,400 m box. Offline, 542 of Ward 68's 2,207 buildings (24.6 %) survive
+the 5 m erosion (old box: 995 of 3,527). A re-fit on the new rows would move `STORE_NIGHT` 0.1043 → 0.093 and
+`q_day` 0.419 → 0.433; neither was adopted. Still old-box records, not published as Ward 68: the SVF and shadow sign
+tests, `canopy-blend-residual`, `mask-fvc`, `term-fit`.
+
+**What would close it.** KMC's current 144-ward boundaries, published as open data; a decision on how the v3
+resilience score sizes interventions over a polygon; a reviewed recalibration of the daytime band; a fresh ICESat-2
+ATL03 pull over Ward 68's southern extension; a fresh console capture.
+
+---
+
 ## 15. Night forcing was read 24 hours early for 20 passes (corrected 2026-09-24)
 
 **Status:** fixed · **See:** `scripts/_power.py`, `scripts/fetch-met.py`, the audit spec

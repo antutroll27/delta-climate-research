@@ -38,6 +38,7 @@ a published number.
 
     python3 scripts/fetch-road-labels.py            # all three wards
     python3 scripts/fetch-road-labels.py --check    # asserts over the committed files
+    python3 scripts/fetch-road-labels.py --ward ballygunge   # one ward
 """
 from __future__ import annotations
 
@@ -68,8 +69,9 @@ OVERPASS_ENDPOINTS = (
 )
 SOURCE = "OpenStreetMap via Overpass (ODbL)"
 
-#: Matches CLIP_M in fetch-water.py so every OSM artefact covers the same ground.
-CLIP_M = 760.0
+#: The clip box is `_types.osm_clip_m(ward)` -- the one fetch-water.py and
+#: fetch-roads.py use -- so every OSM artefact covers the same ground. It was a
+#: 760.0 constant here until Ballygunge became an 1800 m square.
 
 #: The classes we DRAW as majors (road-ribbon.ts's w = 2) and therefore label.
 #: `_link` ramps are included: they carry their parent's name and dropping them
@@ -83,7 +85,7 @@ MIN_LENGTH_M = 40.0
 
 
 def query(ward: _types.Ward) -> dict[str, Any]:
-    w, s, e, n = _types.ward_bounds(ward, pad_m=CLIP_M - ward.footprint_m / 2)
+    w, s, e, n = _types.ward_bounds(ward, pad_m=_types.OSM_CLIP_PAD_M)
     bbox = f"{s},{w},{n},{e}"
     classes = "|".join(MAJOR)
     q = f"""[out:json][timeout:90];
@@ -119,10 +121,11 @@ def in_window(ward: _types.Ward, geom: list[dict[str, Any]]) -> bool:
     """Keep a way if ANY vertex is inside the clip box — a road that merely
     passes through still deserves its name where it crosses."""
     mx, my = _types.m_per_deg(ward.centre.lat)
+    clip = _types.osm_clip_m(ward)
     for p in geom:
         x = (p["lon"] - ward.centre.lon) * mx
         y = (p["lat"] - ward.centre.lat) * my
-        if abs(x) <= CLIP_M and abs(y) <= CLIP_M:
+        if abs(x) <= clip and abs(y) <= clip:
             return True
     return False
 
@@ -187,6 +190,7 @@ def check() -> int:
             print(f"  MISSING {os.path.relpath(path, ROOT)}"); bad += 1; continue
         doc = json.load(open(path, encoding="utf-8"))
         mx, my = _types.m_per_deg(ward.centre.lat)
+        clip = _types.osm_clip_m(ward)
         if doc["count"] != len(doc["features"]):
             print(f"  {ward.id}: count {doc['count']} != {len(doc['features'])} features"); bad += 1
         for f in doc["features"]:
@@ -198,8 +202,8 @@ def check() -> int:
                       f"labelling minor roads is an editorial decision, not a fetch bug")
                 bad += 1; break
             inside = any(
-                abs((lon - ward.centre.lon) * mx) <= CLIP_M + 1
-                and abs((lat - ward.centre.lat) * my) <= CLIP_M + 1
+                abs((lon - ward.centre.lon) * mx) <= clip + 1
+                and abs((lat - ward.centre.lat) * my) <= clip + 1
                 for lon, lat in f["geometry"]["coordinates"])
             if not inside:
                 print(f"  {ward.id}: {p['name']!r} lies wholly outside the clip box"); bad += 1; break
@@ -212,11 +216,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true",
                     help="assert over the committed artefacts, without fetching")
+    ap.add_argument("--ward", choices=sorted(_types.WARDS), default=None)
     args = ap.parse_args()
     if args.check:
         return 1 if check() else 0
     os.makedirs(OUT_DIR, exist_ok=True)
-    for ward in _types.WARDS.values():
+    for ward in ([_types.WARDS[args.ward]] if args.ward else _types.WARDS.values()):
         write(build(ward))
         time.sleep(2)   # Overpass asks for a pause between queries
     return 0

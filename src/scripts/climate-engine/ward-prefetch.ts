@@ -20,7 +20,7 @@
  * model URL comes from scope/paths.ts, never from the explore model loader.
  */
 import { areaKeysInCity, splitKey, type AreaKey } from './scope/registry.ts';
-import { modelPath, paths } from './scope/paths.ts';
+import { modelPath, paths, wardMaskPath } from './scope/paths.ts';
 
 export interface PrefetchConnection {
   readonly saveData?: boolean;
@@ -47,7 +47,8 @@ export function prefetchPlan(key: AreaKey): string[][] {
       const urls = [p.ward, p.terrain, p.water, p.roads, p.labels, p.provenance,
         p.trees, p.surface, p.canopy, p.layers, p.pv];
       const model = modelPath(splitKey(sibling).area);
-      return [model === null ? urls : [...urls, model]];
+      const mask = wardMaskPath(sibling);
+      return [[...urls, ...(model === null ? [] : [model]), ...(mask === null ? [] : [mask])]];
     });
 }
 

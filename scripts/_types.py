@@ -87,8 +87,17 @@ class Ward(NamedTuple):
 # of this and they had already diverged — ecostress-census.py used capitalised
 # keys and coordinates 10–44 m away from the others. Sub-pixel at ECOSTRESS's
 # 70 m, but four pixels at Sentinel's 10 m.
+#
+# BALLYGUNGE IS KMC WARD 68 (founder decision 2026-10-02). Until then it was a
+# 1400 m box at (22.528, 88.3659) that held only part of Ward 68 and parts of
+# five neighbours. It is now a 1800 m square centred on the bounding-box centre
+# of the DataMeet Ward 68 polygon (data/geometry/kmc-wards-around-ballygunge.
+# geojson), which leaves at least 150 m between the ward and every edge (173 m
+# north-south, 491 m east-west). Ward STATISTICS are masked to the polygon
+# (scripts/_wardmask.py); buildings in the square but outside it are context.
+# The other two wards are untouched.
 WARDS: dict[WardId, Ward] = {
-    "ballygunge":  Ward("ballygunge",  LatLon(22.528,  88.3659), 1400),
+    "ballygunge":  Ward("ballygunge",  LatLon(22.522704, 88.369173), 1800),
     "baruipur":    Ward("baruipur",    LatLon(22.3654, 88.4319), 1400),
     "barrackpore": Ward("barrackpore", LatLon(22.7621, 88.3713), 1400),
 }
@@ -107,6 +116,20 @@ def m_per_deg(lat: float) -> MetresPerDegree:
     of them inline and in reciprocal form, one with numpy and two with math.
     """
     return MetresPerDegree(111_320.0 * math.cos(math.radians(lat)), 110_540.0)
+
+
+#: How far the OSM vector artefacts ({ward}-water.json, -roads.json,
+#: -road-labels.geojson) run PAST the ward square's edge, metres. The renderer
+#: lets geometry overhang the window rather than shaving it flush. Was a bare
+#: CLIP_M = 760.0 in each fetcher, i.e. 700 + 60 for a 1400 m ward; derived per
+#: ward since Ballygunge became an 1800 m square, so every OSM artefact of every
+#: ward still covers the same ground as its siblings.
+OSM_CLIP_PAD_M = 60.0
+
+
+def osm_clip_m(w: Ward) -> float:
+    """Half-width of the OSM artefacts' clip box: 760 m for a 1400 m ward."""
+    return w.footprint_m / 2 + OSM_CLIP_PAD_M
 
 
 def ward_bounds(w: Ward, pad_m: float = 0.0) -> tuple[float, float, float, float]:
@@ -168,6 +191,11 @@ class FarWard(TypedDict):
     floor_m2: float
     height_m: dict[str, float]
     floors: dict[str, float]
+    #: Present only for a ward with an administrative polygon (scripts/_wardmask.py):
+    #: what the fields above are a statistic OF ("KMC Ward 68 polygon"), and the
+    #: same quantities over the whole compute square, kept for comparison.
+    domain: NotRequired[str]
+    square: NotRequired[dict[str, float]]
 
 
 class FarFile(TypedDict):
@@ -190,6 +218,10 @@ class Building(TypedDict):
     gers: str
     p: list[float]
     lonlat: list[list[float]]
+    #: Present ONLY for a ward with an administrative polygon (scripts/_wardmask.py):
+    #: True when the footprint INTERSECTS the ward polygon. Absent elsewhere, so the
+    #: files of wards without a polygon stay byte-identical.
+    inWard: NotRequired[bool]
 
 
 class FootprintsSkipped(TypedDict):
@@ -249,6 +281,11 @@ class TraWard(TypedDict):
     min_patch_ha: float
     refuge_classes_present: dict[str, int]
     cells: int
+    #: Present only for a ward with an administrative polygon (scripts/_wardmask.py):
+    #: what the fields above are a statistic OF ("KMC Ward 68 polygon"), and the
+    #: same quantities over the whole compute square, kept for comparison.
+    domain: NotRequired[str]
+    square: NotRequired[dict[str, float]]
 
 
 class TraFile(TypedDict):
@@ -275,6 +312,11 @@ class SentinelWard(TypedDict):
     years: int
     scenes_total: int
     per_year: dict[str, SentinelYear]
+    #: Present only for a ward with an administrative polygon (scripts/_wardmask.py):
+    #: what the fields above are a statistic OF ("KMC Ward 68 polygon"), and the
+    #: same quantities over the whole compute square, kept for comparison.
+    domain: NotRequired[str]
+    square: NotRequired[dict[str, float]]
 
 
 class SentinelFile(TypedDict):
@@ -293,6 +335,11 @@ class PopWard(TypedDict):
     population: int
     cells: int
     area_km2: float
+    #: Present only for a ward with an administrative polygon (scripts/_wardmask.py):
+    #: what the fields above are a statistic OF ("KMC Ward 68 polygon"), and the
+    #: same quantities over the whole compute square, kept for comparison.
+    domain: NotRequired[str]
+    square: NotRequired[dict[str, float]]
 
 
 class PopFile(TypedDict):

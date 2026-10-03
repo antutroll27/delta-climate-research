@@ -1,6 +1,8 @@
 import type { RoadsData, WardData, WaterData } from './heat-map-model.ts';
-import { paths } from './scope/paths.ts';
-import type { AreaKey } from './scope/registry.ts';
+import { paths, wardMaskPath } from './scope/paths.ts';
+import { splitKey, type AreaKey } from './scope/registry.ts';
+import { requireGrid } from './types.ts';
+import { asWardMask, type WardMask } from './ward-mask.ts';
 
 export interface LoadedWard {
   ward: WardData;
@@ -17,6 +19,11 @@ export interface LoadedWard {
    *
    *  Absent degrades to no water, never to a rejection. */
   water: WaterData;
+  /** The administrative boundary the area's statistics are taken over (ward-mask.ts),
+   *  or null where the square is the study area. A DECLARED boundary that fails to
+   *  load or does not match the ward rejects the load: falling back to the square
+   *  would score it under the ward's name. */
+  boundary: WardMask | null;
 }
 
 /* Keyed by AREA KEY, not by bare id, and that is the only shape written or read
@@ -55,11 +62,18 @@ export function loadArea(key: AreaKey, signal?: AbortSignal): Promise<LoadedWard
       `ward-loader: "${key}" ships no artefacts, so there is nothing to load. `
       + 'Fetching anyway would 404 into an empty ward that still renders'));
   }
+  const maskUrl = wardMaskPath(key);
   const load = Promise.all([
     json<WardData>(p.ward, signal),
     json<RoadsData>(p.roads, signal).catch(() => ({ ways: [] })),
     json<WaterData>(p.water, signal).catch(() => ({ polys: [] })),
-  ]).then(([ward, roads, water]) => ({ ward, roads, water }));
+    maskUrl === null ? Promise.resolve(null) : json<unknown>(maskUrl, signal),
+  ]).then(([ward, roads, water, maskRaw]) => {
+    const boundary = maskUrl === null ? null
+      : asWardMask(maskRaw, { area: splitKey(key).area, sizeM: ward.sizeM, n: requireGrid(ward.sizeM).n, buildings: ward.b.length });
+    if (maskUrl !== null && boundary === null) throw new Error(`ward-loader: "${key}" ships a ward boundary that does not match its data`);
+    return { ward, roads, water, boundary };
+  });
   if (!signal) cache.set(key, load);
   return load;
 }

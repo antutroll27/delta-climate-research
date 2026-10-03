@@ -7,20 +7,26 @@
   "provenance": "measured",
   "wards": {
     "ballygunge": {
-      "tra": 0.7799,
-      "median_dist_m": 77.8,
-      "max_dist_m": 670.4,
-      "refuge_cell_fraction": 0.1768,
-      "refuge_patches_in_ward": 9,
-      "largest_patch_in_ward_ha": 19.92,
-      "refuge_patches_in_search_window": 79,
+      "tra": 0.5251,
+      "median_dist_m": 363.1,
+      "max_dist_m": 790.8,
+      "refuge_cell_fraction": 0.0085,
+      "refuge_patches_in_ward": 1,
+      "largest_patch_in_ward_ha": 0.79,
+      "refuge_patches_in_search_window": 97,
       "min_patch_ha": 0.77,
       "refuge_classes_present": {
-        "tree cover": 5668,
-        "grassland": 273,
-        "permanent water": 2
+        "tree cover": 590
       },
-      "cells": 24928
+      "cells": 11734,
+      "domain": "KMC Ward 68 polygon (cells whose centre lies inside it)",
+      "square": {
+        "tra": 0.5993,
+        "median_dist_m": 279.8,
+        "max_dist_m": 867.7,
+        "refuge_cell_fraction": 0.0475,
+        "cells": 41356.0
+      }
     },
     "baruipur": {
       "tra": 0.9135,

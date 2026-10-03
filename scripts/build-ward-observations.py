@@ -53,14 +53,37 @@ if HERE not in sys.path:
 
 import _physics  # noqa: E402
 import _types  # noqa: E402
-from _ecostress import align, band_url, cmr_search, fetch, target_grid, token  # noqa: E402
-from _sentinel import uniform_grid  # noqa: E402
+import _wardmask  # noqa: E402
+from _ecostress import (align, band_url, cmr_search, fetch, target_crs,  # noqa: E402
+                        target_grid, token)
+from _sentinel import grid_for  # noqa: E402
 
-#: The Sentinel-2 surface grid, DERIVED from the ward footprint rather than read
-#: as a module constant baked at Kolkata's 1400 m. This script is Kolkata-only,
-#: and `uniform_grid` refuses the moment the ward table holds two footprints —
-#: which is exactly when one number for "the" grid stops being a fact.
-SURFACE_GRID = uniform_grid(_types.WARDS.values())
+def surface_grid(ward: _types.Ward) -> int:
+    """The Sentinel-2 surface grid of ONE ward, derived from its own footprint.
+
+    PER WARD SINCE 2026-10-03. Until then this was `uniform_grid(WARDS)`, which
+    refused the moment the ward table held two footprints. Ballygunge became an
+    1800 m square (180 cells) beside two 1400 m wards (140), and the Ward 68
+    re-measurement needs this script to run on that table. Nothing about HOW a
+    ward is measured changed: each ward simply reads its own grid, which is what
+    the refusal was protecting — no ward is ever read at another ward's size.
+    """
+    return grid_for(ward.footprint_m)
+
+
+def ward_pixels(ward: _types.Ward) -> "_types.Mask | None":
+    """The ward's OWN pixels on the ECOSTRESS 70 m grid, or None to use them all.
+
+    Ballygunge is KMC Ward 68 (2026-10-02): its square is the compute domain, but
+    the ward statistic is the polygon's, so a ward-scene row is the mean over the
+    70 m pixels whose centres lie inside the polygon. A ward with no polygon
+    (Barrackpore, Baruipur) returns None and is measured over its square exactly
+    as before. This chooses WHICH pixels are the ward; it changes nothing about
+    how they are masked or aggregated.
+    """
+    box = _types.ward_bounds(ward)
+    tf, w, h = target_grid(box)
+    return _wardmask.mask_on_grid(ward.id, tf, w, h, target_crs(box))
 
 ROOT = os.path.join(HERE, "..")
 SURFACE_DIR = os.path.join(ROOT, "public", "heat-map", "data")
@@ -142,18 +165,36 @@ def _assert_built_cache_current(ward_id: str, path: str) -> None:
 
 
 def ward_surface(ward_id: str) -> tuple[float, float, float]:
-    """(fvc, albedo, built) for one ward — the same values the browser runs on."""
+    """(fvc, albedo, built) for one ward — the same values the browser runs on.
+
+    For a ward with a polygon (Ballygunge = KMC Ward 68) these are means over the
+    polygon's cells only, matching the polygon-masked LST they are paired with;
+    the surface PNG is north-up and the built cache south-up, so each takes the
+    mask in its own row order. Wards without a polygon average the whole square,
+    as before.
+    """
+    ward = _types.WARDS[ward_id]
+    grid = surface_grid(ward)
     png = os.path.join(SURFACE_DIR, f"{ward_id}-surface.png")
-    built_f = os.path.join(BUILT_CACHE, f"{ward_id}-built-{SURFACE_GRID}.f32")
+    built_f = os.path.join(BUILT_CACHE, f"{ward_id}-built-{grid}.f32")
     for p, how in ((png, "scripts/export-surface-rasters.py"),
                    (built_f, "npx tsx scripts/export-built-raster.mjs")):
         if not os.path.exists(p):
             sys.exit(f"missing {p} — run `{how}` first.")
     _assert_built_cache_current(ward_id, built_f)
     a = np.asarray(Image.open(png)).astype(np.float32)
-    fvc = float((a[:, :, 0] / 255.0 * (VEG_RANGE[1] - VEG_RANGE[0]) + VEG_RANGE[0]).mean())
-    alb = float((a[:, :, 1] / 255.0 * (ALBEDO_RANGE[1] - ALBEDO_RANGE[0]) + ALBEDO_RANGE[0]).mean())
-    built = float(np.fromfile(built_f, dtype=np.float32).mean())
+    built_a = np.fromfile(built_f, dtype=np.float32).reshape(grid, grid)
+    if a.shape[:2] != (grid, grid):
+        sys.exit(f"{ward_id}: surface PNG is {a.shape[:2]}, expected {grid}x{grid}")
+    veg_a = a[:, :, 0] / 255.0 * (VEG_RANGE[1] - VEG_RANGE[0]) + VEG_RANGE[0]
+    alb_a = a[:, :, 1] / 255.0 * (ALBEDO_RANGE[1] - ALBEDO_RANGE[0]) + ALBEDO_RANGE[0]
+    north = _wardmask.mask_grid(ward, grid, rows="north-up")
+    south = _wardmask.mask_grid(ward, grid, rows="south-up")
+    if north is None or south is None:
+        fvc, alb, built = float(veg_a.mean()), float(alb_a.mean()), float(built_a.mean())
+    else:
+        fvc, alb = float(veg_a[north].mean()), float(alb_a[north].mean())
+        built = float(built_a[south].mean())
     return fvc, alb, built
 
 
@@ -295,18 +336,34 @@ def main() -> None:
         print(f"  {w:<13} fvc {f:.3f}  albedo {a:.3f}  built {b:.3f}")
     print()
 
+    # Which 70 m pixels ARE each ward: the polygon's for Ballygunge (Ward 68),
+    # the whole square for the two wards without one (None).
+    pixels = {wid: ward_pixels(w) for wid, w in _types.WARDS.items()}
+    for wid, px in pixels.items():
+        if px is not None:
+            print(f"  {wid:<13} ward statistic over {int(px.sum())} polygon pixels of "
+                  f"{px.size} in the square ({_wardmask.POLYGONS[wid][0]})")
+
     rows: list[dict[str, Any]] = []
     grids: list[npt.NDArray[np.float32]] = []
+    grid_wards: list[str] = []
     unphysical = 0
     for n, sc in enumerate(scenes, 1):
         for wid, ward in _types.WARDS.items():
             g = ward_lst(ward, sc.date, sc.phase, tok)
             if g is None:
                 continue
-            m = np.isfinite(g)
+            px = pixels[wid]
+            # `own` is the ward's own pixels; the square grid `g` is still what is
+            # cached below, so the spatial work keeps the context around the ward.
+            if px is not None and px.shape != g.shape:
+                sys.exit(f"{wid}: polygon mask {px.shape} does not match the "
+                         f"ECOSTRESS grid {g.shape} — both must come from ward_bounds()")
+            own = g if px is None else g[px]
+            m = np.isfinite(own)
             if int(m.sum()) < MIN_CELLS:
                 continue
-            lst_mean = float(np.nanmean(g))
+            lst_mean = float(np.nanmean(own))
             if not physical_daytime(lst_mean, sc.tAir, sc.sun):
                 unphysical += 1
                 continue
@@ -314,7 +371,7 @@ def main() -> None:
             rows.append({
                 "date": sc.date, "phase": sc.phase, "ward": wid,
                 "lst_mean_c": round(lst_mean, 3),
-                "lst_sd_c": round(float(np.nanstd(g)), 3),
+                "lst_sd_c": round(float(np.nanstd(own)), 3),
                 "cells": int(m.sum()), "cell_frac": round(float(m.mean()), 3),
                 # the ward's own measured surface — what the browser draws with
                 "fvc": round(fvc, 4), "albedo": round(alb, 4), "built": round(built, 4),
@@ -331,6 +388,7 @@ def main() -> None:
             # nan_to_num here would erase the distinction between "cloudy"
             # and "measured 0 °C".
             grids.append(g)
+            grid_wards.append(wid)
         if n % 5 == 0 or n == len(scenes):
             print(f"  [{n:>3}/{len(scenes)}] {len(rows)} ward-scenes")
     print(f"\n  {unphysical} ECOSTRESS ward-scenes rejected by the sun-up physical bar "
@@ -343,19 +401,40 @@ def main() -> None:
     rows.extend(landsat_rows(surf))
     print(f"\n  {n_eco} ECOSTRESS + {len(rows) - n_eco} Landsat = {len(rows)} ward-scenes")
 
-    stack = np.stack(grids)
     os.makedirs(os.path.dirname(OUT_NPZ), exist_ok=True)
     # The index rides along as JSON text, one row per grid, so the .npz is
     # self-describing — a bare array of grids with the pairing held in a
     # separate file is one rename away from silently mismatched rows.
-    np.savez_compressed(OUT_NPZ, grids=stack,
-                        index=np.array([json.dumps(r) for r in rows]))
+    #
+    # ONE STACK PER GRID SHAPE. Ballygunge's 1800 m square is 26x26 at 70 m, the
+    # 1400 m wards 21x21, and np.stack cannot hold both. A single shape keeps the
+    # original `grids` key; a mixed table writes `grids_<ward>` per ward, each in
+    # the order its ward's rows appear in `index`. Nothing reads these grids back
+    # today (they are a cache for the spatial work), so no consumer moves.
+    shapes = {g.shape for g in grids}
+    index = np.array([json.dumps(r) for r in rows])
+    if len(shapes) == 1:
+        np.savez_compressed(OUT_NPZ, grids=np.stack(grids), index=index)
+    else:
+        per_ward = {f"grids_{w}": np.stack([g for g, gw in zip(grids, grid_wards) if gw == w])
+                    for w in dict.fromkeys(grid_wards)}
+        np.savez_compressed(OUT_NPZ, index=index, **per_ward)    # type: ignore[arg-type]
+    grid_shape: dict[str, list[int]] = {
+        w: list(next(g.shape for g, gw in zip(grids, grid_wards) if gw == w))
+        for w in dict.fromkeys(grid_wards)}
     meta = {
         "note": "Ward-scale calibration set. Replaces the GHS-SMOD mask pairs, which "
                 "sample a landscape (FVC 0.678 urban vs 0.654 rural) rather than the "
                 "1400 m wards the product is about (FVC 0.31-0.45).",
         "scenes": len(scenes), "ward_scenes": len(rows),
-        "grid_shape": list(stack.shape[1:]),
+        "grid_shape": (next(iter(grid_shape.values())) if len(shapes) == 1 else grid_shape),
+        # What each ward's row statistics (LST and surface alike) are a mean OF.
+        "domain": {wid: (f"{_wardmask.POLYGONS[wid][0]} ward {_wardmask.POLYGONS[wid][1]} "
+                         f"polygon: {int(px.sum())} of {px.size} ECOSTRESS pixels "
+                         f"(centre inside); surface/built over the polygon's cells"
+                         if px is not None else
+                         f"the whole {_types.WARDS[wid].footprint_m} m square")
+                   for wid, px in pixels.items()},
         "min_cells": MIN_CELLS,
         "sun_up_physical_bar": {
             "rule": "reject when sun > SUN_UP and (lst_mean_c - tAir) < -MAX_BELOW_AIR_K",

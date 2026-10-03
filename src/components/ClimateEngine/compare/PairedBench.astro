@@ -69,7 +69,7 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
         <div class="pane is-on" data-pane="analysis">
           <section class="pane-body" aria-labelledby="pane-analysis-h">
             <p class="pane-h" id="pane-analysis-h">Analysis</p>
-            <p class="pane-note">One intervention package, two equal 1.4 km study windows, one pinned forcing record. Results show each ward’s response from its own baseline. They are not a ward ranking.</p>
+            <p class="pane-note">One intervention package, two study areas on the same 7.3 m model cell, one pinned forcing record. Ballygunge is KMC Ward 68: its figures are taken inside the ward boundary, the rest of its 1.8 km square is context. Results show each ward’s response from its own baseline. They are not a ward ranking.</p>
             <label class="heat-compare__select-label">Ward A
               <select data-input="ward-a" aria-label="Ward A"></select>
             </label>
@@ -85,7 +85,7 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
         <div class="pane" data-pane="layers">
           <section class="pane-body" aria-labelledby="pane-layers-h">
             <p class="pane-h" id="pane-layers-h">Layers</p>
-            <p class="pane-note">Layers turn on what the map draws. Compare draws no map: it renders two fixed 1.4 km thermal fields to a canvas from a single model run, so that the one thing differing between them is the fabric underneath.</p>
+            <p class="pane-note">Layers turn on what the map draws. Compare draws no map: it renders each area's thermal field to a canvas from a single model run, so that the one thing differing between them is the fabric underneath.</p>
             <p class="pane-note">There is no basemap here to switch roads, canopy, footprints or ground-truth photography over — the tree needs a map, and the map takes one ward at a time.</p>
             <a class="pane-out" href={DEFAULT_AREA_PATH}>Open the map <span aria-hidden="true">→</span></a>
           </section>
@@ -228,7 +228,7 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
             <output class="heat-compare__probe" data-map-probe="a" hidden></output>
             <div class="heat-compare__map-tools"><span data-role="map-mode-label">Canvas relief · adaptive fallback</span><button type="button" data-action="map-reset" data-map-reset="a">Reset linked</button></div>
           </div>
-          <figcaption><span>1.4 km × 1.4 km</span><span>Thermal relief illustrative</span><span>26–48°C fixed scale</span></figcaption>
+          <figcaption><span data-value="a-extent">Study square</span><span>Thermal relief illustrative</span><span>26–48°C fixed scale</span></figcaption>
           <p class="heat-compare__pattern" data-value="a-pattern">Preparing spatial summary.</p>
         </figure>
         <figure class="heat-compare__map-card" data-map-card="b">
@@ -239,7 +239,7 @@ import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.t
             <output class="heat-compare__probe" data-map-probe="b" hidden></output>
             <div class="heat-compare__map-tools"><span data-role="map-mode-label">Canvas relief · adaptive fallback</span><button type="button" data-action="map-reset" data-map-reset="b">Reset linked</button></div>
           </div>
-          <figcaption><span>1.4 km × 1.4 km</span><span>Thermal relief illustrative</span><span>26–48°C fixed scale</span></figcaption>
+          <figcaption><span data-value="b-extent">Study square</span><span>Thermal relief illustrative</span><span>26–48°C fixed scale</span></figcaption>
           <p class="heat-compare__pattern" data-value="b-pattern">Preparing spatial summary.</p>
         </figure>
       </div>

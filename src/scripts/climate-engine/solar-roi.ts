@@ -177,8 +177,10 @@ export function wardInput(pv: PvRoofs, idx?: readonly number[]): Pick<RoiInput, 
     its floor capacity; owned as a business (no subsidy) and every kWh valued at the
     tariff (`unitsPerMonth: null`). That last part flatters wherever surplus earns
     nothing, so the line says "as if all of it is used" and never "conservative". */
-export function wardRoi(pv: PvRoofs, basis: SolarCostBasis, tariff: number): RoiResult {
-  const big = [...pv.kwp.keys()].filter((i) => roofMaxKw(pv, i) >= MIN_SYSTEM_KW);
+export function wardRoi(pv: PvRoofs, basis: SolarCostBasis, tariff: number, rows?: readonly number[]): RoiResult {
+  /* `rows` is the ward's roofs where the square also holds context ones (an area
+     with a polygon, ward-mask.ts); omitted, it is every roof, as before. */
+  const big = [...(rows ?? pv.kwp.keys())].filter((i) => roofMaxKw(pv, i) >= MIN_SYSTEM_KW);
   return computeRoi({ ...wardInput(pv, big), owner: 'business', costPerKw: basis.costPerKw.value,
     tariff, unitsPerMonth: null, basis });
 }

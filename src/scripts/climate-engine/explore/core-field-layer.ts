@@ -1,9 +1,52 @@
 import type maplibregl from 'maplibre-gl';
 import { wardLatLon, type Ward } from '../../../data/wards.ts';
 import { requireGrid } from '../types.ts';
+import type { WardMask } from '../ward-mask.ts';
+import { CLAY, WARD } from './look.ts';
+
+/**
+ * Which cells the 2-D path veils: those with NO in-ward cell among their eight
+ * neighbours (1 = veil), SOUTH-up like `cells`.
+ *
+ * WHY NOT `cells === 0`. MapLibre draws this canvas through a linear-filtered
+ * texture, so every screen pixel blends the four texels around it; veiling every
+ * outside texel bled the veil up to a cell (7.3 m) into the ward — the same defect
+ * the 3-D overlay's `step(.003, F.a)` fixes (heat-overlay.ts), with no shader to fix it
+ * in here. Sparing the outside texels next to the ward means every pixel whose
+ * blend touches an in-ward texel blends only unveiled ones: exactly the field as it
+ * was, inside the polygon. The cost is the other side of the line: the context
+ * reads unveiled for one more cell (7.3 m) beyond the ward, the safe direction.
+ */
+export function veilCells(cells: Uint8Array, n: number): Uint8Array {
+  const veil = new Uint8Array(n * n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    let near = 0;
+    for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const gx = x + dx, gy = y + dy;
+      if (gx >= 0 && gx < n && gy >= 0 && gy < n && cells[gy * n + gx] === 1) { near = 1; break; }
+    }
+    veil[y * n + x] = near ? 0 : 1;
+  }
+  return veil;
+}
 
 export const CORE_FIELD_SOURCE = 'delta-core-field-source';
 export const CORE_FIELD_LAYER = 'delta-core-field';
+/** The ward polygon's outline on the 2-D path: one source, a halo layer under a core layer. */
+export const WARD_OUTLINE_SOURCE = 'delta-ward-outline-source';
+const WARD_OUTLINE_HALO = 'delta-ward-outline-halo';
+const WARD_OUTLINE_CORE = 'delta-ward-outline';
+
+/** The ward ring (ward metres, x east / y north) as a closed lon/lat GeoJSON line. */
+export function wardOutlineGeoJson(ward: Ward, ring: readonly number[]): { type: 'Feature'; properties: Record<string, never>; geometry: { type: 'LineString'; coordinates: [number, number][] } } {
+  const coordinates: [number, number][] = [];
+  for (let i = 0; i + 1 < ring.length; i += 2) {
+    const p = wardLatLon(ward, ring[i], ring[i + 1]);
+    coordinates.push([p.lon, p.lat]);
+  }
+  if (coordinates.length && (coordinates[0][0] !== coordinates[coordinates.length - 1][0] || coordinates[0][1] !== coordinates[coordinates.length - 1][1])) coordinates.push(coordinates[0]);
+  return { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } };
+}
 
 const STOPS = [
   [0.435, 0.792, 0.839],
@@ -46,14 +89,19 @@ export function wardFieldCoordinates(ward: Ward, sizeM: number): [[number, numbe
 /** The analytical field as a MapLibre canvas raster — the Three-free renderer that
  *  is the whole picture on tier 0 and stays valid while relief downloads. */
 export interface CoreFieldLayer {
-  /** Idempotent: adds the source/layer once, then only moves the corner coordinates. */
-  attach(ward: Ward, sizeM: number, beforeId?: string): void;
+  /** Idempotent: adds the source/layer once, then only moves the corner coordinates.
+   *  `boundary`, when given, veils the field outside the polygon and outlines it. */
+  attach(ward: Ward, sizeM: number, beforeId?: string, boundary?: WardMask | null): void;
   /** Repaints the canvas from a south-row-major field. Row order is FLIPPED here —
    *  the grid's first row is the south edge, the canvas's first row is the north. */
   update(field: Float32Array, min: number, max: number): void;
   setVisible(visible: boolean): void;
+  /** The ward outline's own switch: it shows whenever this path draws the map, field on or off. */
+  setOutlineVisible(visible: boolean): void;
   /** Re-adds source and layer after a basemap style swap discards them. */
-  rehydrate(ward: Ward, sizeM: number, beforeId?: string): void;
+  rehydrate(ward: Ward, sizeM: number, beforeId?: string, boundary?: WardMask | null): void;
+  /** Re-adds the outline alone after a style swap — its own STYLE_ADDITIONS entry. */
+  restoreOutline(): void;
   dispose(): void;
 }
 
@@ -64,8 +112,12 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
      being attached, because a 2800 m ward solves 384² cells and a canvas left
      at Kolkata's 192² would reject every field it was handed. */
   let n = gridSize;
-  /** One pending `idle` listener at most — see `pushToGpu`. */
+  /** One pending `render` listener at most — see `pushToGpu`. */
   let settling = false;
+  /** The open ward's boundary and frame, or null: read by `update` (the veil) and `restoreOutline`. */
+  let boundary: WardMask | null = null;
+  let boundaryWard: Ward | null = null;
+  let outlineVisible = false;
 
   /**
    * PUSH THE PAINTED CANVAS TO THE GPU. Without this the field is never seen.
@@ -100,16 +152,30 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
    * `if (!options.url) return this;` — it takes a URL and re-fetches. There is no
    * raw-pixel path on it.
    *
-   * WHY PAUSE ON `idle` RATHER THAN IMMEDIATELY. `prepare()` returns early when
+   * HOW IT UPLOADS: `pause()` IS THE UPLOAD. In 4.7.1 `pause()` reads
+   * `if (this._playing) { this.prepare(); this._playing = false; }` — it runs
+   * `prepare()` while still playing, and that re-uploads the canvas there and then.
+   * So `play(); pause();` is one synchronous upload, and the source is left at rest.
+   *
+   * ONLY ONCE THE SOURCE HAS TILES. `prepare()` returns early while
    * `Object.keys(this.tiles).length === 0` — "not enough data for current
    * position" — which is true while the map is still flying to the ward. A
-   * `play(); pause();` pair would then clear the flag WITHOUT having uploaded, and
-   * the fix would be a silent no-op in the exact window the bug lives in. `idle`
-   * means MapLibre has finished rendering, so the upload has happened.
+   * `play(); pause();` there would clear the flag WITHOUT having uploaded, and the
+   * fix would be a silent no-op in the exact window the bug lives in. So until
+   * the source has tiles it is left playing, and paused on the first `render`
+   * after it has them: that frame's `prepare()` ran playing, so it uploaded.
    *
-   * IF `idle` NEVER FIRES the source simply stays playing: the failure mode is a
-   * per-frame upload, not a blank map. Cost, never silence — which is the right
-   * direction for a defect this hard to see.
+   * NEVER ON `idle`, WHICH IS WHAT THIS WAITED FOR UNTIL 2026-10-03 — and `idle`
+   * cannot fire while it waits. A playing canvas source is a transition
+   * (`CanvasSource.hasTransition()` returns `_playing`), so `Map._render` asks
+   * for another frame every frame and never reaches `idle`. The source was never
+   * paused: the map redrew continuously, for ever, on the software path that can
+   * least afford it. MEASURED on Ballygunge at tier 0 (headless SwiftShader, M4):
+   * 0 `idle` events and `_playing` true on every one of 26–38 frames in 6 s; the
+   * renderer's main thread 100 % busy, all of it blocked in a per-frame WebGL
+   * read-back behind the GPU thread; each page screenshot 1.3 s (192² square)
+   * and 2.0 s (KMC Ward 68's 247² square). On a 2-CPU runner that starvation is
+   * what timed out heat-map-tiers.spec.ts:147/186 in page.screenshot.
    */
   function pushToGpu(): void {
     const source = map.getSource(CORE_FIELD_SOURCE) as maplibregl.CanvasSource | undefined;
@@ -119,20 +185,54 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
        whatever the canvas holds at that moment — which is this paint. */
     if (!source || typeof source.play !== 'function') return;
     source.play();
+    if (hasTiles(source)) { source.pause(); return; }
     if (settling) return;
     settling = true;
-    map.once('idle', () => {
-      settling = false;
+    const onRender = (): void => {
       const current = map.getSource(CORE_FIELD_SOURCE) as maplibregl.CanvasSource | undefined;
-      if (current && typeof current.pause === 'function') current.pause();
-    });
+      /* Removed (a style swap, dispose) — nothing left to pause; a re-attach pushes afresh. */
+      if (!current || typeof current.pause !== 'function') { map.off('render', onRender); settling = false; return; }
+      if (!hasTiles(current)) return;
+      map.off('render', onRender);
+      settling = false;
+      current.pause();
+    };
+    map.on('render', onRender);
+  }
+  /** `prepare()` uploads only once the source covers a tile at the current position. */
+  function hasTiles(source: maplibregl.CanvasSource): boolean {
+    return Object.keys(source.tiles ?? {}).length > 0;
   }
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = n;
+  /* The veil for the boundary's cells, rebuilt only when the boundary changes. */
+  let veil: Uint8Array | null = null, veilFor: Uint8Array | null = null;
   const context = canvas.getContext('2d', { alpha: true });
   if (!context) throw new Error('The analytical field canvas is unavailable.');
 
-  function attach(ward: Ward, sizeM: number, beforeId?: string): void {
+  /**
+   * The outline on the 2-D path. Paper halo under an ink core, fixed in both
+   * basemaps — the pair reads on either, and this path is the fallback while the
+   * 3-D scene (which draws its own, look-aware outline) is absent.
+   */
+  function restoreOutline(): void {
+    const data = boundary && boundaryWard ? wardOutlineGeoJson(boundaryWard, boundary.ring) : { type: 'FeatureCollection' as const, features: [] };
+    const source = map.getSource(WARD_OUTLINE_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    if (source) source.setData(data as never);
+    else map.addSource(WARD_OUTLINE_SOURCE, { type: 'geojson', data: data as never });
+    const visibility = outlineVisible ? 'visible' : 'none';
+    if (!map.getLayer(WARD_OUTLINE_HALO)) {
+      map.addLayer({ id: WARD_OUTLINE_HALO, type: 'line', source: WARD_OUTLINE_SOURCE, layout: { 'line-join': 'round', visibility },
+        paint: { 'line-color': CLAY.hazeCol, 'line-width': 5, 'line-opacity': 0.85 } });
+    }
+    if (!map.getLayer(WARD_OUTLINE_CORE)) {
+      map.addLayer({ id: WARD_OUTLINE_CORE, type: 'line', source: WARD_OUTLINE_SOURCE, layout: { 'line-join': 'round', visibility },
+        paint: { 'line-color': WARD.ink, 'line-width': 2 } });
+    }
+  }
+
+  function attach(ward: Ward, sizeM: number, beforeId?: string, wardBoundary: WardMask | null = null): void {
+    boundary = wardBoundary; boundaryWard = ward;
     const wardN = requireGrid(sizeM).n;
     if (wardN !== n) { n = wardN; canvas.width = canvas.height = n; }
     const coordinates = wardFieldCoordinates(ward, sizeM);
@@ -151,6 +251,7 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
         paint: { 'raster-opacity': 0.5, 'raster-fade-duration': 0 },
       }, beforeId);
     }
+    restoreOutline();
     attached = true;
     /* AND AFTER A RE-ATTACH, because that is the other way the texture goes stale.
        `rehydrate` runs after a basemap style swap, which discards the source and
@@ -167,13 +268,26 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
     update(field, min, max) {
       if (field.length !== n * n) throw new RangeError(`Core field of ${field.length} cells does not match this ward's ${n}×${n} admitted grid.`);
       const image = context.createImageData(n, n);
+      /* THE VEIL (look.ts WARD): outside the polygon the ramp colour is desaturated
+         and thinned; inside it is written exactly as before, and so are the outside
+         cells next to it (`veilCells`), so the map's bilinear blend cannot carry the
+         veil in. A mask for another grid is ignored rather than misread. */
+      const cells = boundary && boundary.cells.length === n * n ? boundary.cells : null;
+      if (cells && veilFor !== cells) { veil = veilCells(cells, n); veilFor = cells; }
+      const keep = 1 - WARD.veilDesat, alphaOut = Math.round(210 * WARD.veilAlpha);
       for (let southRow = 0; southRow < n; southRow++) {
         const canvasRow = n - 1 - southRow;
         for (let x = 0; x < n; x++) {
           const source = southRow * n + x;
           const target = (canvasRow * n + x) * 4;
-          const [r, g, b] = heatRampRgb(field[source], min, max);
-          image.data[target] = r; image.data[target + 1] = g; image.data[target + 2] = b; image.data[target + 3] = 210;
+          let [r, g, b] = heatRampRgb(field[source], min, max);
+          let alpha = 210;
+          if (cells && veil && veil[source] === 1) {
+            const grey = 0.299 * r + 0.587 * g + 0.114 * b;
+            r = Math.round(grey + (r - grey) * keep); g = Math.round(grey + (g - grey) * keep); b = Math.round(grey + (b - grey) * keep);
+            alpha = alphaOut;
+          }
+          image.data[target] = r; image.data[target + 1] = g; image.data[target + 2] = b; image.data[target + 3] = alpha;
         }
       }
       context.putImageData(image, 0, 0);
@@ -186,11 +300,22 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
       if (map.getLayer(CORE_FIELD_LAYER)) map.setLayoutProperty(CORE_FIELD_LAYER, 'visibility', visible ? 'visible' : 'none');
     },
 
-    rehydrate(ward, sizeM, beforeId) { attach(ward, sizeM, beforeId); },
+    setOutlineVisible(visible) {
+      outlineVisible = visible;
+      for (const id of [WARD_OUTLINE_HALO, WARD_OUTLINE_CORE]) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+      }
+    },
+
+    rehydrate(ward, sizeM, beforeId, wardBoundary = null) { attach(ward, sizeM, beforeId, wardBoundary); },
+
+    restoreOutline,
 
     dispose() {
       if (map.getLayer(CORE_FIELD_LAYER)) map.removeLayer(CORE_FIELD_LAYER);
       if (map.getSource(CORE_FIELD_SOURCE)) map.removeSource(CORE_FIELD_SOURCE);
+      for (const id of [WARD_OUTLINE_CORE, WARD_OUTLINE_HALO]) if (map.getLayer(id)) map.removeLayer(id);
+      if (map.getSource(WARD_OUTLINE_SOURCE)) map.removeSource(WARD_OUTLINE_SOURCE);
       attached = false;
     },
   };
