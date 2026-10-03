@@ -11,7 +11,7 @@ import { CLAY, WARD } from './look.ts';
  * WHY NOT `cells === 0`. MapLibre draws this canvas through a linear-filtered
  * texture, so every screen pixel blends the four texels around it; veiling every
  * outside texel bled the veil up to a cell (7.3 m) into the ward — the same defect
- * the 3-D overlay's `step(.5, F.a)` fixes (heat-overlay.ts), with no shader to fix it
+ * the 3-D overlay's `step(.003, F.a)` fixes (heat-overlay.ts), with no shader to fix it
  * in here. Sparing the outside texels next to the ward means every pixel whose
  * blend touches an in-ward texel blends only unveiled ones: exactly the field as it
  * was, inside the polygon. The cost is the other side of the line: the context

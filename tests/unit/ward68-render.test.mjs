@@ -29,7 +29,7 @@ test('the overlay veil desaturates and thins the context and is the identity ins
   /* The overlay lives in heat-overlay.ts since the look's C1 fix; obos-look-correctness
      EVALUATES its tail with and without the veil. Here: the veil reads the mask (F.a),
      and both of its factors are exactly 1 where wIn = 1. */
-  assert.match(OVERLAY, /float wIn=step\(\.5,F\.a\); col=mix\(mix\(col,vec3\(dot\(col,vec3\(\.299,\.587,\.114\)\)\),\$\{WARD\.veilDesat\.toFixed\(3\)\}\),col,wIn\);/);
+  assert.match(OVERLAY, /float wIn=step\(\.003,F\.a\); col=mix\(mix\(col,vec3\(dot\(col,vec3\(\.299,\.587,\.114\)\)\),\$\{WARD\.veilDesat\.toFixed\(3\)\}\),col,wIn\);/);
   assert.match(OVERLAY, /\*edge\*\(1\.-\(1\.-wIn\)\*\$\{\(1 - WARD\.veilAlpha\)\.toFixed\(3\)\}\);/);
   assert.ok(WARD.veilDesat > 0 && WARD.veilDesat <= 0.5 && WARD.veilAlpha >= 0.4 && WARD.veilAlpha < 1, 'the veil is no longer a light one');
 });
@@ -68,7 +68,7 @@ test('the 2-D path veils by the same mask and draws the same outline, enrolled f
    pixel as a BILINEAR blend. Read raw, it half-veiled the ward for a cell inside the
    line (1.94 % of the ward, measured). These evaluate the shader's own `wIn`
    statement and the 2-D path's own veil, on the values a bilinear sample produces. */
-test('the 3-D overlay\'s wIn is a hard step of the mask: never a fraction, 1 from the 0.5 contour in', () => {
+test('the 3-D overlay\'s wIn is a hard step of the mask: never a fraction, and 1 wherever any in-ward texel reaches', () => {
   const stmt = OVERLAY.match(/float wIn=([^;]+);/);
   assert.ok(stmt, 'the overlay no longer declares wIn');
   const expr = stmt[1].replace(/\bF\.a\b/g, 'A');
@@ -79,7 +79,8 @@ test('the 3-D overlay\'s wIn is a hard step of the mask: never a fraction, 1 fro
   for (let k = 0; k <= 256; k++) {
     const a = k / 256, v = wIn(a, step, () => NaN, () => NaN, Math.min, Math.max);
     assert.ok(v === 0 || v === 1, `a bilinear mask sample of ${a.toFixed(3)} gives wIn = ${v}: the veil is not hard`);
-    assert.equal(v, a >= 0.5 ? 1 : 0, `sample ${a.toFixed(3)}`);
+    /* 1/256 is the least share one in-ward texel can carry under 8-bit filter weights */
+    assert.equal(v, a > 0 ? 1 : 0, `sample ${a.toFixed(4)}: a pixel an in-ward texel reaches must be the ward's`);
   }
 });
 
