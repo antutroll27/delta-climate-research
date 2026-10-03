@@ -34,6 +34,22 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { WaterData } from './heat-map-model';
 import { buildDepthField, openLines, waterFieldM } from './water-depth';
 import { buildRibbonMesh } from './road-ribbon';
+import { displayColor, HAZE_GLSL } from './explore/look-shading';
+import { CLAY } from './explore/look';
+
+/**
+ * The editorial look's holders (explore/look.ts), shared with the relief renderer.
+ * Absent — `?look=classic` — the classic shader is used unchanged.
+ */
+export interface WaterLook {
+  studio: { value: number };
+  /** unit vector, scene frame (+x east, +y up, +z north) — the real sun */
+  sun: { value: THREE.Vector3 };
+  /** what a grazing view reflects: the environment's horizon */
+  sky: { value: THREE.Color };
+  haze: { value: number };
+  hazeCol: { value: THREE.Color };
+}
 
 export interface WaterLayer {
   readonly mesh: THREE.Mesh;
@@ -64,7 +80,9 @@ const VERT = /* glsl */ `
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }`;
 
-const FRAG = /* glsl */ `
+/** The water shipped until 2026-10-02, kept unchanged for `?look=classic`. Its
+    sun is a FIXED north-east direction; the editorial `FRAG` below uses the real one. */
+const FRAG_CLASSIC = /* glsl */ `
   precision highp float;
   uniform sampler2D tDepth;
   uniform float uTime;
@@ -150,6 +168,72 @@ const FRAG = /* glsl */ `
     gl_FragColor = vec4(col, alpha);
   }`;
 
+/* ── The editorial water (the default). ONE pass, one draw, like the classic
+   shader: no reflection target, no refraction copy — the GL context is
+   MapLibre's. What changes against classic:
+     sun        the real solar direction, the same vector that aims the key light,
+                so the glint sits where the compass says the sun is;
+     Fresnel    a grazing view now turns toward the SKY's colour (Schlick, F0 .02)
+                instead of brightening toward the shore tint;
+     absorption colour follows Beer–Lambert on the shore-distance field — exp(−kd)
+                — so depth is a continuous deepening, not five terraces;
+     shore      the margin fades in over the first metres of the field, so the
+                water edge is soft against the ground instead of cut out. */
+const FRAG = /* glsl */ `
+  precision highp float;
+  uniform sampler2D tDepth;
+  uniform float uTime, uGrow, uFieldSize, uStudio, uHaze, uMaxDistM, uKS;
+  uniform vec3 uView, uSun, uSky, uHazeCol;
+  uniform vec3 uShallowS, uDeepS;
+  varying vec2 vPos;
+  varying float vFlow;
+  ${HAZE_GLSL}
+  const vec3 SHALLOW_D = vec3(0.420, 0.760, 0.740);
+  const vec3 DEEP_D    = vec3(0.045, 0.300, 0.340);
+
+  float waves(vec2 p, float t, out vec2 slope) {
+    float a = sin(p.x * 1.7 + p.y * 2.3 + t * 1.05);
+    float b = sin(p.x * 2.9 - p.y * 1.3 - t * 0.65 + 1.7);
+    slope = vec2(
+      1.7 * cos(p.x * 1.7 + p.y * 2.3 + t * 1.05) + 2.9 * cos(p.x * 2.9 - p.y * 1.3 - t * 0.65 + 1.7),
+      2.3 * cos(p.x * 1.7 + p.y * 2.3 + t * 1.05) - 1.3 * cos(p.x * 2.9 - p.y * 1.3 - t * 0.65 + 1.7)
+    );
+    return (a + b) * 0.5;
+  }
+
+  void main() {
+    vec2 uv = vPos / uFieldSize + 0.5;
+    float depth = texture2D(tDepth, uv).r;
+    vec2 p = vPos * 0.085;
+    p.y += uTime * 0.32 * vFlow;
+    vec2 slope;
+    waves(p, uTime, slope);
+    float chop = mix(1.0, 0.45, depth);
+    bool stu = uStudio > 0.5;
+
+    /* Beer–Lambert on METRES from shore (the field is normalised to the ward's
+       widest water; uMaxDistM undoes that), so a tank and a river shelve alike:
+       the colour has sunk ~63 % by 18 m out, wherever that water is. */
+    float dM = depth * uMaxDistM;
+    float absorb = 1.0 - exp(-dM / (stu ? uKS : 18.0));
+    vec3 col = mix(stu ? uShallowS : SHALLOW_D, stu ? uDeepS : DEEP_D, absorb);
+
+    vec3 n = normalize(vec3(-slope.x * 0.03 * chop, 1.0, -slope.y * 0.03 * chop));
+    vec3 v = normalize(uView);
+    float fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+    col = mix(col, uSky, clamp(fres * (stu ? 0.55 : 0.7), 0.0, 0.5));
+
+    vec3 sun = normalize(uSun);
+    float spec = pow(max(dot(reflect(-sun, n), v), 0.0), 60.0);
+    col += (stu ? vec3(0.98, 0.98, 0.95) : vec3(0.85, 0.97, 0.95)) * spec * (stu ? 0.30 : 0.45) * smoothstep(0.0, 0.25, sun.y);
+
+    col = mix(col, uHazeCol, lookHaze() * uHaze);
+    /* The margin fades in over its first ~5 m, so the edge is soft, not cut. */
+    float shore = smoothstep(0.0, 5.0, dM);
+    float alpha = mix(0.74, 0.94, absorb) * mix(0.30, 1.0, shore) * min(1.0, uGrow * 1.6);
+    gl_FragColor = vec4(col, alpha);
+  }`;
+
 /** Ring → a flat ShapeGeometry in the scene's frame, or null if degenerate. */
 function ringGeometry(flat: readonly number[]): THREE.ShapeGeometry | null {
   if (flat.length < 6) return null;
@@ -168,13 +252,13 @@ function ringGeometry(flat: readonly number[]): THREE.ShapeGeometry | null {
 }
 
 /** The shore-distance field, as a single-channel texture the shader samples. */
-function depthTexture(data: WaterData): THREE.DataTexture {
+function depthTexture(data: WaterData): THREE.DataTexture & { maxDistM?: number } {
   const field = buildDepthField(data.polys, waterFieldM(data));
   const texture = new THREE.DataTexture(field.data, field.n, field.n, THREE.RedFormat);
   texture.minFilter = texture.magFilter = THREE.LinearFilter;
   texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.needsUpdate = true;
-  return texture;
+  return Object.assign(texture, { maxDistM: field.maxDistM });
 }
 
 /**
@@ -189,6 +273,7 @@ export function createWaterLayer(
   data: WaterData,
   growU: { value: number },
   groundAt: ((x: number, y: number) => number) | null = null,
+  look?: WaterLook,
 ): WaterLayer | null {
   const geometries: THREE.BufferGeometry[] = [];
   for (const poly of data.polys) {
@@ -237,9 +322,16 @@ export function createWaterLayer(
       uGrow: growU,                     /* SHARED with the facade's grow-in */
       uFieldSize: { value: waterFieldM(data) },
       uView: viewU,
+      ...(look ? {
+        uMaxDistM: { value: Math.max(1, tDepth.maxDistM ?? 1) },
+        uStudio: look.studio, uSun: look.sun, uSky: look.sky, uHaze: look.haze, uHazeCol: look.hazeCol,
+        /* Clay: a soft teal-green shallows into a deep teal (CLAY.water*). */
+        uShallowS: { value: displayColor(CLAY.waterShallow) }, uDeepS: { value: displayColor(CLAY.waterDeep) },
+        uKS: { value: CLAY.waterK },
+      } : {}),
     },
     vertexShader: VERT,
-    fragmentShader: FRAG,
+    fragmentShader: look ? FRAG : FRAG_CLASSIC,
     transparent: true,
     depthWrite: false,                  /* buildings occlude; water never does */
     side: THREE.DoubleSide,             /* a ribbon mitre can wind either way */

@@ -22,6 +22,9 @@ import { terrainDrawAt } from '../terrain.ts';
 import { requireGrid } from '../types.ts';
 import { createVegetationLayer, type VegetationLayer } from '../vegetation-layer.ts';
 import { createWaterLayer, type WaterLayer } from '../water-layer.ts';
+import { CLASSIC, CLAY, clayFor, DARK, glintSun, isPhone, lookAmounts, STUDIO_LIGHT, watchPhone } from './look.ts';
+import { makeHeatOverlay } from './heat-overlay.ts';
+import { displayColor, HAZE_GLSL, makeContactAO, srgbLinear } from './look-shading.ts';
 import { hasBuildingModel, loadBuildingModel, type LandmarkNode } from './building-model.ts';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './building-pick.ts';
 import {
@@ -143,6 +146,27 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private selected = { value: new THREE.Vector2(1e9, 1e9) };
   private selRadius = { value: 0 };
   private cooling = { value: 0 };
+  /* ── The editorial look's shared holders (look.ts), so every material re-points
+     at once on an environment switch. Inert under `?look=classic`: no classic
+     shader declares them. ── */
+  /** Baked contact occlusion: R = tight (CLAY.aoNearM) blur of the footprints, G = wide (≈ 8 m). */
+  private aoTex: { value: THREE.Texture } = { value: makeContactAO([], 1400, 4, CLAY.aoNearM) };
+  private aoAmt = { value: 0 };
+  /** × the overlay's opacity, and the AO channel weights — per environment. */
+  private opBoost = { value: 1 };
+  private aoW = { value: new THREE.Vector2(DARK.aoNear, DARK.aoFar) };
+  /** Is the frame phone-sized (look.ts `isPhone`)? Re-read on every crossing by `watchPhone`. */
+  private phone = isPhone();
+  private unwatchPhone: () => void = () => undefined;
+  /** The facade's phone-dependent Clay amounts: (tintW, lineK, strokeK, wallFloor). */
+  private clayK = { value: new THREE.Vector4() };
+  private haze = { value: 0 };
+  private hazeCol = { value: displayColor(CLAY.hazeCol) };
+  /** The water's glint direction. A placeholder until `applySun` aims it at the REAL
+      sun, which `onAdd` does (via `applyEnvironment`) before the first frame. */
+  private sunDir = { value: new THREE.Vector3(0, 1, 0) };
+  /** What a grazing view of the water reflects: the environment's horizon. */
+  private skyCol = { value: displayColor(CLAY.horizon) };
   private visual: ReliefVisualState = {
     mode: 'relief', environment: 'dark', tintMode: 1, grow: 1,
     overlayOpacity: 0.5, live: null, phase: 'peak',
@@ -177,6 +201,8 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.heatTexture.minFilter = this.heatTexture.magFilter = THREE.LinearFilter;
     this.heatTexture.needsUpdate = true;
     this.heatUniform = { value: this.heatTexture };
+    this.setClayK();
+    if (!CLASSIC) this.unwatchPhone = watchPhone((phone) => this.setPhone(phone));
     this.facade = this.makeFacade();
     this.layer = {
       id: 'delta-city', type: 'custom', renderingMode: '3d',
@@ -254,6 +280,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.visual = state;
     this.grow.value = state.grow;
     this.tint.value = state.tintMode;
+    /* With the heat surface off (uOp 0) the editorial overlay still draws its contact AO: that is ground shading only, never the tint (heat-overlay.ts). */
     if (this.overlay) (this.overlay.material as THREE.ShaderMaterial).uniforms.uOp.value = state.overlayOpacity;
     if (environmentChanged || this.studio.value !== (state.environment === 'studio' ? 1 : 0)) this.applyEnvironment(state.environment);
     else this.applySun(state.sun);
@@ -363,6 +390,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.unwatchPhone();
     this.clearBuildings();
     this.ready.resolve();
     for (const cached of this.modelCache.values()) {
@@ -381,7 +409,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     });
     this.coolingLine?.geometry.dispose();
     (this.coolingLine?.material as THREE.Material | undefined)?.dispose?.();
-    this.facade.dispose(); this.heatTexture.dispose();
+    this.facade.dispose(); this.heatTexture.dispose(); this.aoTex.value.dispose();
     this.pendingSky?.texture.dispose(); this.pendingSky = null;
     for (const target of this.convolved.values()) target.dispose();
     this.convolved.clear();
@@ -408,7 +436,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.renderer.autoClear = false;
     this.overlay = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1, this.options.terrainGridSize - 1, this.options.terrainGridSize - 1),
-      new THREE.ShaderMaterial({
+      CLASSIC ? new THREE.ShaderMaterial({
         transparent: true, depthWrite: false,
         uniforms: { tT: this.heatUniform, uMin: this.heatMin, uMax: this.heatMax, uOp: { value: 0.5 }, uCool: this.cooling },
         vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
@@ -420,7 +448,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
             float edge=smoothstep(0.0,0.16,min(min(vUv.x,1.0-vUv.x),min(vUv.y,1.0-vUv.y)));
             float cool=F.b*uCool; vec3 col=mix(ramp(t),vec3(.353,.722,.541),cool*.62);
             gl_FragColor=vec4(col,(uOp+cool*.16)*edge); }`,
-      }),
+      }) : this.makeOverlay(),
     );
     this.overlay.rotation.x = -Math.PI / 2; this.overlay.position.y = 0.6; this.overlay.renderOrder = -1;
     this.scene.add(this.overlay);
@@ -495,8 +523,17 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     else { this.installExtrusion(bundle); this.ready.resolve(); }
     this.overlay.scale.set(bundle.wardData.sizeM, bundle.wardData.sizeM, 1);
     this.displaceGround(bundle.terrain, bundle.wardData.sizeM);
+    if (!CLASSIC) {
+      this.aoTex.value.dispose();
+      this.aoTex.value = makeContactAO(bundle.wardData.b, bundle.wardData.sizeM, 1024, CLAY.aoNearM);
+    }
+    /* The editorial look's holders, handed to every layer; `undefined` under
+       `?look=classic`, which makes each layer take its classic shader. */
+    const look = CLASSIC
+      ? undefined
+      : { studio: this.studio, sun: this.sunDir, sky: this.skyCol, haze: this.haze, hazeCol: this.hazeCol };
     if (this.water) { this.scene.remove(this.water.mesh); this.water.dispose(); this.water = null; }
-    const water = createWaterLayer(bundle.water, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
+    const water = createWaterLayer(bundle.water, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y), look);
     if (water) { this.water = water; this.scene.add(water.mesh); }
     /* REBUILT LIKE EVERY OTHER LAYER HERE, and it used to be the one exception.
        `if (!this.clouds)` built the deck once, on the first ward, and never again —
@@ -509,11 +546,13 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     const clouds = createCloudLayer((x, y) => terrainDrawAt(bundle.terrain, x, y));
     this.clouds = clouds; this.scene.add(clouds.group);
     if (this.roads) { this.scene.remove(this.roads.mesh); this.roads.dispose(); this.roads = null; }
-    const roads = createRoadLayer(bundle.roads, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
-    if (roads) { this.roads = roads; this.scene.add(roads.mesh); }
+    const roads = createRoadLayer(bundle.roads, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y), look);
+    if (roads) {
+      this.roads = roads; this.scene.add(roads.mesh); roads.setPhone?.(this.phone); roads.setStudio?.(this.studio.value > 0.5);
+    }
     if (this.veg) { this.scene.remove(this.veg.group); this.veg.dispose(); this.veg = null; }
-    const veg = createVegetationLayer(bundle.veg, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y));
-    if (veg) { this.veg = veg; this.scene.add(veg.group); }
+    const veg = createVegetationLayer(bundle.veg, this.grow, (x, y) => terrainDrawAt(bundle.terrain, x, y), look);
+    if (veg) { this.veg = veg; this.scene.add(veg.group); veg.setStudio?.(this.studio.value > 0.5); }
     /* LAST, AND IT HAS TO BE LAST. Everything above is newly constructed and
        therefore visible and full height; this is where the switches the layer
        tree owns are put back on. Without it every ward switch silently resets
@@ -615,6 +654,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
       geometry.setAttribute('aDelay', new THREE.BufferAttribute(delays, 1));
       geometry.setAttribute('aH', new THREE.BufferAttribute(heights, 1));
       geometry.setAttribute('aCtr', new THREE.BufferAttribute(centres, 2));
+      /* Editorial look: the ground under the block, so contact shading is height
+         ABOVE GROUND rather than above sea level — on relief those differ by metres. */
+      if (!CLASSIC) geometry.setAttribute('aG', new THREE.BufferAttribute(new Float32Array(vertices).fill(elevation), 1));
       geometries.push(geometry);
     }
     const merged = mergeGeometries(geometries, false);
@@ -677,9 +719,12 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private applyEnvironment(environment: ReliefVisualState['environment']): void {
     const studio = environment === 'studio'; this.studio.value = studio ? 1 : 0;
     if (!this.scene) return;
+    if (!CLASSIC) { this.applyLook(studio); this.veg?.setStudio?.(studio); this.roads?.setStudio?.(studio); }
     if (studio) {
-      this.hemi.color.set(0xffffff); this.hemi.groundColor.set(0xd8d2c8);
-      this.hemiBase = 1.45; this.keyBase = 1.7; this.rim.intensity = 0.12;
+      /* STUDIO_LIGHT is the editorial Clay light, or the classic one under
+         `?look=classic` (look.ts holds both). */
+      this.hemi.color.set(STUDIO_LIGHT.sky); this.hemi.groundColor.set(STUDIO_LIGHT.ground);
+      this.hemiBase = STUDIO_LIGHT.hemi; this.keyBase = STUDIO_LIGHT.key; this.rim.intensity = STUDIO_LIGHT.rim;
     } else {
       this.hemi.color.set(0xbfe2e8); this.hemi.groundColor.set(0x0a1518);
       this.hemiBase = 1.05; this.keyBase = 2.1; this.rim.intensity = 0.5;
@@ -711,6 +756,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (!this.scene) return;
     const lighting = sunLighting(sun.elevationDeg);
     this.key.position.set(sun.x, sun.y, sun.z);
+    /* The water's glint follows the same sun (look.ts, `glintSun`); below the
+       horizon it holds a high sun so a night lake still has a faint sheen. */
+    this.sunDir.value.set(...glintSun(sun));
     this.keyLevel = this.keyBase * lighting.keyFactor;
     this.key.intensity = this.keyLevel;
     /* Below the horizon the key is zero and the hemisphere takes over, which is
@@ -801,7 +849,51 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.options.map.triggerRepaint();
   }
 
+  /** The per-environment amounts every editorial material reads (look.ts). */
+  private applyLook(studio: boolean): void {
+    const amounts = lookAmounts(studio, this.phone);
+    this.aoAmt.value = amounts.ao;
+    this.opBoost.value = amounts.overlayBoost;
+    this.aoW.value.set(amounts.aoNear, amounts.aoFar);
+    this.haze.value = amounts.haze;
+    /* The horizon colour each basemap's sky is painted with at midday (sun-lighting.ts). */
+    this.skyCol.value.copy(displayColor(amounts.horizon));
+  }
+
+  /** The facade's phone-dependent Clay amounts, from the current frame. */
+  private setClayK(): void {
+    const c = clayFor(this.phone);
+    this.clayK.value.set(c.tintW, c.lineK, c.strokeK, c.wallFloor);
+  }
+
+  /**
+   * The frame crossed the phone line (look.ts `watchPhone`). Everything that
+   * differs on a phone is a uniform except the road ribbon's drawn width, which
+   * is geometry: the road layer rebuilds that one mesh (a few ms, once).
+   */
+  private setPhone(phone: boolean): void {
+    if (phone === this.phone || this.disposed) return;
+    this.phone = phone;
+    this.setClayK();
+    if (this.scene) this.applyLook(this.studio.value > 0.5);
+    this.roads?.setPhone?.(phone);
+    this.options.map.triggerRepaint();
+  }
+
+  /** The editorial ground overlay (heat-overlay.ts): the tint untouched, the ground shaded. */
+  private makeOverlay(): THREE.ShaderMaterial {
+    return makeHeatOverlay({
+      heat: this.heatUniform, heatMin: this.heatMin, heatMax: this.heatMax, cooling: this.cooling,
+      ao: this.aoTex, aoAmt: this.aoAmt, aoW: this.aoW, haze: this.haze, hazeCol: this.hazeCol, opBoost: this.opBoost,
+    });
+  }
+
   private makeFacade(kind: 'extruded' | 'model' = 'extruded'): THREE.MeshStandardMaterial {
+    return CLASSIC ? this.makeFacadeClassic(kind) : this.makeEditorialFacade(kind);
+  }
+
+  /** The facade shipped until 2026-10-02, kept unchanged for `?look=classic`. */
+  private makeFacadeClassic(kind: 'extruded' | 'model'): THREE.MeshStandardMaterial {
     const material = new THREE.MeshStandardMaterial({ roughness: 0.84, metalness: 0.05 });
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uGrow = this.grow; shader.uniforms.uStudio = this.studio; shader.uniforms.uSize = this.size; shader.uniforms.uTintMode = this.tint;
@@ -838,6 +930,73 @@ export class ThreeReliefRenderer implements ReliefRenderer {
           if(uTintMode>1.5)t=t<.35?.17:t<.6?.48:t<.8?.70:t<.9?.85:.97;float heatW=smoothstep(.10,.52,t);
           vec3 clay=stu?vec3(.925,.916,.902):vec3(.30,.325,.335);vec3 body=mix(clay,rampc(t),heatW*(stu?.92:1.));
           body*=mix(.95,1.05,dh(floor(vFp.xz*.05)));if(wall){float fy=fract(vFp.y/3.3);float floorLine=1.-smoothstep(.05,.11,min(fy,1.-fy));float colAxis=abs(fn.x)>abs(fn.z)?vFp.z:vFp.x;float fx=fract(colAxis/3.4);float mull=1.-smoothstep(.035,.075,min(fx,1.-fx));float stroke=max(floorLine,mull*.55);vec3 lineCol=stu?body*.70:body*1.7+vec3(.015);body=mix(body,lineCol,stroke*.8);body=mix(body,stu?clay*1.05:body*1.55,smoothstep(.945,.985,vTop));}else{body*=stu?.97:.90;float spk=uTintMode<.5?1.:.35;body*=mix(1.,mix(.93,1.05,dh(floor(vFp.xz*.7))),spk);}body*=mix(stu?.76:.58,1.,smoothstep(0.,14.,vFp.y));if(vSel>.5){body=mix(body,vec3(.027,.788,.992),.42);body+=vec3(.10,.16,.18)*smoothstep(.90,.99,vTop);}diffuseColor.rgb=body;`);
+    };
+    return material;
+  }
+
+  /**
+   * The editorial facade. The same instrument — the heat ramp, the field it
+   * samples, the selection and the grow-in are untouched — over a retuned body:
+   *   · Clay is the infographic's off-white (CLAY.building), each block nudged
+   *     ±3 % in tone and a hair warm or cool, so a ward stops reading as one cast;
+   *   · the Clay tint starts earlier and fuller (CLAY.tintLo/tintHi/tintW), so the
+   *     heat stays visible over a paler body — visibility, not a new colour;
+   *   · contact shading: walls darken exponentially into the last few metres above
+   *     THEIR OWN ground, and more where the baked map says neighbours crowd in;
+   *   · roofs lose the 1.4 m speckle and take a little of the concrete roof tone;
+   *   · floor lines in Clay are drawn lighter (CLAY.lineK / strokeK);
+   *   · roughness varies per block, and distance hazes toward the paper (Clay only).
+   */
+  private makeEditorialFacade(kind: 'extruded' | 'model'): THREE.MeshStandardMaterial {
+    const material = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0.0 });
+    const clay = srgbLinear(CLAY.building), roof = srgbLinear(CLAY.roof);
+    const v3 = (c: THREE.Color): string => `vec3(${c.r.toFixed(4)},${c.g.toFixed(4)},${c.b.toFixed(4)})`;
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uGrow = this.grow; shader.uniforms.uStudio = this.studio; shader.uniforms.uSize = this.size; shader.uniforms.uTintMode = this.tint;
+      shader.uniforms.tField = this.heatUniform; shader.uniforms.uHeatMin = this.heatMin; shader.uniforms.uHeatMax = this.heatMax; shader.uniforms.uSelCtr = this.selected;
+      shader.uniforms.tAO = this.aoTex; shader.uniforms.uHaze = this.haze; shader.uniforms.uHazeCol = this.hazeCol;
+      shader.uniforms.uClayK = this.clayK;
+      if (kind === 'model') { shader.uniforms.uSelR = this.selRadius; shader.uniforms.uExtrude = this.modelExtrude; }
+      const varyings = 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel; varying float vH; varying float vRnd;\n';
+      const declare = kind === 'model'
+        ? varyings + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr; uniform float uSelR; attribute float aGround; uniform float uExtrude;\nfloat mdh(vec2 p){float h=sin(p.x*127.1+p.y*311.7)*43758.5453;return h-floor(h);}\n'
+        : 'attribute float aDelay; attribute float aH; attribute vec2 aCtr; attribute float aG;\n' + varyings + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr;\n';
+      /* Per-block tone. The extrusion has a centroid per block; the merged glTF has
+         none, so it takes a smooth 40 m value noise instead — no seams, gentler. */
+      const place = kind === 'model'
+        ? `#include <begin_vertex>
+          float aDelay=min(1.,length(position.xz)/max(uSize*.5,1.))*.72+mdh(floor(position.xz))*.28;
+          float gT=clamp((uGrow-aDelay*.55)/.45,0.,1.); float gE=1.+2.70158*pow(gT-1.,3.)+1.70158*pow(gT-1.,2.);
+          float lift=(transformed.y-aGround)*gE*uExtrude;transformed.y=aGround+lift;vFp=transformed;vFp.y=lift;vFn=normal;vTop=0.;vH=lift;
+          vec2 q=position.xz/40.;vec2 qi=floor(q),qf=fract(q);qf=qf*qf*(3.-2.*qf);
+          vRnd=mix(mix(mdh(qi),mdh(qi+vec2(1,0)),qf.x),mix(mdh(qi+vec2(0,1)),mdh(qi+vec2(1,1)),qf.x),qf.y);
+          vT=texture2D(tField,clamp(position.xz/uSize+.5,0.,1.)).g;
+          vSel=uSelR>0.?1.-step(uSelR,distance(position.xz,uSelCtr)):0.;`
+        : `#include <begin_vertex>
+          float gT=clamp((uGrow-aDelay*.55)/.45,0.,1.); float gE=1.+2.70158*pow(gT-1.,3.)+1.70158*pow(gT-1.,2.);
+          transformed.y*=gE;vFp=transformed;vFn=normal;vTop=position.y/max(aH,.001);vH=(position.y-aG)*gE;
+          vRnd=fract(sin(dot(aCtr,vec2(12.9898,78.233)))*43758.5453);
+          vT=texture2D(tField,clamp(aCtr/uSize+.5,0.,1.)).g;vSel=1.-step(.5,distance(aCtr,uSelCtr));`;
+      shader.vertexShader = declare + shader.vertexShader.replace('#include <begin_vertex>', place);
+      shader.fragmentShader = varyings + 'uniform float uStudio,uSize,uHeatMin,uHeatMax,uTintMode,uHaze; uniform vec3 uHazeCol; uniform vec4 uClayK; uniform sampler2D tField,tAO;\n' + HAZE_GLSL
+        + 'vec3 rampc(float t){vec3 c0=vec3(.435,.792,.839),c1=vec3(.624,.725,.541),c2=vec3(.690,.553,.341),c3=vec3(.831,.420,.290),c4=vec3(.898,.282,.302);return t<.35?mix(c0,c1,t/.35):t<.6?mix(c1,c2,(t-.35)/.25):t<.8?mix(c2,c3,(t-.6)/.2):mix(c3,c4,min((t-.8)/.2,1.));}\n'
+        + shader.fragmentShader
+          .replace('#include <color_fragment>', `#include <color_fragment>
+          vec3 fn=normalize(vFn);bool wall=abs(fn.y)<.5;bool stu=uStudio>.5;vec2 fuv=clamp(vFp.xz/uSize+.5,0.,1.);
+          float T=uTintMode<.5?texture2D(tField,fuv).r:vT;float t=clamp((T-uHeatMin)/(uHeatMax-uHeatMin),0.,1.);
+          if(uTintMode>1.5)t=t<.35?.17:t<.6?.48:t<.8?.70:t<.9?.85:.97;float heatW=stu?smoothstep(${CLAY.tintLo.toFixed(3)},${CLAY.tintHi.toFixed(3)},t):smoothstep(.10,.52,t);
+          float r2=fract(vRnd*7.13);
+          vec3 tone=stu?mix(vec3(.985,.99,1.0),vec3(1.015,1.0,.978),vRnd)*mix(.97,1.03,r2):vec3(mix(.90,1.10,vRnd));
+          vec3 clay=(stu?${v3(clay)}:vec3(.30,.325,.335))*tone;vec3 body=mix(clay,rampc(t),heatW*(stu?uClayK.x:1.));
+          float hgt=max(vH,0.);
+          if(wall){float fy=fract(vFp.y/3.3);float floorLine=1.-smoothstep(.05,.11,min(fy,1.-fy));float colAxis=abs(fn.x)>abs(fn.z)?vFp.z:vFp.x;float fx=fract(colAxis/3.4);float mull=1.-smoothstep(.035,.075,min(fx,1.-fx));float stroke=max(floorLine,mull*.55);
+            vec3 lineCol=stu?body*uClayK.y:body*1.7+vec3(.015);body=mix(body,lineCol,stroke*(stu?uClayK.z:.8));body=mix(body,stu?clay*1.04:body*1.55,smoothstep(.945,.985,vTop));
+            body*=mix(stu?uClayK.w:.50,1.,1.-exp(-hgt/(stu?4.:5.)));
+            float nb=texture2D(tAO,clamp((vFp.xz+fn.xz*3.)/uSize+.5,0.,1.)).g;body*=1.-nb*(stu?.30:.38)*(1.-smoothstep(0.,24.,hgt));}
+          else{body=stu?mix(body,${v3(roof)}*tone,${CLAY.roofMix.toFixed(3)}*(1.-heatW)):body*.90;}
+          if(vSel>.5){body=mix(body,vec3(.027,.788,.992),.42);body+=vec3(.10,.16,.18)*smoothstep(.90,.99,vTop);}diffuseColor.rgb=body;`)
+          .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor*=mix(.86,1.08,vRnd);')
+          .replace('#include <dithering_fragment>', 'gl_FragColor.rgb=mix(gl_FragColor.rgb,uHazeCol,lookHaze()*uHaze);\n#include <dithering_fragment>');
     };
     return material;
   }

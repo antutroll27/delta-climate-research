@@ -298,10 +298,12 @@ export function maplibreSky(
   elevationDeg: number,
   cloudFraction: number,
   environment: 'dark' | 'studio' = 'dark',
+  /** `?look=classic` (look.ts) — passed in, so this file imports nothing new. */
+  classic = false,
 ): MapLibreSky {
   const day = smoothstep(-8, 12, elevationDeg);
   const cloud = Math.min(1, Math.max(0, cloudFraction));
-  const p = environment === 'studio' ? STUDIO_SKY : SLATE_SKY;
+  const p = environment === 'studio' ? (classic ? STUDIO_SKY : PAPER_SKY) : SLATE_SKY;
   return {
     'sky-color': mixHex(mixHex(p.nightSky, p.daySky, day), p.overcast, cloud * 0.55),
     'horizon-color': mixHex(mixHex(p.nightHorizon, p.dayHorizon, day), p.overcast, cloud * 0.45),
@@ -321,11 +323,24 @@ const SLATE_SKY = {
   overcast: '#4a4a58',
 } as const;
 
-/* Clay/positron is a light basemap; the same violet over it reads as a bug. */
+/* Clay/positron is a light basemap; the same violet over it reads as a bug.
+   The classic Clay sky, kept for `?look=classic`. */
 const STUDIO_SKY = {
   nightSky: '#3f4356', nightHorizon: '#767a8c',
   daySky: '#8ea3c6', dayHorizon: '#d7dde8',
   overcast: '#b9bcc4',
+} as const;
+
+/* The editorial Clay sky (look.ts): lifted toward the paper, so the horizon meets
+   the paper ground without a blue seam. Still cool overhead, and NEUTRAL at the
+   horizon rather than paper-warm: the preview's #ebe9e3 / #d2d1cc had red above
+   blue, which the sealed-palette sky test (heat-sun-lighting.test.mjs) forbids
+   at any hour. The sky draws no pixels at the default pitch of 60, so the
+   approved frames hold. */
+const PAPER_SKY = {
+  nightSky: '#4a4d5a', nightHorizon: '#8a8b90',
+  daySky: '#c3ccd4', dayHorizon: '#e8e9e9',
+  overcast: '#d0d1d2',
 } as const;
 
 function mixHex(a: string, b: string, t: number): string {

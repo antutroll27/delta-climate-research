@@ -1,4 +1,13 @@
 import * as THREE from 'three';
+import { HAZE_GLSL, srgbLinear } from './explore/look-shading';
+import { CLAY } from './explore/look';
+
+/** The editorial look's holders, shared with the relief renderer (explore/look.ts). */
+export interface VegetationLook {
+  studio: { value: number };
+  haze: { value: number };
+  hazeCol: { value: THREE.Color };
+}
 
 export type Species = 'neem' | 'gulmohar' | 'palm';
 export interface TreeInstance { x: number; y: number; h: number; species: Species; r: number; }
@@ -18,6 +27,8 @@ export interface VegetationLayer {
    */
   setCanopyVisible(v: boolean): void;
   setTime(seconds: number, wind: number, windFrom: number): void;
+  /** Editorial look only: Clay swaps to the planting crowns, Dark keeps the classic ones. */
+  setStudio?(studio: boolean): void;
   dispose(): void;
 }
 
@@ -59,11 +70,40 @@ export function asTreesFile(raw: unknown): TreesFile | null {
   };
 }
 
-function addWind(material: THREE.Material): { uTime: { value: number }; uWind: { value: THREE.Vector2 } } {
+/* ── The editorial Clay planting (explore/look.ts). ──────────────────────────── */
+/** Crown underside value, × the albedo at the bottom of the ball (1 = no form shading). */
+const CROWN_UNDER = 0.24;
+/** The infographic's pale greens (LEAF → MOSS, lifted toward PALE in the lighter trees). */
+const CROWN_LEAF = '#7fae78', CROWN_MOSS = '#5f8f4e', CROWN_PALE = '#a9c99a';
+/** A deeper, fuller moss (MOSS → DEEP, highlight HI). On its own it read heavy. */
+const CROWN_MOSS_FULL = '#457d37', CROWN_DEEP = '#2f5f26', CROWN_HI = '#5f9e4f';
+/** Each crown sits this far from the full moss toward the pale greens: the founder's
+    middle ground between the pale infographic and the contrast pass. */
+const CROWN_PALE_SHARE = 0.65;
+/** Clay trunk: a lighter bark, so a trunk does not read as a hole in the paper. */
+const STUDIO_TRUNK = 0x7a6a58;
+/** Clay blob under each crown: firmer than Dark's, a contact edge straight down. */
+const STUDIO_BLOB_OPACITY = 0.60;
+
+function addWind(material: THREE.Material, look?: VegetationLook, crownForm = false): { uTime: { value: number }; uWind: { value: THREE.Vector2 } } {
   const uTime = { value: 0 }, uWind = { value: new THREE.Vector2(0, 0) };
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uTime;
     shader.uniforms.uWind = uWind;
+    if (look) {
+      shader.uniforms.uHaze = look.haze; shader.uniforms.uHazeCol = look.hazeCol;
+      shader.fragmentShader = 'uniform float uHaze; uniform vec3 uHazeCol;\n' + HAZE_GLSL + shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        'gl_FragColor.rgb=mix(gl_FragColor.rgb,uHazeCol,lookHaze()*uHaze);\n#include <dithering_fragment>');
+    }
+    /* A soft darker UNDERSIDE on each crown (unit-ball height, so it is the same
+       under every sun — form shading, not a shadow). It buys back the value
+       contrast the pale greens give up, without darkening the tops. */
+    if (look && crownForm) {
+      shader.fragmentShader = 'varying float vCrownY;\n' + shader.fragmentShader.replace('#include <color_fragment>',
+        `#include <color_fragment>\ndiffuseColor.rgb*=mix(${CROWN_UNDER.toFixed(2)},1.0,smoothstep(-0.4,1.0,vCrownY));`);
+      shader.vertexShader = 'varying float vCrownY;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvCrownY=position.y;');
+    }
     shader.vertexShader = `uniform float uTime;\nuniform vec2 uWind;\n` + shader.vertexShader.replace(
       '#include <begin_vertex>',
       `#include <begin_vertex>
@@ -89,6 +129,7 @@ export function createVegetationLayer(
   data: TreesFile | null,
   growU: { value: number },
   groundAt: ((x: number, y: number) => number) | null = null,
+  look?: VegetationLook,
 ): VegetationLayer | null {
   void growU;
   if (!data || data.trees.length === 0) return null;
@@ -164,17 +205,83 @@ export function createVegetationLayer(
   shadows.instanceMatrix.needsUpdate = true;
   group.add(shadows);
 
+  /* ── Editorial look, Clay only: the infographic's planting. ──────────────────
+     The classic crown is a 1-subdivision faceted ball at lightness 0.36 — on a
+     light map, at the overhead camera, that is a dark speck. These are the same
+     80-triangle ball, SMOOTH-shaded (3 subdivisions looked no rounder at this
+     camera and cost ~4 ms a frame over 9,542 instances at stress resolution; 2
+     cost ~1.3 ms), 12 % larger, lower and squatter, and coloured by the same
+     per-tree jitter, so the spread that stops 9,542 crowns reading as one carpet
+     is kept. Same positions, same count, same sway: the illustration changes,
+     the data does not. */
+  let soft: THREE.InstancedMesh | null = null;
+  let softGeo: THREE.BufferGeometry | null = null;
+  let softMat: THREE.MeshLambertMaterial | null = null;
+  let softWind: ReturnType<typeof addWind> | null = null;
+  let studioOn = false;
+  if (look) {
+    softGeo = new THREE.IcosahedronGeometry(1, 1);
+    /* LAMBERT, no specular — and this, not the colour, was the "washed-out" look.
+       A smooth ball seen obliquely is mostly grazing surface, and a standard
+       material's Fresnel sheen adds equal R, G and B there: on a dark green it
+       greyed the crowns (albedo chroma .56 rendered at .41). Matte is also what
+       the clay infographic's planting is. */
+    softMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    softWind = addWind(softMat, look, true);
+    soft = new THREE.InstancedMesh(softGeo, softMat, n);
+    const leaf = srgbLinear(CROWN_LEAF), moss = srgbLinear(CROWN_MOSS), pale = srgbLinear(CROWN_PALE);
+    const mossFull = srgbLinear(CROWN_MOSS_FULL), deep = srgbLinear(CROWN_DEEP), hi = srgbLinear(CROWN_HI);
+    const tmp = new THREE.Color();
+    trees.forEach((t, i) => {
+      const g = ground(t.x, t.y);
+      const treeH = Math.max(4, t.h) * 1.4;
+      const crownR = Math.max(t.r, treeH * 0.34) * 1.12;
+      const trunkH = treeH * 0.30;
+      /* Lowered and squashed (same footprint) so roofs and their heat tint stand
+         clear of the crown from the oblique camera. */
+      dummy.position.set(t.x, g + trunkH + crownR * CLAY.crownLift, t.y);
+      dummy.scale.set(crownR, crownR * CLAY.crownSquash, crownR);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      soft!.setMatrixAt(i, dummy.matrix);
+      const jitter = Math.abs(((t.x * 12.9898 + t.y * 78.233) * 43758.5453) % 1);
+      /* Two greens per tree from the one jitter — the pale infographic green and
+         the fuller moss — mixed CROWN_PALE_SHARE of the way to the pale one. The
+         moss alone closed the saturation gap to classic (chroma .37 vs .52) but
+         read heavy; the pale alone read washed out. Value and chroma only. */
+      const paleGreen = tmp.copy(leaf).lerp(moss, jitter * 0.8).lerp(pale, (1 - jitter) * 0.12);
+      color.copy(mossFull).lerp(deep, jitter * 0.7).lerp(hi, (1 - jitter) * 0.3);
+      color.lerp(paleGreen, CROWN_PALE_SHARE);
+      soft!.setColorAt(i, color);
+    });
+    soft.instanceMatrix.needsUpdate = true;
+    if (soft.instanceColor) soft.instanceColor.needsUpdate = true;
+    soft.visible = false;
+    group.add(soft);
+  }
+  let canopyOn = true;
+  const applyStudio = (): void => {
+    if (!soft) return;
+    soft.visible = studioOn && canopyOn;
+    crowns.visible = !studioOn && canopyOn;
+    trunkMat.color.set(studioOn ? STUDIO_TRUNK : 0x5a4632);
+    shadowMat.opacity = studioOn ? STUDIO_BLOB_OPACITY : 0.55;
+  };
+
   return {
     group,
     setVisible(v) { group.visible = v; },
-    setCanopyVisible(v) { crowns.visible = v; shadows.visible = v; },
+    setCanopyVisible(v) { canopyOn = v; crowns.visible = v; shadows.visible = v; applyStudio(); },
     setTime(seconds, wind_, windFrom) {
       const rad = (windFrom * Math.PI) / 180;
       const mag = Math.min(0.5, wind_ / 30) * 0.4;
       wind.uTime.value = seconds;
       wind.uWind.value.set(Math.sin(rad) * mag, Math.cos(rad) * mag);
+      if (softWind) { softWind.uTime.value = seconds; softWind.uWind.value.copy(wind.uWind.value); }
     },
+    ...(look ? { setStudio(v: boolean) { studioOn = v; applyStudio(); } } : {}),
     dispose() {
+      softGeo?.dispose(); softMat?.dispose(); soft?.dispose();
       crownGeo.dispose(); trunkGeo.dispose(); crownMat.dispose(); trunkMat.dispose(); crowns.dispose(); trunks.dispose();
       shadowTex.dispose(); quad.dispose(); shadowMat.dispose(); shadows.dispose();
     },

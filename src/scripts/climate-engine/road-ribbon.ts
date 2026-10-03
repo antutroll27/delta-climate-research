@@ -144,6 +144,8 @@ export function buildRibbonMesh<L extends RibbonLine>(
 export function buildRoadMesh(
   data: RoadsData,
   groundAt: (x: number, y: number) => number,
+  /** DRAWN width only (the editorial Clay boost, look.ts); the model's widths never read this. */
+  widthScale = 1,
 ): RoadMesh | null {
-  return buildRibbonMesh(data.ways ?? [], (way) => roadHalfWidthM(way.w), groundAt, ROAD_Y);
+  return buildRibbonMesh(data.ways ?? [], (way) => roadHalfWidthM(way.w) * widthScale, groundAt, ROAD_Y);
 }
