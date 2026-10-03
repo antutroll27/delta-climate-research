@@ -67,6 +67,19 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
     const cardEl = document.querySelector('#bcard');
     const cb = cardEl && !cardEl.hasAttribute('hidden') && getComputedStyle(cardEl).opacity !== '0' ? cardEl.getBoundingClientRect() : null;
     (window as unknown as { __cardBoxBefore?: number[] | null }).__cardBoxBefore = cb ? [cb.left, cb.top, cb.right, cb.bottom] : null;
+    /* THE SELECTION'S OTHER OVERLAYS, read in the same pass: the greenery tag and the
+       walk-time ring labels float over the panels with pointer-events:none, so the hit
+       test below falls straight through them. Measured 2026-10-03 (Ward 68's best roof):
+       the tag sat on #wardScope and a ring label on #lst's unit, scored at 1.8:1 against
+       the tag's green and the label's pill. */
+    const overlays: number[][] = [];
+    for (const id of ['coolTag', 'ringNear', 'ringFar']) {
+      const o = document.getElementById(id);
+      if (!o || o.hasAttribute('hidden') || getComputedStyle(o).visibility === 'hidden' || getComputedStyle(o).opacity === '0') continue;
+      const r = o.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) overlays.push([r.left, r.top, r.right, r.bottom]);
+    }
+    (window as unknown as { __overlaysBefore?: number[][] }).__overlaysBefore = overlays;
   });
   const shot = (await page.screenshot()).toString('base64');
   const { findings, moved } = await page.evaluate(async (b64) => {
@@ -155,8 +168,14 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
          Ceiling: a partial cover — the box edge across an element — is not. */
       const cardNow = document.querySelector('#bcard');
       const cbb = (window as unknown as { __cardBoxBefore?: number[] | null }).__cardBoxBefore;
-      if (cbb && cardNow && !cardNow.contains(el)
-        && cx >= cbb[0] && cx <= cbb[2] && cy >= cbb[1] && cy <= cbb[3]) continue;
+      /* PARTIAL COVERS TOO, now: the centre and four inset corners are tested, not the
+         centre alone, so a box edge across an element (the card's edge over a tint
+         chip, the tag over half a line) skips it instead of scoring the cover. */
+      const probes = [[cx, cy], [r.left + 2, r.top + 2], [r.right - 2, r.top + 2], [r.left + 2, r.bottom - 2], [r.right - 2, r.bottom - 2]];
+      const inBox = (b: number[]) => probes.some(([x, y]) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]);
+      if (cbb && cardNow && !cardNow.contains(el) && inBox(cbb)) continue;
+      const covers = (window as unknown as { __overlaysBefore?: number[][] }).__overlaysBefore ?? [];
+      if (!el.closest('#coolTag, #ringNear, #ringFar') && covers.some(inBox)) continue;
 
       /* MOTION. The screenshot and this read are two frames apart, and the
          selection's ring labels are repositioned on every map render — on the
@@ -274,12 +293,16 @@ test.describe('console legibility', () => {
        what puts the card on screen at opacity 1, where it IS sampled. */
     await page.locator('#modechip button[data-m="relief"]').click();
     await page.waitForTimeout(4_000);
+    /* CLAY FIRST, THEN THE CARD. The card opens beside the best roof, and since
+       Ballygunge became KMC Ward 68 (2026-10-02) that roof — the ward's best, not the
+       old box's — puts a 730 px card over the env chip, so clicking Clay after the
+       card hit the card. The state measured is the same: Clay, with a card open. */
+    await page.locator('#envchip button[data-e="studio"]').click();
+    await page.waitForTimeout(4_000);
     await page.locator('[data-rail="solar"]').click();
     await expect(page.locator('#solList tr')).toHaveCount(10, { timeout: 15_000 });
     await page.locator('#solList tr').first().click();
-    await page.waitForTimeout(1_500);
-    await page.locator('#envchip button[data-e="studio"]').click();
-    await page.waitForTimeout(4_000);
+    await page.waitForTimeout(2_500);
     const findings = await contrastFailures(page);
     expect(findings, report('Clay studio, card open', findings)).toEqual([]);
   });
