@@ -206,15 +206,29 @@ test('cloud desaturates the sky, and Clay gets a light one', () => {
  * in. There is no dusk glow: the palette interpolates night to day and stops.
  */
 test('no sky colour is a warm accent at any hour', () => {
-  for (const elevation of [-47, -20, -6, -2, 0, 3, 8, 20, 45, 71]) {
-    for (const environment of ['dark', 'studio']) {
-      for (const key of ['sky-color', 'horizon-color']) {
-        const hex = maplibreSky(elevation, 0, environment)[key];
-        const [r, , b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-        assert.ok(b >= r, `${environment} ${key} at ${elevation} deg is warm: ${hex}`);
+  /* BOTH LOOKS AND BOTH SKIES OF CLOUD. This loop used to call the three-argument
+     form only, which was the classic sky — so when the editorial look's paper sky
+     arrived behind a fourth argument, its paper-warm horizon (#ebe9e3, red above
+     blue) passed a test that never asked for it. The default IS the shipped look,
+     so the bare call now draws the paper sky, and `classic` is asked for by name. */
+  let checked = 0;
+  for (const classic of [false, true]) {
+    for (const cloud of [0, 1]) {
+      for (const elevation of [-47, -20, -6, -2, 0, 3, 8, 20, 45, 71]) {
+        for (const environment of ['dark', 'studio']) {
+          for (const key of ['sky-color', 'horizon-color']) {
+            const hex = maplibreSky(elevation, cloud, environment, classic)[key];
+            const [r, , b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+            assert.ok(b >= r, `${classic ? 'classic' : 'editorial'} ${environment} ${key} at ${elevation} deg, cloud ${cloud}, is warm: ${hex}`);
+            checked += 1;
+          }
+        }
       }
     }
   }
+  assert.equal(checked, 160, 'the sweep shrank, so it is no longer checking every sky');
+  // The two looks' Clay skies must actually differ, or `classic` is not being honoured.
+  assert.notEqual(maplibreSky(71, 0, 'studio', false)['horizon-color'], maplibreSky(71, 0, 'studio', true)['horizon-color']);
 });
 
 test('the day dome is the one with no sun in it', () => {

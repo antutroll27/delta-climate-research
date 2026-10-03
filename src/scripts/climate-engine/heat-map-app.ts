@@ -46,6 +46,8 @@ import {
   dayOfYearUtc, maplibreSky, representativeSolarHour, sunPlacement, wardMonthHour,
 } from './explore/sun-lighting';
 import { createCoreFieldLayer, CORE_FIELD_SOURCE } from './explore/core-field-layer';
+import { CLASSIC, LAB_HOOK } from './explore/look';
+import { paperStyle } from './explore/look-paper';
 import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
 import {
   attachReliefCustomLayer, isReliefLayerAttached, shouldShowRelief,
@@ -359,6 +361,10 @@ export function mountHeatMap(): () => void {
     maxPitch: 78,
   });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+  /* `?lab=1` on localhost only (look.ts `labHookAllowed`): a capture harness pins
+     the camera and drives the perf orbit. Never set on the production host. */
+  const labWindow = window as unknown as { __obosMap?: maplibregl.Map };
+  if (LAB_HOOK) labWindow.__obosMap = map;
   /* A distance reference. The instrument shows a 1.4 km window at a pitch that
      foreshortens it, and until now nothing on screen said how big anything was. */
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 104, unit: 'metric' }), 'bottom-left');
@@ -503,6 +509,7 @@ export function mountHeatMap(): () => void {
       currentSun().placement.elevationDeg,
       (state.live?.cloud ?? 0) / 100,
       env,
+      CLASSIC,
     );
     const key = JSON.stringify(spec);
     if (key === appliedSky) return;
@@ -3417,7 +3424,9 @@ export function mountHeatMap(): () => void {
        is to restyle the basemap. The handler's own comment claimed the opposite.
        A full reload is the honest cost of a control that replaces the whole basemap,
        and it is what makes `style.load` mean what this file has always assumed. */
-    map.setStyle(STYLES[e as 'dark' | 'studio'], { diff: false });
+    /* Clay's positron is recoloured to the paper palette on the way in (look-paper.ts);
+       `?look=classic` keeps stock positron. */
+    map.setStyle(STYLES[e as 'dark' | 'studio'], { diff: false, ...(!CLASSIC && s ? { transformStyle: paperStyle } : {}) });
   }
   document.querySelectorAll('#envchip button').forEach(b => onEl(b, 'click', () => setEnv((b as HTMLElement).dataset.e!)));
   /* ── THE SIX LAYERS, AND THE TWO CONTROLS THAT REACH TWO OF THEM ──────────────
@@ -3742,6 +3751,7 @@ export function mountHeatMap(): () => void {
     coreField.dispose();
     simHost?.dispose();
     try { map.remove(); } catch { /* ignore */ }
+    if (labWindow.__obosMap === map) delete labWindow.__obosMap;
     document.body.classList.remove('studio');
   };
 }
