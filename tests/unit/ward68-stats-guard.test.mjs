@@ -77,3 +77,13 @@ test('a polygon area cannot load without its boundary, nor read a solar file wit
   /* The open area's mask is assigned with the open area, so the two never disagree. */
   assert.match(CODE, /state\.ward = name; state\.climate = resolve\(name\)\.climate;\s*wardMask = maskCache\[name\] \?\? null;/);
 });
+
+test('Compare takes Ballygunge\'s figures inside the polygon too, and says so', async () => {
+  const core = (await readFile(new URL('../../src/scripts/climate-engine/compare/paired-core.ts', import.meta.url), 'utf8'))
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(core, /return boundary \? \{ field: solved\.field, stats: fieldStats\(solved\.field, boundary, solved\.stats\.thresholdC\) \} : solved;/,
+    'Compare no longer re-takes a ward\'s stats over its boundary');
+  assert.match(core, /field\(prepared\.base, baselineParams, prepared\.wardData\.sizeM, options, prepared\.boundary\)/, 'the baseline is solved over the square');
+  assert.match(core, /field\(scenarioLayers, scenarioParams, prepared\.wardData\.sizeM, options, prepared\.boundary\)/, 'the scenario is solved over the square');
+  assert.match(core, /statsOver: prepared\.boundary\?\.name \?\? null,/);
+});
