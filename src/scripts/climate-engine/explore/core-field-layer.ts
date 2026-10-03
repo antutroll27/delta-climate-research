@@ -4,6 +4,32 @@ import { requireGrid } from '../types.ts';
 import type { WardMask } from '../ward-mask.ts';
 import { CLAY, WARD } from './look.ts';
 
+/**
+ * Which cells the 2-D path veils: those with NO in-ward cell among their eight
+ * neighbours (1 = veil), SOUTH-up like `cells`.
+ *
+ * WHY NOT `cells === 0`. MapLibre draws this canvas through a linear-filtered
+ * texture, so every screen pixel blends the four texels around it; veiling every
+ * outside texel bled the veil up to a cell (7.3 m) into the ward — the same defect
+ * the 3-D overlay's `step(.5, F.a)` fixes (heat-overlay.ts), with no shader to fix it
+ * in here. Sparing the outside texels next to the ward means every pixel whose
+ * blend touches an in-ward texel blends only unveiled ones: exactly the field as it
+ * was, inside the polygon. The cost is the other side of the line: the context
+ * reads unveiled for one more cell (7.3 m) beyond the ward, the safe direction.
+ */
+export function veilCells(cells: Uint8Array, n: number): Uint8Array {
+  const veil = new Uint8Array(n * n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    let near = 0;
+    for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const gx = x + dx, gy = y + dy;
+      if (gx >= 0 && gx < n && gy >= 0 && gy < n && cells[gy * n + gx] === 1) { near = 1; break; }
+    }
+    veil[y * n + x] = near ? 0 : 1;
+  }
+  return veil;
+}
+
 export const CORE_FIELD_SOURCE = 'delta-core-field-source';
 export const CORE_FIELD_LAYER = 'delta-core-field';
 /** The ward polygon's outline on the 2-D path: one source, a halo layer under a core layer. */
@@ -155,6 +181,8 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
   }
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = n;
+  /* The veil for the boundary's cells, rebuilt only when the boundary changes. */
+  let veil: Uint8Array | null = null, veilFor: Uint8Array | null = null;
   const context = canvas.getContext('2d', { alpha: true });
   if (!context) throw new Error('The analytical field canvas is unavailable.');
 
@@ -217,9 +245,11 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
       if (field.length !== n * n) throw new RangeError(`Core field of ${field.length} cells does not match this ward's ${n}×${n} admitted grid.`);
       const image = context.createImageData(n, n);
       /* THE VEIL (look.ts WARD): outside the polygon the ramp colour is desaturated
-         and thinned; inside it is written exactly as before. A mask for another
-         grid is ignored rather than misread. */
+         and thinned; inside it is written exactly as before, and so are the outside
+         cells next to it (`veilCells`), so the map's bilinear blend cannot carry the
+         veil in. A mask for another grid is ignored rather than misread. */
       const cells = boundary && boundary.cells.length === n * n ? boundary.cells : null;
+      if (cells && veilFor !== cells) { veil = veilCells(cells, n); veilFor = cells; }
       const keep = 1 - WARD.veilDesat, alphaOut = Math.round(210 * WARD.veilAlpha);
       for (let southRow = 0; southRow < n; southRow++) {
         const canvasRow = n - 1 - southRow;
@@ -228,7 +258,7 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
           const target = (canvasRow * n + x) * 4;
           let [r, g, b] = heatRampRgb(field[source], min, max);
           let alpha = 210;
-          if (cells && cells[source] === 0) {
+          if (cells && veil && veil[source] === 1) {
             const grey = 0.299 * r + 0.587 * g + 0.114 * b;
             r = Math.round(grey + (r - grey) * keep); g = Math.round(grey + (g - grey) * keep); b = Math.round(grey + (b - grey) * keep);
             alpha = alphaOut;
