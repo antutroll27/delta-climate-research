@@ -16,7 +16,7 @@ import { detectHeatCaps } from './caps';
 import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
-import { ACCURACY, SPATIAL, HEIGHTS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
+import { ACCURACY, SPATIAL, HEIGHTS, PEAK_CHIP_BASIS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
 import { solarElevationFactor, solarDayHours } from './sky';
 import { loadLayerManifest } from './provenance';
 import * as U from './dc-urs';
@@ -361,7 +361,19 @@ export function mountHeatMap(): () => void {
        easeTo, flyTo and reset in this file still says 60 or 0. */
     maxPitch: 78,
   });
-  map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+  /* The attribution control is REBUILT when the open area's boundary credit changes
+     (`setMapCredit`, from paintWardScope): MapLibre reads `customAttribution` only at
+     construction. */
+  let attribution = new maplibregl.AttributionControl({ compact: true });
+  let attributionCredit: string | null = null;
+  map.addControl(attribution, 'bottom-right');
+  function setMapCredit(credit: string | null): void {
+    if (credit === attributionCredit) return;
+    attributionCredit = credit;
+    map.removeControl(attribution);
+    attribution = new maplibregl.AttributionControl({ compact: true, ...(credit ? { customAttribution: credit } : {}) });
+    map.addControl(attribution, 'bottom-right');
+  }
   /* `?lab=1` on localhost only (look.ts `labHookAllowed`): a capture harness pins
      the camera and drives the perf orbit. Never set on the production host. */
   const labWindow = window as unknown as { __obosMap?: maplibregl.Map };
@@ -1407,6 +1419,28 @@ export function mountHeatMap(): () => void {
     dropCsv();
   });
 
+  /* THE HUD THE MAP-BORNE CHIPS MUST NOT SIT ON. The greenery tag and the ring labels
+     are z-index 6 over the panels, so wherever they land on one they cover its text —
+     MEASURED by the pre-ship audit (2026-10-03): the tag over #wardScope and the LST
+     unit, a ring label on the tag at 3.64:1. They are placed clear of these boxes, and
+     hidden when nowhere is clear. Read at most every 250 ms: the HUD moves on a pane
+     toggle or a resize, not per frame, and placeCard runs per frame. */
+  const HUD_KEEP_OUT = '.rail-r > *, #clockw, #vegw, #svw, .chiprow, .synthetic, .stamp-slot, #sunLine, #compass';
+  let hudRects: DOMRect[] = [], hudReadAt = -Infinity;
+  function hudKeepOut(): DOMRect[] {
+    const now = performance.now();
+    if (now - hudReadAt < 250) return hudRects;
+    hudReadAt = now;
+    hudRects = [...document.querySelectorAll<HTMLElement>(HUD_KEEP_OUT)]
+      .filter((e) => !e.hidden && e.offsetParent !== null && getComputedStyle(e).visibility !== 'hidden')
+      .map((e) => e.getBoundingClientRect())
+      .filter((r) => r.width > 0 && r.height > 0);
+    return hudRects;
+  }
+  /** Client-space boxes [left, top, right, bottom]: do they overlap? Touching is not overlapping. */
+  const overlaps = (a: readonly number[], b: { left: number; top: number; right: number; bottom: number }) =>
+    a[0] < b.right && a[2] > b.left && a[1] < b.bottom && a[3] > b.top;
+
   /** Move the card, brackets and ring labels onto the selection, and keep the
       compass needle honest. Transform only — no layout. */
   function placeCard() {
@@ -1440,6 +1474,9 @@ export function mountHeatMap(): () => void {
        both land under the card does it hide — the card carries the same fact
        in prose, so nothing is lost. Exact rectangles, no slop margins: a
        near-miss is not a collision. */
+    const hud = hudKeepOut();
+    /* The tag is placed FIRST, and its box is what the ring labels then avoid. */
+    let tagBox: number[] | null = null;
     if (nearestCool) {
       const tag = el('coolTag');
       if (tag) {
@@ -1452,7 +1489,14 @@ export function mountHeatMap(): () => void {
              146 wide, ~41 tall. These are the chip's real dimensions — a stale
              width here silently tests a rectangle the tag no longer occupies. */
           const TAG_W = 146, TAG_H = 41, TAG_DX = 73, TAG_DY = 16;
+          const boxAt = (x: number, y: number) => {
+            const L = x + cvB.left - TAG_DX, T = y + cvB.top - TAG_DY;
+            return [L, T, L + TAG_W, T + TAG_H];
+          };
+          /* Clear of the HUD everywhere; clear of the card except on the docked rung. */
+          const clearOfHud = (x: number, y: number) => !hud.some((r) => overlaps(boxAt(x, y), r));
           const fits = (y: number) => {
+            if (!clearOfHud(q.x, y)) return false;
             if (!cardB) return true;
             const L = q.x + cvB.left - TAG_DX, T = y + cvB.top - TAG_DY;
             return L + TAG_W < cardB.left || L > cardB.right
@@ -1474,9 +1518,14 @@ export function mountHeatMap(): () => void {
                ty - TAG_DY to ty - TAG_DY + TAG_H. */
             ty = cardB.top - cvB.top - (TAG_H - TAG_DY) - 9;
             if (ty < 44) ty = cardB.bottom - cvB.top + TAG_DY + 9;
+            /* docked over a panel is still over its text: hidden instead */
+            if (!clearOfHud(tx, ty)) ty = null;
           }
           tag.style.visibility = ty === null ? 'hidden' : 'visible';
-          if (ty !== null) tag.style.transform = `translate3d(${Math.round(tx)}px, ${Math.round(ty)}px, 0)`;
+          if (ty !== null) {
+            tag.style.transform = `translate3d(${Math.round(tx)}px, ${Math.round(ty)}px, 0)`;
+            tagBox = boxAt(Math.round(tx), Math.round(ty));
+          }
         }
       }
     }
@@ -1485,12 +1534,19 @@ export function mountHeatMap(): () => void {
       /* Gather every on-screen candidate, then choose in two passes: topmost
          among those clear of the card, else topmost overall. Two cheap loops
          beat one clever one nobody can read six months from now. */
+      /* A label NEVER sits on the greenery tag or on the HUD — both are text it would
+         cover (or be covered by) at z 6. Under the card is the one tolerated fallback:
+         the card is z 7 and opaque, so a label beneath it is simply not seen. */
       const cands: { x: number; y: number; free: boolean }[] = [];
       for (const [dx, dz] of [[0, r], [0, -r], [r, 0], [-r, 0]] as const) {
         const q = relief?.project(selected.cx + dx, 1, selected.cz + dz, w, h) ?? { x: 0, y: 0, w: -1 };
         /* The chip is taller now, so it needs more headroom before it would be
            clipped by the top edge or buried under the footer strip. */
         if (q.w <= 0 || q.y > h - 46 || q.y < 44) continue;
+        /* .ringlab box: margin -9px 0 0 -52px, 104 × ~22. */
+        const L = q.x + cvBox.left - 52, T = q.y + cvBox.top - 9, box = [L, T, L + 104, T + 22];
+        if ((tagBox && overlaps(box, { left: tagBox[0], top: tagBox[1], right: tagBox[2], bottom: tagBox[3] }))
+          || hud.some((rect) => overlaps(box, rect))) continue;
         cands.push({ x: q.x, y: q.y, free: clearsCard(q.x, q.y) });
       }
       const pool = cands.filter(c => c.free);
@@ -2597,20 +2653,30 @@ export function mountHeatMap(): () => void {
    * With a polygon the readouts are the polygon's (refreshStats), the map shows the
    * square, and nothing else on screen would tell a reader which of the two a
    * number describes. The boundary is CC BY-SA, so wherever it is drawn its
-   * attribution is on screen too — written from the artefact, never typed here.
+   * attribution is ON SCREEN too — written from the artefact, never typed here —
+   * in three places, because each of the others is hidden somewhere:
+   *   · the scope line under the mean (#wardScope), in the readout panel, which is
+   *     on screen at every width — the one place a phone shows it;
+   *   · the map's attribution control, bottom-right (desktop; phones hide it);
+   *   · the legend's credit line (#attrWard; below the fold on desktop, hidden on
+   *     phones — it was the ONLY credit until the pre-ship audit, 2026-10-03).
    */
   function paintWardScope(): void {
     const scope = el('wardScope'), credit = el('attrWard');
     if (scope) {
       scope.hidden = wardMask === null;
-      scope.textContent = wardMask
+      scope.innerHTML = wardMask
         ? `Inside ${wardMask.name} (${(wardMask.areaM2 / 1e6).toFixed(2)} km²) · the faint ground around it is context`
+          + ` · <span class="ward-credit">boundary © DataMeet, <a href="${wardMask.licenceUri}" target="_blank" rel="noopener noreferrer">CC BY-SA 2.5 IN</a></span>`
         : '';
     }
     if (credit) {
       credit.hidden = wardMask === null;
       credit.textContent = wardMask ? `Ward boundary © DataMeet (${wardMask.licence}) · ` : '';
     }
+    setMapCredit(wardMask
+      ? `Ward boundary © DataMeet, <a href="${wardMask.licenceUri}" target="_blank" rel="noopener noreferrer">CC BY-SA 2.5 IN</a>`
+      : null);
   }
 
   function paintWardTools(): void {
@@ -2834,7 +2900,11 @@ export function mountHeatMap(): () => void {
         ? `Outside validation · ${fig(`~±${TRANSITION_RMSE_K.toFixed(1)} °C`)} at this hour`
         : a.confidence === 'quantitative'
           ? `Calibrated · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}`
-          : `Indicative only · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}`;
+          /* THE PEAK BAND IS THE EARLIER EVIDENCE SET (accuracy.ts PEAK_EVIDENCE_BASIS):
+             measured before Ballygunge became KMC Ward 68, kept because it is the wider,
+             safer band, and said so ON the chip — a tooltip nobody hovers was the only
+             place it was said (pre-ship audit 2026-10-03). */
+          : `Indicative only · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}${state.phase === 'peak' ? ` · ${PEAK_CHIP_BASIS}` : ''}`;
       tag.className = `conf ${transition ? 'indicative' : a.confidence}`;
       if (transition) {
         (tag as HTMLElement).title =

@@ -67,19 +67,6 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
     const cardEl = document.querySelector('#bcard');
     const cb = cardEl && !cardEl.hasAttribute('hidden') && getComputedStyle(cardEl).opacity !== '0' ? cardEl.getBoundingClientRect() : null;
     (window as unknown as { __cardBoxBefore?: number[] | null }).__cardBoxBefore = cb ? [cb.left, cb.top, cb.right, cb.bottom] : null;
-    /* THE SELECTION'S OTHER OVERLAYS, read in the same pass: the greenery tag and the
-       walk-time ring labels float over the panels with pointer-events:none, so the hit
-       test below falls straight through them. Measured 2026-10-03 (Ward 68's best roof):
-       the tag sat on #wardScope and a ring label on #lst's unit, scored at 1.8:1 against
-       the tag's green and the label's pill. */
-    const overlays: number[][] = [];
-    for (const id of ['coolTag', 'ringNear', 'ringFar']) {
-      const o = document.getElementById(id);
-      if (!o || o.hasAttribute('hidden') || getComputedStyle(o).visibility === 'hidden' || getComputedStyle(o).opacity === '0') continue;
-      const r = o.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) overlays.push([r.left, r.top, r.right, r.bottom]);
-    }
-    (window as unknown as { __overlaysBefore?: number[][] }).__overlaysBefore = overlays;
   });
   const shot = (await page.screenshot()).toString('base64');
   const { findings, moved } = await page.evaluate(async (b64) => {
@@ -168,14 +155,17 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
          Ceiling: a partial cover — the box edge across an element — is not. */
       const cardNow = document.querySelector('#bcard');
       const cbb = (window as unknown as { __cardBoxBefore?: number[] | null }).__cardBoxBefore;
-      /* PARTIAL COVERS TOO, now: the centre and four inset corners are tested, not the
-         centre alone, so a box edge across an element (the card's edge over a tint
-         chip, the tag over half a line) skips it instead of scoring the cover. */
+      /* PARTIAL COVERS TOO: the centre and four inset corners are tested, not the
+         centre alone, so the opaque card's edge across an element (a tint chip)
+         skips it instead of scoring the card.
+         THE MAP-BORNE CHIPS ARE NOT SKIPPED (pre-ship audit 2026-10-03). The greenery
+         tag and the ring labels were once excused here as covers, which hid real
+         overlaps — the tag over #wardScope and the LST unit, a ring label on the
+         tag. The app now keeps them clear of the HUD and of each other
+         (heat-map-app.ts hudKeepOut), so text under one of them is a failure. */
       const probes = [[cx, cy], [r.left + 2, r.top + 2], [r.right - 2, r.top + 2], [r.left + 2, r.bottom - 2], [r.right - 2, r.bottom - 2]];
       const inBox = (b: number[]) => probes.some(([x, y]) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]);
       if (cbb && cardNow && !cardNow.contains(el) && inBox(cbb)) continue;
-      const covers = (window as unknown as { __overlaysBefore?: number[][] }).__overlaysBefore ?? [];
-      if (!el.closest('#coolTag, #ringNear, #ringFar') && covers.some(inBox)) continue;
 
       /* MOTION. The screenshot and this read are two frames apart, and the
          selection's ring labels are repositioned on every map render — on the

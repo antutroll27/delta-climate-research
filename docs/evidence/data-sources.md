@@ -25,10 +25,15 @@ Overture footprints its boundary cuts over a ±60 m shift grid) · **share-alike
 derived *from the polygon itself* (the ward mask `public/heat-map/data/ballygunge-ward.json`) carry CC BY-SA 2.5 IN;
 statistics merely *masked by* it are not adaptations of the boundary file · **attribution (required, CC BY-SA):**
 "Ward boundary: DataMeet Municipal_Spatial_Data, Kolkata/kolkata.geojson (KMC 141-ward scheme), commit cd52891;
-CC BY-SA 2.5 India" — carried in the mask artefact, printed on the map's attribution line wherever the boundary is
-drawn ("Ward boundary © DataMeet (CC BY-SA 2.5 India)"), listed on `/attribution` (generated from the ward
-records, which now carry a `ward boundary` layer), and in the ward record's `boundary` block, which also ships
-the polygon itself · **used in the app (2026-10-03):** the Ward 68 outline (3-D and 2-D), the veil over the
+CC BY-SA 2.5 India" — carried in the mask artefact with the licence URI (`licenceUri`, CC BY-SA 2.5 §4(a));
+on screen wherever the boundary is drawn: on the instrument in the scope line under the mean ("boundary © DataMeet,
+CC BY-SA 2.5 IN", linked to the licence — the readout panel is visible at every width, phones included), in the
+map's attribution control bottom-right (desktop; phones hide it) and on the legend's credit line ("Ward boundary ©
+DataMeet (CC BY-SA 2.5 India)"; below the fold on desktop, hidden on phones), and on Compare in the caption under
+Ballygunge's map; also on the paired Brief, listed on `/attribution` (generated from the ward records, which carry
+a `ward boundary` layer), and in the ward record's `boundary` block, which ships the polygon with its own licence,
+URI, credit and share-alike term (the OGC item marks that property as CC BY-SA under `propertyLicences`, and the
+NGSI-LD entity, whose `location` is the polygon, carries `boundaryLicence`) · **used in the app (2026-10-03):** the Ward 68 outline (3-D and 2-D), the veil over the
 context, and every Ballygunge ward statistic (field statistics by solver-cell centre inside the polygon,
 per-building statistics by footprint intersecting it) · status: shipped on `feat/ballygunge-ward68`, not yet
 merged.
