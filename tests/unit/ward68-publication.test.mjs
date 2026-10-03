@@ -117,3 +117,17 @@ test('STAC states each ward\'s own surface grid, and it is the shipped PNG\'s re
     assert.match(stacItem(w, surface).properties.description, new RegExp(`This ward: ${side} × ${side} cells`));
   }
 });
+
+test('a boundary artefact without its licence URI is refused, not drawn uncredited', async () => {
+  const { asWardMask } = await import('../../src/scripts/climate-engine/ward-mask.ts');
+  const WARD = await json('public/heat-map/data/ballygunge.json');
+  const expect = { area: 'ballygunge', sizeM: 1800, n: 247, buildings: WARD.b.length };
+  const warn = console.warn; console.warn = () => {};
+  try {
+    assert.ok(asWardMask(MASK, expect), 'the shipped artefact was refused');
+    const { licenceUri: _drop, ...bare } = MASK;
+    assert.equal(asWardMask(bare, expect), null, 'an artefact with no licence URI was accepted');
+    assert.equal(asWardMask({ ...MASK, licenceUri: 'http://example.org/' }, expect), null, 'a non-CC licence URI was accepted');
+  } finally { console.warn = warn; }
+  assert.equal(asWardMask(MASK, expect).licenceUri, URI);
+});
