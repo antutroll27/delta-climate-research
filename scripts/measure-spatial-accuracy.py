@@ -88,23 +88,49 @@ import _canopy  # noqa: E402
 import _physics  # noqa: E402
 import _types  # noqa: E402
 import _water  # noqa: E402
-from _ecostress import align, band_url, cmr_search, fetch, target_grid, token  # noqa: E402
-from _sentinel import uniform_grid  # noqa: E402
+import _wardmask  # noqa: E402
+from _ecostress import (align, band_url, cmr_search, fetch, target_crs,  # noqa: E402
+                        target_grid, token)
+from _sentinel import grid_for  # noqa: E402
 
-def surface_grid() -> int:
-    """The Sentinel-2 surface grid, DERIVED from the ward footprint rather than read
-    as a module constant baked at Kolkata's 1400 m. This script is Kolkata-only,
-    and `uniform_grid` refuses the moment the ward table holds two footprints —
-    which is exactly when one number for "the" grid stops being a fact.
+def surface_grid(ward_id: str) -> int:
+    """The Sentinel-2 surface grid of ONE ward, derived from its own footprint.
 
-    A FUNCTION, NOT A MODULE CONSTANT, since 2026-10-02, when Ballygunge became an
-    1800 m square beside two 1400 m wards. The refusal is unchanged — every
-    measurement in this script still refuses a mixed ward table — but it now fires
-    when a grid is NEEDED, not when the module is IMPORTED: measure-shadow-signtest
-    (and through it the PV chain) imports this file only for its sun and its
-    scene machinery, and must not inherit a refusal about grids it never uses.
+    PER WARD SINCE 2026-10-03. Until then this was `uniform_grid(WARDS)`, which
+    refused a ward table holding two footprints; Ballygunge became an 1800 m square
+    (180 cells) beside two 1400 m wards (140), and the Ward 68 re-measurement runs
+    this script on that table. Each ward reads its own grid — no ward is ever read
+    at another ward's size, which is what the refusal protected.
     """
-    return uniform_grid(_types.WARDS.values())
+    return grid_for(_types.WARDS[ward_id].footprint_m)
+
+
+def ward_pixels(ward: _types.Ward) -> _types.Mask | None:
+    """The ward's OWN 70 m pixels on its ECOSTRESS grid, or None for all of them.
+
+    Ballygunge is KMC Ward 68 (2026-10-02). The model still runs over the whole
+    square — the solver needs one, and the context around the ward is real — but a
+    ward-scene is SCORED only on the pixels whose centres lie inside the polygon.
+    Wards without a polygon return None and are scored over the square, as before.
+    This selects which pixels are the ward; how they are compared is unchanged.
+    """
+    box = _types.ward_bounds(ward)
+    tf, w, h = target_grid(box)
+    return _wardmask.mask_on_grid(ward.id, tf, w, h, target_crs(box))
+
+
+def scored_cells(ward: _types.Ward, obs: npt.NDArray[np.float32],
+                 pixels: _types.Mask | None) -> _types.Mask:
+    """Valid observation cells that belong to the ward — the cells every
+    predictor is scored on. `pixels` is `ward_pixels(ward)`, passed in so a sweep
+    computes it once per ward rather than once per scene."""
+    m: _types.Mask = np.isfinite(obs)
+    if pixels is not None:
+        if pixels.shape != obs.shape:
+            sys.exit(f"{ward.id}: polygon mask {pixels.shape} does not match the "
+                     f"ECOSTRESS grid {obs.shape} — both must come from ward_bounds()")
+        m = m & pixels
+    return m
 
 ROOT = os.path.join(HERE, "..")
 SURFACE_DIR = os.path.join(ROOT, "public", "heat-map", "data")
@@ -212,7 +238,7 @@ def built_layer(ward_id: str) -> npt.NDArray[np.float32]:
     odd layer out is `built`. Both put the layers on the same ground; they differ
     only in which convention they adopt to do it.
     """
-    grid = surface_grid()
+    grid = surface_grid(ward_id)
     path = os.path.join(BUILT_CACHE, f"{ward_id}-built-{grid}.f32")
     if not os.path.exists(path):
         sys.exit(f"{os.path.relpath(path, os.path.expanduser('~'))} is missing — run "
@@ -294,7 +320,7 @@ def water_coverage(ward_id: str, n: int | None = None) -> npt.NDArray[np.float32
     """
     size_m = float(_types.WARDS[ward_id].footprint_m)
     return _water.water_north_up(_water.load_ward_water(ward_id), size_m,
-                                 surface_grid() if n is None else n)
+                                 surface_grid(ward_id) if n is None else n)
 
 
 def water_layer(ward_id: str, n: int | None = None) -> npt.NDArray[np.float32]:
@@ -314,7 +340,7 @@ def water_layer(ward_id: str, n: int | None = None) -> npt.NDArray[np.float32]:
     spatial amplitude.
     """
     if not _water.LAYER_ENABLED:
-        grid = surface_grid() if n is None else n
+        grid = surface_grid(ward_id) if n is None else n
         return np.zeros((grid, grid), dtype=np.float32)
     return water_coverage(ward_id, n)
 
@@ -531,6 +557,7 @@ def main() -> None:
     # each ward this is. Printing it is how that blindness stays visible instead of
     # becoming an absence nobody notices.
     water_cover: dict[str, float] = {}
+    pixels = {wid: ward_pixels(w) for wid, w in wards.items()}
     for wid, w in wards.items():
         _tf, W, H = target_grid(_types.ward_bounds(w))
         veg, alb = surface_layers(wid)
@@ -557,7 +584,7 @@ def main() -> None:
                 sys.exit(f"{wid} {sc.date}: ECOSTRESS grid {obs.shape} does not match the "
                          f"surface grid {lay['veg'].shape} — the two are supposed to come "
                          f"from the same ward_bounds().")
-            m = np.isfinite(obs)
+            m = scored_cells(w, obs, pixels[wid])
             if int(m.sum()) < MIN_CELLS:
                 continue
 
@@ -610,6 +637,15 @@ def main() -> None:
                   "cells at 70 m, so per-scene r is noisy; the aggregate is the figure.",
         "scenes": len(scenes),
         "ward_scenes_scored": len(rows),
+        # Which pixels each ward is scored on (2026-10-03): the polygon's for a ward
+        # with an administrative boundary, the whole square otherwise. The model is
+        # evaluated over the square either way.
+        "domain": {wid: (f"KMC ward {_wardmask.POLYGONS[wid][1]} polygon: {int(px.sum())} of "
+                         f"{px.size} ECOSTRESS pixels (centre inside); model over the "
+                         f"{_types.WARDS[wid].footprint_m} m square"
+                         if px is not None else
+                         f"the whole {_types.WARDS[wid].footprint_m} m square")
+                   for wid, px in pixels.items()},
         "overall": {k: agg(None, k) for k in ("r_physics", "r_built", "r_veg", "anomaly_rmse_k")},
         "by_phase": {p: {k: agg(p, k) for k in
                          ("r_physics", "r_built", "r_veg", "anomaly_rmse_k")}
