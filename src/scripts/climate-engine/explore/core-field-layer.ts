@@ -112,7 +112,7 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
      being attached, because a 2800 m ward solves 384² cells and a canvas left
      at Kolkata's 192² would reject every field it was handed. */
   let n = gridSize;
-  /** One pending `idle` listener at most — see `pushToGpu`. */
+  /** One pending `render` listener at most — see `pushToGpu`. */
   let settling = false;
   /** The open ward's boundary and frame, or null: read by `update` (the veil) and `restoreOutline`. */
   let boundary: WardMask | null = null;
@@ -152,16 +152,30 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
    * `if (!options.url) return this;` — it takes a URL and re-fetches. There is no
    * raw-pixel path on it.
    *
-   * WHY PAUSE ON `idle` RATHER THAN IMMEDIATELY. `prepare()` returns early when
+   * HOW IT UPLOADS: `pause()` IS THE UPLOAD. In 4.7.1 `pause()` reads
+   * `if (this._playing) { this.prepare(); this._playing = false; }` — it runs
+   * `prepare()` while still playing, and that re-uploads the canvas there and then.
+   * So `play(); pause();` is one synchronous upload, and the source is left at rest.
+   *
+   * ONLY ONCE THE SOURCE HAS TILES. `prepare()` returns early while
    * `Object.keys(this.tiles).length === 0` — "not enough data for current
    * position" — which is true while the map is still flying to the ward. A
-   * `play(); pause();` pair would then clear the flag WITHOUT having uploaded, and
-   * the fix would be a silent no-op in the exact window the bug lives in. `idle`
-   * means MapLibre has finished rendering, so the upload has happened.
+   * `play(); pause();` there would clear the flag WITHOUT having uploaded, and the
+   * fix would be a silent no-op in the exact window the bug lives in. So until
+   * the source has tiles it is left playing, and paused on the first `render`
+   * after it has them: that frame's `prepare()` ran playing, so it uploaded.
    *
-   * IF `idle` NEVER FIRES the source simply stays playing: the failure mode is a
-   * per-frame upload, not a blank map. Cost, never silence — which is the right
-   * direction for a defect this hard to see.
+   * NEVER ON `idle`, WHICH IS WHAT THIS WAITED FOR UNTIL 2026-10-03 — and `idle`
+   * cannot fire while it waits. A playing canvas source is a transition
+   * (`CanvasSource.hasTransition()` returns `_playing`), so `Map._render` asks
+   * for another frame every frame and never reaches `idle`. The source was never
+   * paused: the map redrew continuously, for ever, on the software path that can
+   * least afford it. MEASURED on Ballygunge at tier 0 (headless SwiftShader, M4):
+   * 0 `idle` events and `_playing` true on every one of 26–38 frames in 6 s; the
+   * renderer's main thread 100 % busy, all of it blocked in a per-frame WebGL
+   * read-back behind the GPU thread; each page screenshot 1.3 s (192² square)
+   * and 2.0 s (KMC Ward 68's 247² square). On a 2-CPU runner that starvation is
+   * what timed out heat-map-tiers.spec.ts:147/186 in page.screenshot.
    */
   function pushToGpu(): void {
     const source = map.getSource(CORE_FIELD_SOURCE) as maplibregl.CanvasSource | undefined;
@@ -171,13 +185,23 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
        whatever the canvas holds at that moment — which is this paint. */
     if (!source || typeof source.play !== 'function') return;
     source.play();
+    if (hasTiles(source)) { source.pause(); return; }
     if (settling) return;
     settling = true;
-    map.once('idle', () => {
-      settling = false;
+    const onRender = (): void => {
       const current = map.getSource(CORE_FIELD_SOURCE) as maplibregl.CanvasSource | undefined;
-      if (current && typeof current.pause === 'function') current.pause();
-    });
+      /* Removed (a style swap, dispose) — nothing left to pause; a re-attach pushes afresh. */
+      if (!current || typeof current.pause !== 'function') { map.off('render', onRender); settling = false; return; }
+      if (!hasTiles(current)) return;
+      map.off('render', onRender);
+      settling = false;
+      current.pause();
+    };
+    map.on('render', onRender);
+  }
+  /** `prepare()` uploads only once the source covers a tile at the current position. */
+  function hasTiles(source: maplibregl.CanvasSource): boolean {
+    return Object.keys(source.tiles ?? {}).length > 0;
   }
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = n;
