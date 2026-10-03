@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import shapely
@@ -39,6 +39,9 @@ from shapely.geometry import MultiPolygon, Polygon, shape
 
 import _types
 from _types import Mask, Ward, WardId
+
+if TYPE_CHECKING:
+    from affine import Affine
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -126,6 +129,33 @@ def mask_grid(ward: Ward, n: int, *, rows: RowOrder) -> Mask | None:
     return out
 
 
+def mask_on_grid(ward_id: WardId, transform: Affine, width: int, height: int,
+                 crs: str) -> Mask | None:
+    """height x width boolean grid over a GEOREFERENCED raster: True where the pixel
+    CENTRE lies in the ward polygon. None for a ward with no polygon.
+
+    For the satellite grids the laboratory scores against (ECOSTRESS 70 m on
+    `_ecostress.target_grid`, Landsat 30 m windows), which are projected and
+    north-up and do not share the ward-local frame `mask_grid` works in. Same
+    centre-inclusion rule as `mask_grid`, so "the ward" means one thing at every
+    resolution. Added 2026-10-03 for the Ward 68 calibration re-measurement.
+    """
+    poly = polygon_lonlat(ward_id)
+    if poly is None:
+        return None
+    from rasterio.warp import transform as _warp   # lazy: the solver-grid callers never need it
+    cols, rows_ = np.meshgrid(np.arange(width, dtype=np.float64) + 0.5,
+                              np.arange(height, dtype=np.float64) + 0.5)
+    xs = transform.c + cols * transform.a + rows_ * transform.b
+    ys = transform.f + cols * transform.d + rows_ * transform.e
+    moved = _warp(crs, "EPSG:4326", xs.ravel().tolist(), ys.ravel().tolist())
+    lon, lat = moved[0], moved[1]
+    inside = np.asarray(shapely.contains_xy(poly, np.asarray(lon), np.asarray(lat)),
+                        dtype=np.bool_).reshape(height, width)
+    out: Mask = np.ascontiguousarray(inside)
+    return out
+
+
 def rle(mask: Mask) -> list[int]:
     """Run lengths of a flattened boolean mask, starting with a run of False.
 
@@ -186,6 +216,18 @@ def _self_test() -> None:
     # of a north-up grid and the BOTTOM rows of a south-up one is the mirror bug.
     north_rows = nn[: 247 // 4].sum()
     assert north_rows > 0 and s[-(247 // 4):].sum() == north_rows
+    # mask_on_grid on the ECOSTRESS 70 m grid: same area, and the north-up raster puts
+    # the ward's northern tip in its TOP rows, as the north-up mask_grid does.
+    from _ecostress import TARGET_RES, target_crs, target_grid
+    box = _types.ward_bounds(w)
+    tf, gw, gh = target_grid(box)
+    eco = mask_on_grid(w.id, tf, gw, gh, target_crs(box))
+    assert eco is not None
+    eco_area = float(eco.sum()) * TARGET_RES ** 2
+    assert abs(eco_area - poly.area) / poly.area < 0.10, (eco_area, poly.area)
+    top = eco[: gh // 4].sum()
+    assert top > 0 and eco[-(gh // 4):].sum() < top, "70 m mask is mirrored north-south"
+    assert mask_on_grid("barrackpore", tf, gw, gh, target_crs(box)) is None
     assert not has_polygon("barrackpore") and polygon_local(_types.WARDS["barrackpore"]) is None
     print(f"  _wardmask: Ward 68 {poly.area / 1e6:.4f} km² local, {frac:.1%} of the "
           f"{w.footprint_m} m square, margin {margin:.0f} m; rle round-trips")

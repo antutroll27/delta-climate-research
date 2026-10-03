@@ -37,6 +37,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import _types  # noqa: E402  (path must be set first -- the scripts are not a package)
+import _wardmask  # noqa: E402
 
 ROOT = os.path.join(HERE, "..")
 CACHE = os.path.expanduser("~/.cache/delta-climate/landsat")
@@ -216,6 +217,9 @@ def ward_lst(src_lst: Any, src_qa: Any, src_stqa: Any, ward: _types.Ward
     from rasterio.warp import transform_bounds
     from rasterio.windows import from_bounds
 
+    from rasterio.transform import from_bounds as transform_from_bounds
+    from rasterio.windows import bounds as window_bounds
+
     w, s, e, n = _types.ward_bounds(ward)
     # The COGs are UTM 45N, the ward table is WGS-84. Reproject the bounds, not
     # the raster: one transform of four numbers instead of a resample of a scene.
@@ -228,6 +232,19 @@ def ward_lst(src_lst: Any, src_qa: Any, src_stqa: Any, ward: _types.Ward
     total = int(k_raw.size)
     if total == 0:
         return None
+    # WHICH PIXELS ARE THE WARD (2026-10-03). Ballygunge is KMC Ward 68: its row is
+    # the mean over the 30 m pixels whose centres fall inside the polygon, and
+    # `total` — the denominator of the MIN_CELL_FRAC floor — is the polygon's
+    # pixel count, so the floor keeps meaning "share of the ward that is clear".
+    # Wards without a polygon get None and are read over the whole square as before.
+    hgt, wid = k_raw.shape
+    in_ward = _wardmask.mask_on_grid(
+        ward.id, transform_from_bounds(*window_bounds(win, src_lst.transform), wid, hgt),
+        wid, hgt, src_lst.crs.to_string())
+    if in_ward is not None:
+        total = int(in_ward.sum())
+        if total == 0:
+            return None
 
     qa = src_qa.read(1, window=win, boundless=True, fill_value=1)
     stq = src_stqa.read(1, window=win, boundless=True, fill_value=-9999)
@@ -237,6 +254,8 @@ def ward_lst(src_lst: Any, src_qa: Any, src_stqa: Any, ward: _types.Ward
     good &= (kelvin > K_MIN) & (kelvin < K_MAX)
     good &= (qa & QA_BAD) == 0
     good &= (stq != -9999) & (stq.astype(np.float32) * ST_QA_SCALE <= ST_QA_MAX_K)
+    if in_ward is not None:
+        good &= in_ward
 
     cel = np.where(good, kelvin - 273.15, np.nan).astype(np.float32)
     # Carry the retained pixels' own stated uncertainty out with the temperature.
@@ -316,12 +335,19 @@ def probe() -> int:
     return 0
 
 
-def sweep(limit: int | None, qa_curve: bool) -> int:
+def sweep(limit: int | None, qa_curve: bool, only_ward: str | None = None,
+          until: str | None = None) -> int:
     """P1: every candidate scene x ward -> committed aggregates.
 
     Idempotent over the output file: a re-run after a SAS expiry or a 429 keeps
     what already landed. The yield table it prints is the campaign's headline
     number and belongs in the commit message.
+
+    `only_ward` RE-MEASURES ONE WARD: its existing rows are dropped and rebuilt,
+    every other ward's rows are carried byte-for-byte. `until` (YYYY-MM-DD,
+    exclusive) holds the scene set to an earlier sweep's evidence window, so a
+    re-measured ward is compared over the same archive rather than a grown one.
+    Both added 2026-10-03 for Ballygunge -> KMC Ward 68.
     """
     import numpy as np
     import rasterio
@@ -329,13 +355,24 @@ def sweep(limit: int | None, qa_curve: bool) -> int:
     s = requests.Session()
     items = search(s)
     items.sort(key=lambda it: it["properties"]["datetime"])
+    if until:
+        items = [it for it in items if it["properties"]["datetime"][:10] < until]
+        print(f"  held to scenes before {until}: {len(items)} candidates")
     if limit:
         items = items[:limit]
+    wards_in_scope = [w for w in _types.WARDS.values() if only_ward in (None, w.id)]
+    if not wards_in_scope:
+        sys.exit(f"unknown ward {only_ward!r}")
 
     rows: list[dict[str, Any]] = []
     if os.path.exists(OUT):
         with open(OUT) as fh:
             rows = json.load(fh)["rows"]
+    if only_ward:
+        dropped = sum(r["ward"] == only_ward for r in rows)
+        rows = [r for r in rows if r["ward"] != only_ward]
+        print(f"  re-measuring {only_ward}: {dropped} existing rows dropped, "
+              f"{len(rows)} rows of other wards carried unchanged")
     done = {(r["scene_id"], r["ward"]) for r in rows}
 
     # Yield accounting. Every drop is counted and reported; a scene that vanishes
@@ -352,9 +389,9 @@ def sweep(limit: int | None, qa_curve: bool) -> int:
         if key is None or ST_QA_KEY not in assets or QA_PIXEL_KEY not in assets:
             tally["no_assets"] += 1
             continue
-        wards_todo = [w for w in _types.WARDS.values() if (sid, w.id) not in done]
+        wards_todo = [w for w in wards_in_scope if (sid, w.id) not in done]
         if not wards_todo:
-            tally["cached"] += len(_types.WARDS)
+            tally["cached"] += len(wards_in_scope)
             continue
 
         try:
@@ -466,11 +503,13 @@ def main() -> int:
     ap.add_argument("--yield-curve", action="store_true",
                     help="print the cell_frac distribution to site the floor")
     ap.add_argument("--check", action="store_true", help="assert over the committed file")
+    ap.add_argument("--ward", help="with --sweep: re-measure ONE ward, carrying the others")
+    ap.add_argument("--until", help="with --sweep: only scenes dated before YYYY-MM-DD")
     a = ap.parse_args()
     if a.probe:
         return probe()
     if a.sweep:
-        return sweep(a.limit, a.yield_curve)
+        return sweep(a.limit, a.yield_curve, a.ward, a.until)
     if a.check:
         return check()
     ap.print_help()
