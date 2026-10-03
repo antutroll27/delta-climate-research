@@ -36,7 +36,7 @@ export const MATRIX: readonly MatrixRow[] = [
   {
     standard: 'OGC 3D Tiles 1.1', region: 'Global', purpose: '3D streaming',
     posture: 'aligned',
-    ships: 'A tileset per ward at /3d-tiles/{id}/tileset.json — 17,171 LoD1 buildings as glTF 2.0 (Ballygunge's tileset is its 1.8 km square: KMC Ward 68 and the context buildings around it), radian region bounding volumes, and a geometric error measured from the ward\'s median building footprint diagonal. Validated with the official Cesium 3d-tiles-validator: 0 errors, 0 warnings on all three.',
+    ships: 'A tileset per ward at /3d-tiles/{id}/tileset.json — 17,171 LoD1 buildings as glTF 2.0 (Ballygunge\'s tileset is its 1.8 km square: KMC Ward 68 and the context buildings around it), radian region bounding volumes, and a geometric error measured from the ward\'s median building footprint diagonal. Validated with the official Cesium 3d-tiles-validator: 0 errors, 0 warnings on all three.',
     gap: 'Single-level tilesets: one root tile per ward, no hierarchy, so there is no progressive refinement to stream. Buildings sit at ellipsoid height 0 because no validated terrain model exists — viewers must clamp to terrain. LoD1 only; no roof shape.',
   },
   {
