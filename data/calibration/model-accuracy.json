@@ -26,6 +26,11 @@
   },
   "ward_scale": {
     "method": "leave-one-OVERPASS-out; scene- and ward-level splits leak through shared overpasses and are not published",
+    "domain": {
+      "ballygunge": "data/geometry/kmc-wards-around-ballygunge.geojson ward 68 polygon: 189 of 676 ECOSTRESS pixels (centre inside); surface/built over the polygon's cells",
+      "baruipur": "the whole 1400 m square",
+      "barrackpore": "the whole 1400 m square"
+    },
     "scored": {
       "q_day": 0.419,
       "ratio": 0.2,
@@ -45,7 +50,8 @@
         "night": 50,
         "day": 32
       },
-      "action": "recalibrate and update accuracy.ts in a reviewed change; this campaign deliberately does not move published constants"
+      "action": "recalibrate and update accuracy.ts in a reviewed change; this campaign deliberately does not move published constants",
+      "published_peak_evidence": "accuracy.ts peak n=29 (RMSE 4.42 K, ceiling 3.338 K, band 4.5 K) is an older ECOSTRESS evidence set, scored with Ballygunge as the old 1400 m box; strata.peak_ecostress is the current measurement, with Ballygunge as the KMC Ward 68 polygon"
     },
     "bootstrap": {
       "seed": 7,
@@ -58,10 +64,10 @@
         11.5
       ],
       "offset_K": {
-        "ecostress": 0.748,
-        "landsat": -2.407
+        "ecostress": 0.937,
+        "landsat": -2.494
       },
-      "delta_K": -3.155,
+      "delta_K": -3.431,
       "n_overpasses": {
         "ecostress": 2,
         "landsat": 50
@@ -75,32 +81,32 @@
       "night": {
         "n_scenes": 50,
         "n_overpasses": 20,
-        "rmse_K": 2.677,
-        "bias_K": 0.36,
-        "loo_overpass_rmse_K": 2.801,
+        "rmse_K": 2.662,
+        "bias_K": 0.41,
+        "loo_overpass_rmse_K": 2.777,
         "ci95_K": [
-          1.616,
-          3.689
+          1.598,
+          3.697
         ],
-        "ci95_halfwidth_K": 1.036,
+        "ci95_halfwidth_K": 1.05,
         "hour_range": [
           0.7,
           23.84
         ],
         "reference_uncertainty_K": null,
-        "ceiling_rmse_K": 2.117
+        "ceiling_rmse_K": 2.166
       },
       "morning_ecostress": {
         "n_scenes": 9,
         "n_overpasses": 4,
-        "rmse_K": 4.456,
-        "bias_K": -1.896,
-        "loo_overpass_rmse_K": 5.98,
+        "rmse_K": 4.34,
+        "bias_K": -1.623,
+        "loo_overpass_rmse_K": 6.287,
         "ci95_K": [
-          3.68,
-          5.805
+          3.74,
+          5.753
         ],
-        "ci95_halfwidth_K": 1.062,
+        "ci95_halfwidth_K": 1.006,
         "hour_range": [
           7.09,
           11.06
@@ -109,40 +115,40 @@
         "ceiling_rmse_K": null
       },
       "morning_landsat": {
-        "n_scenes": 213,
+        "n_scenes": 212,
         "n_overpasses": 50,
-        "rmse_K": 3.148,
-        "bias_K": -2.407,
-        "loo_overpass_rmse_K": 2.071,
+        "rmse_K": 3.253,
+        "bias_K": -2.494,
+        "loo_overpass_rmse_K": 2.129,
         "ci95_K": [
-          2.629,
-          3.648
+          2.718,
+          3.764
         ],
-        "ci95_halfwidth_K": 0.51,
+        "ci95_halfwidth_K": 0.523,
         "hour_range": [
           10.39,
           10.41
         ],
-        "reference_uncertainty_K": 2.161,
-        "ceiling_rmse_K": 1.578
+        "reference_uncertainty_K": 2.164,
+        "ceiling_rmse_K": 1.597
       },
       "peak_ecostress": {
         "n_scenes": 23,
         "n_overpasses": 8,
-        "rmse_K": 2.183,
-        "bias_K": 0.421,
-        "loo_overpass_rmse_K": 2.389,
+        "rmse_K": 2.233,
+        "bias_K": 0.658,
+        "loo_overpass_rmse_K": 2.358,
         "ci95_K": [
-          1.32,
-          2.919
+          1.387,
+          2.924
         ],
-        "ci95_halfwidth_K": 0.8,
+        "ci95_halfwidth_K": 0.769,
         "hour_range": [
           11.76,
           17.45
         ],
         "reference_uncertainty_K": null,
-        "ceiling_rmse_K": 2.027
+        "ceiling_rmse_K": 1.967
       }
     }
   }
