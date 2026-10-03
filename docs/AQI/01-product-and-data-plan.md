@@ -143,7 +143,7 @@ vector file (`kolkata-heat-history/vector-locations/`):
 
 | OBOS area | Station | Position and containment | Product state |
 |---|---|---|---|
-| Ballygunge | OpenAQ `10918`, "Ballygunge, Kolkata – WBPCB"; owner WBPCB, provider CPCB; reference monitor; reporting since 2020-01-02 | 22.53675 N, 88.36380 E; KMC Ward 69; 1.0 km from the OBOS centre; 268 m outside the 1.4 km box, **inside the 3 km window** | Covered |
+| Ballygunge | OpenAQ `10918`, "Ballygunge, Kolkata – WBPCB"; owner WBPCB, provider CPCB; reference monitor; reporting since 2020-01-02 | 22.53675 N, 88.36380 E; KMC Ward 69. **Since 3 Oct: 1.7 km (1,657 m) from the OBOS centre, about 0.9 km outside KMC Ward 68 and 53 m beyond the 3 km window's northern edge** — because Ballygunge became KMC Ward 68 (founder, 2 Oct) and its centre moved to the ward's (22.522704 N, 88.369173 E). Until then it was 1.0 km from the old centre, inside the window (AQI-R20) | Kept as the nearest official monitor, served `inside: 'outside_window'`, `placement: 'in KMC Ward 69, outside Ward 68'` |
 | Barrackpore | OpenAQ `3409509`, "SVSPA Campus, Barrackpore – WBPCB"; owner WBPCB, provider CPCB; reporting since 2025-02-18 | 22.76056 N, 88.36176 E; 1.0 km from the OBOS centre; 302 m outside the 1.4 km box, **inside the 3 km window** | Covered |
 | Baruipur | No continuous government monitor | — | `no_station` |
 
@@ -186,8 +186,10 @@ instrument. Genuinely live, area-level coverage in Bengaluru would need OBOS's o
 
 **Decided 26 September 2026:** the boundary is each area's **3 km window**, the square
 of side 3,000 m on the OBOS centre defined in `scripts/_types.py` `ward_bounds` and
-exported in the heat-history vector file. Both Kolkata stations lie inside it; neither
-lies inside the 1.4 km box. The response must state which geometry version was used,
+exported in the heat-history vector file. Both Kolkata stations lay inside it on that
+date; neither lay inside the 1.4 km box. Since 3 October Ballygunge's monitor lies 53 m
+outside its window, because the window now centres on KMC Ward 68 (AQI-R20); it is kept
+as the nearest official monitor and labelled `outside_window`. The response must state which geometry version was used,
 and the UI always states the station's distance from the centre.
 
 ### 5.2 Coverage states

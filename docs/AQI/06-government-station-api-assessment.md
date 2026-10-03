@@ -116,8 +116,13 @@ Evidence: [Ballygunge station](https://explore.openaq.org/locations/10918) and
 
 **Re-tested through the API on 26 September 2026:**
 
-- **Position.** Both locations sit about 1.0 km from their OBOS centres, inside the
-  3 km windows. They lie 268 m and 302 m respectively outside the 1.4 km boxes.
+- **Position.** On 26 September both locations sat about 1.0 km from their OBOS
+  centres, inside the 3 km windows, 268 m and 302 m respectively outside the 1.4 km
+  boxes. **Ballygunge has since moved (3 October):** Ballygunge became KMC Ward 68
+  (founder, 2 October) and its centre moved to the ward's (22.522704 N, 88.369173 E),
+  so `10918` is now 1.7 km (1,657 m) from it, in KMC Ward 69, about 0.9 km outside
+  Ward 68 and 53 m beyond the 3 km window. It is kept as the nearest official monitor
+  and labelled as outside the window (AQI-R20). Barrackpore is unchanged.
 - **Last report.** Both last reported at 2026-09-24 17:30 UTC, as did every other
   CPCB-provided monitor in India (425 locations). The break is national, not
   station-specific.
