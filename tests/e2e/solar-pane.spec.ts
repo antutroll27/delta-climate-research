@@ -158,10 +158,17 @@ test.describe('the solar screen', () => {
        measured, before the camera move existed). */
     await page.mouse.move(canvas.x + 40, canvas.y + 40);
     for (let i = 0; i < 6; i += 1) { await page.mouse.wheel(0, -400); await page.waitForTimeout(150); }
-    await page.waitForTimeout(800);
+    /* PAST THE ORBIT'S RESUME, ON PURPOSE. The idle orbit restarts 2.5 s after the last
+       touch of the canvas, and its per-frame setBearing (a jumpTo, which stop()s) used
+       to cancel this row's easeTo — measured, 2 ms after it began — leaving the camera
+       zoomed away and the card at opacity 0. This used to wait 800 ms, so whether the
+       click landed before or after the orbit came back was decided by machine load:
+       the flake. Waiting past it makes the test exercise that path every run. */
+    await page.waitForTimeout(3_000);
     await page.locator('#solList tr').nth(2).click();
-    await page.waitForTimeout(1_800);
-    await expect(page.locator('#bcard')).toHaveCSS('opacity', '1');
+    /* Polled, not slept: the ease is 700 ms, but on a software renderer a frame can
+       take 400 ms; the camera has arrived when the card is shown. */
+    await expect.poll(async () => page.locator('#bcard').evaluate((el) => getComputedStyle(el).opacity), { timeout: 8_000 }).toBe('1');
     const after = (await page.locator('#bcard').boundingBox())!;
     expect(after.x).toBeGreaterThanOrEqual(canvas.x);
     expect(after.x + after.width).toBeLessThanOrEqual(canvas.x + canvas.width);

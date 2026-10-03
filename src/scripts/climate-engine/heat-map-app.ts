@@ -415,10 +415,20 @@ export function mountHeatMap(): () => void {
   /* ── idle auto-orbit (pauses on any interaction, resumes after 2.5 s) ── */
   let orbit = !reduceMotion, orbitResume = 0, lastT = 0;
   const ORBIT_DEG_PER_SEC = -1.4;
+  /* THE ORBIT NEVER CANCELS A CAMERA MOVE. `setBearing` is `jumpTo`, and MapLibre's
+     `jumpTo` begins with `stop()`, so a running orbit killed any easeTo/flyTo on its
+     next frame. MEASURED (pre-ship audit 2026-10-03, solar-pane:129): a ranked row
+     clicked once the orbit had resumed — 2.5 s after the last touch of the CANVAS;
+     the row is in the side pane, so it never paused it — logged `easeTo` and, 2 ms
+     later, the orbit's `jumpTo → stop`; the camera stayed where it was and the card,
+     projected behind it, stayed at opacity 0. Deterministic once the orbit runs;
+     flaky in the suite, where load decided which side of 2.5 s the click landed.
+     The orbit now steps only while no animation owns the camera, and resumes from
+     wherever the move left it. */
   function advanceOrbit(t: number): boolean {
     const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0; lastT = t;
     const active = Boolean(orbit && mode === 'relief' && map.isStyleLoaded());
-    if (active) map.setBearing(map.getBearing() + ORBIT_DEG_PER_SEC * dt);
+    if (active && !map.isEasing()) map.setBearing(map.getBearing() + ORBIT_DEG_PER_SEC * dt);
     return active;
   }
   function nudgeOrbit() { orbit = false; clearTimeout(orbitResume); orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') { orbit = true; requestRuntimeFrame('orbit'); } }, 2500); }
@@ -608,6 +618,9 @@ export function mountHeatMap(): () => void {
       else { vel.b = -dragAcc.dx * 0.4; vel.p = -dragAcc.dy * 0.35; map.jumpTo({ bearing: map.getBearing() + vel.b, pitch: Math.min(78, Math.max(0, map.getPitch() + vel.p)) }); }
       dragAcc = null;
     } else if (drag) { vel.b *= 0.5; vel.p *= 0.5; }
+    /* Inertia is a jumpTo too: it yields to a camera animation (see advanceOrbit) and
+       is spent, not resumed, when one starts. A drag in progress still wins above. */
+    else if (map.isEasing()) { vel.b = vel.p = 0; }
     else if (Math.abs(vel.b) > 0.02 || Math.abs(vel.p) > 0.02) { vel.b *= 0.88; vel.p *= 0.88; map.jumpTo({ bearing: map.getBearing() + vel.b, pitch: Math.min(78, Math.max(0, map.getPitch() + vel.p)) }); }
     return !!drag || Math.abs(vel.b) > 0.02 || Math.abs(vel.p) > 0.02;
   }
@@ -1340,6 +1353,9 @@ export function mountHeatMap(): () => void {
        Ease there at the current zoom, pitch and bearing; instant under reduced
        motion. */
     const ll = wardLatLon(wardOf(state.ward), b.cx, b.cz);
+    /* A row click is an interaction, so it pauses the idle orbit like a touch of the
+       map does; the orbit also yields while this ease runs (advanceOrbit). */
+    nudgeOrbit();
     map.easeTo({ center: [ll.lon, ll.lat], duration: reduceMotion ? 0 : 700, essential: true });
   };
   const tariffInput = el('solTariff') as HTMLInputElement | null;
