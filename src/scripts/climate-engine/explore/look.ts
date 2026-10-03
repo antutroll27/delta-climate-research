@@ -196,7 +196,10 @@ export const WARD = {
   /** The outline's dark neutral. */
   ink: '#1c2326',
   /** Drawn widths of the outline's core and its contrasting halo, metres. */
-  lineM: 4.2, haloM: 10,
+  lineM: 6, haloM: 14,
+  /** Opacity of the see-through pass: where a roof stands on the line, the line still
+      shows through it this faintly, so the boundary reads whole without reading as a HUD. */
+  xrayAlpha: 0.38,
   /** Metres above the ground: over the roads' and water's ribbons, under every roof. */
   liftM: 1.6,
   /** Outside the polygon, the heat overlay is desaturated by this share and its opacity scaled by `veilAlpha`. */

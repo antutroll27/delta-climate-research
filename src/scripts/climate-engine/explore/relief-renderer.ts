@@ -714,19 +714,22 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     const pts = densifyRing(bundle.boundary.ring, 8);
     const ground = (x: number, y: number): number => terrainDrawAt(bundle.terrain, x, y);
     const group = new THREE.Group();
-    const make = (halfM: number, lift: number, order: number): void => {
+    const make = (halfM: number, lift: number, order: number, depthTest: boolean): void => {
       const mesh = buildRibbonMesh([{ p: pts }], () => halfM, ground, lift);
       if (!mesh) return;
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
       geometry.setIndex(new THREE.BufferAttribute(mesh.indices, 1));
-      const material = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
+      const material = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthTest, side: THREE.DoubleSide });
       const ribbon = new THREE.Mesh(geometry, material);
       ribbon.renderOrder = order;
       group.add(ribbon);
     };
-    make(WARD.haloM / 2, WARD.liftM, 1);
-    make(WARD.lineM / 2, WARD.liftM + 0.05, 2);
+    make(WARD.haloM / 2, WARD.liftM, 1, true);
+    make(WARD.lineM / 2, WARD.liftM + 0.05, 2, true);
+    /* THE SEE-THROUGH PASS, the one ribbon not depth-tested: the core again, faint,
+       drawn last, so a stretch hidden behind a block still reads as the same line. */
+    make(WARD.lineM / 2, WARD.liftM + 0.05, 20, false);
     this.outline = group;
     this.scene.add(group);
     this.paintOutline();
@@ -739,7 +742,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     /* srgbLinear, not displayColor: a MeshBasicMaterial passes through three's colour
        management, so the hex must enter linear to come out as itself. */
     const ink = srgbLinear(WARD.ink), paper = srgbLinear(CLAY.hazeCol);
-    const [halo, core] = this.outline.children as THREE.Mesh[];
+    const [halo, core, xray] = this.outline.children as THREE.Mesh[];
     const set = (mesh: THREE.Mesh | undefined, colour: THREE.Color, opacity: number): void => {
       if (!mesh) return;
       const material = mesh.material as THREE.MeshBasicMaterial;
@@ -747,6 +750,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     };
     set(halo, studio ? paper : ink, studio ? 0.85 : 0.7);
     set(core, studio ? ink : paper, 0.95);
+    set(xray, studio ? ink : paper, WARD.xrayAlpha);
   }
 
   private disposeOutline(): void {

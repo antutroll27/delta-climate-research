@@ -10,7 +10,9 @@ import { test, expect, type Page } from '@playwright/test';
    selected building never projects, so the tests that need the card force the
    layer first, as a reader on a weak GPU can by pressing "3D Relief". */
 const BALLYGUNGE = '/heat-map/in/kolkata/ballygunge/';
-const HEADER = 'idx,lat,lon,footprint_m2,kwp,kwh_yr,kwh_low,kwh_high,kwp_high,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,tier,basis';
+/* `in_ward` since Ballygunge became KMC Ward 68 (2026-10-02): the square holds context
+   roofs, and the column marks the ward's. Only an area with a polygon has it. */
+const HEADER = 'idx,lat,lon,footprint_m2,kwp,kwh_yr,kwh_low,kwh_high,kwp_high,loss,loss_buildings,loss_trees,loss_strict,loss_raised,worth_per_yr,tariff_per_kwh,currency,tier,in_ward,basis';
 
 async function boot(page: Page) {
   await page.goto(BALLYGUNGE);
@@ -116,6 +118,9 @@ test.describe('the solar screen', () => {
     expect(fixed[columns.indexOf('tariff_per_kwh')]).toBe('10.00');   // the tariff the reader set
     expect(fixed[columns.indexOf('currency')]).toBe('INR');           // the scope's currency, never typed
     expect(fixed[columns.indexOf('tier')]).toBe('screened');          // Ballygunge ships tiers.validated: null
+    // the ward's roofs are marked: 2,207 of the square's 7,931 touch KMC Ward 68
+    const inWard = lines.slice(1).filter((l) => l.split(',')[columns.indexOf('in_ward')] === '1').length;
+    expect(inWard).toBe(2207);
     // the basis rides EVERY row, not just row 0 -- the join reassembles the one
     // quoted field, which carries commas of its own.
     expect(lines[2].split(',').slice(headerFieldCount - 1).join(',')).toContain('screening');

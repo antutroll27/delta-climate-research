@@ -1307,11 +1307,13 @@ export function mountHeatMap(): () => void {
         ['tariff_per_kwh', tariff.toFixed(2)],
         ['currency', COSTS.currency],
         ['tier', tier],
-        ['basis', basis],
         /* Only where a polygon exists: there the square holds context roofs, and a
            sheet that cannot tell them apart from the ward's would let the ward's
-           totals be re-summed over the neighbours'. Elsewhere every row is the area. */
+           totals be re-summed over the neighbours'. Elsewhere every row is the area.
+           BEFORE `basis`, which stays last: it is the one quoted field that can carry
+           commas, and a reader splitting on commas relies on it closing the row. */
         ...(wardMask ? [['in_ward', buildingInWard(wardMask, i) ? 1 : 0] as [string, number]] : []),
+        ['basis', basis],
       ];
     };
     const rows = [rowPairs(0).map(([name]) => name).join(',')];

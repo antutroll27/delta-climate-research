@@ -43,8 +43,11 @@ test('context buildings are dimmed by a per-building flag, and the model path is
 test('the outline is rebuilt per ward, depth-tested, writes no depth, and only where a boundary ships', () => {
   assert.match(RELIEF, /this\.buildOutline\(bundle\);\s*\/\* LAST, AND IT HAS TO BE LAST/);
   assert.match(RELIEF, /if \(!this\.scene \|\| !bundle\.boundary\) return;/);
-  assert.match(RELIEF, /new THREE\.MeshBasicMaterial\(\{ transparent: true, depthWrite: false, side: THREE\.DoubleSide \}\)/);
-  assert.doesNotMatch(RELIEF, /depthTest:\s*false/, 'an outline drawn through buildings would read as a HUD line, not ground');
+  assert.match(RELIEF, /new THREE\.MeshBasicMaterial\(\{ transparent: true, depthWrite: false, depthTest, side: THREE\.DoubleSide \}\)/);
+  /* Halo and core are depth-tested ground; only the see-through pass is not, and it is faint. */
+  assert.match(RELIEF, /make\(WARD\.haloM \/ 2, WARD\.liftM, 1, true\);\s*make\(WARD\.lineM \/ 2, WARD\.liftM \+ 0\.05, 2, true\);/);
+  assert.equal((RELIEF.match(/\bmake\([^)]*, false\);/g) ?? []).length, 1, 'more than one outline pass ignores depth');
+  assert.ok(WARD.xrayAlpha > 0 && WARD.xrayAlpha <= 0.5, 'the see-through pass is no longer faint, so the outline reads as a HUD line');
   /* Ink and paper only: no new colour that could read as a heat class. */
   assert.match(RELIEF, /const ink = srgbLinear\(WARD\.ink\), paper = srgbLinear\(CLAY\.hazeCol\);/);
   assert.equal(WARD.ink.length, 7);
