@@ -63,6 +63,8 @@ interface PreparedWard {
   result: WardScenarioResult;
   buildingGeometry: THREE.BufferGeometry;
   roadGeometry: THREE.BufferGeometry;
+  /** The ward boundary as a closed line, or an empty geometry where there is none. */
+  outlineGeometry: THREE.BufferGeometry;
 }
 
 const DEFAULT_VIEW: SharedView = { yaw: -0.3, pitch: 0.92, zoom: 1 };
@@ -195,12 +197,29 @@ function buildRoadGeometry(roads: RoadsData): THREE.BufferGeometry {
   return geometry;
 }
 
+/* THE WARD BOUNDARY on the 3-D map, for an area that has one: every figure beside
+   the map is taken inside it (ward-plan.ts). The scene's frame is x east, z SOUTH,
+   so a ward-local (x, y north) point lands at (x, h, -y), as the roads do. It
+   floats just over the relief surface's highest lift (3 + 24 m) and is drawn last,
+   unoccluded, so the whole line reads at any camera. */
+const OUTLINE_LIFT_M = 30;
+function buildOutlineGeometry(ring: readonly number[] | null): THREE.BufferGeometry {
+  const positions: number[] = [];
+  if (ring && ring.length >= 6) {
+    for (let index = 0; index + 1 < ring.length; index += 2) positions.push(ring[index], OUTLINE_LIFT_M, -ring[index + 1]);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  return geometry;
+}
+
 async function prepareWard(result: WardScenarioResult, tier: HeatCaps['tier']): Promise<PreparedWard> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   return {
     result,
     buildingGeometry: buildBuildingGeometry(result.wardData, tier),
     roadGeometry: buildRoadGeometry(result.roads),
+    outlineGeometry: buildOutlineGeometry(result.boundaryRing),
   };
 }
 
@@ -381,6 +400,7 @@ class WardScene {
   private transitionStartedAt = 0;
   private buildings: THREE.Mesh;
   private roads: THREE.LineSegments;
+  private outline: THREE.LineLoop;
   private surface: THREE.Mesh;
   private particles: THREE.Points;
   private particleMat: THREE.ShaderMaterial;
@@ -437,6 +457,13 @@ class WardScene {
     this.roads.renderOrder = 1;
     this.scene.add(this.roads);
 
+    this.outline = new THREE.LineLoop(
+      prepared.outlineGeometry,
+      new THREE.LineBasicMaterial({ color: 0xf5f4f1, transparent: true, opacity: 0.92, depthTest: false }),
+    );
+    this.outline.renderOrder = 4;
+    this.scene.add(this.outline);
+
     const visualSegments = caps.tier === 2 ? 191 : 95;
     this.surface = new THREE.Mesh(
       new THREE.PlaneGeometry(prepared.result.wardData.sizeM, prepared.result.wardData.sizeM, visualSegments, visualSegments),
@@ -468,6 +495,8 @@ class WardScene {
     this.buildings.geometry = prepared.buildingGeometry;
     this.roads.geometry.dispose();
     this.roads.geometry = prepared.roadGeometry;
+    this.outline.geometry.dispose();
+    this.outline.geometry = prepared.outlineGeometry;
     this.currentTexture.dispose();
     this.nextTexture?.dispose();
     this.currentTexture = createFieldTexture(prepared.result.field);
@@ -564,6 +593,8 @@ class WardScene {
     (this.buildings.material as THREE.Material).dispose();
     this.roads.geometry.dispose();
     (this.roads.material as THREE.Material).dispose();
+    this.outline.geometry.dispose();
+    (this.outline.material as THREE.Material).dispose();
     this.surface.geometry.dispose();
     (this.surface.material as THREE.Material).dispose();
     this.particles.geometry.dispose();

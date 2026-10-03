@@ -85,5 +85,11 @@ test('Compare takes Ballygunge\'s figures inside the polygon too, and says so', 
     'Compare no longer re-takes a ward\'s stats over its boundary');
   assert.match(core, /field\(prepared\.base, baselineParams, prepared\.wardData\.sizeM, options, prepared\.boundary\)/, 'the baseline is solved over the square');
   assert.match(core, /field\(scenarioLayers, scenarioParams, prepared\.wardData\.sizeM, options, prepared\.boundary\)/, 'the scenario is solved over the square');
-  assert.match(core, /statsOver: prepared\.boundary\?\.name \?\? null,/);
+  assert.match(core, /statsOver: prepared\.boundary \? \{ name: prepared\.boundary\.name, areaM2: prepared\.boundary\.areaM2 \} : null,/);
+  /* and the PLAN — what is planted, priced and counted — is the ward's too (ward-plan.ts;
+     behaviour in ward68-compare-plan.test.mjs) */
+  assert.match(core, /const planSpatial = wardSpatial\(spatial, loaded\.boundary, /, 'the plan is targeted over the square');
+  assert.match(core, /confineToWard\(prepared\.base,\s*applyInterventions\(prepared\.base, interventions, prepared\.planSpatial, /, 'the plan lands outside the ward');
+  assert.match(core, /capitalCost: computeCost\(interventions, prepared\.planSpatial, costs\),/, 'Compare prices the square\'s plan');
+  assert.match(core, /delivered: deliveredQuantities\(state\.coverage, prepared\.planSpatial\),/, 'Compare counts the square\'s quantities');
 });

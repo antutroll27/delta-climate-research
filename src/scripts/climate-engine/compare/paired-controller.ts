@@ -3,7 +3,7 @@ import { areaKeysInCity, isAreaKey, nextDistinctArea, type AreaKey } from '../sc
 import { resolve, requireCosts } from '../scope/resolve.ts';
 import { enablePairedMapInteraction, renderPairedMap, resetPairedMapView, thermalPatternSummary } from './paired-map-2d.ts';
 import { createPairedScenarioClient } from './paired-client.ts';
-import type { MetricValue, PairedResult, WardScenarioResult } from './paired-protocol.ts';
+import { statsOverLabel, type MetricValue, type PairedResult, type WardScenarioResult } from './paired-protocol.ts';
 import { parsePairedScenario, serializePairedScenario } from '../scenario/scenario-url.ts';
 import { coverageIsZero, normalizeCoverage, type CoverageScenario } from '../scenario/scenario-state.ts';
 import type {
@@ -236,7 +236,7 @@ export function mountPairedBench(): () => void {
   function renderCanvasField(slot: 'a' | 'b', ward: WardScenarioResult): void {
     const canvas = one<HTMLCanvasElement>(`[data-map-field="${slot}"]`);
     if (!canvas) return;
-    renderPairedMap(canvas, ward.field, ward.wardData, ward.roads);
+    renderPairedMap(canvas, ward.field, ward.wardData, ward.roads, ward.boundaryRing);
     if (!mapCleanup.has(canvas)) mapCleanup.set(canvas, enablePairedMapInteraction(canvas));
   }
 
@@ -263,9 +263,13 @@ export function mountPairedBench(): () => void {
       setText(`[data-value="${slot}-delivered"]`, formatDelivered(ward));
       setText(`[data-value="${slot}-pattern"]`, thermalPatternSummary(ward.field));
       /* The square each field is drawn over, and — for a ward with a boundary — what
-         the figures above are taken over. The two squares are no longer equal. */
+         every figure above is taken over (cost and quantities included, ward-plan.ts).
+         The two areas are no longer equal. The boundary is drawn on the map, so its
+         CC BY-SA credit rides the same caption. */
       const km = (ward.wardData.sizeM / 1000).toFixed(1);
-      setText(`[data-value="${slot}-extent"]`, `${km} km × ${km} km${ward.statsOver ? ` · figures inside ${ward.statsOver}` : ''}`);
+      setText(`[data-value="${slot}-extent"]`, ward.statsOver
+        ? `${km} km × ${km} km · figures ${statsOverLabel(ward)} · boundary © DataMeet, CC BY-SA 2.5 IN`
+        : `${km} km × ${km} km · figures over the ${statsOverLabel(ward)}`);
       const threeCanvas = one<HTMLCanvasElement>(`[data-map-three="${slot}"]`);
       threeCanvas?.setAttribute(
         'aria-label',

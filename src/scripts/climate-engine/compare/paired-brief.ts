@@ -1,7 +1,7 @@
 import { fmtMoney } from '../money.ts';
 import { resolve, requireCosts } from '../scope/resolve.ts';
 import { createPairedScenarioClient } from './paired-client.ts';
-import type { PairedResult, WardScenarioResult } from './paired-protocol.ts';
+import { statsOverLabel, type PairedResult, type WardScenarioResult } from './paired-protocol.ts';
 import { parsePairedScenario, serializePairedScenario } from '../scenario/scenario-url.ts';
 
 export function mountPairedBrief(): () => void {
@@ -28,6 +28,10 @@ export function mountPairedBrief(): () => void {
        print verbatim. Same reasoning as paired-controller.ts. */
     const scope = resolve(result.ward);
     set(`[data-value="${slot}-name"]`, scope.area.name);
+    /* WHAT THIS SIDE'S FIGURES ARE OVER. The two areas are not equal any more —
+       KMC Ward 68 is 0.93 km² inside an 1800 m square, the others are their 1.4 km
+       windows — and every row below, the cost included, is this area's. */
+    set(`[data-value="${slot}-over"]`, statsOverLabel(result));
     set(`[data-value="${slot}-baseline"]`, `${result.baselineMeanC.toFixed(1)}°C`);
     set(`[data-value="${slot}-scenario"]`, `${result.scenarioMeanC.toFixed(1)}°C`);
     set(`[data-value="${slot}-cooling"]`, `−${result.coolingC.toFixed(1)}°C`);
@@ -44,6 +48,17 @@ export function mountPairedBrief(): () => void {
     writeWard('b', result.b);
     set('[data-value="forcing"]', `${result.forcing.label}; ${result.forcing.source}`);
     set('[data-value="backend"]', result.a.evidence.backendVersion);
+    /* Each side's own admitted grid: Ballygunge's 1800 m square is 247 cells, a 1.4 km
+       window 192 — the same physical cell to 0.06 % (paired-protocol.ts). */
+    const grid = (w: WardScenarioResult) => { const n = Math.round(Math.sqrt(w.field.length)); return `${n} × ${n}, ${w.evidence.gridVersion}`; };
+    set('[data-value="grid"]', grid(result.a) === grid(result.b) ? grid(result.a) : `${grid(result.a)} / ${grid(result.b)}`);
+    /* The boundary's licence travels with the figures taken inside it (CC BY-SA 2.5 IN §4). */
+    const bounded = [result.a, result.b].filter((w) => w.statsOver);
+    const credit = root.querySelector<HTMLElement>('[data-value="boundary-credit"]');
+    if (credit) {
+      credit.hidden = bounded.length === 0;
+      credit.textContent = bounded.length === 0 ? '' : `${bounded.map((w) => w.statsOver!.name).join(' and ')}: ward boundary © DataMeet (Municipal_Spatial_Data), CC BY-SA 2.5 India, https://creativecommons.org/licenses/by-sa/2.5/in/.`;
+    }
     status('Record reproduced in the client with the pinned scenario and version contract.');
     client.dispose();
   }).catch((error: Error) => {

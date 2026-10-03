@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createPairedScenarioCache, runPairedScenarioCore } from '../../src/scripts/climate-engine/compare/paired-core.ts';
-import { assertPairedResult } from '../../src/scripts/climate-engine/compare/paired-protocol.ts';
+import { assertPairedResult, SAME_CELL_TOLERANCE, sameCell } from '../../src/scripts/climate-engine/compare/paired-protocol.ts';
 import { classifyPairedFailure } from '../../src/scripts/climate-engine/compare/paired-worker.ts';
 import { assertHeatRequest } from '../../src/scripts/climate-engine/sim-protocol.ts';
 import { gridVersion, HEAT_METRICS_VERSION, requireGrid } from '../../src/scripts/climate-engine/types.ts';
@@ -147,3 +147,17 @@ test('a Ballygunge (1800 m, 247 cells) and Baruipur (1400 m, 192) pair is accept
   assert.match(error.message, /1400 m ward's admitted grid/);
   assert.equal(classifyPairedFailure(error).code, 'invalid-request');
 });
+
+/* ── the tolerance itself (pre-ship audit 2026-10-03, mutant N6) ──
+   No two ADMITTED grids are 1 % apart today, so the pair above cannot tell a 0.1 %
+   tolerance from a 50 % one. These pairs can: Ballygunge's real 0.057 % is the same
+   cell, a 1 % pair is not, and assertPairedResult's refusal of one is the contract's. */
+test('a pair of cells 1 % apart is not the same physical cell; Ballygunge\'s 0.057 % is', () => {
+  const kolkata = 1400 / 192, ward68 = 1800 / 247;
+  assert.equal(sameCell(kolkata, ward68), true, '7.2917 vs 7.2874 m is the pair Compare runs by default');
+  assert.equal(sameCell(kolkata, kolkata * 1.01), false, 'a 1 % coarser cell passed as the same cell');
+  assert.equal(sameCell(kolkata * 1.01, kolkata), false, 'the check is not symmetric');
+  assert.equal(sameCell(kolkata, kolkata * 1.002), false, 'a 0.2 % pair passed a 0.1 % tolerance');
+  assert.equal(SAME_CELL_TOLERANCE, 0.001);
+});
+
