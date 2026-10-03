@@ -1016,8 +1016,32 @@ desaturated veil, and counted in nothing.
 - **The landing page's console screenshots** (`public/images/obos/console-*.webp`) predate Ward 68 and show the old
   box; the caption beside them now states Ward 68's figures.
 
+**Calibration re-measured for KMC Ward 68 (2026-10-03).** The ward-scale observations and accuracy figures were
+re-measured with Ballygunge's ward means taken over the polygon: 189 of 676 ECOSTRESS 70 m pixels and about 1,050
+Landsat 30 m pixels in the 1,800 m square, with surface and built fraction over the polygon's cells (FVC 0.220
+against the old box's 0.329). Methods, physics constants and the evidence window are unchanged. Barrackpore's and
+Baruipur's rows are byte-identical, and with the old ward table the pipeline reproduces every committed ECOSTRESS
+row. Ward 68 reads warmer than the old box: +0.54 K by day, +0.17 K at night, +0.82 K on Landsat; the old box had
+been mostly the greener Wards 69 and 65. Night accuracy barely moved (RMSE 2.677 → 2.662 K, leave-one-overpass-out
+2.801 → 2.777 K, bias +0.36 → +0.41 K; the band stays ±3.0 K). The daytime peak now measures RMSE 2.233 K and
+2.358 K out of sample over n = 23; the published ±4.5 K / n = 29 band is an older evidence set scored on the old
+box, is labelled so in `accuracy.ts`, and is kept (wider than measured, the safe direction) until a reviewed
+recalibration — adopting the new figures would trip two pre-registered guards. Within-ward skill fell: the shipped
+field's r 0.297 → 0.261 over 85 ward-scenes (was 87) against a vegetation null of 0.308, amplitude 1.17 → 1.11×.
+That is the ward's own ground, not the pipeline: Ward 68 is uniformly dense, and the part of it inside the old box
+already scored built-fraction r +0.05 against +0.14 for the rest of that box; misregistration and the Overture
+release were tested and ruled out. Ward 68 is too small for 470 m blocks, so the coarsest scale-sweep row holds the
+other two wards only, and the published neighbourhood gap is the ~340 m one (−0.039). **ICESat-2 heights were not
+re-measured**: the committed photon subsets end about 420 m short of Ward 68's southern edge, the check refuses to
+re-score them against the new footprints, and a fresh multi-GB ATL03 download did not fit on the machine; the
+`HEIGHTS` figures are labelled as the old 1,400 m box. Offline, 542 of Ward 68's 2,207 buildings (24.6 %) survive
+the 5 m erosion (old box: 995 of 3,527). A re-fit on the new rows would move `STORE_NIGHT` 0.1043 → 0.093 and
+`q_day` 0.419 → 0.433; neither was adopted. Still old-box records, not published as Ward 68: the SVF and shadow sign
+tests, `canopy-blend-residual`, `mask-fvc`, `term-fit`.
+
 **What would close it.** KMC's current 144-ward boundaries, published as open data; a decision on how the v3
-resilience score sizes interventions over a polygon; a fresh console capture.
+resilience score sizes interventions over a polygon; a reviewed recalibration of the daytime band; a fresh ICESat-2
+ATL03 pull over Ward 68's southern extension; a fresh console capture.
 
 ---
 
