@@ -150,6 +150,20 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
 };
 
 /**
+ * WHICH EVIDENCE SET A PUBLISHED FIGURE IS (pre-ship audit, 2026-10-03). The peak
+ * band and n above, and HEIGHTS below, were measured before Ballygunge became KMC
+ * Ward 68 and were deliberately not re-adopted; these strings say so wherever the
+ * figures travel without their notes — the ward record's `basis` fields, and the
+ * readout chip's "earlier set" (`PEAK_CHIP_BASIS`).
+ */
+export const PEAK_EVIDENCE_BASIS = 'Earlier evidence set, measured before Ballygunge became KMC Ward 68: '
+  + 'Ballygunge was then the 1.4 km box around 22.528 N, 88.366 E. Not re-adopted; the current '
+  + 'measurement over Ward 68 is in /uncertainty and model-accuracy.json strata.peak_ecostress.';
+export const PEAK_CHIP_BASIS = 'earlier set';
+export const HEIGHTS_EVIDENCE_BASIS = 'Measured on the earlier 1.4 km Ballygunge box, before Ballygunge became '
+  + 'KMC Ward 68; its ICESat-2 transects stop short of Ward 68\'s southern blocks. Not re-measured.';
+
+/**
  * Shown on the resilience score while an indicator that can move it is unmeasured.
  *
  * Written for a municipal officer, not a statistician. It names WHICH direction

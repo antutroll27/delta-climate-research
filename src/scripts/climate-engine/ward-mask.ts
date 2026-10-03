@@ -33,6 +33,8 @@ export interface WardMask {
   /** "KMC Ward 68" — the name every masked figure is printed under. */
   readonly name: string;
   readonly licence: string;
+  /** The licence's URI (CC BY-SA 2.5 §4(a): every copy carries the licence or its URI). */
+  readonly licenceUri: string;
   readonly attribution: string;
   /** Polygon area in the ward-local frame, m². */
   readonly areaM2: number;
@@ -86,6 +88,7 @@ export function asWardMask(raw: unknown, expect: { area: string; sizeM: number; 
   if (!Array.isArray(f.inWard) || f.inWard.length !== expect.buildings) return refuse(`inWard has ${Array.isArray(f.inWard) ? f.inWard.length : '?'} rows, ward has ${expect.buildings}`);
   if (!Array.isArray(f.ring) || f.ring.length < 6 || f.ring.length % 2 !== 0 || !f.ring.every(finite)) return refuse('ring is not a polygon');
   if (typeof f.name !== 'string' || typeof f.attribution !== 'string' || typeof f.licence !== 'string' || !finite(f.areaM2)) return refuse('name, licence or area missing');
+  if (typeof f.licenceUri !== 'string' || !/^https:\/\/creativecommons\.org\//.test(f.licenceUri)) return refuse('licence URI missing');
   let cells: Uint8Array;
   try { cells = decodeRle(grid.rle as number[], expect.n * expect.n); } catch (e) { return refuse((e as Error).message); }
   const inWard = Uint8Array.from(f.inWard as unknown[], (v) => (v === 1 ? 1 : 0));
@@ -94,7 +97,7 @@ export function asWardMask(raw: unknown, expect: { area: string; sizeM: number; 
   if (inWardCount !== f.inWardCount) return refuse(`${inWardCount} buildings flagged, declares ${String(f.inWardCount)}`);
   if (cellCount === 0 || inWardCount === 0) return refuse('empty');
   return {
-    name: f.name, licence: f.licence, attribution: f.attribution, areaM2: f.areaM2,
+    name: f.name, licence: f.licence, licenceUri: f.licenceUri, attribution: f.attribution, areaM2: f.areaM2,
     ring: f.ring as number[], n: expect.n, cells, cellCount, inWard, inWardCount,
   };
 }

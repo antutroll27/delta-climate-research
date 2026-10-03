@@ -56,6 +56,9 @@ LICENCE = "CC BY-SA 2.5 India"
 ATTRIBUTION = ("Ward boundary: DataMeet Municipal_Spatial_Data, Kolkata/kolkata.geojson "
                "(KMC 141-ward scheme), commit cd528915e5f69c54b6d3ca858feb5ae56e3e7b3b; "
                "CC BY-SA 2.5 India")
+#: The licence's own URI. CC BY-SA 2.5 §4(a) asks every copy to carry the licence
+#: or its URI, so the artefact and every record that republishes the polygon do.
+LICENCE_URI = "https://creativecommons.org/licenses/by-sa/2.5/in/"
 
 RowOrder = Literal["south-up", "north-up"]
 

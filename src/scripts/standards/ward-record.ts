@@ -24,7 +24,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { WARDS, wardLatLon, type Ward } from '../../data/wards.ts';
-import { ACCURACY, HEIGHTS, SPATIAL } from '../climate-engine/accuracy.ts';
+import { ACCURACY, HEIGHTS, HEIGHTS_EVIDENCE_BASIS, PEAK_EVIDENCE_BASIS, SPATIAL } from '../climate-engine/accuracy.ts';
 
 /** Mirrors scripts/_types.py:m_per_deg — spherical WGS-84, good to <0.1 % over km. */
 const M_PER_DEG_LON_EQUATOR = 111_320;
@@ -162,6 +162,7 @@ interface WardMaskFile {
   readonly name: string;
   readonly kmcWard: number;
   readonly licence: string;
+  readonly licenceUri: string;
   readonly attribution: string;
   readonly areaM2: number;
   readonly sizeM: number;
@@ -211,7 +212,16 @@ export interface WardRecord {
   readonly boundary: null | {
     readonly name: string;
     readonly source: string;
+    /** THE POLYGON'S OWN LICENCE, which is NOT the record's. Everything else here
+     *  derives from ODbL building data; `polygon` below is DataMeet's CC BY-SA 2.5
+     *  India boundary, carried with its licence, URI (CC BY-SA 2.5 §4(a)), credit
+     *  and share-alike term so that a consumer reading only this block — or the OGC
+     *  item, whose feature-level licence is ODbL — still sees it. */
     readonly licence: string;
+    readonly licenceId: 'CC-BY-SA-2.5-IN';
+    readonly licenceUri: string;
+    readonly attribution: string;
+    readonly shareAlike: string;
     readonly areaM2: number;
     readonly statistics: string;
     readonly buildingsInWard: number;
@@ -222,9 +232,11 @@ export interface WardRecord {
   };
   readonly confidence: {
     readonly night: { readonly tier: 'quantitative' | 'indicative'; readonly bandK: number; readonly n: number; readonly modelRmseK: number; readonly ceilingRmseK: number };
-    readonly peak:  { readonly tier: 'quantitative' | 'indicative'; readonly bandK: number; readonly n: number; readonly modelRmseK: number; readonly ceilingRmseK: number };
+    /** `basis` says which evidence set the peak figures are: NOT the current one. */
+    readonly peak:  { readonly tier: 'quantitative' | 'indicative'; readonly bandK: number; readonly n: number; readonly modelRmseK: number; readonly ceilingRmseK: number; readonly basis: string };
     readonly spatial: { readonly n: number; readonly rModel: number; readonly rVegOnly: number; readonly note: string };
-    readonly heights: { readonly verdict: string; readonly nBuildings: number; readonly minBuildings: number };
+    /** `basis`: where the ICESat-2 sweep was run — the earlier 1.4 km box, not Ward 68. */
+    readonly heights: { readonly verdict: string; readonly nBuildings: number; readonly minBuildings: number; readonly basis: string };
   };
   readonly provenance: {
     readonly footprints: {
@@ -277,6 +289,10 @@ export function wardRecord(w: Ward): WardRecord {
     name: mask.name,
     source: mask.attribution,
     licence: mask.licence,
+    licenceId: 'CC-BY-SA-2.5-IN' as const,
+    licenceUri: mask.licenceUri,
+    attribution: 'DataMeet (Municipal_Spatial_Data)',
+    shareAlike: 'Share-alike: this polygon, and any adaptation of it, may be redistributed only under CC BY-SA 2.5 India (or a later or compatible CC BY-SA licence), with this attribution. It is not covered by the ODbL that governs the rest of this record.',
     areaM2: mask.areaM2,
     statistics: 'Every ward statistic (mean surface temperature, area above 40 °C, the heat-stress histogram, rooftop solar totals, building counts) is taken inside this polygon: field statistics over solver cells whose centre lies inside it, per-building statistics over footprints that touch it.',
     buildingsInWard: mask.inWardCount,
@@ -308,9 +324,9 @@ export function wardRecord(w: Ward): WardRecord {
     },
     confidence: {
       night: { tier: ACCURACY.night.confidence, bandK: ACCURACY.night.bandK, n: ACCURACY.night.n, modelRmseK: ACCURACY.night.modelRmseK, ceilingRmseK: ACCURACY.night.ceilingRmseK },
-      peak:  { tier: ACCURACY.peak.confidence,  bandK: ACCURACY.peak.bandK,  n: ACCURACY.peak.n,  modelRmseK: ACCURACY.peak.modelRmseK,  ceilingRmseK: ACCURACY.peak.ceilingRmseK },
+      peak:  { tier: ACCURACY.peak.confidence,  bandK: ACCURACY.peak.bandK,  n: ACCURACY.peak.n,  modelRmseK: ACCURACY.peak.modelRmseK,  ceilingRmseK: ACCURACY.peak.ceilingRmseK, basis: PEAK_EVIDENCE_BASIS },
       spatial: { n: SPATIAL.n, rModel: SPATIAL.rModel, rVegOnly: SPATIAL.rVegOnly, note: SPATIAL.note },
-      heights: { verdict: HEIGHTS.verdict, nBuildings: HEIGHTS.nBuildings, minBuildings: HEIGHTS.minBuildings },
+      heights: { verdict: HEIGHTS.verdict, nBuildings: HEIGHTS.nBuildings, minBuildings: HEIGHTS.minBuildings, basis: HEIGHTS_EVIDENCE_BASIS },
     },
     provenance: {
       footprints: { source: prov.source, count: prov.count, byDataset },

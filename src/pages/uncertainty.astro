@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import Base from '../layouts/Base.astro';
 import StandardsPage from '../components/standards/StandardsPage.astro';
-import { ACCURACY, HEIGHTS, SPATIAL } from '../scripts/climate-engine/accuracy.ts';
+import { HEIGHTS_EVIDENCE_BASIS, ACCURACY, HEIGHTS, SPATIAL } from '../scripts/climate-engine/accuracy.ts';
 import { UNCERTAINTY_STATEMENT } from '../scripts/standards/matrix.ts';
 
 interface SignTest { summary: Record<string, { scenes: number; mean_r: number; pct_positive: number; sign_test_p: number; verdict: string }> }
@@ -101,6 +101,7 @@ const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Un
 
     <h2>Building heights</h2>
     <p>Heights ship from a zonal statistic over each footprint. Independent validation against ICESat-2 returned the pre-registered verdict <span class="verdict">{HEIGHTS.verdict}</span>: <span class="n">{HEIGHTS.nBuildings}</span> distinct buildings measured against a pre-registered minimum of <span class="n">{HEIGHTS.minBuildings}</span>, over <span class="n">{HEIGHTS.nPasses}</span> passes on <span class="n">{HEIGHTS.nRgts}</span> ground tracks. Below the bar, so nothing depending on validated heights ships as validated. Heights are not in the thermal physics today; they matter for the render and for the shadow work above.</p>
+    <p class="basis"><strong>Where this was measured.</strong> {HEIGHTS_EVIDENCE_BASIS}</p>
 
     <p class="muted">Sources: <code>src/scripts/climate-engine/accuracy.ts</code>, <code>data/calibration/svf-signtest.json</code>, <code>data/calibration/shadow-signtest.json</code>. Machine-readable per ward at <code>/api/wards/&#123;id&#125;/metadata.json</code>.</p>
   </StandardsPage>

@@ -47,6 +47,10 @@ export const CONTEXT_DOCUMENT = {
       dataStatus: `${VOCAB}dataStatus`,
       withinAreaOfInterest: `${VOCAB}withinAreaOfInterest`,
       dataLicence: `${VOCAB}dataLicence`,
+      buildingsDrawn: `${VOCAB}buildingsDrawn`,
+      statisticsArea: `${VOCAB}statisticsArea`,
+      computeDomain: `${VOCAB}computeDomain`,
+      boundaryLicence: `${VOCAB}boundaryLicence`,
     },
     CORE_CONTEXT,
   ],
@@ -62,22 +66,39 @@ const prop = (value: unknown, unitCode?: string, observedAt?: string) => ({
 export function wardEntity(w: Ward, opts: { readonly inline?: boolean } = {}) {
   const r = wardRecord(w);
   const f = wardFeature(w);
+  const b = r.boundary;
   return {
     // Req: `id` is a URI. The URN form is the NGSI-LD convention.
     id: `urn:ngsi-ld:UrbanClimateWard:${w.id}`,
     type: 'UrbanClimateWard',
     name: prop(r.name),
     dataStatus: prop(r.status),
-    // GeoProperty is how NGSI-LD carries geometry — GeoJSON as the value.
-    location: { type: 'GeoProperty' as const, value: f.geometry },
+    /* GeoProperty is how NGSI-LD carries geometry — GeoJSON as the value.
+       THE WARD, NOT THE SQUARE (pre-ship audit 2026-10-03). For an area with an
+       administrative boundary (Ballygunge = KMC Ward 68) `location` is that polygon,
+       because it is what every figure on this entity describes; the 1800 m square the
+       model is solved over moves to `computeDomain`. Without one, the square IS the
+       study area and `location` stays the square, byte for byte. */
+    location: { type: 'GeoProperty' as const, value: b ? { type: 'Polygon' as const, coordinates: [b.polygon] } : f.geometry },
+    ...(b ? {
+      computeDomain: { type: 'GeoProperty' as const, value: f.geometry },
+      statisticsArea: prop(`This ward is ${b.name} (${(b.areaM2 / 1e6).toFixed(2)} km², the polygon in \`location\`). \`buildingCount\` counts the footprints that touch it; every ward statistic the instrument and /api/wards/${w.id}/metadata.json publish is taken inside it (field statistics over solver cells whose centre lies inside). \`computeDomain\` is the ${w.footprintM} m square the model is solved over; \`buildingsDrawn\` counts every footprint in it, the ones outside the ward drawn as context only. The surface-temperature band is the model's measured error, not a ward statistic.`),
+      /* The polygon in `location` is DataMeet's, not ODbL: its own licence travels with
+         it. ONE STRING, not an object: the keys of an object value are terms too, and a
+         term the @context does not define is dropped during expansion without a word. */
+      boundaryLicence: prop(`${b.licence} (${b.licenceId}, ${b.licenceUri}) — © ${b.attribution}. ${b.shareAlike}`),
+    } : {}),
     analysisCrs: prop(r.analysisCrs),
-    buildingCount: prop(r.provenance.footprints.count),
+    // the WARD's buildings where there is a boundary (2,207 in KMC Ward 68), not the square's
+    buildingCount: prop(b ? b.buildingsInWard : r.provenance.footprints.count),
+    ...(b ? { buildingsDrawn: prop(b.buildingsInDomain) } : {}),
     // What is measured, and what it is NOT — the same separation the REST
     // payloads carry, because a broker consumer is even more likely to read a
     // bare temperature as air temperature.
     measuredQuantity: prop(r.quantity.measured),
     notMeasured: prop(r.quantity.isNot),
-    // the geometry in `location` is ODbL-derived, so the licence travels with it
+    // the building-derived data is ODbL, so the licence travels with it (for a ward with
+    // a boundary, the polygon in `location` is the exception — see `boundaryLicence`)
     dataLicence: prop(LICENCE_BLOCK.notice),
     surfaceTemperatureBand: prop(r.confidence.night.bandK, 'KEL'),
     surfaceTemperatureTier: prop(r.confidence.night.tier),

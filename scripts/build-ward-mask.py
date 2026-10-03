@@ -92,6 +92,7 @@ def build(ward: _types.Ward) -> dict[str, Any]:
         "kmcWard": kmc,
         "name": f"KMC Ward {kmc}",
         "licence": _wardmask.LICENCE,
+        "licenceUri": _wardmask.LICENCE_URI,
         "attribution": _wardmask.ATTRIBUTION,
         "center": [ward.centre.lat, ward.centre.lon],
         "sizeM": ward.footprint_m,
@@ -131,7 +132,7 @@ def check() -> int:
         with open(path, encoding="utf-8") as fh:
             doc = json.load(fh)
         want = build(ward)
-        for key in ("center", "sizeM", "ring", "grid", "surface", "inWard"):
+        for key in ("licence", "licenceUri", "attribution", "center", "sizeM", "ring", "grid", "surface", "inWard"):
             if doc.get(key) != want[key]:
                 print(f"  {ward.id}: `{key}` is stale against the polygon, the ward table "
                       f"or the footprints -- regenerate"); bad += 1
