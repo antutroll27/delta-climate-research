@@ -90,7 +90,11 @@ test('feedSource: only exactly "relay" selects the relay', () => {
   assert.equal(feedSource({ AIR_CPCB_SOURCE: 'relay' }), 'relay');
 });
 
-test('the deployed handler reads AIR_CPCB_SOURCE: "relay" never asks CPCB directly', async () => {
+test('the deployed handler reads AIR_CPCB_SOURCE: "relay" never asks CPCB directly', async (t) => {
+  /* The deployed handler reads the real clock, and the stubbed OpenAQ rows end at
+     2026-09-24T13:00Z. Unpinned, the test passed only until those rows went stale
+     (live reading → "feed_quiet", no result) — the same time bomb as PR #35. */
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-09-24T14:00:00Z') });
   const keys = ['OPENAQ_API_KEY', 'AIR_CPCB_FEED', 'AIR_CPCB_SOURCE', 'BLOB_READ_WRITE_TOKEN', 'VERCEL_OIDC_TOKEN', 'BLOB_STORE_ID'];
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   const savedFetch = globalThis.fetch, c = counting();
