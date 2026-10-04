@@ -150,7 +150,8 @@ const timed = (xml) => {
 
 test('the real capture parses exactly as it did before the linear rewrite (481 stations, deep-equal)', () => {
   const golden = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/aqi/cpcb-feed-2026-09-27T0500IST.parsed.json.gz', import.meta.url))).toString('utf8'));
-  assert.deepEqual(parseFeed(FEED_XML), golden);
+  /* The golden predates the State/City grouping (tests/unit/aqi-city.test.mjs pins those): compared without them. */
+  assert.deepEqual(parseFeed(FEED_XML).map(({ state, city, ...rest }) => rest), golden);
 });
 
 test('I2: a 2 MB opening tag with no "=" in it parses or throws in under 200 ms', () => {

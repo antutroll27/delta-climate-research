@@ -278,7 +278,7 @@ test.describe('console legibility', () => {
     expect(findings, report('Clay studio', findings)).toEqual([]);
   });
 
-  test('the Air card and pane with the US-EPA line, Slate and Clay', async ({ page }, testInfo) => {
+  test('the Air card and pane with the US-EPA and city-wide lines, Slate and Clay', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-tier0',
       'one tier is enough: this measures ink against panel grounds, not the renderer');
     /* Off-pane the Air card sits below the right panel's fold (measured at 1280x720:
@@ -292,6 +292,10 @@ test.describe('console legibility', () => {
     await page.waitForTimeout(1_500);
     await expect(page.locator('#aqiBlock .aq-us summary')).toBeInViewport();
     await expect(page.locator('#airPane .aq-us summary')).toBeInViewport();
+    /* The city-wide line, its note open so the station list is swept too. */
+    await expect(page.locator('#aqiBlock .aq-city summary')).toBeInViewport();
+    await page.locator('#airPane .aq-city summary').click();
+    await expect(page.locator('#airPane .aq-city li').first()).toBeInViewport();
     /* THE AIR TEXT ONLY: at 1440x900 the map's big place name crosses the heat field,
        which the default-viewport sweeps above judge; this one judges the air ink. */
     const slate = (await contrastFailures(page)).filter((f) => f.air);

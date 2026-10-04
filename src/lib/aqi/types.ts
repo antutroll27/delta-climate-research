@@ -139,9 +139,31 @@ export interface HistoryResponse {
   pm25_24h: { hour_ist: string; value: number | null }[];
 }
 
+/**
+ * The city-wide AQI by CPCB's city method (lib/aqi/city.ts): the mean of every valid
+ * station CPCB groups under the city, in the same feed snapshot as the ward's figure.
+ */
+export interface CityAqi {
+  /** The OBOS city, e.g. "Kolkata". */
+  name: string;
+  aqi: number;
+  category: CpcbCategory;
+  /** How many stations the mean is over (at least 2); equals `members.length`. */
+  stations: number;
+  /** Each station averaged, with CPCB's exact name and its published AQI. */
+  members: { name: string; aqi: number }[];
+  /** The snapshot's `lastupdate`, ISO UTC. */
+  observed_at: string;
+}
+
 /** What `GET /api/air-quality?area=in/kolkata/ballygunge` returns. */
 export interface AirQualityPayload {
   current: AirQualityResponse;
   /** null when the area has no station or no usable readings at all. */
   history: HistoryResponse | null;
+  /**
+   * Present only when `current` is a live CPCB figure from the feed and the city has
+   * at least 2 valid stations. Absent on the OpenAQ fallback: sources are never mixed.
+   */
+  city?: CityAqi;
 }

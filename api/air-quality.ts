@@ -26,6 +26,7 @@
  */
 import { waitUntil } from '@vercel/functions';
 import { buildPayload } from '../src/lib/aqi/build.ts';
+import { cityAqi, cityFor } from '../src/lib/aqi/city.ts';
 import { currentFromFeed, fetchFeed, FeedError, pick, readRelayFeed, requireLive, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import type { Raw } from '../src/lib/aqi/hours.ts';
 import { fetchSensorWindow, OpenAqError } from '../src/lib/aqi/openaq.ts';
@@ -215,8 +216,12 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
         logUpstream(area, r.e); // `in` narrows under Vercel's non-strict compile too (re-audit M-3)
       }
     }
+    /* The city-wide mean rides only with a live CPCB figure, from the same snapshot; the OpenAQ
+       fallback below never carries one, so no card mixes sources. */
+    const ref = cityFor(area);
+    const city = feed && ref && current.state === 'live' ? cityAqi(feed, ref) : null;
     res.setHeader('Cache-Control', history ? OK_CACHE : PARTIAL_CACHE);
-    res.status(200).json({ current, history } satisfies AirQualityPayload);
+    res.status(200).json({ current, history, ...(city ? { city } : {}) } satisfies AirQualityPayload);
     return;
   }
 

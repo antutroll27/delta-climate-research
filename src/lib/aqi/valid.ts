@@ -8,7 +8,7 @@
  * and the UI shows its failure view (air-panel.ts `loadAir`). Pure; no I/O.
  */
 import { SCHEMA } from './types.ts';
-import type { AirQualityPayload } from './types.ts';
+import type { AirQualityPayload, CityAqi } from './types.ts';
 
 type Obj = Record<string, unknown>;
 
@@ -81,7 +81,21 @@ function isHistory(h: unknown): boolean {
     arrOf(h['days'], isDay) && arrOf(h['pm25_24h'], isHour);
 }
 
-/** True only for a body the painters can render without trusting a single field. */
+const aqiVal = (x: unknown): boolean => fin(x) && Number.isInteger(x) && x >= 0 && x <= 500;
+const isMember = (m: unknown): boolean => obj(m) && str(m['name']) && aqiVal(m['aqi']);
+
+/**
+ * A whole city figure of at least two stations. NOT part of `isAirPayload`: `city` is an
+ * optional extra, so a missing or malformed one never takes the ward's reading down with
+ * it; the painters check it on its own and simply omit the city line (air-panel.ts).
+ */
+export function isCity(c: unknown): c is CityAqi {
+  return obj(c) && str(c['name']) && aqiVal(c['aqi']) && oneOf(CATEGORIES, c['category']) &&
+    fin(c['stations']) && c['stations'] >= 2 && Array.isArray(c['members']) && c['members'].length === c['stations'] &&
+    arrOf(c['members'], isMember) && date(c['observed_at']);
+}
+
+/** True only for a body the painters can render without trusting a single field. `city` is judged apart (`isCity`). */
 export function isAirPayload(x: unknown): x is AirQualityPayload {
   return obj(x) && isCurrent(x['current']) && isHistory(x['history']);
 }

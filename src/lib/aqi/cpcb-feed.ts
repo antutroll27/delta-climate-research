@@ -45,6 +45,9 @@ export interface FeedStation {
   aqi: number | null;
   dominant: Pollutant | null;
   subindices: CpcbSubIndex[];
+  /** The `<State id>` and `<City id>` the station sits in (CPCB's own grouping); null when it sits in none. */
+  state: string | null;
+  city: string | null;
 }
 
 const PARAM: Readonly<Record<string, Pollutant>> = { 'PM2.5': 'pm25', PM10: 'pm10', NO2: 'no2', SO2: 'so2', CO: 'co', OZONE: 'o3', NH3: 'nh3' };
@@ -69,7 +72,7 @@ const ends = (s: string, i: number): boolean => i >= s.length || /[\s>/]/.test(s
  * forward pass: each scan starts where the last one stopped, so no byte is read
  * twice. An element with no closing tag ends the pass, because no later one can close.
  */
-function* elements(s: string, name: string): Generator<{ tag: string; body: string }> {
+function* elements(s: string, name: string): Generator<{ tag: string; body: string; at: number }> {
   const open = `<${name}`, close = `</${name}>`;
   let i = s.indexOf(open);
   while (i >= 0) {
@@ -79,7 +82,7 @@ function* elements(s: string, name: string): Generator<{ tag: string; body: stri
     if (gt - i > MAX_TAG) { i = s.indexOf(open, gt + 1); continue; }
     const end = s.indexOf(close, gt + 1);
     if (end < 0) return;
-    yield { tag: s.slice(i + open.length, gt), body: s.slice(gt + 1, end) };
+    yield { tag: s.slice(i + open.length, gt), body: s.slice(gt + 1, end), at: i };
     i = s.indexOf(open, end + close.length);
   }
 }
@@ -95,6 +98,34 @@ function* selfClosing(s: string, name: string): Generator<string> {
     if (gt - i <= MAX_TAG && s[gt - 1] === '/') yield s.slice(i + open.length, gt - 1);
     i = s.indexOf(open, gt + 1);
   }
+}
+
+/**
+ * Every non-self-closing `<name id="…">` with the span up to its `</name>`, in one forward
+ * pass. A self-closing `<State id="…"/>` (an empty state) opens nothing; an opening tag with
+ * no close ends the pass. The CPCB grouping is flat (State > City > Station), never nested in itself.
+ */
+function spans(s: string, name: string): { start: number; end: number; id: string }[] {
+  const open = `<${name}`, close = `</${name}>`, out: { start: number; end: number; id: string }[] = [];
+  let i = s.indexOf(open);
+  while (i >= 0) {
+    if (!ends(s, i + open.length)) { i = s.indexOf(open, i + open.length); continue; }
+    const gt = s.indexOf('>', i);
+    if (gt < 0) break;
+    if (gt - i > MAX_TAG || s[gt - 1] === '/') { i = s.indexOf(open, gt + 1); continue; }
+    const end = s.indexOf(close, gt + 1);
+    if (end < 0) break;
+    out.push({ start: i, end, id: attrs(s.slice(i + open.length, gt))['id'] ?? '' });
+    i = s.indexOf(open, end + close.length);
+  }
+  return out;
+}
+
+/** The id of the span holding position `at`. Stations arrive in document order, so `k` only moves forward. */
+function holder(xs: readonly { start: number; end: number; id: string }[], k: { i: number }, at: number): string | null {
+  while (k.i < xs.length && xs[k.i]!.end < at) k.i++;
+  const x = xs[k.i];
+  return x && x.start < at && at < x.end && x.id ? x.id : null;
 }
 
 /** "NA" and "" are missing; anything else must be a whole number. */
@@ -143,7 +174,9 @@ function stripHidden(xml: string): string {
 export function parseFeed(xml: string): FeedStation[] {
   if (!xml.includes('<AqIndex')) throw new FeedError('not a CPCB AQI feed');
   const out: FeedStation[] = [];
-  for (const el of elements(stripHidden(xml), 'Station')) {
+  const doc = stripHidden(xml);
+  const states = spans(doc, 'State'), cities = spans(doc, 'City'), ks = { i: 0 }, kc = { i: 0 };
+  for (const el of elements(doc, 'Station')) {
     try {
       const a = attrs(el.tag), body = el.body;
       /* Number('') and Number(' ') are 0, a real place: a blank coordinate is missing, not zero. */
@@ -160,7 +193,8 @@ export function parseFeed(xml: string): FeedStation[] {
       /* A published AQI led by a pollutant we cannot name is not "no AQI": drop the station, so ours falls back (re-audit M-1). */
       if (aqi !== null && !dominant) continue;
       out.push({ name: a['id'], published_at: istStamp(a['lastupdate'] ?? ''), lat, lon,
-        aqi: aqi !== null && dominant ? aqi : null, dominant: aqi !== null ? dominant : null, subindices });
+        aqi: aqi !== null && dominant ? aqi : null, dominant: aqi !== null ? dominant : null, subindices,
+        state: holder(states, ks, el.at), city: holder(cities, kc, el.at) });
     } catch {
       continue; // ponytail: one malformed station never poisons the rest; ours then falls back to OBOS's calculation
     }
