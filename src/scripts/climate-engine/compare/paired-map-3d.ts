@@ -67,6 +67,15 @@ interface PreparedWard {
   outlineGeometry: THREE.BufferGeometry;
 }
 
+/** The thermal surface: exactly the ward's footprint. */
+function surfaceGeometry(sizeM: number, segments: number): THREE.PlaneGeometry {
+  return new THREE.PlaneGeometry(sizeM, sizeM, segments, segments);
+}
+/** The dark ground slab under it, a margin wider. */
+function groundGeometry(sizeM: number): THREE.PlaneGeometry {
+  return new THREE.PlaneGeometry(sizeM * 1.08, sizeM * 1.08);
+}
+
 const DEFAULT_VIEW: SharedView = { yaw: -0.3, pitch: 0.92, zoom: 1 };
 const TOP_VIEW: SharedView = { yaw: 0, pitch: 0.035, zoom: 1 };
 const TRANSITION_MS = 720;
@@ -402,6 +411,8 @@ class WardScene {
   private roads: THREE.LineSegments;
   private outline: THREE.LineLoop;
   private surface: THREE.Mesh;
+  private ground: THREE.Mesh;
+  private readonly visualSegments: number;
   private particles: THREE.Points;
   private particleMat: THREE.ShaderMaterial;
   private field: Float32Array;
@@ -438,13 +449,13 @@ class WardScene {
       uHeatMax: { value: RAMP_MAX },
     };
 
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(prepared.result.wardData.sizeM * 1.08, prepared.result.wardData.sizeM * 1.08),
+    this.ground = new THREE.Mesh(
+      groundGeometry(prepared.result.wardData.sizeM),
       new THREE.MeshBasicMaterial({ color: 0x0a2022 }),
     );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -1.2;
-    this.scene.add(ground);
+    this.ground.rotation.x = -Math.PI / 2;
+    this.ground.position.y = -1.2;
+    this.scene.add(this.ground);
 
     this.buildings = new THREE.Mesh(prepared.buildingGeometry, buildingMaterial(this.uniforms));
     this.buildings.renderOrder = 1;
@@ -464,9 +475,9 @@ class WardScene {
     this.outline.renderOrder = 4;
     this.scene.add(this.outline);
 
-    const visualSegments = caps.tier === 2 ? 191 : 95;
+    this.visualSegments = caps.tier === 2 ? 191 : 95;
     this.surface = new THREE.Mesh(
-      new THREE.PlaneGeometry(prepared.result.wardData.sizeM, prepared.result.wardData.sizeM, visualSegments, visualSegments),
+      surfaceGeometry(prepared.result.wardData.sizeM, this.visualSegments),
       thermalMaterial(this.uniforms),
     );
     this.surface.rotation.x = -Math.PI / 2;
@@ -488,9 +499,20 @@ class WardScene {
   }
 
   replacePrepared(prepared: PreparedWard): void {
+    /* THE SLABS FOLLOW THE WARD. Both planes are sized to the ward at construction,
+       so swapping a 1.4 km ward onto a side that held a 1.8 km one drew it on the
+       1.8 km slab, its field stretched to fit (audit I2). Rebuilt only when the
+       size actually changes. */
+    const sizeM = prepared.result.wardData.sizeM;
+    if (sizeM !== this.result.wardData.sizeM) {
+      this.surface.geometry.dispose();
+      this.surface.geometry = surfaceGeometry(sizeM, this.visualSegments);
+      this.ground.geometry.dispose();
+      this.ground.geometry = groundGeometry(sizeM);
+    }
     this.result = prepared.result;
     this.field = prepared.result.field;
-    this.uniforms.uSize.value = prepared.result.wardData.sizeM;
+    this.uniforms.uSize.value = sizeM;
     this.buildings.geometry.dispose();
     this.buildings.geometry = prepared.buildingGeometry;
     this.roads.geometry.dispose();

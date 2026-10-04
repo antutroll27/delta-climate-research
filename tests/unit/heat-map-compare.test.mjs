@@ -352,3 +352,14 @@ test('TypeScript HeatSim produces stable finite statistics on the canonical grid
   assert.ok(stats.meanC > 20 && stats.meanC < 60);
   sim.dispose();
 });
+
+test('a Compare link states no solver grid it cannot know (audit M2)', () => {
+  // The link used to carry `grid=hm-grid-192-v1` for every pair, including Ward 68
+  // (247 cells over 1800 m) and every Bengaluru ward (384 over 2800 m). Nothing
+  // reads the parameter back, and the serializer has no ward sizes to state the
+  // real ones from, so the stamp is dropped rather than left wrong.
+  for (const search of ['?a=ballygunge&b=barrackpore', '?a=baruipur&b=barrackpore', '?a=in/bengaluru/whitefield&b=in/bengaluru/indiranagar']) {
+    const query = new URLSearchParams(serializePairedScenario(parsePairedScenario(search)));
+    assert.equal(query.has('grid'), false, `${search} -> ${query}`);
+  }
+});

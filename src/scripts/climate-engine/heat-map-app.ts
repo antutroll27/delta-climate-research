@@ -14,7 +14,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { greenReferenceContrastC, requireGrid, type ClimateConstants, type PvFile, type SimLayers, type SimParams } from './types';
 import { detectHeatCaps } from './caps';
 import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
-import type { HeatSimHost, HeatSimRequest, HeatSimSnapshot } from './sim-protocol';
+import { isCurrentSnapshot, type HeatSimHost, type HeatSimRequest, type HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
 import { ACCURACY, SPATIAL, HEIGHTS, PEAK_CHIP_BASIS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
 import { solarElevationFactor, solarDayHours } from './sky';
@@ -38,7 +38,7 @@ import {
   labelLayerSpec, EMPTY_LABELS, ensureLabelsOnTop,
 } from './road-labels';
 import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
-import { createWardSession } from './ward-session';
+import { createWardSession, type WardRequestToken } from './ward-session';
 import { createLoadChip } from './load-chip';
 import { createExploreFrameScheduler } from './explore/frame-scheduler';
 import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
@@ -401,13 +401,21 @@ export function mountHeatMap(): () => void {
   let relief: ReliefRenderer | null = null;
   let reliefReady: Promise<void> | null = null;
   let reliefWard: ReliefWardBundle | null = null;
-  let currentField: Float32Array | null = null;
-  /* The last field ONLY if it is on the current ward's grid. Kolkata mixes grids
-     since Ward 68 (247² beside 192²), so a switch used to hand the previous ward's
-     field to buffers already resized for the next one and abort the load (live,
-     2026-10-04). A field from another grid is not a placeholder; it is wrong data. */
+  /* THE LAST FIELD, TAGGED WITH THE WARD AND THE COMMIT IT WAS SOLVED UNDER.
+     `wardEpoch` moves at every commit (`commitWard`), including a rollback to the
+     same ward, so a field from before a switch can never be read after it. */
+  let wardEpoch = 0;
+  let currentField: { field: Float32Array; ward: AreaKey; epoch: number } | null = null;
+  /* The last field ONLY if it is this ward's, from this commit, on this ward's grid.
+     Kolkata mixes grids since Ward 68 (247² beside 192²), so a switch used to hand
+     the previous ward's field to buffers already resized for the next one and abort
+     the load (live, 2026-10-04). And a SAME-grid switch handed it over cleanly,
+     which was worse: Indiranagar's field drawn, and quoted on the card, under
+     Whitefield's name until the first solve (audit I1). A field from another ward
+     is not a placeholder; it is wrong data. */
   const fieldOnGrid = (): Float32Array | null =>
-    currentField && currentField.length === simN() * simN() ? currentField : null;
+    currentField && currentField.ward === state.ward && currentField.epoch === wardEpoch
+      && currentField.field.length === simN() * simN() ? currentField.field : null;
   let tintMode = 1;
   let growProgress = 1;
   let registry: BuildingMeta[] = [];
@@ -1891,8 +1899,14 @@ export function mountHeatMap(): () => void {
   let simReady: Promise<void> | null = null;
   let simGeneration = 0;
   let simAnimate = !reduceMotion;
-  let latestSimRequest: HeatSimRequest | null = null;
+  /* THE REQUEST NAMES ITS WARD. A snapshot is drawn only for the ward it was
+     solved for, on that ward's grid (`presentSnapshot`). */
+  type WardSimRequest = HeatSimRequest & { ward: AreaKey };
+  let latestSimRequest: WardSimRequest | null = null;
   let latestSnapshot: HeatSimSnapshot | null = null;
+  /* Settles when the committed ward's first field is drawn; the load chip waits on it. */
+  let fieldArrived: () => void = () => {};
+  let fieldArrival: Promise<void> = Promise.resolve();
   const setSimBackend = (label: string) => setText('simBackend', label);
   const makeCpuHost = (): HeatSimHost => {
     try { return createWorkerHost(); }
@@ -1950,10 +1964,11 @@ export function mountHeatMap(): () => void {
      Ward-independent by construction — see rampBounds() in heat-map-model. */
   let ramp: [number, number] = [M.RAMP_MIN, M.RAMP_MAX];
   function bridgeField(t: Float32Array) {
-    currentField = t;
+    currentField = { field: t, ward: state.ward, epoch: wardEpoch };
     coreField.update(t, ramp[0], ramp[1]);
     relief?.updateField({ field: t, coolingMask: cooling?.mask ?? null, ramp });
     syncReliefVisual();
+    fieldArrived();
   }
 
   /* ── walk-time rings + cooling surfaces ──
@@ -2087,7 +2102,10 @@ export function mountHeatMap(): () => void {
          grow animation keeps running underneath, so ticking the box back on
          restores the field at whatever opacity it should be at rather than
          replaying the entrance. */
-      overlayOpacity: surfaceOn ? opBase * Math.min(1, growProgress * 1.6) : 0,
+      /* …and zero until THIS ward's first snapshot: between a commit and its first
+         solve the renderer holds no field for the ward on screen (`setWard` clears
+         it), and an overlay over an empty field would draw the cold end of the ramp. */
+      overlayOpacity: surfaceOn && fieldOnGrid() ? opBase * Math.min(1, growProgress * 1.6) : 0,
       live: state.live, phase: state.phase,
       /* The same computation the compass dial reads, handed to the renderer rather
          than recomputed there — see currentSun. It aims the key light and nothing
@@ -2262,6 +2280,21 @@ export function mountHeatMap(): () => void {
     }
   }
 
+  /**
+   * EVERYTHING A WARD NEEDS TO BE THE OPEN WARD, computed before any of it is shown.
+   * `loadWard` builds one (the stage); `commitWard` shows one (the commit). The
+   * last one committed is kept, so a commit that throws part way can put the
+   * previous ward back exactly as it was.
+   */
+  interface StagedWard {
+    name: AreaKey; w: ReturnType<typeof wardOf>; d: M.WardData;
+    terrain: ReliefWardBundle['terrain']; water: M.WaterData; roads: M.RoadsData; labels: unknown;
+    trees: ReliefWardBundle['veg']; mask: WardMask | null;
+    base: SimLayers; spatial: M.Spatial;
+    cooling: CoolingSurfaces; coolingLo: CoolingSurfaces; coolingHi: CoolingSurfaces;
+  }
+  let committedBundle: StagedWard | null = null;
+
   async function loadWard(name: AreaKey) {
     /* The refusal comes BEFORE the session is opened and before the chip says
        "Loading …", so an unreachable area cannot leave a spinner running for a
@@ -2286,7 +2319,6 @@ export function mountHeatMap(): () => void {
        below without a `!`, which would be a promise to the compiler with nothing
        keeping it. */
     if (P === null) return;
-    const w = wardOf(name);
     const token = wardSession.begin(name);
     if (!token) {
       /* Refused because this ward is already on screen. After a failed switch that is
@@ -2308,6 +2340,10 @@ export function mountHeatMap(): () => void {
         return fallback;
       }
     };
+        /* ── STAGE ── everything that can throw, into a local bundle. No shared state,
+       no DOM, no renderer is touched here; the per-ward caches are immutable
+       artefacts keyed by ward and are the one exception. */
+    let staged: StagedWard;
     try {
       /* Fetch the complete immutable ward bundle before changing shared state. A
          superseded request therefore cannot replace geometry, labels, or metrics
@@ -2373,14 +2409,115 @@ export function mountHeatMap(): () => void {
         maskCache[name] = mask;
       }
       if (pvCache[name] === undefined) pvCache[name] = asPvFile(pvRaw, d.b.length, areaOf(name), maskCache[name] ?? null);
-      void loadDcUrs(name); void loadHeatwave(name);
-      /* The scope moves WITH the area. `state.climate` is what `currentParams`
-         and `applyInterventions` read, so leaving it behind would run the new
-         city's geometry through the old city's fallback temperature and
-         park-cooling radius — cleanly, and with a plausible number out. */
-      state.ward = name; state.climate = resolve(name).climate;
-      wardMask = maskCache[name] ?? null;
-      projectWard();
+      const { means, surface } = wardSurface;
+      /* THE NEW WARD'S GRID, never `simN()`: that still names the ward on screen. */
+      const n = requireGrid(d.sizeM).n;
+      const base = rasterWardBase(d, means, surface, canopy, water);
+      /* Cooling surfaces are a property of the MEASURED vegetation, so they are
+         computed from the ward's base layers and never move when a scenario does —
+         planting trees in the model must not invent a park that is not there.
+         Two more passes at the bracketing thresholds: three flood fills over 37k
+         cells is a few milliseconds once per ward, and it buys the only honest way
+         to show a figure this parameter-sensitive: as a range. */
+      const cellM2 = (d.sizeM / n) * (d.sizeM / n);
+      staged = {
+        name, w: wardOf(name), d, terrain, water, roads, labels, trees,
+        mask: maskCache[name] ?? null,
+        base, spatial: M.buildSpatial(d, base, roads),
+        cooling: findCoolingSurfaces(base.veg, n, cellM2),
+        coolingLo: findCoolingSurfaces(base.veg, n, cellM2, VEG_BRACKET[0]),
+        coolingHi: findCoolingSurfaces(base.veg, n, cellM2, VEG_BRACKET[1]),
+      };
+    } catch (error) {
+      if (!wardSession.isCurrent(token)) return;
+      failSwitch(token, name, error);
+      return;
+    }
+    if (!wardSession.isCurrent(token)) return;
+
+    /* ── COMMIT ── one synchronous block. If any of it throws (a renderer call,
+       a projection), the previous ward's bundle is committed again, so the page
+       is either wholly on the new ward or wholly on the old one. */
+    try {
+      commitWard(staged, false);
+    } catch (error) {
+      const previous = committedBundle;
+      if (previous && previous !== staged) {
+        try { commitWard(previous, true); }
+        catch (rollbackError) { console.warn(`Ward ${areaOf(previous.name)} could not be restored:`, rollbackError); }
+        console.warn(`Ward switch to ${name} rolled back to ${previous.name}.`);
+        void resetSim();
+      }
+      failSwitch(token, name, error);
+      return;
+    }
+    /* A superseded load cannot reach here: nothing above awaited since the check. */
+    wardSession.commit(token);
+    void loadDcUrs(name); void loadHeatwave(name);
+    void resetSim();
+    fetchLive(name);
+    schedulePrefetch(name);
+    /* THE LOADER HOLDS UNTIL THE BUILDINGS ARE ON SCREEN AND THE WARD HAS ITS OWN
+       FIGURES, not until the data lands. Between the commit and the first solve the
+       readouts are blank (see `blankReadouts`), and the chip is what says why. A
+       Bengaluru GLB installs after this point, and the chip used to vanish while
+       the map still showed bare ground (audit, 2026-09-13). Capped at 8 s so a model
+       or a solve that never arrives cannot pin it up; skipped if another load has
+       since begun. */
+    const buildingsShown = relief ? relief.buildingsReady() : Promise.resolve();
+    void Promise.race([
+      Promise.all([buildingsShown, fieldArrival]),
+      new Promise<void>((settle) => window.setTimeout(settle, 8000)),
+    ]).then(() => {
+      if (wardSession.pendingWard === null && wardSession.committedWard === name) loadChip.done();
+    });
+  }
+
+  /**
+   * A SWITCH THAT DID NOT HAPPEN, SAID ONCE.
+   *
+   * The committed ward is re-projected whatever failed: a load refused before the
+   * commit leaves the URL, crumb and Area select on the ward still on screen, and
+   * one that rolled back has already re-projected it — this is idempotent. Without
+   * it a 500 picked from the Area select left the select naming a ward that never
+   * opened (audit M1).
+   */
+  function failSwitch(token: WardRequestToken, name: AreaKey, error: unknown): void {
+    wardSession.fail(token);
+    console.warn(`Ward ${name} could not load:`, error);
+    loadChip.fail(`${resolve(name).area.name} could not load.`);
+    try { projectWard(); } catch (projectError) { console.warn('Ward projection failed:', projectError); }
+  }
+
+  /**
+   * THE ONE PLACE A WARD BECOMES THE OPEN WARD. Synchronous, so nothing can paint
+   * between its first write and its last.
+   *
+   * IT INVALIDATES BEFORE IT ASSIGNS. The running solve, its snapshot and the field
+   * it drew all belong to the ward being left, so the generation moves first and
+   * the figures are blanked; only then does `state.ward` change. Nothing can then
+   * print one ward's mean under the other's name — on a same-grid pair (Baruipur ↔
+   * Barrackpore, every Bengaluru pair) that used to last until the first solve:
+   * 0.2–0.5 s, ~3 s on a slow CPU (audit I1).
+   *
+   * `restore` is the rollback: the ward being returned to was already framed, so
+   * the camera is left alone and nothing grows in again.
+   */
+  function commitWard(b: StagedWard, restore: boolean): void {
+    const { name, w, d } = b;
+    /* 1 · invalidate */
+    simGeneration++; latestSimRequest = null; latestSnapshot = null;
+    wardEpoch++;
+    fieldArrival = new Promise<void>((settle) => { fieldArrived = settle; });
+    blankReadouts(areaOf(name));
+    /* 2 · assign. The scope moves WITH the area. `state.climate` is what
+       `currentParams` and `applyInterventions` read, so leaving it behind would run
+       the new city's geometry through the old city's fallback temperature and
+       park-cooling radius — cleanly, and with a plausible number out. */
+    state.ward = name; state.climate = resolve(name).climate;
+    wardMask = b.mask;
+    currentWardSizeM = d.sizeM;
+    projectWard();
 
     /* Rebuild the pick registry from the SAME rows the extrusions come from, and
        drop any selection: building #1759 in Ballygunge is a different building in
@@ -2388,8 +2525,6 @@ export function mountHeatMap(): () => void {
     select(null);
     closeStreetView();
     registry = buildRegistry(d.b);
-
-    currentWardSizeM = d.sizeM;
     paintSolarWard();
     paintAir();
     const mc = maplibregl.MercatorCoordinate.fromLngLat([w.lon, w.lat], 0);
@@ -2400,10 +2535,10 @@ export function mountHeatMap(): () => void {
        building heights never pass through the ward frame. */
     reliefWard = {
       wardId: w.id,
-      wardData: d, roads, water, terrain,
+      wardData: d, roads: b.roads, water: b.water, terrain: b.terrain,
       mercatorOrigin: { x: mc.x, y: mc.y, z: mc.z ?? 0 },
       frame: wardMercatorScale(w.lat),
-      veg: trees,
+      veg: b.trees,
       boundary: wardMask,
     };
     coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined, wardMask);
@@ -2416,48 +2551,22 @@ export function mountHeatMap(): () => void {
     syncRendererVisibility();
     /* The exaggeration is stated wherever the optional ground relief is drawn. */
     const terrLab = el('terrLab');
-    if (terrLab) terrLab.textContent = terrainLabel(terrain) || 'unavailable';
+    if (terrLab) terrLab.textContent = terrainLabel(b.terrain) || 'unavailable';
 
     /* Vegetation and albedo are MEASURED per cell, from Sentinel-2, and pinned to
-       the same ward means the resilience score reads. loadWardSurface verifies
-       that pairing before either reaches the model, so the map and the score
-       cannot end up drawn from different vintages of the same measurement. */
-    surfaceCache[name] ??= await loadAreaSurface(name);
-    const { means, surface } = surfaceCache[name];
-    state.base = rasterWardBase(d, means, surface, canopy, water);
-    /* The reveal belongs on this line and not on a later await: everything below
-       is optional artefacts, and a roads or labels fetch that hangs must not hold
-       back a control whose data is already in hand. */
+       the same ward means the resilience score reads. loadWardSurface verified
+       that pairing at the stage, so the map and the score cannot end up drawn from
+       different vintages of the same measurement. */
+    state.base = b.base;
     paintWardTools();
-    if (!roadsCache[name]) { try { roadsCache[name] = await (await fetch(P.roads)).json(); } catch { roadsCache[name] = { ways: [] }; } }
     /* Street names for this ward. Separate artefact, separate frame: these are
        lon/lat and go to MapLibre directly, so they never pass through our metre
        frame and act as a standing check on the geometry that does. */
-    if (!labelCache[name]) {
-      labelCache[name] = await fetch(P.labels)
-        .then(r => (r.ok ? r.json() : EMPTY_LABELS))
-        .catch(() => EMPTY_LABELS);
-    }
     (map.getSource(LABEL_SOURCE) as maplibregl.GeoJSONSource | undefined)
-      ?.setData(labelCache[name] as never);
-    if (provCache[name] === undefined) {
-      provCache[name] = await fetch(P.provenance)
-        .then(r => (r.ok ? r.json() : null)).catch(() => null);
-    }
-    state.spatial = M.buildSpatial(d, state.base, roadsCache[name]);
-    /* Cooling surfaces are a property of the MEASURED vegetation, so they are
-       computed from the ward's base layers and never move when a scenario does —
-       planting trees in the model must not invent a park that is not there. */
-    const cellM2 = (d.sizeM / simN()) * (d.sizeM / simN());
-    cooling = findCoolingSurfaces(state.base.veg, simN(), cellM2);
-    /* Two more passes at the bracketing thresholds. Three flood fills over 37k
-       cells is a few milliseconds once per ward, and it buys the only honest
-       way to show a figure this parameter-sensitive: as a range. */
-    coolingLo = findCoolingSurfaces(state.base.veg, simN(), cellM2, VEG_BRACKET[0]);
-    coolingHi = findCoolingSurfaces(state.base.veg, simN(), cellM2, VEG_BRACKET[1]);
-    { const f = fieldOnGrid(); if (f) relief?.updateField({ field: f, coolingMask: cooling.mask, ramp }); }
+      ?.setData(b.labels as never);
+    state.spatial = b.spatial;
+    cooling = b.cooling; coolingLo = b.coolingLo; coolingHi = b.coolingHi;
     state.live = liveCache[name] ?? null; paintLive();
-    resetSim();
 
     setHTML('pname', w.name); setText('pzone', w.zone); setText('coord', formatLatLon(w.lat, w.lon, ' · ', 3));
     /* THE WARD'S COUNT FIRST, the drawn count beside it: with a polygon, most of the
@@ -2479,37 +2588,37 @@ export function mountHeatMap(): () => void {
     const activeId = areaOf(name);
     document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
 
-    const dur = relief ? 1400 : 0;
-    orbit = false; clearTimeout(orbitResume);
-    map.flyTo({ center: [w.lon, w.lat], zoom: 15.3, pitch: mode === 'iso' ? 0 : 60, bearing: mode === 'iso' ? 0 : -18, duration: dur });
-    orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') { orbit = true; requestRuntimeFrame('orbit'); } }, dur + 600);
-    if (reduceMotion) { growProgress = 1; syncReliefVisual(); }
-    else {
-      growProgress = 0;
-      growStart = performance.now() + dur * 0.45;
-      syncReliefVisual();
-      requestRuntimeFrame('grow', dur * 0.45);
+    if (restore) {
+      growProgress = 1; syncReliefVisual();
+    } else {
+      const dur = relief ? 1400 : 0;
+      orbit = false; clearTimeout(orbitResume);
+      map.flyTo({ center: [w.lon, w.lat], zoom: 15.3, pitch: mode === 'iso' ? 0 : 60, bearing: mode === 'iso' ? 0 : -18, duration: dur });
+      orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') { orbit = true; requestRuntimeFrame('orbit'); } }, dur + 600);
+      if (reduceMotion) { growProgress = 1; syncReliefVisual(); }
+      else {
+        growProgress = 0;
+        growStart = performance.now() + dur * 0.45;
+        syncReliefVisual();
+        requestRuntimeFrame('grow', dur * 0.45);
+      }
     }
-      /* A superseded load must not start a warm-up after the newer load has already
-         aborted the previous one, nor take the loader down. */
-      if (!wardSession.commit(token)) return;
-      fetchLive(name);
-      schedulePrefetch(name);
-      /* THE LOADER HOLDS UNTIL THE BUILDINGS ARE ON SCREEN, not until the data lands.
-         A Bengaluru GLB installs after this point, and the chip used to vanish while
-         the map still showed bare ground (audit, 2026-09-13). Capped at 8 s so a model
-         that never arrives cannot pin it up; skipped if another load has since begun. */
-      const buildingsShown = relief ? relief.buildingsReady() : Promise.resolve();
-      void Promise.race([buildingsShown, new Promise<void>((settle) => window.setTimeout(settle, 8000))])
-        .then(() => {
-          if (wardSession.pendingWard === null && wardSession.committedWard === name) loadChip.done();
-        });
-    } catch (error) {
-      if (!wardSession.isCurrent(token)) return;
-      wardSession.fail(token);
-      console.warn(`Ward ${name} could not load:`, error);
-      loadChip.fail(`${resolve(name).area.name} could not load.`);
-    }
+    committedBundle = b;
+  }
+
+  /**
+   * THE FIGURES GO TO THE STAGE'S OWN "NOT YET" STATE at a commit: the em-dash
+   * HeatMapStage.astro renders before any solve, and empty histogram bars. The
+   * strip tile of the ward being opened goes with them, because it is the same
+   * number in a second place. Tiles of OTHER wards are left alone — they are still
+   * true under the current scenario (see `applyScenarioChange`).
+   */
+  function blankReadouts(openId: string): void {
+    setHTML('lst', '—<span class="u">°C</span>');
+    setText('uhi', '—');
+    setText('area', '—');
+    histo?.childNodes.forEach((bar) => { (bar as HTMLElement).style.height = '0%'; });
+    setHTML(`big-${openId}`, meanTile('—'));
   }
 
   async function resetSim() {
@@ -2524,25 +2633,51 @@ export function mountHeatMap(): () => void {
     const p = M.currentParams({ ...state, clock: scenarioClock() });
     const layers = M.applyInterventions(state.base, state.iv, state.spatial, state.climate.parkRadiusM);
     state.greenG = M.computeGreenG(layers);
-    const request: HeatSimRequest = {
+    const request: WardSimRequest = {
+      ward: state.ward,
       generation: ++simGeneration,
       grid: { n: simN(), cellMeters: cache[state.ward].sizeM / simN() },
       sizeM: cache[state.ward].sizeM,
       layers, params: p, settleSteps: RESET_BURST, thresholdC: 40,
     };
     latestSimRequest = request;
+    let snapshot: HeatSimSnapshot;
     try {
-      const snapshot = await simHost.reset(request);
-      if (appDisposed || latestSimRequest?.generation !== snapshot.generation) return;
-      latestSnapshot = snapshot;
-      refreshStats(snapshot); bridgeField(snapshot.field);
-      lastSimulationAt = performance.now();
-      requestRuntimeFrame('render');
+      snapshot = await simHost.reset(request);
     } catch (error) {
+      /* THE HOST ITSELF REJECTED — the one failure that may demote it. */
       if (latestSimRequest?.generation !== request.generation) return;
       if (demoteSimHost()) void resetSim();
       else console.warn('Heat simulation unavailable:', error);
+      return;
     }
+    if (presentSnapshot(request, snapshot)) {
+      lastSimulationAt = performance.now();
+      requestRuntimeFrame('render');
+    }
+  }
+
+  /**
+   * DRAW A SNAPSHOT, OR DROP IT — NEVER DEMOTE FOR IT.
+   *
+   * A snapshot is drawn only if it is the latest request's, for the ward on screen,
+   * on that ward's grid. Anything the drawing throws (`refreshStats`, `bridgeField`,
+   * the core field, the relief upload) is the CONSUMER's fault: the frame is
+   * dropped and logged, and the engine stays. These used to share a catch with the
+   * host's own rejection, so one RangeError in a painter demoted the GPU to CPU
+   * STATIC for the rest of the session (audit C2).
+   */
+  function presentSnapshot(request: WardSimRequest, snapshot: HeatSimSnapshot): boolean {
+    if (appDisposed || latestSimRequest?.generation !== snapshot.generation) return false;
+    if (request.ward !== state.ward || !isCurrentSnapshot(snapshot, request.generation, currentWardSizeM)) return false;
+    try {
+      latestSnapshot = snapshot;
+      refreshStats(snapshot);
+      bridgeField(snapshot.field);
+    } catch (error) {
+      console.warn('Heat field frame dropped:', error);
+    }
+    return true;
   }
 
   /* ── live ambient (Met Norway direct; production proxies via /api/ambient) ── */
@@ -3802,11 +3937,13 @@ export function mountHeatMap(): () => void {
       lastSimulationAt = time;
       const request = latestSimRequest!;
       void simHost!.advance(request.generation, 80).then((snapshot) => {
-        if (!snapshot || latestSimRequest?.generation !== snapshot.generation) return;
-        latestSnapshot = snapshot;
-        refreshStats(snapshot);
-        bridgeField(snapshot.field);
-      }).catch(() => { if (demoteSimHost()) void resetSim(); }).finally(() => {
+        if (snapshot) presentSnapshot(request, snapshot);
+      }, (error) => {
+        /* Only the host's own rejection reaches here; `presentSnapshot` keeps
+           consumer errors to itself (audit C2). */
+        console.warn('Heat simulation advance failed:', error);
+        if (demoteSimHost()) void resetSim();
+      }).finally(() => {
         simulationInFlight = false;
         requestRuntimeFrame('render', budget.simulationIntervalMs);
       });
