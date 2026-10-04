@@ -79,6 +79,11 @@ export function parsePairedScenario(search: string): PairedScenarioState {
  * The state → the link. Emits the LEGACY spelling wherever one exists, so a link
  * written today and one bookmarked before the scope migration are the same string —
  * see `toLegacyWard`, which owns that decision for the writer and the reader alike.
+ *
+ * NO `grid`. It was `hm-grid-192-v1` for every pair, which is Baruipur's and
+ * Barrackpore's grid and nobody else's (Ward 68 is 247 over 1800 m, Bengaluru 384
+ * over 2800 m). Nothing reads it back, and this function has no ward sizes to
+ * state the real ones from; the settled page prints them (`grid-label`).
  */
 export function serializePairedScenario(state: PairedScenarioState): string {
   const params = new URLSearchParams({
@@ -90,7 +95,6 @@ export function serializePairedScenario(state: PairedScenarioState): string {
     phase: state.phase,
     contract: state.contract,
     forcing: state.forcing,
-    grid: 'hm-grid-192-v1',
     data: 'ward-geometry-v1',
     stock: 'modelled-stock-v1',
     backend: 'ts-v1',

@@ -282,6 +282,10 @@ export function mountPairedBench(): () => void {
     const forcingLabel = `${result.forcing.label} · ${result.forcing.status.replace('-', ' ')}`;
     setText('[data-role="forcing-label"]', forcingLabel);
     setText('[data-role="backend-label"]', result.a.evidence.backendVersion);
+    /* EACH SIDE'S OWN GRID. This read `hm-grid-192-v1` from the markup for every
+       pair, Ward 68's 247² and Bengaluru's 384² included. */
+    const gridA = result.a.evidence.gridVersion, gridB = result.b.evidence.gridVersion;
+    setText('[data-role="grid-label"]', gridA === gridB ? gridA : `${gridA} / ${gridB}`);
     one<HTMLButtonElement>('[data-action="retry"]')?.setAttribute('hidden', '');
     setStatus(`Comparison settled. ${nameOf(result.a.ward)} and ${nameOf(result.b.ward)} use the same ${result.forcing.label.toLowerCase()}.`);
     void enhanceWithThree(result);
