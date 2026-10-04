@@ -252,7 +252,7 @@ test.describe('console legibility', () => {
   /* THE AIR CARD WITH A FIGURE IN IT. The built page has no /api/air-quality, so
      unstubbed the card shows only its failure line and the headline, the US-EPA
      equivalent under it and the meta lines are never swept. A CPCB answer puts them on screen. */
-  test.beforeEach(async ({ page }) => { await stubAir(page); });
+  test.beforeEach(async ({ page }) => { await stubAir(page, { nowcast: true }); });
 
   test('every word clears its contrast floor on the default basemap', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-tier0',

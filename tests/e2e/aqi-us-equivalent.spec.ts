@@ -11,7 +11,9 @@ import { stubAir } from './aqi-cpcb-stub.ts';
  */
 const BALLYGUNGE = '/heat-map/in/kolkata/ballygunge/';
 const SHOTS = process.env['US_AQI_SHOTS'];
-const LINE = '≈ US AQI 142 · Unhealthy for Sensitive Groups';
+/* No NowCast in the stub: the 24-hour line, labelled so. */
+const LINE = '≈ US AQI 142 · Unhealthy for Sensitive Groups · 24-h';
+const NOWCAST_LINE = '≈ US AQI 154 · Unhealthy · NowCast';
 
 async function toClay(page: Page): Promise<void> {
   /* On a phone the env chip can sit under the HUD; the click is the same control either way. */
@@ -74,6 +76,39 @@ test.describe('US AQI equivalent', () => {
       await expect(card.locator('.aq-us p')).toBeVisible();
       if (SHOTS) await card.screenshot({ path: `${SHOTS}/card-${env}-narrow.png` });
       await us.click();
+    }
+  });
+
+  test('NowCast: the API sent us_nowcast, so the line is the recent-hours figure, Dark and Clay, desktop and narrow', async ({ browser }, info) => {
+    test.skip(info.project.name !== 'chromium-tier0', 'a DOM check: one tier is enough');
+    for (const width of [1440, 1000]) {
+      /* A fresh context per width, so the Clay choice of the first never carries into the second. */
+      const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+      const page = await ctx.newPage();
+      await stubAir(page, { nowcast: true });
+      await page.goto(BALLYGUNGE);
+      const card = page.locator('#aqiBlock');
+      const us = card.locator('.aq-us summary');
+      await expect(us).toBeVisible({ timeout: 60_000 });
+      await expect(card.locator('.num')).toHaveText('107');
+      await expect(us).toContainText(NOWCAST_LINE);
+      await expect(us).toHaveAttribute('title', /NowCast, recent hours weighted, as used by AirNow/);
+      for (const env of ['dark', 'clay'] as const) {
+        if (env === 'clay') await toClay(page);
+        const [c, u] = await Promise.all([card.boundingBox(), us.boundingBox()]);
+        expect(u!.x + u!.width).toBeLessThanOrEqual(c!.x + c!.width + 1);
+        await us.click();
+        await expect(card.locator('.aq-us p')).toContainText("converted from this CPCB station's hourly PM2.5/PM10");
+        if (SHOTS) await card.screenshot({ path: `${SHOTS}/nowcast-card-${env}-${width}.png` });
+        await us.click();
+        if (width === 1440) {
+          await openAirPane(page);
+          await expect(page.locator('#airPane .aq-us summary')).toContainText(NOWCAST_LINE);
+          if (SHOTS) await page.screenshot({ path: `${SHOTS}/nowcast-pane-${env}-desktop.png` });
+          await page.locator('[data-rail="air"]').first().click();
+        }
+      }
+      await ctx.close();
     }
   });
 

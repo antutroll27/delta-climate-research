@@ -25,12 +25,19 @@
  * (503), the Pi's retry comes back 'duplicate', so latest can lag by up to one hour until
  * the next hour's feed repairs it; one hour stays inside the 2 h "Live" rule.
  *
+ * NOWCAST HISTORY (hourly-history.ts): a NEW hour is also added to the rolling hourly PM record
+ * once it is archived and latest is settled. It is best effort: a failure is logged and the answer
+ * is still 200 "new", because the Pi's retry would come back "duplicate" and change nothing; the
+ * read side lays the current hour over the record, so one lost write costs nothing. A missing
+ * record (the first deploy) is rebuilt once from the previous 11 hourly archives.
+ *
  * Logs carry only the outcome and a machine reason: never the key, a signature or the body.
  * Every response is Cache-Control: no-store.
  */
 import { gunzipSync } from 'node:zlib';
 import { FEED_MAX_BYTES, FeedError, parseFeed, readRelayFeed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import { readSigned, validKey, verifyV1 } from '../src/lib/aqi/relay-auth.ts';
+import { updateHistory } from '../src/lib/aqi/hourly-history.ts';
 import { archivePath, blobStore, RELAY_MAX_GZ_BYTES, type FeedStore } from '../src/lib/aqi/relay-store.ts';
 
 export const config = { maxDuration: 30 };
@@ -124,6 +131,11 @@ export async function handleIngest(request: Request, d: IngestDeps): Promise<Res
     /* The class names the failure (a suspended store, a bad token, a timeout); the message may carry store details. */
     console.warn('air-quality-ingest store failed', e instanceof Error ? e.constructor.name : typeof e);
     return refuse(503, 'store_failed');
+  }
+  try {
+    await updateHistory(d.store, stations);
+  } catch (e) {
+    console.warn('air-quality-ingest history failed', e instanceof Error ? e.constructor.name : typeof e);
   }
   console.info('air-quality-ingest stored', lastupdate, stations.length);
   return answer(200, { stored: 'new', lastupdate, stations: stations.length });

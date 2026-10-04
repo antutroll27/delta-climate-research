@@ -23,12 +23,17 @@
  * Raspberry Pi relay's copy in private Vercel Blob (readRelayFeed) instead of from CPCB itself.
  * A relayed feed older than LIVE_H counts as a failure (requireLive), so a dead relay hands
  * over to OpenAQ instead of ageing the card; everything else after the read is unchanged.
+ *
+ * US NOWCAST (lib/aqi/hourly-history.ts): with the relay source, the rolling hourly PM record the
+ * ingest keeps is read with the feed and cached with it; a live CPCB answer then carries
+ * `us_nowcast`. The record is optional: missing or unreadable, the card shows the 24-hour US line.
  */
 import { waitUntil } from '@vercel/functions';
 import { buildPayload } from '../src/lib/aqi/build.ts';
 import { cityAqi, cityFor } from '../src/lib/aqi/city.ts';
 import { currentFromFeed, fetchFeed, FeedError, pick, readRelayFeed, requireLive, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import type { Raw } from '../src/lib/aqi/hours.ts';
+import { nowcastFor, readHistory, type History } from '../src/lib/aqi/hourly-history.ts';
 import { fetchSensorWindow, OpenAqError } from '../src/lib/aqi/openaq.ts';
 import { blobStore, type FeedStore } from '../src/lib/aqi/relay-store.ts';
 import { isAirArea, POLLUTANTS, stationFor, stationPayload, type StationEntry } from '../src/lib/aqi/stations.ts';
@@ -82,8 +87,9 @@ const CACHE = new Map<string, CacheEntry>();
 const INFLIGHT = new Map<string, Promise<RawSet>>();
 
 export interface FeedCache {
-  entry: { at: number; stations: FeedStation[] } | null;
-  inflight: Promise<FeedStation[]> | null;
+  /** `history`: the relay's hourly PM record read with the feed (null when none; absent for the direct source). */
+  entry: { at: number; stations: FeedStation[]; history?: History | null } | null;
+  inflight: Promise<FeedSnapshot> | null;
   /** When the last fetch failed; CPCB is not asked again for FEED_RETRY_MS (the fallback answers meanwhile). */
   failedAt?: number;
 }
@@ -102,16 +108,20 @@ const PARTIAL_CACHE = 'public, max-age=0, s-maxage=60';
  * CPCB's whole feed, cached 10 min and shared by every area; null on any failure
  * (logged once; never cached as a feed, but not retried for FEED_RETRY_MS).
  */
-function feedFor(now: Date, d: Deps): Promise<FeedStation[] | null> {
+interface FeedSnapshot { stations: FeedStation[]; history: History | null }
+
+function feedFor(now: Date, d: Deps): Promise<FeedSnapshot | null> {
   const c = d.feedCache ?? FEED;
-  if (c.entry && now.getTime() - c.entry.at < CACHE_TTL_MS) return Promise.resolve(c.entry.stations);
+  if (c.entry && now.getTime() - c.entry.at < CACHE_TTL_MS) return Promise.resolve({ stations: c.entry.stations, history: c.entry.history ?? null });
   if (c.failedAt !== undefined && now.getTime() - c.failedAt < FEED_RETRY_MS) return Promise.resolve(null);
   if (!c.inflight) {
-    const read = d.source === 'relay'
-      ? readRelayFeed(d.store ?? blobStore()).then((s) => requireLive(s, now))
-      : fetchFeed({ fetch: d.fetch });
+    const store = d.store ?? (d.source === 'relay' ? blobStore() : null);
+    /* The history read never fails the feed: readHistory answers null instead of throwing. */
+    const read: Promise<FeedSnapshot> = d.source === 'relay' && store
+      ? Promise.all([readRelayFeed(store).then((s) => requireLive(s, now)), readHistory(store)]).then(([stations, history]) => ({ stations, history }))
+      : fetchFeed({ fetch: d.fetch }).then((stations) => ({ stations, history: null }));
     c.inflight = read
-      .then((stations) => { c.entry = { at: now.getTime(), stations }; delete c.failedAt; return stations; }, (e: unknown) => { c.failedAt = now.getTime(); throw e; })
+      .then((snap) => { c.entry = { at: now.getTime(), ...snap }; delete c.failedAt; return snap; }, (e: unknown) => { c.failedAt = now.getTime(); throw e; })
       .finally(() => { c.inflight = null; });
   }
   return c.inflight.catch((e: unknown) => {
@@ -198,7 +208,8 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
   const rawP: Promise<Settled> | null = d.key
     ? rawFor(area, st, now, d).then((raw) => ({ ok: true as const, raw }), (e: unknown) => ({ ok: false as const, e }))
     : null;
-  const feed = await feedP;
+  const snap = await feedP;
+  const feed = snap?.stations ?? null;
   const f = feed ? pick(feed, st) : null;
   const current = f ? currentFromFeed(f, area, st, now) : null;
 
@@ -220,8 +231,10 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
        fallback below never carries one, so no card mixes sources. */
     const ref = cityFor(area);
     const city = feed && ref && current.state === 'live' ? cityAqi(feed, ref) : null;
+    /* NowCast likewise: only beside a live CPCB figure, from that station's own hours. */
+    const usNowcast = f && current.state === 'live' ? nowcastFor(snap?.history ?? null, f) : null;
     res.setHeader('Cache-Control', history ? OK_CACHE : PARTIAL_CACHE);
-    res.status(200).json({ current, history, ...(city ? { city } : {}) } satisfies AirQualityPayload);
+    res.status(200).json({ current, history, ...(city ? { city } : {}), ...(usNowcast ? { us_nowcast: usNowcast } : {}) } satisfies AirQualityPayload);
     return;
   }
 

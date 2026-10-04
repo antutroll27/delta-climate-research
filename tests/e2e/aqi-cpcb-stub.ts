@@ -7,7 +7,7 @@ import type { Page } from '@playwright/test';
  * view and nothing under the headline is ever drawn. `observed_at` is "now", so the
  * client's 2 h rule keeps it live.
  */
-export function cpcbBallygunge(now = new Date()) {
+export function cpcbBallygunge(now = new Date(), o: { nowcast?: boolean } = {}) {
   const sub = (parameter: string, avg: number) => ({ parameter, avg, min: avg - 10, max: avg + 12, hourly: avg + 3 });
   return {
     current: {
@@ -26,9 +26,11 @@ export function cpcbBallygunge(now = new Date()) {
       members: ([['Rabindra Bharati University', 118], ['Fort William', 96], ['Jadavpur', 104], ['Ballygunge', 107],
         ['Victoria', 121], ['Rabindra Sarobar', 99], ['Bidhannagar', 112]] as const).map(([n, aqi]) => ({ name: `${n}, Kolkata - WBPCB`, aqi })),
     },
+    /* `nowcast`: the US line by EPA NowCast from the relay's hourly record (lib/aqi/hourly-history.ts). */
+    ...(o.nowcast ? { us_nowcast: { aqi: 154, category: 'unhealthy', dominant: 'pm25', hours_used: 12 } } : {}),
   };
 }
 
-export async function stubAir(page: Page): Promise<void> {
-  await page.route('**/api/air-quality*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(cpcbBallygunge()) }));
+export async function stubAir(page: Page, o: { nowcast?: boolean } = {}): Promise<void> {
+  await page.route('**/api/air-quality*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(cpcbBallygunge(new Date(), o)) }));
 }
