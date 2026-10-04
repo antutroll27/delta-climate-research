@@ -19,7 +19,7 @@
  * Pure: no DOM, no I/O, no clock. Missing is null, never a guess.
  */
 import { EDGES } from './cpcb.ts';
-import type { Result } from './types.ts';
+import type { Result, UsNowcast } from './types.ts';
 
 export type UsPollutant = 'pm25' | 'pm10';
 export type UsCategory = 'good' | 'moderate' | 'usg' | 'unhealthy' | 'very_unhealthy' | 'hazardous';
@@ -118,4 +118,41 @@ export function usAqiOf(r: Result): UsAqi | null {
     return q && q.window_h === 24 && q.unit === 'ug_m3' && ok(q.sub_index) && ok(q.value) ? q.value : null;
   };
   return usAqiFromConcentrations(c('pm25'), c('pm10'));
+}
+
+/**
+ * EPA NOWCAST (the AirNow real-time PM method): a weighted mean of the last 12 hourly
+ * concentrations, recent hours weighted more when the air is changing.
+ *
+ * `hours[0]` is the latest hour, `hours[k]` the hour k hours before it; a missing hour is
+ * null (the slot is kept, so a gap never shifts older hours forward). Only the first 12 are read.
+ *   w = min / max over the valid hours (1 when max is 0), floored at 0.5 for PM;
+ *   NowCast = Σ wᵏ·cₖ / Σ wᵏ over the valid hours, then EPA truncation.
+ * At least 2 of the latest 3 hours must be valid, else null (AirNow's only rule:
+ * forum.airnowtech.org/t/the-nowcast-for-pm2-5-and-pm10/172).
+ */
+export const NOWCAST_HOURS = 12;
+
+export function nowcast(p: UsPollutant, hours: readonly (number | null)[]): number | null {
+  const h = Array.from({ length: NOWCAST_HOURS }, (_, k) => (ok(hours[k]) ? hours[k]! : null));
+  if (h.slice(0, 3).filter((x) => x !== null).length < 2) return null;
+  const vals = h.filter((x): x is number => x !== null);
+  const max = Math.max(...vals), min = Math.min(...vals);
+  const w = Math.max(max > 0 ? min / max : 1, 0.5);
+  let num = 0, den = 0;
+  h.forEach((c, k) => { if (c !== null) { num += c * w ** k; den += w ** k; } });
+  return truncate(p, num / den);
+}
+
+/**
+ * The US NowCast AQI from hourly PM2.5 and PM10 concentrations (µg/m³, latest first):
+ * the larger of the two pollutant indices, a tie to PM2.5. `hours_used` counts the valid
+ * hours of the leading pollutant in its 12-hour window. Null when neither has a NowCast.
+ */
+export function usNowcast(pm25: readonly (number | null)[], pm10: readonly (number | null)[]): UsNowcast | null {
+  const a = nowcast('pm25', pm25), b = nowcast('pm10', pm10);
+  const u = usAqiFromConcentrations(a, b);
+  if (!u) return null;
+  const used = (u.dominant === 'pm25' ? pm25 : pm10).slice(0, NOWCAST_HOURS).filter(ok).length;
+  return { aqi: u.aqi, category: u.category, dominant: u.dominant, hours_used: used };
 }

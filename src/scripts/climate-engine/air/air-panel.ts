@@ -17,9 +17,9 @@
  */
 import { category } from '../../../lib/aqi/cpcb.ts';
 import { LIVE_H } from '../../../lib/aqi/build.ts';
-import { AIR_STATES, isAirPayload, isCity } from '../../../lib/aqi/valid.ts';
+import { AIR_STATES, isAirPayload, isCity, isUsNowcast } from '../../../lib/aqi/valid.ts';
 import { US_WORD, usAqiOf } from '../../../lib/aqi/us-aqi.ts';
-import type { AirQualityPayload, AqiResult, CityAqi, AqiStation, CpcbCategory, CpcbSubIndex, HistoryDay, HistoryResponse, Pollutant, PollutantReading, Result } from '../../../lib/aqi/types.ts';
+import type { AirQualityPayload, AqiResult, CityAqi, UsNowcast, AqiStation, CpcbCategory, CpcbSubIndex, HistoryDay, HistoryResponse, Pollutant, PollutantReading, Result } from '../../../lib/aqi/types.ts';
 
 type Current = AirQualityPayload['current'];
 
@@ -77,31 +77,32 @@ const windowOf = (r: AqiResult): string => (r.pollutants.find((q) => q.parameter
 
 /* The fallback names no cause: the feed may be down, the station missing from it (register AQI-R47), stale, moved,
    or its published figure rejected by `pick` (off-scale, ambiguous, or not the largest sub-index). */
-function hero(r: Result, muted: boolean, city = ''): string {
+function hero(r: Result, muted: boolean, city = '', nc?: UsNowcast): string {
   const meta = r.origin === 'cpcb'
     ? `Led by <b>${pol(r.dominant)}</b> · CPCB published AQI · <span style="white-space:nowrap">${r.window_h === 8 ? '8-hour average' : '24-hour average'}</span>`
     : `Led by <b>${pol(r.dominant)}</b> · AQI computed by OBOS from OpenAQ (no usable current CPCB figure for this station) · <span style="white-space:nowrap">${windowOf(r)}</span>`;
   return `<div class="hero"><span class="num${muted ? ' muted' : ''}" style="color:${col(r.category)}">${num(r.aqi)}</span>
-    <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>${usLine(r)}${city}
+    <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>${usLine(r, nc)}${city}
     <p class="meta">${meta}</p>`;
 }
 
+const NOWCAST_NOTE = "Same air on the US EPA scale (NowCast, recent hours weighted, as used by AirNow), converted from this CPCB station's hourly PM2.5/PM10. The official Indian AQI above is the legal standard.";
 const US_NOTE = {
   cpcb: "Same air, US EPA scale (used by IQAir, aqi.in): converted from CPCB's 24-hour PM2.5/PM10. The official Indian AQI above is the legal standard.",
   obos: 'Same air, US EPA scale (used by IQAir, aqi.in): computed from the same 24-hour PM2.5/PM10 means. The official Indian AQI above is the legal standard.',
 } as const;
 
 /* THE US EPA EQUIVALENT, one small muted line under the official number, so a reader
-   who has seen IQAir's figure does not take OBOS's for a mistake. Nothing when the
-   result carries no 24-hour PM2.5 or PM10: never a guess. A <details>, so the note
-   opens by tap and keyboard as well as by hover (the title). */
-function usLine(r: Result): string {
-  const u = usAqiOf(r);
+   who has seen IQAir's figure does not take OBOS's for a mistake. NowCast (`nc`, the
+   recent-hours figure AirNow shows) when the API sent one; otherwise the 24-hour
+   equivalent, labelled so; nothing when neither exists: never a guess. A <details>, so
+   the note opens by tap and keyboard as well as by hover (the title). */
+function usLine(r: Result, nc?: UsNowcast): string {
+  const u = nc ? { aqi: nc.aqi, capped: false, category: nc.category } : usAqiOf(r);
   if (!u) return '';
-  const note = US_NOTE[r.origin];
-  /* The info mark rides with the category's last word, so it never wraps onto a line alone. */
-  const words = US_WORD[u.category].split(' '), last = words.pop()!;
-  return `<details class="aq-us"><summary title="${esc(note)}">≈ US AQI ${u.capped ? '500+' : num(u.aqi)} · ${[...words, ''].join(' ')}<span style="white-space:nowrap">${last}<span class="aq-us-i" aria-hidden="true">i</span></span></summary><p>${esc(note)}</p></details>`;
+  const note = nc ? NOWCAST_NOTE : US_NOTE[r.origin];
+  /* The info mark rides with the basis label, so it never wraps onto a line alone. */
+  return `<details class="aq-us"><summary title="${esc(note)}">≈ US AQI ${u.capped ? '500+' : num(u.aqi)} · ${US_WORD[u.category]} · <span style="white-space:nowrap">${nc ? 'NowCast' : '24-h'}<span class="aq-us-i" aria-hidden="true">i</span></span></summary><p>${esc(note)}</p></details>`;
 }
 
 /** CPCB's station name without its city and agency: "Ballygunge, Kolkata - WBPCB" → "Ballygunge". */
@@ -121,6 +122,8 @@ function cityLine(city: CityAqi | undefined): string {
 
 /** The city figure only when it is whole: a malformed one is dropped here and the ward's card paints without it. */
 const cityIn = (p: AirQualityPayload): CityAqi | undefined => (isCity(p.city) ? p.city : undefined);
+/** Likewise NowCast: a malformed one is dropped and the US line falls back to 24 hours. */
+const nowcastIn = (p: AirQualityPayload): UsNowcast | undefined => (isUsNowcast(p.us_nowcast) ? p.us_nowcast : undefined);
 
 /* NEUTRAL ABOUT WHOSE FAULT A GAP IS: a quiet feed may be the station, CPCB, OpenAQ
    or us, so each sentence says what reached us and makes no claim about who stopped. */
@@ -132,7 +135,7 @@ const nowrap = (html: string): string => `<span style="white-space:nowrap">${htm
 const lastReading = (iso: string | null): string => (iso === null ? '' : `Last reading ${nowrap(`<b>${esc(istFmt(iso))}</b>`)}.`);
 
 /** The card's content for one state; `title` is the head's label (empty in the pane, which has its own heading). */
-function block(c: Current, title: string, place: string, city?: CityAqi): string {
+function block(c: Current, title: string, place: string, city?: CityAqi, nc?: UsNowcast): string {
   switch (c.state) {
     case 'no_station':
       return head(title, '<span class="chip off">No station</span>') +
@@ -168,8 +171,9 @@ function block(c: Current, title: string, place: string, city?: CityAqi): string
         ? `Published by CPCB at ${t}${stale ? '. No update has reached us since.' : ''}`
         : `${stale ? 'No readings have reached us since' : 'Readings to'} ${t}${stale ? '.' : ''}`;
       /* The city line is as live as the ward figure it rides with: a demoted (stale) card drops it. */
-      const cityHtml = !stale && c.result.origin === 'cpcb' ? cityLine(city) : '';
-      return head(title, chip) + hero(c.result, stale, cityHtml) + stationLine(c.station, c.source.owner, place) + `<p class="meta">${when}</p>`;
+      const live = !stale && c.result.origin === 'cpcb';
+      const cityHtml = live ? cityLine(city) : '';
+      return head(title, chip) + hero(c.result, stale, cityHtml, live ? nc : undefined) + stationLine(c.station, c.source.owner, place) + `<p class="meta">${when}</p>`;
     }
     default:
       return noFigure(title, 'Not loaded', FAILED);
@@ -182,7 +186,7 @@ const knownState = (c: Current): boolean => AIR_STATES.includes(c.state);
 /** The right-panel block. `now` re-judges a cached live payload (see `demote`). */
 export function cardHtml(p: AirQualityPayload, placeName: string, now: Date = new Date()): string {
   if (!knownState(p.current)) return unavailableHtml(placeName);
-  return block(demote(p.current, now), `Air quality · ${esc(placeName)}`, placeName, cityIn(p));
+  return block(demote(p.current, now), `Air quality · ${esc(placeName)}`, placeName, cityIn(p), nowcastIn(p));
 }
 
 /** What the card shows when the request itself failed (network, 5xx, not JSON, or a malformed body). No number, no blame. */
@@ -311,7 +315,7 @@ const originOf = (c: Current): Origin =>
 export function paneHtml(p: AirQualityPayload, placeName: string, now: Date = new Date()): string {
   if (!knownState(p.current)) return failedPaneHtml(placeName);
   const c = demote(p.current, now);
-  let s = `<p class="pane-h" id="pane-air-h">Air · ${esc(placeName)}</p><div class="aqblock">${block(c, '', placeName, cityIn(p))}</div>`;
+  let s = `<p class="pane-h" id="pane-air-h">Air · ${esc(placeName)}</p><div class="aqblock">${block(c, '', placeName, cityIn(p), nowcastIn(p))}</div>`;
   if (c.state === 'no_station') return s + method(null, 'obos');
   s += polTable(c);
   if (!p.history && (c.state === 'live' || c.state === 'stale' || c.state === 'insufficient_data')) {

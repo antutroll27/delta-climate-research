@@ -8,7 +8,8 @@
  * and the UI shows its failure view (air-panel.ts `loadAir`). Pure; no I/O.
  */
 import { SCHEMA } from './types.ts';
-import type { AirQualityPayload, CityAqi } from './types.ts';
+import { usCategory } from './us-aqi.ts';
+import type { AirQualityPayload, CityAqi, UsNowcast } from './types.ts';
 
 type Obj = Record<string, unknown>;
 
@@ -95,7 +96,18 @@ export function isCity(c: unknown): c is CityAqi {
     arrOf(c['members'], isMember) && date(c['observed_at']);
 }
 
-/** True only for a body the painters can render without trusting a single field. `city` is judged apart (`isCity`). */
+/**
+ * A whole US NowCast figure, judged apart from the payload like `city`: a malformed one is
+ * dropped and the card falls back to the 24-hour US line. The category must be the one its
+ * AQI falls in, so a body cannot pair 40 with "Hazardous".
+ */
+export function isUsNowcast(u: unknown): u is UsNowcast {
+  return obj(u) && aqiVal(u['aqi']) && str(u['category']) && u['category'] === usCategory(u['aqi'] as number) &&
+    (u['dominant'] === 'pm25' || u['dominant'] === 'pm10') &&
+    fin(u['hours_used']) && Number.isInteger(u['hours_used']) && u['hours_used'] >= 2 && u['hours_used'] <= 12;
+}
+
+/** True only for a body the painters can render without trusting a single field. `city` and `us_nowcast` are judged apart (`isCity`, `isUsNowcast`). */
 export function isAirPayload(x: unknown): x is AirQualityPayload {
   return obj(x) && isCurrent(x['current']) && isHistory(x['history']);
 }

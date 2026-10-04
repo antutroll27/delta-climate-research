@@ -87,7 +87,7 @@ const payload = (subs) => ({ history: null, current: {
 test('the card and the pane print the US line under the official number, the official number first', () => {
   const now = new Date('2026-10-04T08:00:00Z');
   for (const html of [cardHtml(payload([['pm25', 87], ['pm10', 107]]), 'Ballygunge', now), paneHtml(payload([['pm25', 87], ['pm10', 107]]), 'Ballygunge', now)]) {
-    assert.match(html.replace(/<[^>]+>/g, ''), /≈ US AQI 142 · Unhealthy for Sensitive Groupsi/);
+    assert.match(html.replace(/<[^>]+>/g, ''), /≈ US AQI 142 · Unhealthy for Sensitive Groups · 24-hi/);
     assert.ok(html.indexOf('class="num') < html.indexOf('US AQI'), 'CPCB headline comes first');
     assert.match(html, /converted from CPCB&#39;s 24-hour PM2.5\/PM10/);
   }

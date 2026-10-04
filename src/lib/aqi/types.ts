@@ -8,6 +8,8 @@
  * reads an AQI where the state carries none. Missing values are `null`, never 0.
  */
 
+import type { UsCategory, UsPollutant } from './us-aqi.ts';
+
 export const SCHEMA = 2 as const;
 
 /** CPCB National AQI categories, in order. The UI always prints the word; colour is never the only signal. */
@@ -156,6 +158,19 @@ export interface CityAqi {
   observed_at: string;
 }
 
+/**
+ * The same air on the US EPA scale by NowCast (lib/aqi/us-aqi.ts `usNowcast`), from the
+ * station's last 12 CPCB hourly PM2.5/PM10 sub-indices turned back into µg/m³.
+ */
+export interface UsNowcast {
+  /** 0–500, whole. */
+  aqi: number;
+  category: UsCategory;
+  dominant: UsPollutant;
+  /** Valid hours of the leading pollutant in its 12-hour window (2–12). */
+  hours_used: number;
+}
+
 /** What `GET /api/air-quality?area=in/kolkata/ballygunge` returns. */
 export interface AirQualityPayload {
   current: AirQualityResponse;
@@ -166,4 +181,9 @@ export interface AirQualityPayload {
    * at least 2 valid stations. Absent on the OpenAQ fallback: sources are never mixed.
    */
   city?: CityAqi;
+  /**
+   * Present only with a live CPCB figure from the Pi relay whose station has at least 2 of
+   * its latest 3 hours on record. Absent on the OpenAQ fallback, which keeps the 24-hour line.
+   */
+  us_nowcast?: UsNowcast;
 }

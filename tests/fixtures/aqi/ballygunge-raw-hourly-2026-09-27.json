@@ -1,0 +1,6 @@
+{
+  "note": "Ballygunge (OpenAQ location 10918; PM2.5 sensor 12236012, PM10 sensor 12236011): the raw hourly µg/m³ from OpenAQ's S3 archive (oaq_10918_2026092{6,7}.csv.gz), latest first. Slot 0 is the hour CPCB's feed of 2026-09-27 11:00 IST reports as Hourly_sub_index (OpenAQ stamps it 10:00 IST). Slots 0-6 match the feeds of 11:00..05:00 IST in tests/fixtures/aqi/cpcb-hourly and cpcb-feed-2026-09-27T0500IST.xml.gz. Phase A, 2026-10-05.",
+  "latest_feed_ist": "2026-09-27T11:00:00+05:30",
+  "pm25": [19.3, 22.6, 18.2, 14.5, 15.9, 18.4, 15.8, 17.4, 19.9, 15.7, 15.1, 17.8],
+  "pm10": [50.9, 47.8, 50.5, 49.2, 40.8, 42.1, 44.7, 41.2, 52.5, 46.1, 52.8, 50.0]
+}

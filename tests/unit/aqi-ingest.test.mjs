@@ -5,7 +5,7 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import test from 'node:test';
 import { handleIngest, MIN_STATIONS, POST } from '../../api/air-quality-ingest.ts';
 import { signV1 } from '../../src/lib/aqi/relay-auth.ts';
-import { LATEST_PATH, memoryStore } from '../../src/lib/aqi/relay-store.ts';
+import { HISTORY_PATH, LATEST_PATH, memoryStore } from '../../src/lib/aqi/relay-store.ts';
 
 const FEED_GZ = readFileSync(new URL('../fixtures/aqi/cpcb-feed-2026-09-27T0500IST.xml.gz', import.meta.url));
 const FEED_XML = gunzipSync(FEED_GZ).toString('utf8');
@@ -29,12 +29,12 @@ const feedOf = (n, stamp = '27-09-2026 05:00:00') => gzipSync(`<?xml version='1.
   Array.from({ length: n }, (_, i) => `<Station id="S${i}" lastupdate="${stamp}" latitude="22.5" longitude="88.3"><Pollutant_Index id="PM10" Min="1" Max="9" Avg="5" Hourly_sub_index="5"/><Air_Quality_Index Value="5" Predominant_Parameter="PM10"/></Station>`).join('')
 }</City></State></Country></AqIndex>`);
 
-test('a new feed is archived by its IST hour, then becomes latest: 200 new', async () => {
+test('a new feed is archived by its IST hour, then becomes latest, and joins the NowCast history: 200 new', async () => {
   const d = deps();
   const r = await call(req(FEED_GZ), d);
   assert.equal(r.status, 200);
   assert.deepEqual(await r.json(), { stored: 'new', lastupdate: '2026-09-26T23:30:00.000Z', stations: 481 });
-  assert.deepEqual([...d.store.files.keys()].sort(), [ARCHIVE, LATEST_PATH].sort());
+  assert.deepEqual([...d.store.files.keys()].sort(), [ARCHIVE, LATEST_PATH, HISTORY_PATH].sort());
   assert.deepEqual(Buffer.from(d.store.files.get(LATEST_PATH)), FEED_GZ, 'stored exactly as sent');
 });
 
