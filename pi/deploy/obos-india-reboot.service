@@ -1,0 +1,12 @@
+# The weekly maintenance reboot, started only by obos-india-reboot.timer. Installed by setup.sh.
+[Unit]
+Description=Weekly maintenance reboot (obos-india)
+
+# Never within 12 h of boot. With the read-only overlay the Pi boots on an old
+# saved clock; when NTP corrects it, a Saturday that "passed" would fire at once,
+# on every boot: a reboot loop. Skipped, the timer simply waits for next week.
+
+[Service]
+Type=oneshot
+ExecCondition=/bin/sh -c 'read -r up _ </proc/uptime; [ "$${up%%.*}" -ge 43200 ]'
+ExecStart=/usr/bin/systemctl --no-block reboot

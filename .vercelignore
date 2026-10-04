@@ -17,6 +17,10 @@ dist
 go
 tests/fixtures/geo-oracle
 
+# The Raspberry Pi service (Go module deltaclimate.earth/obos-india). It is built on a
+# workstation and copied to the Pi (pi/deploy/README.md); the site never imports or builds it.
+/pi
+
 # The 1024px logo master. It is the input to scripts/build-icons.mjs, and every
 # icon it produces is generated ahead of time and committed, so the build never
 # reads it — but sitting in public/ it would be uploaded AND served at 1.44 MB

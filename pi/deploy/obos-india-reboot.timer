@@ -1,0 +1,11 @@
+# Sunday 03:37 IST, written in UTC (Saturday 22:07) so the Pi's own time zone
+# setting cannot move it. Not on the IST hour, when CPCB publishes.
+[Unit]
+Description=Weekly maintenance reboot, Sunday 03:37 IST
+
+[Timer]
+OnCalendar=Sat *-*-* 22:07:00 UTC
+Persistent=false
+
+[Install]
+WantedBy=timers.target
