@@ -43,7 +43,9 @@ export default defineConfig({
        rather than lying about what CI checks. */
     ...(process.env.CI ? [] : [{
       name: 'chromium-relief',
-      testMatch: '**/heat-map-tiers.spec.ts',
+      /* The ward-switch spec too: it clicks 3D Relief, so it also runs in the
+         default project on SwiftShader, and here it runs on the real GPU path. */
+      testMatch: ['**/heat-map-tiers.spec.ts', '**/heat-map-ward-switch.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {

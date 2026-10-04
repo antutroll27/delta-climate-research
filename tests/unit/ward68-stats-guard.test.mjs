@@ -75,7 +75,7 @@ test('a polygon area cannot load without its boundary, nor read a solar file wit
   assert.match(body('asPvFile'), /mask === null\s*\|\| \(typeof f\.totals_in_ward\?\.capacity_mwp === 'number'[\s\S]*f\.totals_in_ward\?\.buildings === mask\.inWardCount/,
     'a polygon area would read a solar file that carries only the square\'s totals');
   /* The open area's mask is assigned with the open area, so the two never disagree. */
-  assert.match(CODE, /state\.ward = name; state\.climate = resolve\(name\)\.climate;\s*wardMask = maskCache\[name\] \?\? null;/);
+  assert.match(CODE, /state\.ward = name; state\.climate = resolve\(name\)\.climate;\s*wardMask = b\.mask;/);
 });
 
 test('Compare takes Ballygunge\'s figures inside the polygon too, and says so', async () => {

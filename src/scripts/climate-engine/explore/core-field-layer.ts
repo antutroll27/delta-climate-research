@@ -232,9 +232,16 @@ export function createCoreFieldLayer(map: maplibregl.Map, gridSize: number): Cor
   }
 
   function attach(ward: Ward, sizeM: number, beforeId?: string, wardBoundary: WardMask | null = null): void {
+    /* A DIFFERENT WARD STARTS BLANK. Resizing clears the canvas, so a grid change
+       always did; a SAME-grid switch (Baruipur ↔ Barrackpore, every Bengaluru pair)
+       kept the previous ward's pixels and showed them at the new ward's coordinates
+       until its first solve (audit I1). A re-attach to the SAME ward — `rehydrate`
+       after a basemap swap — keeps them, which is what it exists for. */
+    const wardChanged = boundaryWard?.id !== ward.id;
     boundary = wardBoundary; boundaryWard = ward;
     const wardN = requireGrid(sizeM).n;
     if (wardN !== n) { n = wardN; canvas.width = canvas.height = n; }
+    else if (wardChanged) context?.clearRect(0, 0, n, n);
     const coordinates = wardFieldCoordinates(ward, sizeM);
     if (!map.getSource(CORE_FIELD_SOURCE)) {
       map.addSource(CORE_FIELD_SOURCE, {

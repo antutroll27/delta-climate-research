@@ -234,6 +234,13 @@ export class ThreeReliefRenderer implements ReliefRenderer {
        size with no admitted pair rather than guessing one. Deliberately BEFORE
        the early return below: the buffers are not scene-dependent. */
     this.resizeField(requireGrid(bundle.wardData.sizeM).n);
+    /* AND START EMPTY. A same-grid ward keeps the buffers, and with them the
+       previous ward's field: the facades and the ground overlay sample it, so the
+       new city was tinted by the old one until its first solve (audit I1). Zero is
+       neutral to every sampler — no heat weight on a facade — and the app holds the
+       overlay at opacity 0 until this ward's first field arrives. */
+    this.heatData.fill(0);
+    this.heatTexture.needsUpdate = true;
     if (!this.scene) return;
     this.rebuildWard(bundle);
     this.options.map.triggerRepaint();
