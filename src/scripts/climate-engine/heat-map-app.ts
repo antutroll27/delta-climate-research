@@ -402,6 +402,12 @@ export function mountHeatMap(): () => void {
   let reliefReady: Promise<void> | null = null;
   let reliefWard: ReliefWardBundle | null = null;
   let currentField: Float32Array | null = null;
+  /* The last field ONLY if it is on the current ward's grid. Kolkata mixes grids
+     since Ward 68 (247² beside 192²), so a switch used to hand the previous ward's
+     field to buffers already resized for the next one and abort the load (live,
+     2026-10-04). A field from another grid is not a placeholder; it is wrong data. */
+  const fieldOnGrid = (): Float32Array | null =>
+    currentField && currentField.length === simN() * simN() ? currentField : null;
   let tintMode = 1;
   let growProgress = 1;
   let registry: BuildingMeta[] = [];
@@ -690,7 +696,7 @@ export function mountHeatMap(): () => void {
 
   function paintCard(b: BuildingMeta) {
     const i = cellIndexAt(b.cx, b.cz);
-    const localC = currentField?.[i] ?? NaN;
+    const localC = fieldOnGrid()?.[i] ?? NaN;
     const veg = state.base ? state.base.veg[i] : NaN;
     const alb = state.base ? state.base.albedo[i] : NaN;
     const wardMean = state.lastMean[state.ward];
@@ -2153,7 +2159,7 @@ export function mountHeatMap(): () => void {
       relief = instance;
       attachReliefLayer();
       if (reliefWard) instance.setWard(reliefWard);
-      if (currentField) instance.updateField({ field: currentField, coolingMask: cooling?.mask ?? null, ramp });
+      { const f = fieldOnGrid(); if (f) instance.updateField({ field: f, coolingMask: cooling?.mask ?? null, ramp }); }
       instance.setVisualState(reliefVisualState());
       instance.setSelection({ building: selected, nearestCooling: nearestCool });
       /* The renderer boots with every layer on, because a mesh it has just built
@@ -2449,7 +2455,7 @@ export function mountHeatMap(): () => void {
        way to show a figure this parameter-sensitive: as a range. */
     coolingLo = findCoolingSurfaces(state.base.veg, simN(), cellM2, VEG_BRACKET[0]);
     coolingHi = findCoolingSurfaces(state.base.veg, simN(), cellM2, VEG_BRACKET[1]);
-    if (currentField) relief?.updateField({ field: currentField, coolingMask: cooling.mask, ramp });
+    { const f = fieldOnGrid(); if (f) relief?.updateField({ field: f, coolingMask: cooling.mask, ramp }); }
     state.live = liveCache[name] ?? null; paintLive();
     resetSim();
 

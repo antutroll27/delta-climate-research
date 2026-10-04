@@ -232,6 +232,27 @@ test.describe('the relief tier — the scene the founder looks at', () => {
       + 'ramp: the relief scene mounted but the thermal field is not on it')
       .toBeGreaterThan(0.05);
   });
+
+  test('switching between Kolkata wards of DIFFERENT grids loads every ward', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-relief',
+      'needs a real GPU; tier 0 has no relief scene, which is why CI never saw this');
+    test.setTimeout(180_000);
+    /* 2026-10-04, live: Ward 68 made Ballygunge 247² while Baruipur/Barrackpore stay
+       192², and every Kolkata switch in 3-D said "could not load". loadWard pushed
+       the PREVIOUS ward's field into the relief buffers it had just resized for the
+       new ward, and updateField threw. Bengaluru never broke: one grid for all. */
+    const failures: string[] = [];
+    page.on('console', (m) => { if (/could not load/i.test(m.text())) failures.push(m.text()); });
+    await page.goto(BALLYGUNGE);
+    await settled(page);
+    for (const ward of ['baruipur', 'ballygunge', 'barrackpore', 'ballygunge']) {
+      await page.locator(`#strip .ward[data-w="${ward}"]`).click();
+      await expect(page).toHaveURL(new RegExp(`/kolkata/${ward}/`), { timeout: 30_000 });
+      await expect(page.locator('#simBackend')).not.toHaveText(/selecting/i, { timeout: 40_000 });
+      await page.waitForTimeout(4_000);
+    }
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
 });
 
 const WARD_ROUTE = '/heat-map/in/kolkata/ballygunge/';
