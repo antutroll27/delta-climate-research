@@ -19,7 +19,7 @@ import { category } from '../../../lib/aqi/cpcb.ts';
 import { LIVE_H } from '../../../lib/aqi/build.ts';
 import { AIR_STATES, isAirPayload } from '../../../lib/aqi/valid.ts';
 import { US_WORD, usAqiOf } from '../../../lib/aqi/us-aqi.ts';
-import type { AirQualityPayload, AqiResult, AqiStation, CpcbCategory, CpcbSubIndex, HistoryDay, HistoryResponse, Pollutant, PollutantReading, Result } from '../../../lib/aqi/types.ts';
+import type { AirQualityPayload, AqiResult, CityAqi, AqiStation, CpcbCategory, CpcbSubIndex, HistoryDay, HistoryResponse, Pollutant, PollutantReading, Result } from '../../../lib/aqi/types.ts';
 
 type Current = AirQualityPayload['current'];
 
@@ -77,12 +77,12 @@ const windowOf = (r: AqiResult): string => (r.pollutants.find((q) => q.parameter
 
 /* The fallback names no cause: the feed may be down, the station missing from it (register AQI-R47), stale, moved,
    or its published figure rejected by `pick` (off-scale, ambiguous, or not the largest sub-index). */
-function hero(r: Result, muted: boolean): string {
+function hero(r: Result, muted: boolean, city = ''): string {
   const meta = r.origin === 'cpcb'
     ? `Led by <b>${pol(r.dominant)}</b> · CPCB published AQI · <span style="white-space:nowrap">${r.window_h === 8 ? '8-hour average' : '24-hour average'}</span>`
     : `Led by <b>${pol(r.dominant)}</b> · AQI computed by OBOS from OpenAQ (no usable current CPCB figure for this station) · <span style="white-space:nowrap">${windowOf(r)}</span>`;
   return `<div class="hero"><span class="num${muted ? ' muted' : ''}" style="color:${col(r.category)}">${num(r.aqi)}</span>
-    <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>${usLine(r)}
+    <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>${usLine(r)}${city}
     <p class="meta">${meta}</p>`;
 }
 
@@ -104,6 +104,21 @@ function usLine(r: Result): string {
   return `<details class="aq-us"><summary title="${esc(note)}">≈ US AQI ${u.capped ? '500+' : num(u.aqi)} · ${[...words, ''].join(' ')}<span style="white-space:nowrap">${last}<span class="aq-us-i" aria-hidden="true">i</span></span></summary><p>${esc(note)}</p></details>`;
 }
 
+/** CPCB's station name without its city and agency: "Ballygunge, Kolkata - WBPCB" → "Ballygunge". */
+const shortStation = (n: string): string => n.replace(/, [^,]+ - [A-Za-z]+$/, '');
+
+/* THE CITY-WIDE AQI (lib/aqi/city.ts), one line under the US line in the same small muted
+   voice, so it is visibly subordinate to the ward's own number and says it covers the whole
+   city. The note (tap, keyboard or hover, like the US note) lists every station averaged.
+   No colour of its own: the category is a word. */
+function cityLine(city: CityAqi | undefined): string {
+  if (!city) return '';
+  const n = num(city.stations);
+  const note = `Average of all ${n} CPCB stations reporting in ${city.name} right now (CPCB's city method). The big number above is this ward's nearest station.`;
+  const list = city.members.map((m) => `<li><span>${esc(shortStation(m.name))}</span><span>${num(m.aqi)}</span></li>`).join('');
+  return `<details class="aq-city"><summary title="${esc(note)}">${esc(city.name)} (entire city) · ${num(city.aqi)} ${word(city.category)} · <span style="white-space:nowrap">${n} stations<span class="aq-us-i" aria-hidden="true">i</span></span></summary><p>${esc(note)}</p><ul>${list}</ul></details>`;
+}
+
 /* NEUTRAL ABOUT WHOSE FAULT A GAP IS: a quiet feed may be the station, CPCB, OpenAQ
    or us, so each sentence says what reached us and makes no claim about who stopped. */
 const FAILED = 'Air-quality data could not be loaded just now. Try again shortly.';
@@ -114,7 +129,7 @@ const nowrap = (html: string): string => `<span style="white-space:nowrap">${htm
 const lastReading = (iso: string | null): string => (iso === null ? '' : `Last reading ${nowrap(`<b>${esc(istFmt(iso))}</b>`)}.`);
 
 /** The card's content for one state; `title` is the head's label (empty in the pane, which has its own heading). */
-function block(c: Current, title: string, place: string): string {
+function block(c: Current, title: string, place: string, city?: CityAqi): string {
   switch (c.state) {
     case 'no_station':
       return head(title, '<span class="chip off">No station</span>') +
@@ -149,7 +164,9 @@ function block(c: Current, title: string, place: string): string {
       const when = c.result.origin === 'cpcb'
         ? `Published by CPCB at ${t}${stale ? '. No update has reached us since.' : ''}`
         : `${stale ? 'No readings have reached us since' : 'Readings to'} ${t}${stale ? '.' : ''}`;
-      return head(title, chip) + hero(c.result, stale) + stationLine(c.station, c.source.owner, place) + `<p class="meta">${when}</p>`;
+      /* The city line is as live as the ward figure it rides with: a demoted (stale) card drops it. */
+      const cityHtml = !stale && c.result.origin === 'cpcb' ? cityLine(city) : '';
+      return head(title, chip) + hero(c.result, stale, cityHtml) + stationLine(c.station, c.source.owner, place) + `<p class="meta">${when}</p>`;
     }
     default:
       return noFigure(title, 'Not loaded', FAILED);
@@ -162,7 +179,7 @@ const knownState = (c: Current): boolean => AIR_STATES.includes(c.state);
 /** The right-panel block. `now` re-judges a cached live payload (see `demote`). */
 export function cardHtml(p: AirQualityPayload, placeName: string, now: Date = new Date()): string {
   if (!knownState(p.current)) return unavailableHtml(placeName);
-  return block(demote(p.current, now), `Air quality · ${esc(placeName)}`, placeName);
+  return block(demote(p.current, now), `Air quality · ${esc(placeName)}`, placeName, p.city);
 }
 
 /** What the card shows when the request itself failed (network, 5xx, not JSON, or a malformed body). No number, no blame. */
@@ -291,7 +308,7 @@ const originOf = (c: Current): Origin =>
 export function paneHtml(p: AirQualityPayload, placeName: string, now: Date = new Date()): string {
   if (!knownState(p.current)) return failedPaneHtml(placeName);
   const c = demote(p.current, now);
-  let s = `<p class="pane-h" id="pane-air-h">Air · ${esc(placeName)}</p><div class="aqblock">${block(c, '', placeName)}</div>`;
+  let s = `<p class="pane-h" id="pane-air-h">Air · ${esc(placeName)}</p><div class="aqblock">${block(c, '', placeName, p.city)}</div>`;
   if (c.state === 'no_station') return s + method(null, 'obos');
   s += polTable(c);
   if (!p.history && (c.state === 'live' || c.state === 'stale' || c.state === 'insufficient_data')) {

@@ -2405,12 +2405,19 @@ const newCity = scope.area.hasData
      secondary token the .meta lines already clear the contrast guard with; no colour of its own, so a
      US category is never painted in a CPCB band colour. The note opens under it on tap or keyboard. */
   :is(.aqblock,[data-pane="air"]) .aq-us{margin:-2px 0 0}
-  :is(.aqblock,[data-pane="air"]) .aq-us summary{list-style:none;cursor:pointer;display:block;font:400 .54rem/1.6 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
-  :is(.aqblock,[data-pane="air"]) .aq-us summary::-webkit-details-marker{display:none}
-  :is(.aqblock,[data-pane="air"]) .aq-us summary:hover{color:var(--paper)}
-  :is(.aqblock,[data-pane="air"]) .aq-us summary:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  :is(.aqblock,[data-pane="air"]) :is(.aq-us,.aq-city) summary{list-style:none;cursor:pointer;display:block;font:400 .54rem/1.6 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+  :is(.aqblock,[data-pane="air"]) :is(.aq-us,.aq-city) summary::-webkit-details-marker{display:none}
+  :is(.aqblock,[data-pane="air"]) :is(.aq-us,.aq-city) summary:hover{color:var(--paper)}
+  :is(.aqblock,[data-pane="air"]) :is(.aq-us,.aq-city) summary:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   :is(.aqblock,[data-pane="air"]) .aq-us-i{display:inline-grid;place-items:center;width:1.3em;height:1.3em;margin-left:.5em;vertical-align:.05em;border:1px solid currentColor;border-radius:50%;font:500 .5rem/1 var(--sans);text-transform:none;letter-spacing:0}
-  :is(.aqblock,[data-pane="air"]) .aq-us p{margin:4px 0 0;font-size:.62rem;line-height:1.45;color:var(--ink)}
+  :is(.aqblock,[data-pane="air"]) :is(.aq-us,.aq-city) p{margin:4px 0 0;font-size:.62rem;line-height:1.45;color:var(--ink)}
+  /* The city-wide AQI (air-panel.ts cityLine): the US line's own voice and token, a step smaller, so it
+     can never read as the ward's figure; its note lists the stations averaged. */
+  :is(.aqblock,[data-pane="air"]) .aq-city{margin:0}
+  :is(.aqblock,[data-pane="air"]) .aq-city summary{font-size:.5rem}
+  :is(.aqblock,[data-pane="air"]) .aq-city ul{list-style:none;margin:4px 0 0;padding:0;font-size:.62rem;line-height:1.5;color:var(--ink)}
+  :is(.aqblock,[data-pane="air"]) .aq-city li{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line)}
+  :is(.aqblock,[data-pane="air"]) .aq-city li span:last-child{font-family:var(--mono);color:var(--paper)}
   :is(.aqblock,[data-pane="air"]) .empty{font-size:.82rem;line-height:1.5;color:var(--paper);margin:0}
   [data-pane="air"] table.pol{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.64rem}
   [data-pane="air"] table.pol th{text-align:left;font-weight:400;font-size:.46rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 0 6px;border-bottom:1px solid var(--line-hi)}

@@ -20,6 +20,12 @@ export function cpcbBallygunge(now = new Date()) {
         subindices: [sub('pm25', 87), sub('pm10', 107), sub('no2', 21), sub('so2', 9), sub('co', 38), sub('o3', 27)] },
     },
     history: null,
+    /* The city-wide mean (lib/aqi/city.ts): 757 / 7 = 108.1 → 108 Moderate. */
+    city: {
+      name: 'Kolkata', aqi: 108, category: 'moderate', stations: 7, observed_at: new Date(now.getTime() - 20 * 60_000).toISOString(),
+      members: ([['Rabindra Bharati University', 118], ['Fort William', 96], ['Jadavpur', 104], ['Ballygunge', 107],
+        ['Victoria', 121], ['Rabindra Sarobar', 99], ['Bidhannagar', 112]] as const).map(([n, aqi]) => ({ name: `${n}, Kolkata - WBPCB`, aqi })),
+    },
   };
 }
 
