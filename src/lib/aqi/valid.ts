@@ -81,9 +81,20 @@ function isHistory(h: unknown): boolean {
     arrOf(h['days'], isDay) && arrOf(h['pm25_24h'], isHour);
 }
 
+const aqiVal = (x: unknown): boolean => fin(x) && Number.isInteger(x) && x >= 0 && x <= 500;
+const isMember = (m: unknown): boolean => obj(m) && str(m['name']) && aqiVal(m['aqi']);
+
+/** Optional (older servers send none); when present, a whole city figure of at least two stations. */
+function isCity(c: unknown): boolean {
+  if (c === undefined) return true;
+  return obj(c) && str(c['name']) && aqiVal(c['aqi']) && oneOf(CATEGORIES, c['category']) &&
+    fin(c['stations']) && c['stations'] >= 2 && Array.isArray(c['members']) && c['members'].length === c['stations'] &&
+    arrOf(c['members'], isMember) && date(c['observed_at']);
+}
+
 /** True only for a body the painters can render without trusting a single field. */
 export function isAirPayload(x: unknown): x is AirQualityPayload {
-  return obj(x) && isCurrent(x['current']) && isHistory(x['history']);
+  return obj(x) && isCurrent(x['current']) && isHistory(x['history']) && isCity(x['city']);
 }
 
 /** The five states, for the painters' own last-line check. */
