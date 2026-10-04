@@ -17,7 +17,7 @@
  */
 import { category } from '../../../lib/aqi/cpcb.ts';
 import { LIVE_H } from '../../../lib/aqi/build.ts';
-import { AIR_STATES, isAirPayload } from '../../../lib/aqi/valid.ts';
+import { AIR_STATES, isAirPayload, isCity } from '../../../lib/aqi/valid.ts';
 import { US_WORD, usAqiOf } from '../../../lib/aqi/us-aqi.ts';
 import type { AirQualityPayload, AqiResult, CityAqi, AqiStation, CpcbCategory, CpcbSubIndex, HistoryDay, HistoryResponse, Pollutant, PollutantReading, Result } from '../../../lib/aqi/types.ts';
 
@@ -119,6 +119,9 @@ function cityLine(city: CityAqi | undefined): string {
   return `<details class="aq-city"><summary title="${esc(note)}">${esc(city.name)} (entire city) · ${num(city.aqi)} ${word(city.category)} · <span style="white-space:nowrap">${n} stations<span class="aq-us-i" aria-hidden="true">i</span></span></summary><p>${esc(note)}</p><ul>${list}</ul></details>`;
 }
 
+/** The city figure only when it is whole: a malformed one is dropped here and the ward's card paints without it. */
+const cityIn = (p: AirQualityPayload): CityAqi | undefined => (isCity(p.city) ? p.city : undefined);
+
 /* NEUTRAL ABOUT WHOSE FAULT A GAP IS: a quiet feed may be the station, CPCB, OpenAQ
    or us, so each sentence says what reached us and makes no claim about who stopped. */
 const FAILED = 'Air-quality data could not be loaded just now. Try again shortly.';
@@ -179,7 +182,7 @@ const knownState = (c: Current): boolean => AIR_STATES.includes(c.state);
 /** The right-panel block. `now` re-judges a cached live payload (see `demote`). */
 export function cardHtml(p: AirQualityPayload, placeName: string, now: Date = new Date()): string {
   if (!knownState(p.current)) return unavailableHtml(placeName);
-  return block(demote(p.current, now), `Air quality · ${esc(placeName)}`, placeName, p.city);
+  return block(demote(p.current, now), `Air quality · ${esc(placeName)}`, placeName, cityIn(p));
 }
 
 /** What the card shows when the request itself failed (network, 5xx, not JSON, or a malformed body). No number, no blame. */
@@ -308,7 +311,7 @@ const originOf = (c: Current): Origin =>
 export function paneHtml(p: AirQualityPayload, placeName: string, now: Date = new Date()): string {
   if (!knownState(p.current)) return failedPaneHtml(placeName);
   const c = demote(p.current, now);
-  let s = `<p class="pane-h" id="pane-air-h">Air · ${esc(placeName)}</p><div class="aqblock">${block(c, '', placeName, p.city)}</div>`;
+  let s = `<p class="pane-h" id="pane-air-h">Air · ${esc(placeName)}</p><div class="aqblock">${block(c, '', placeName, cityIn(p))}</div>`;
   if (c.state === 'no_station') return s + method(null, 'obos');
   s += polTable(c);
   if (!p.history && (c.state === 'live' || c.state === 'stale' || c.state === 'insufficient_data')) {

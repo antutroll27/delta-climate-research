@@ -8,8 +8,8 @@ import { handle } from '../../api/air-quality.ts';
 import { cityAqi, cityFor, MIN_CITY_STATIONS } from '../../src/lib/aqi/city.ts';
 import { parseFeed } from '../../src/lib/aqi/cpcb-feed.ts';
 import { LATEST_PATH, memoryStore } from '../../src/lib/aqi/relay-store.ts';
-import { isAirPayload } from '../../src/lib/aqi/valid.ts';
-import { cardHtml } from '../../src/scripts/climate-engine/air/air-panel.ts';
+import { isAirPayload, isCity } from '../../src/lib/aqi/valid.ts';
+import { cardHtml, loadAir } from '../../src/scripts/climate-engine/air/air-panel.ts';
 
 const FEED_GZ = readFileSync(new URL('../fixtures/aqi/cpcb-feed-2026-09-27T0500IST.xml.gz', import.meta.url));
 const FEED_XML = gunzipSync(FEED_GZ).toString('utf8');
@@ -85,14 +85,27 @@ test('/api/air-quality: on the OpenAQ fallback (relay older than 2 h) there is n
   assert.equal('city' in r.body, false, 'sources are never mixed');
 });
 
-test('validator: city is optional, and a malformed one fails the body', async () => {
+test('validator: city is optional and judged apart; a malformed one fails isCity but never the payload', async () => {
   const { body } = await get(CNOW);
   const { city, ...without } = body;
+  assert.ok(isCity(city));
   assert.ok(isAirPayload(without), 'an older server sends no city');
   for (const bad of [{ ...city, stations: 1, members: city.members.slice(0, 1) }, { ...city, aqi: '43' }, { ...city, category: 'red' },
-    { ...city, stations: 6 }, { ...city, members: [...city.members.slice(1), { name: 1, aqi: 2 }] }, null]) {
-    assert.equal(isAirPayload({ ...without, city: bad }), false, JSON.stringify(bad)?.slice(0, 60));
+    { ...city, stations: 6 }, { ...city, members: [...city.members.slice(1), { name: 1, aqi: 2 }] }, null, 'x']) {
+    assert.equal(isCity(bad), false, JSON.stringify(bad)?.slice(0, 60));
+    assert.ok(isAirPayload({ ...without, city: bad }), 'a bad city never invalidates current/history');
   }
+});
+
+test('a payload with a malformed city still loads and paints the ward AQI, with no city line', async () => {
+  const { body } = await get(CNOW);
+  const bad = { ...body, city: { ...body.city, aqi: 'NaN', members: 'oops' } };
+  const paint = await loadAir('in/kolkata/ballygunge', 'Ward 68', { fetch: async () => ({ ok: true, json: async () => bad }),
+    signal: new AbortController().signal, isCurrent: () => true, now: CNOW });
+  assert.match(paint.block, /<span class="num"[^>]*>38<\/span>/, 'the ward reading is painted');
+  assert.doesNotMatch(paint.block, /aq-city|entire city/);
+  assert.doesNotMatch(paint.pane, /aq-city|entire city/);
+  assert.doesNotMatch(paint.block, /could not be loaded/);
 });
 
 test('the card prints the city line under the US line, with the station list in its note; a demoted card drops it', async () => {
