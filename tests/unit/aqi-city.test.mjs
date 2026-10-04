@@ -53,7 +53,8 @@ test('cityAqi: fewer than 2 valid stations is no city figure; a null AQI or an o
   assert.equal(cityAqi(old, KOLKATA), null, 'six stations from an older hour are not this snapshot');
   const two = feed.map((s, i) => (i < 2 ? s : { ...s, aqi: null, dominant: null }));
   assert.deepEqual({ aqi: cityAqi(two, KOLKATA).aqi, n: cityAqi(two, KOLKATA).stations }, { aqi: 53, n: 2 }, '(59 + 46) / 2 = 52.5 → 53');
-  assert.equal(cityFor('in/bengaluru/x'), null, 'Bengaluru has no Air card, so no city');
+  assert.equal(cityFor('ae/dubai/x'), null, 'Dubai has no Air card, so no city');
+  assert.equal(cityFor('in/bengaluru/x').cpcb_state, 'Karnataka');
 });
 
 const CNOW = new Date('2026-09-27T00:30:00Z');

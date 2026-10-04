@@ -34,3 +34,34 @@ export function cpcbBallygunge(now = new Date(), o: { nowcast?: boolean } = {}) 
 export async function stubAir(page: Page, o: { nowcast?: boolean } = {}): Promise<void> {
   await page.route('**/api/air-quality*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(cpcbBallygunge(new Date(), o)) }));
 }
+
+/**
+ * Indiranagar's answer as the handler builds it from CPCB's feed of 05-10-2026 02:00 IST
+ * (tests/fixtures/aqi/cpcb-feed-2026-10-05T0200IST.xml.gz): Kasturi Nagar 68 Satisfactory,
+ * PM10-led, 3.8 km away outside the ward's window; Bengaluru 612 / 7 = 87 Satisfactory.
+ * No history: Bengaluru has no OpenAQ copy (stations.ts `sensors: null`).
+ */
+export function cpcbIndiranagar(now = new Date()) {
+  const at = new Date(now.getTime() - 20 * 60_000).toISOString();
+  const sub = (parameter: string, avg: number | null, min: number | null, max: number | null) => ({ parameter, avg, min, max, hourly: null });
+  return {
+    current: {
+      schema: 2, area_id: 'in/bengaluru/indiranagar', served_at: now.toISOString(), state: 'live', observed_at: at,
+      source: { owner: 'Karnataka State Pollution Control Board', via: 'CPCB', standard: 'CPCB National AQI' },
+      station: { id: 'cpcb:kasturi-nagar-bengaluru', name: 'Kasturi Nagar, Bengaluru', lat: 13.003872, lon: 77.664217, distance_m: 3803,
+        inside: 'outside_window', placement: 'in Kasturi Nagar, north-east of Indiranagar' },
+      result: { origin: 'cpcb', aqi: 68, category: 'satisfactory', dominant: 'pm10', window_h: 24,
+        subindices: [sub('pm25', 52, 50, 53), sub('pm10', 68, 67, 69), sub('no2', 26, 25, 27), sub('nh3', 4, 4, 4), sub('so2', 9, 9, 9), sub('co', null, null, null), sub('o3', null, null, null)] },
+    },
+    history: null,
+    city: {
+      name: 'Bengaluru', aqi: 87, category: 'satisfactory', stations: 7, observed_at: at,
+      members: ([['Jayanagar 5th Block', 'KSPCB', 119], ['Bapuji Nagar', 'KSPCB', 84], ['Peenya', 'CPCB', 37], ['BTM Layout', 'CPCB', 88],
+        ['Silk Board', 'KSPCB', 126], ['Hebbal', 'KSPCB', 90], ['Kasturi Nagar', 'KSPCB', 68]] as const).map(([n, o, aqi]) => ({ name: `${n}, Bengaluru - ${o}`, aqi })),
+    },
+  };
+}
+
+export async function stubAirIndiranagar(page: Page): Promise<void> {
+  await page.route('**/api/air-quality*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(cpcbIndiranagar(new Date())) }));
+}

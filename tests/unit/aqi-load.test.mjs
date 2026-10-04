@@ -71,7 +71,7 @@ test('an answer for an area the reader has left paints nothing, success or failu
   assert.equal(await run(new TypeError('Failed to fetch'), { isCurrent: () => false }).out, null);
 });
 test('the loading and not-covered panes name the place and keep the heading', () => {
-  for (const [html, say] of [[loadingPaneHtml('Ballygunge'), /Loading air quality…/], [uncoveredPaneHtml('MG <Road>'), /covers Kolkata first; this city is not yet covered/]]) {
+  for (const [html, say] of [[loadingPaneHtml('Ballygunge'), /Loading air quality…/], [uncoveredPaneHtml('MG <Road>'), /covers Kolkata and Bengaluru; this city is not yet covered/]]) {
     assert.match(html, /<p class="pane-h" id="pane-air-h">Air · /);
     assert.match(html, say);
     assert.doesNotMatch(html, /<Road>/, 'the place is escaped');

@@ -72,6 +72,7 @@ import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
 import { toLegacyWard } from './scope/legacy.ts';
 import { prefetchPlan, runPrefetch, shouldPrefetch, type PrefetchConnection } from './ward-prefetch';
 import { loadAir, loadingPaneHtml, uncoveredPaneHtml, wireBarTips } from './air/air-panel.ts';
+import { isAirCity } from '../../lib/aqi/stations.ts';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
 // not a code change (dc-urs-spec.md §1).
@@ -1230,7 +1231,7 @@ export function mountHeatMap(): () => void {
     if (pane === 'air') { if (legend.firstElementChild !== block) legend.prepend(block); }
     else if (block.nextElementSibling !== below) legend.insertBefore(block, below);
   }
-  /* Kolkata only in the first release (spec 2026-09-26-aqi-kolkata-design.md §5).
+  /* Kolkata and Bengaluru (stations.ts AREAS; Bengaluru since 2026-10-05); elsewhere the pane says so.
      The fetch is ~7 s cold (31 days from six sensors), so it never blocks the area
      load: the pane says "Loading", the card stays hidden until an answer lands, and
      an answer for an area the reader has already left is dropped (loadAir). */
@@ -1243,7 +1244,7 @@ export function mountHeatMap(): () => void {
     const area = state.ward, place = areaName();
     block.hidden = true;
     if (status) status.textContent = '';
-    if (splitKey(area).city !== 'kolkata') { pane.innerHTML = uncoveredPaneHtml(place); return; }
+    if (!isAirCity(area)) { pane.innerHTML = uncoveredPaneHtml(place); return; }
     pane.innerHTML = loadingPaneHtml(place);
     const ctl = new AbortController();
     airAbort = ctl;

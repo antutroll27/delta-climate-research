@@ -22,7 +22,7 @@ function readings(hours: Record<string, Map<HourKey, Hour>>, st: StationEntry, e
   return POLLUTANTS.map((p) => {
     const w = EIGHT_HOUR.has(p) ? window8(hours[p]!, endKey) : window24(hours[p]!, endKey);
     const ok = w.value !== null && w.hours >= MIN_HOURS;
-    return { parameter: p, value: w.value === null ? null : Math.round(w.value * 100) / 100, unit: st.sensors[p as keyof StationEntry['sensors']].unit,
+    return { parameter: p, value: w.value === null ? null : Math.round(w.value * 100) / 100, unit: st.sensors?.[p as keyof NonNullable<StationEntry['sensors']>].unit ?? 'ug_m3' /* no sensors, no raw readings: never reached */,
       window_h: EIGHT_HOUR.has(p) ? 8 : 24, hours_present: w.hours, sub_index: ok ? subIndex(p, w.value!) : null };
   });
 }

@@ -25,8 +25,8 @@ export { HISTORY_PATH };
 export const HISTORY_HOURS = 24;
 const HOUR_MS = 3_600_000;
 
-/** CPCB's exact names of the stations OBOS shows (stations.ts), the only ones recorded. */
-export const TRACKED: readonly string[] = Object.values(AREAS).flatMap((s) => (s ? [s.cpcb_name] : []));
+/** CPCB's exact names of the stations OBOS shows (stations.ts), Kolkata's and Bengaluru's, the only ones recorded; each once (two Bengaluru wards share Kasturi Nagar). */
+export const TRACKED: readonly string[] = [...new Set(Object.values(AREAS).flatMap((s) => (s ? [s.cpcb_name] : [])))];
 
 export interface PmHour { pm25: number | null; pm10: number | null }
 export interface HourRecord {

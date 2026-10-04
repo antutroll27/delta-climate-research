@@ -156,8 +156,9 @@ not a static assumption that coverage will never change.
 
 ### Bengaluru areas currently represented in OBOS
 
-**Parked on 26 September 2026.** No government station lies inside the 3 km window of
-Indiranagar, MG Road or Whitefield. Findings, for when Bengaluru is resumed:
+**Resumed on 5 October 2026** from CPCB's feed: each ward shows its nearest monitor in the
+feed, labelled outside its window with the true distance (register AQI-R51). Parked on
+26 September 2026; the findings then were:
 
 | Area | Nearest live government station | Nearest KSPCB manual station (monthly AQI) |
 |---|---|---|

@@ -1,6 +1,7 @@
 // src/lib/aqi/stations.ts
 /**
- * The three Kolkata areas and their government monitors. Positions verified
+ * The OBOS areas with an Air card (Kolkata's three, Bengaluru's three) and their
+ * government monitors. Kolkata's positions verified Positions verified
  * 2026-09-26 (register AQI-R20, R21). Units come from a per-sensor table, never
  * from OpenAQ's labels, which are wrong (AQI-R31): Ballygunge's are verified against
  * OpenCity's native-unit archive; Barrackpore's CO and NO₂ are verified (magnitude,
@@ -16,7 +17,13 @@ export interface StationEntry extends Omit<AqiStation, 'placement'> {
   owner: string;
   /** The station's exact `<Station id>` in CPCB's CAAQMS feed (register AQI-R47a). */
   cpcb_name: string;
-  sensors: Readonly<Record<'pm25' | 'pm10' | 'no2' | 'so2' | 'co' | 'o3', SensorRef>>;
+  /**
+   * OpenAQ's sensors for the 30-day history and the fallback, or null when OBOS knows none
+   * (Bengaluru: no verified OpenAQ ids; Kasturi Nagar has been silent there). With null,
+   * CPCB's feed is the only source: no history, and when the feed is unusable the card
+   * shows the honest unavailable state instead of a figure from elsewhere.
+   */
+  sensors: Readonly<Record<'pm25' | 'pm10' | 'no2' | 'so2' | 'co' | 'o3', SensorRef>> | null;
 }
 
 export const AREAS: Readonly<Record<string, StationEntry | null>> = {
@@ -43,9 +50,41 @@ export const AREAS: Readonly<Record<string, StationEntry | null>> = {
                so2: { id: 12238560, unit: 'ug_m3' }, co: { id: 12238553, unit: 'mg_m3' }, o3: { id: 12238556, unit: 'ug_m3' } },
   },
   'in/kolkata/baruipur': null,
+  /* BENGALURU (founder, 2026-10-05). No CPCB/KSPCB monitor stands inside any of the three
+     3 km windows, so each ward shows its NEAREST monitor in CPCB's feed, labelled as that
+     with its true distance (as Ballygunge). Positions are the feed's own (fixture
+     cpcb-feed-2026-10-05T0200IST); distances are haversine from the ward centres in
+     src/data/cities.ts. Nearest "that reports in the feed": a station present in the feed,
+     even in an hour it publishes no AQI (MG Road's Hombegowda Nagar at 02:00 IST on
+     5 Oct); that hour then shows CPCB's own no-AQI state, never a swapped-in neighbour.
+     Whitefield's monitor is 10.0 km away: there is no maximum-distance rule, so it is
+     shown, distance first; hiding it is the founder's call. No OpenAQ ids: `sensors` null. */
+  'in/bengaluru/indiranagar': {
+    id: 'cpcb:kasturi-nagar-bengaluru', name: 'Kasturi Nagar, Bengaluru', owner: 'Karnataka State Pollution Control Board',
+    cpcb_name: 'Kasturi Nagar, Bengaluru - KSPCB',
+    lat: 13.003872, lon: 77.664217, distance_m: 3803,
+    inside: 'outside_window', placement: 'in Kasturi Nagar, north-east of Indiranagar', sensors: null,
+  },
+  'in/bengaluru/mg-road': {
+    id: 'cpcb:hombegowda-nagar-bengaluru', name: 'Hombegowda Nagar, Bengaluru', owner: 'Karnataka State Pollution Control Board',
+    cpcb_name: 'Hombegowda Nagar, Bengaluru - KSPCB',
+    lat: 12.938539, lon: 77.5901, distance_m: 4341,
+    inside: 'outside_window', placement: 'in Hombegowda Nagar, south of MG Road', sensors: null,
+  },
+  'in/bengaluru/whitefield': {
+    id: 'cpcb:kasturi-nagar-bengaluru', name: 'Kasturi Nagar, Bengaluru', owner: 'Karnataka State Pollution Control Board',
+    cpcb_name: 'Kasturi Nagar, Bengaluru - KSPCB',
+    lat: 13.003872, lon: 77.664217, distance_m: 10037,
+    inside: 'outside_window', placement: 'in Kasturi Nagar, west-north-west of Whitefield', sensors: null,
+  },
 };
 
 export function isAirArea(key: string): boolean { return Object.hasOwn(AREAS, key); }
+/** True when the area's city has an Air card (`in/bengaluru/x` → true): the UI's one gate, read from AREAS. */
+export function isAirCity(key: string): boolean {
+  const prefix = key.split('/').slice(0, 2).join('/') + '/';
+  return Object.keys(AREAS).some((k) => k.startsWith(prefix));
+}
 /**
  * The station as the wire carries it — ONE builder for every response path (OBOS's
  * own calculation, CPCB's feed, the upstream-error state), so the honest status is

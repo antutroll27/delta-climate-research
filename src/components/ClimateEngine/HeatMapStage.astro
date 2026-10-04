@@ -18,6 +18,8 @@ import PanelToggle from './shell/PanelToggle.astro';
 import LayerTree from './shell/LayerTree.astro';
 import InterventionPane from './shell/InterventionPane.astro';
 import { areaKeysInCity } from '../../scripts/climate-engine/scope/registry.ts';
+import { isAirCity } from '../../lib/aqi/stations.ts';
+import { UNCOVERED_NOTE } from '../../scripts/climate-engine/air/air-panel.ts';
 import { areaPath, DEFAULT_AREA_PATH } from '../../scripts/climate-engine/scope/paths.ts';
 import { resolve, type ResolvedScope } from '../../scripts/climate-engine/scope/resolve.ts';
 import { newCityToAnnounce } from '../../scripts/climate-engine/shell/new-city.ts';
@@ -351,7 +353,7 @@ const newCity = scope.area.hasData
       <div class="pane" data-pane="air">
         <section class="pane-body" id="airPane" aria-labelledby="pane-air-h">
           <p class="pane-h" id="pane-air-h">Air · <span id="airPaneArea">{scope.area.name}</span></p>
-          <p class="pane-note" id="airPaneBody">{scope.city.id === 'kolkata' ? 'Loading air quality…' : 'Air quality covers Kolkata first; this city is not yet covered.'}</p>
+          <p class="pane-note" id="airPaneBody">{isAirCity(scope.key) ? 'Loading air quality…' : UNCOVERED_NOTE}</p>
         </section>
       </div>
 

@@ -1,5 +1,5 @@
 /**
- * GET /api/air-quality?area=in/kolkata/ballygunge
+ * GET /api/air-quality?area=in/kolkata/ballygunge (or in/bengaluru/indiranagar, …)
  * Government-station air quality for one OBOS area: current state + 30 days.
  * The OpenAQ key is read from OPENAQ_API_KEY and never leaves this function:
  * not in a response, not in a log line (only the area and a numeric status are logged).
@@ -146,7 +146,7 @@ const whenAborted = (signal: AbortSignal): Promise<never> => new Promise((_, rej
  * failure (429, 5xx, timeout, network) fails the whole area and aborts the other fetches:
  * a partial picture built from throttled data is not served.
  */
-async function fetchAll(st: StationEntry, now: Date, d: Deps): Promise<RawSet> {
+async function fetchAll(sensors: NonNullable<StationEntry['sensors']>, now: Date, d: Deps): Promise<RawSet> {
   const to = new Date(Math.ceil(now.getTime() / 900_000) * 900_000).toISOString();
   const from = new Date(Date.parse(to) - 31 * 86_400_000).toISOString();
   const ctl = new AbortController();
@@ -154,7 +154,7 @@ async function fetchAll(st: StationEntry, now: Date, d: Deps): Promise<RawSet> {
   let first: unknown = null;
   const work = Promise.allSettled(POLLUTANTS.map(async (p) => {
     try {
-      return await fetchSensorWindow(st.sensors[p as keyof typeof st.sensors].id, from, to, { key: d.key, fetch: d.fetch, signal });
+      return await fetchSensorWindow(sensors[p as keyof typeof sensors].id, from, to, { key: d.key, fetch: d.fetch, signal });
     } catch (e) {
       if (e instanceof OpenAqError && e.status === 404) return [];
       if (first === null) first = e;
@@ -173,13 +173,13 @@ async function fetchAll(st: StationEntry, now: Date, d: Deps): Promise<RawSet> {
 }
 
 /** Cached raw readings, a shared in-flight fetch, or a new fetch. Only successes enter the cache. */
-function rawFor(area: string, st: StationEntry, now: Date, d: Deps): Promise<RawSet> {
+function rawFor(area: string, sensors: NonNullable<StationEntry['sensors']>, now: Date, d: Deps): Promise<RawSet> {
   const cache = d.cache ?? CACHE, inflight = d.inflight ?? INFLIGHT;
   const hit = cache.get(area);
   if (hit && now.getTime() - hit.at < CACHE_TTL_MS) return Promise.resolve(hit.raw);
   let p = inflight.get(area);
   if (!p) {
-    p = fetchAll(st, now, d)
+    p = fetchAll(sensors, now, d)
       .then((raw) => { cache.set(area, { at: now.getTime(), raw }); return raw; })
       .finally(() => { inflight.delete(area); });
     inflight.set(area, p);
@@ -190,7 +190,7 @@ function rawFor(area: string, st: StationEntry, now: Date, d: Deps): Promise<Raw
 function upstreamError(area: string, st: StationEntry, now: Date): AirQualityPayload {
   const station = stationPayload(st);
   return { current: { schema: SCHEMA, area_id: area, served_at: now.toISOString(),
-    source: { owner: st.owner, via: 'CPCB via OpenAQ', standard: 'CPCB National AQI' },
+    source: { owner: st.owner, via: st.sensors ? 'CPCB via OpenAQ' : 'CPCB', standard: 'CPCB National AQI' },
     state: 'unavailable', station, last_observed_at: null, reason: 'upstream_error' }, history: null };
 }
 
@@ -205,8 +205,10 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
   const st = stationFor(area), now = (d.now ?? (() => new Date()))();
   if (!st) { res.setHeader('Cache-Control', OK_CACHE); res.status(200).json(buildPayload(area, null, {}, now)); return; }
   const feedP = d.cpcbFeed ? feedFor(now, d) : Promise.resolve(null);
-  const rawP: Promise<Settled> | null = d.key
-    ? rawFor(area, st, now, d).then((raw) => ({ ok: true as const, raw }), (e: unknown) => ({ ok: false as const, e }))
+  /* A station with no OpenAQ sensors (Bengaluru) has no second source: CPCB's feed or nothing. */
+  const sensors = st.sensors;
+  const rawP: Promise<Settled> | null = d.key && sensors
+    ? rawFor(area, sensors, now, d).then((raw) => ({ ok: true as const, raw }), (e: unknown) => ({ ok: false as const, e }))
     : null;
   const snap = await feedP;
   const feed = snap?.stations ?? null;
@@ -233,12 +235,16 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
     const city = feed && ref && current.state === 'live' ? cityAqi(feed, ref) : null;
     /* NowCast likewise: only beside a live CPCB figure, from that station's own hours. */
     const usNowcast = f && current.state === 'live' ? nowcastFor(snap?.history ?? null, f) : null;
-    res.setHeader('Cache-Control', history ? OK_CACHE : PARTIAL_CACHE);
+    /* No OpenAQ sensors: no history is coming, so the CPCB answer is already whole. */
+    res.setHeader('Cache-Control', history || !sensors ? OK_CACHE : PARTIAL_CACHE);
     res.status(200).json({ current, history, ...(city ? { city } : {}), ...(usNowcast ? { us_nowcast: usNowcast } : {}) } satisfies AirQualityPayload);
     return;
   }
 
   // CPCB unusable: today's path. A misconfiguration must never be cached at the CDN: it would outlive the fix.
+  /* No OpenAQ copy of this station to fall back on: the honest unavailable state, uncached like any failure,
+     so the CDN keeps serving its last good CPCB answer and the next request asks the feed again. */
+  if (!sensors) { res.setHeader('Cache-Control', FAIL_CACHE); res.status(200).json(upstreamError(area, st, now)); return; }
   if (!rawP) { res.setHeader('Cache-Control', 'no-store'); res.status(503).json({ error: 'air quality not configured' }); return; }
   const r = await rawP;
   if ('e' in r) {

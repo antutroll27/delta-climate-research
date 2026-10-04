@@ -26,7 +26,8 @@ The plan has four goals:
 
 ## Current state (27 September 2026)
 
-The first release is **Kolkata only**, specified in
+The first release was **Kolkata only**; since 5 October 2026 Bengaluru's three wards also
+have the Air card, from CPCB's feed only (register AQI-R51). The first release is specified in
 [`docs/superpowers/specs/2026-09-26-aqi-kolkata-design.md`](../superpowers/specs/2026-09-26-aqi-kolkata-design.md).
 Its successor, [`2026-09-27-aqi-cpcb-feed-design.md`](../superpowers/specs/2026-09-27-aqi-cpcb-feed-design.md),
 changes where the current value comes from. Where the specs and these documents differ, the specs govern.
@@ -108,7 +109,7 @@ Details are in the [research register](./05-research-register.md), R19–R47a.
 | Historical storage | None required for the live pilot; add managed PostgreSQL when durable history is justified |
 | ESP32 transport | Deferred until after the government-station release |
 | Map representation | Station markers and explicit coverage states; no unsupported ward-wide AQI surface |
-| First-release scope | Kolkata only (decided 26 Sep 2026) |
+| First-release scope | Kolkata only (decided 26 Sep 2026); Bengaluru added from CPCB's feed (5 Oct 2026, AQI-R51) |
 | Area coverage rule | Station inside the place's 3 km window, distance always shown (decided 26 Sep 2026) |
 | Missing live coverage | Display `no_station` or `insufficient_data`; never substitute zero or an invented value |
 | External ingestion cadence | On-demand with caching during the pilot; scheduled archival added when justified |
