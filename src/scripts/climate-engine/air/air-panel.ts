@@ -18,6 +18,7 @@
 import { category } from '../../../lib/aqi/cpcb.ts';
 import { LIVE_H } from '../../../lib/aqi/build.ts';
 import { AIR_STATES, isAirPayload } from '../../../lib/aqi/valid.ts';
+import { US_WORD, usAqiOf } from '../../../lib/aqi/us-aqi.ts';
 import type { AirQualityPayload, AqiResult, AqiStation, CpcbCategory, CpcbSubIndex, HistoryDay, HistoryResponse, Pollutant, PollutantReading, Result } from '../../../lib/aqi/types.ts';
 
 type Current = AirQualityPayload['current'];
@@ -81,8 +82,26 @@ function hero(r: Result, muted: boolean): string {
     ? `Led by <b>${pol(r.dominant)}</b> · CPCB published AQI · <span style="white-space:nowrap">${r.window_h === 8 ? '8-hour average' : '24-hour average'}</span>`
     : `Led by <b>${pol(r.dominant)}</b> · AQI computed by OBOS from OpenAQ (no usable current CPCB figure for this station) · <span style="white-space:nowrap">${windowOf(r)}</span>`;
   return `<div class="hero"><span class="num${muted ? ' muted' : ''}" style="color:${col(r.category)}">${num(r.aqi)}</span>
-    <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>
+    <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>${usLine(r)}
     <p class="meta">${meta}</p>`;
+}
+
+const US_NOTE = {
+  cpcb: "Same air, US EPA scale (used by IQAir, aqi.in): converted from CPCB's 24-hour PM2.5/PM10. The official Indian AQI above is the legal standard.",
+  obos: 'Same air, US EPA scale (used by IQAir, aqi.in): computed from the same 24-hour PM2.5/PM10 means. The official Indian AQI above is the legal standard.',
+} as const;
+
+/* THE US EPA EQUIVALENT, one small muted line under the official number, so a reader
+   who has seen IQAir's figure does not take OBOS's for a mistake. Nothing when the
+   result carries no 24-hour PM2.5 or PM10: never a guess. A <details>, so the note
+   opens by tap and keyboard as well as by hover (the title). */
+function usLine(r: Result): string {
+  const u = usAqiOf(r);
+  if (!u) return '';
+  const note = US_NOTE[r.origin];
+  /* The info mark rides with the category's last word, so it never wraps onto a line alone. */
+  const words = US_WORD[u.category].split(' '), last = words.pop()!;
+  return `<details class="aq-us"><summary title="${esc(note)}">≈ US AQI ${u.capped ? '500+' : num(u.aqi)} · ${[...words, ''].join(' ')}<span style="white-space:nowrap">${last}<span class="aq-us-i" aria-hidden="true">i</span></span></summary><p>${esc(note)}</p></details>`;
 }
 
 /* NEUTRAL ABOUT WHOSE FAULT A GAP IS: a quiet feed may be the station, CPCB, OpenAQ

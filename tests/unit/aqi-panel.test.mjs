@@ -146,7 +146,8 @@ test('I4: an O₃-led AQI names the maximum 8-hour mean, a PM-led one the 24-hou
   assert.equal(o3.current.result.dominant, 'o3');
   const card = cardHtml(o3, 'Ballygunge', T);
   assert.match(card, /Led by <b>O₃<\/b> · AQI computed by OBOS from OpenAQ \(no usable current CPCB figure for this station\) · <span[^>]*>maximum 8-hour mean<\/span>/);
-  assert.doesNotMatch(card, /24-hour/);
+  /* The US-equivalent note under the number names ITS OWN 24-hour PM basis; the headline's window must not. */
+  assert.doesNotMatch(card.replace(/<details class="aq-us">[\s\S]*?<\/details>/, ''), /24-hour/);
   const pm = buildPayload(K, st, rawWith('2026-09-24T17:30:00Z', { pm25: 80 }), T);
   assert.equal(pm.current.result.dominant, 'pm25');
   assert.match(cardHtml(pm, 'Ballygunge', T), /Led by <b>PM2\.5<\/b> · AQI computed by OBOS from OpenAQ \(no usable current CPCB figure for this station\) · <span[^>]*>24-hour mean<\/span>/);

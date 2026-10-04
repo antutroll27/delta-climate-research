@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { stubAir } from './aqi-cpcb-stub.ts';
 
 /**
  * EVERY WORD ON THE CONSOLE, AGAINST THE GROUND IT IS ACTUALLY DRAWN ON.
@@ -44,6 +45,8 @@ const BALLYGUNGE = '/heat-map/in/kolkata/ballygunge/';
 interface Finding {
   ratio: number; floor: number; color: string; ground: string;
   px: number; text: string; path: string;
+  /** Inside the Air card or the Air pane. */
+  air: boolean;
 }
 
 /**
@@ -221,6 +224,7 @@ async function contrastFailures(page: Page): Promise<Finding[]> {
         ratio: Number(cr.toFixed(2)), floor, color: painted,
         ground: `rgb(${ground.join(',')})`, px: Number(px.toFixed(1)),
         text: el.textContent.trim().slice(0, 30), path: path.slice(-3).join(' > '),
+        air: el.closest('#aqiBlock, #airPane') !== null,
       });
     }
     return { findings: out.sort((a, b) => a.ratio - b.ratio), moved };
@@ -245,6 +249,10 @@ async function settled(page: Page): Promise<void> {
 
 test.describe('console legibility', () => {
   test.setTimeout(180_000);
+  /* THE AIR CARD WITH A FIGURE IN IT. The built page has no /api/air-quality, so
+     unstubbed the card shows only its failure line and the headline, the US-EPA
+     equivalent under it and the meta lines are never swept. A CPCB answer puts them on screen. */
+  test.beforeEach(async ({ page }) => { await stubAir(page); });
 
   test('every word clears its contrast floor on the default basemap', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-tier0',
@@ -268,6 +276,30 @@ test.describe('console legibility', () => {
     await page.waitForTimeout(4_000);
     const findings = await contrastFailures(page);
     expect(findings, report('Clay studio', findings)).toEqual([]);
+  });
+
+  test('the Air card and pane with the US-EPA line, Slate and Clay', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-tier0',
+      'one tier is enough: this measures ink against panel grounds, not the renderer');
+    /* Off-pane the Air card sits below the right panel's fold (measured at 1280x720:
+       the US line's top at y=887), so the sweeps above never sample it. With the Air
+       pane open the card moves to the top of the panel, and the pane shows the same
+       headline and line: both are on screen. */
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(BALLYGUNGE);
+    await settled(page);
+    await page.locator('[data-rail="air"]').first().click();
+    await page.waitForTimeout(1_500);
+    await expect(page.locator('#aqiBlock .aq-us summary')).toBeInViewport();
+    await expect(page.locator('#airPane .aq-us summary')).toBeInViewport();
+    /* THE AIR TEXT ONLY: at 1440x900 the map's big place name crosses the heat field,
+       which the default-viewport sweeps above judge; this one judges the air ink. */
+    const slate = (await contrastFailures(page)).filter((f) => f.air);
+    expect(slate, report('OBOS Slate, Air card', slate)).toEqual([]);
+    await page.locator('#envchip button[data-e="studio"]').click();
+    await page.waitForTimeout(4_000);
+    const clay = (await contrastFailures(page)).filter((f) => f.air);
+    expect(clay, report('Clay studio, Air card', clay)).toEqual([]);
   });
 
   test('Clay studio with a building card open', async ({ page }, testInfo) => {

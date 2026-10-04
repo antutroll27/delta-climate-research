@@ -2401,6 +2401,16 @@ const newCity = scope.area.hasData
   :is(.aqblock,[data-pane="air"]) .dot{width:9px;height:9px;border-radius:50%;flex:none}
   :is(.aqblock,[data-pane="air"]) .meta{margin:0;font-size:.68rem;line-height:1.5;color:var(--ink)}
   :is(.aqblock,[data-pane="air"]) .meta b{font-weight:500;color:var(--paper)}
+  /* The US EPA equivalent (air-panel.ts usLine): the legend's small mono label voice in --ink, the
+     secondary token the .meta lines already clear the contrast guard with; no colour of its own, so a
+     US category is never painted in a CPCB band colour. The note opens under it on tap or keyboard. */
+  :is(.aqblock,[data-pane="air"]) .aq-us{margin:-2px 0 0}
+  :is(.aqblock,[data-pane="air"]) .aq-us summary{list-style:none;cursor:pointer;display:block;font:400 .54rem/1.6 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+  :is(.aqblock,[data-pane="air"]) .aq-us summary::-webkit-details-marker{display:none}
+  :is(.aqblock,[data-pane="air"]) .aq-us summary:hover{color:var(--paper)}
+  :is(.aqblock,[data-pane="air"]) .aq-us summary:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  :is(.aqblock,[data-pane="air"]) .aq-us-i{display:inline-grid;place-items:center;width:1.3em;height:1.3em;margin-left:.5em;vertical-align:.05em;border:1px solid currentColor;border-radius:50%;font:500 .5rem/1 var(--sans);text-transform:none;letter-spacing:0}
+  :is(.aqblock,[data-pane="air"]) .aq-us p{margin:4px 0 0;font-size:.62rem;line-height:1.45;color:var(--ink)}
   :is(.aqblock,[data-pane="air"]) .empty{font-size:.82rem;line-height:1.5;color:var(--paper);margin:0}
   [data-pane="air"] table.pol{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.64rem}
   [data-pane="air"] table.pol th{text-align:left;font-weight:400;font-size:.46rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 0 6px;border-bottom:1px solid var(--line-hi)}
