@@ -42,6 +42,12 @@ export interface AqiStation {
   inside: 'window_3km' | 'outside_window';
   /** Where an `outside_window` monitor stands, in words (e.g. "in KMC Ward 69, outside Ward 68"). Absent when inside. */
   placement?: string;
+  /**
+   * Present (true) only when this is NOT the area's nearest monitor: every nearer one on the
+   * area's ladder (stations.ts FALLBACKS) published no valid AQI this hour, so this is the
+   * nearest monitor REPORTING one, and the card says so. Absent on every Kolkata answer.
+   */
+  fallback?: true;
 }
 
 export interface PollutantReading {
@@ -102,9 +108,11 @@ export type Result = AqiResult | CpcbResult;
  * Why there is no AQI. Each says something different about the station, so the UI must not collapse them:
  * - `feed_quiet`: no reading for more than 7 days (or none at all in the 31-day window);
  * - `no_valid_aqi`: the feed is stale (2 h to 7 d) and its window fails the CPCB validity rule;
- * - `upstream_error`: we could not reach OpenAQ. This says nothing about the station, so `last_observed_at` is null.
+ * - `upstream_error`: we could not reach the source (OpenAQ, or CPCB's feed via the relay). This says nothing about the station, so `last_observed_at` is null.
+ * - `station_not_reporting`: CPCB's feed was read and is current, but none of the area's monitors (its whole ladder) is in it
+ *   with a usable answer. The station given is the area's nearest; `last_observed_at` is null.
  */
-export type UnavailableReason = 'feed_quiet' | 'no_valid_aqi' | 'upstream_error';
+export type UnavailableReason = 'feed_quiet' | 'no_valid_aqi' | 'upstream_error' | 'station_not_reporting';
 
 interface Common {
   schema: typeof SCHEMA;

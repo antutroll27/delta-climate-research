@@ -231,6 +231,25 @@ export function pick(feed: readonly FeedStation[], st: StationEntry): FeedStatio
   return f.aqi === max && held ? f : null;
 }
 
+/**
+ * THE STATION SERVED from an area's ladder (stations.ts `candidatesFor`, nearest first): the first
+ * that `pick` accepts AND that published an AQI this hour; failing that, the first `pick` accepts
+ * at all (its no-AQI hour is then shown as CPCB's own, at that station); null when no rung is in
+ * the feed. `fallback` is true for any rung but the first. A one-rung ladder (every Kolkata area)
+ * is exactly `pick`: same station, same answer.
+ */
+export function pickServed(feed: readonly FeedStation[], ladder: readonly StationEntry[]): { st: StationEntry; f: FeedStation; fallback: boolean } | null {
+  let present: { st: StationEntry; f: FeedStation; fallback: boolean } | null = null;
+  for (const [i, st] of ladder.entries()) {
+    const f = pick(feed, st);
+    if (!f) continue;
+    const hit = { st, f, fallback: i > 0 };
+    if (f.aqi !== null && f.dominant !== null) return hit;
+    present ??= hit;
+  }
+  return present;
+}
+
 /** The body, read chunk by chunk and abandoned the moment it passes FEED_MAX_BYTES: nothing unbounded is ever buffered. */
 async function readCapped(res: Response): Promise<string> {
   if (!res.body) return '';
@@ -320,11 +339,11 @@ function cpcbReasons(f: FeedStation): string[] {
  * cannot be used (published more than 7 days ago, or stamped in the future):
  * the caller then falls back to OBOS's own calculation from OpenAQ.
  */
-export function currentFromFeed(f: FeedStation, areaKey: string, st: StationEntry, now: Date): AirQualityResponse | null {
+export function currentFromFeed(f: FeedStation, areaKey: string, st: StationEntry, now: Date, fallback = false): AirQualityResponse | null {
   const ageMs = now.getTime() - Date.parse(f.published_at);
   if (ageMs < -FUTURE_SLACK_MS || ageMs > STALE_DAYS * DAY_MS) return null;
   const fresh = ageMs <= LIVE_H * HOUR_MS;
-  const station: AqiStation = stationPayload(st);
+  const station: AqiStation = stationPayload(st, fallback);
   const common = { schema: SCHEMA, area_id: areaKey, served_at: now.toISOString(),
     source: { owner: st.owner, via: 'CPCB', standard: 'CPCB National AQI' as const } };
   if (f.aqi === null || f.dominant === null) {

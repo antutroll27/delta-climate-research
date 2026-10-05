@@ -65,3 +65,29 @@ export function cpcbIndiranagar(now = new Date()) {
 export async function stubAirIndiranagar(page: Page): Promise<void> {
   await page.route('**/api/air-quality*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(cpcbIndiranagar(new Date())) }));
 }
+
+/**
+ * Whitefield's answer as the handler builds it from CPCB's feed of 05-10-2026 18:00 IST
+ * (tests/fixtures/aqi/cpcb-feed-2026-10-05T1800IST.xml.gz), when Kasturi Nagar, its nearest
+ * monitor, was not in the feed: the ladder's next rung, Silk Board, 119 Moderate, 15.0 km
+ * away, flagged `fallback`. The card must print THAT station's distance, not Kasturi Nagar's.
+ */
+export function cpcbWhitefieldFallback(now = new Date()) {
+  const at = new Date(now.getTime() - 20 * 60_000).toISOString();
+  const sub = (parameter: string, avg: number | null) => ({ parameter, avg, min: avg, max: avg, hourly: null });
+  return {
+    current: {
+      schema: 2, area_id: 'in/bengaluru/whitefield', served_at: now.toISOString(), state: 'live', observed_at: at,
+      source: { owner: 'Karnataka State Pollution Control Board', via: 'CPCB', standard: 'CPCB National AQI' },
+      station: { id: 'cpcb:silk-board-bengaluru', name: 'Silk Board, Bengaluru', lat: 12.917348, lon: 77.622813, distance_m: 14966,
+        inside: 'outside_window', placement: 'at Silk Board, west-south-west of Whitefield', fallback: true },
+      result: { origin: 'cpcb', aqi: 119, category: 'moderate', dominant: 'pm25', window_h: 24,
+        subindices: [sub('pm25', 119), sub('pm10', 96), sub('no2', 30), sub('so2', 8), sub('co', 40), sub('o3', 20)] },
+    },
+    history: null,
+  };
+}
+
+export async function stubAirWhitefieldFallback(page: Page): Promise<void> {
+  await page.route('**/api/air-quality*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(cpcbWhitefieldFallback(new Date())) }));
+}
