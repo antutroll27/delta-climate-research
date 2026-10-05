@@ -1144,3 +1144,68 @@ diverge: the TypeScript's every `x.wind / n` site against `_physics`' constants;
 `model_wind`; a live `landsat_rows()` against `model_wind`; and every committed row, both instruments, against
 `model_wind` of its own forcing line. Mutation-proved both ways: reverting `landsat_rows` to `f["wind"]` fails
 the live check, and the pre-fix artefact fails the artefact check.
+
+## 18. Displayed vs calibrated: the page draws a damped field the bands were never fitted on
+
+**Status:** measured, not changed · **See:** `scripts/measure-displayed-vs-calibrated.py`,
+`scripts/displayed-field-means.mjs`, `data/calibration/displayed-vs-calibrated.json`.
+
+Every published accuracy figure scores the calibrated equation, `(gain + kRad·tSky + h·wind·tAir) /
+(kRad + h·wind)` at the ward's mean surface (`fit-ward-scale.py` `predict`, `eqMeanFromMeans`). The solver the
+page runs, `TsHeatSim` (`sim-ts.ts`) and its GPU twin (`sim-gpu-webgl2.ts`), multiplies the convective term by a
+per-cell ventilation factor `max(0.15, 1 − 0.55·built + 0.65·water)` that no fit has ever seen. A built cell
+therefore sheds heat to the air more slowly than the calibrated equation assumes, and the ward mean on screen
+runs warm of the number the bands describe.
+
+**Method.** For each of the 294 scored rows, the shipped solver was driven through the app's own path
+(`rasterWardBase` layers, `currentParams` with the row's forcing and corrected wind, the Ward 68 polygon mask
+through `fieldStats`) to convergence (ward mean moving < 1e-4 K per 400 steps), and scored against the same
+observation with the statistics `measure-accuracy.py` publishes. The calibrated column is recomputed with the
+published scorer and the script refuses to run unless it reproduces `model-accuracy.json` on every stratum
+(it does, to 0.002 K). "First frame" is the field after `RESET_BURST` (600) steps, which is also all the
+non-animating static host ever shows. No row changed branch (day/night) between the two paths.
+
+| stratum | n | calibrated bias / RMSE / LOO-overpass | displayed bias / RMSE / LOO-overpass | first frame RMSE | published band | holds for displayed? |
+|---|---|---|---|---|---|---|
+| night | 50 | +0.41 / 2.66 / 2.78 K | +0.59 / 2.83 / **2.92** K | 2.79 K | ±3.0 K | **yes, by 0.08 K** |
+| morning_ecostress (7.1–11.1 h) | 9 | −1.62 / 4.34 / 6.29 K | −1.11 / 4.27 / 5.87 K | 4.28 K | 7.54 K (transition) | yes |
+| morning_landsat (10:30) | 212 | +0.36 / 2.91 / 2.94 K | +1.12 / 3.36 / 3.23 K | 3.23 K | ±4.5 K (peak; 10:30 is outside the transition window) | yes |
+| peak_ecostress (11.8–17.5 h) | 23 | +0.66 / 2.23 / 2.36 K | +1.09 / 2.42 / 2.37 K | 2.41 K | ±4.5 K (n = 29 earlier set) | yes |
+
+Displayed minus calibrated, mean over the stratum: night +0.18 K, morning_ecostress +0.51, morning_landsat
++0.76, peak +0.44 K; on Ward 68 alone +0.37 (night), +1.14 (Landsat, 92 rows over 47 overpasses), +0.73 K
+(peak). Ward 68 sits highest because it is the most built (0.36). Almost all of it is the solver's own
+departure from its undamped equation (`solver_minus_equation_K`); the app's equation differs from the
+published scorer by under 0.1 K (the night-ET taper uses a fixed reference surface in the app).
+
+**The ventilation factor is the whole gap.** Re-running the same harness with the factor set to 1 (a scratch
+counterfactual, not committed) puts displayed within 0.1 K of calibrated on every stratum: night +0.31 / 2.68 /
+2.81 K, Landsat +0.33 / 2.89 / 2.92 K, peak +0.64 / 2.22 / 2.35 K, Ward 68 Landsat −0.08 K from calibrated.
+Diffusion and the polygon mask contribute almost nothing.
+
+**Seasons.** All four pooled bands hold for the displayed field. They do not all hold by season:
+
+| displayed field | winter (Dec–Feb) | pre-monsoon (Mar–Jun) | monsoon (Jul–Sep) | post-monsoon (Oct–Nov) |
+|---|---|---|---|---|
+| night, all wards | −1.57 / 2.41 K (n 14) | +2.00 / **3.27** K (n 18) | +2.33 / 4.22 K (n 5) | +0.31 / 1.73 K (n 13) |
+| Landsat 10:30, all wards | +0.30 / 2.69 K (n 119) | +3.56 / **4.81** K (n 60) | — | −0.36 / 2.13 K (n 33) |
+| Landsat 10:30, Ward 68 | +1.70 / 3.17 K (n 49) | +4.17 / **5.65** K (n 29) | — | +0.56 / 1.95 K (n 14) |
+| peak, all wards | +0.50 / 2.00 K (n 9) | +2.50 / 3.21 K (n 9) | — | −0.38 / 1.14 K (n 5) |
+
+(bias / RMSE.) The calibrated equation already runs hot before the monsoon (Landsat Mar–Jun +2.57 K bias,
+RMSE 3.91 K all wards; Ward 68 +2.80 / 4.45 K) and the damping adds about another 1 K. So **the ±4.5 K daytime
+band fails for the displayed field at 10:30 in March–June** (4.81 K all wards, 5.65 K on Ward 68), and the
+calibrated field there is at the edge (4.45 K on Ward 68). Leave-one-overpass-out stays inside (3.45 / 4.09 K)
+because that statistic removes the bias, and the pre-monsoon error is mostly bias. Night pre-monsoon exceeds
+±3.0 K in both fields (calibrated 3.06, displayed 3.27 K; monsoon n = 5 is too small to read). Winter and
+post-monsoon sit well inside every band. This matches the 2026-10-05 "41.9 too high?" check, whose
+Ward 68 Mar–Jun RMSE was 5.6 K: about right in October, about +4 K hot before the monsoon.
+
+**Per ward, not pooled.** Ward 68 night on the displayed field is RMSE 3.13 K, LOO-overpass 3.16 K (n 16):
+over the ±3.0 K band, where its calibrated figure (2.86 / 2.97 K) is just inside. The band is a pooled
+three-ward claim and is not published per ward, but Ward 68 is the default view.
+
+**What this does not change.** No constant, no solver line and no displayed band was changed. The verdicts
+above are evidence for a decision: remove the factor (the page then draws the calibrated field), carry it into
+the calibration and re-fit (a reviewed recalibration), or keep it and score the bands against the displayed
+field. Its effect on within-ward spatial skill has not been measured, and should be before choosing.
