@@ -8,8 +8,9 @@ import { allWards } from '../../src/data/cities.ts';
 const mPerDeg = (lat) => [111_320 * Math.cos((lat * Math.PI) / 180), 110_540];
 const havM = (a, b, c, d) => { const R = 6_371_008.8, r = Math.PI / 180, x = Math.sin(((c - a) * r) / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(((d - b) * r) / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); };
 
-test('every Kolkata area is registered, Baruipur deliberately without a station', () => {
-  assert.deepEqual(Object.keys(AREAS).sort(), ['in/kolkata/ballygunge', 'in/kolkata/barrackpore', 'in/kolkata/baruipur']);
+test('every Kolkata and Bengaluru area is registered, Baruipur deliberately without a station', () => {
+  assert.deepEqual(Object.keys(AREAS).sort(), ['in/bengaluru/indiranagar', 'in/bengaluru/mg-road', 'in/bengaluru/whitefield',
+    'in/kolkata/ballygunge', 'in/kolkata/barrackpore', 'in/kolkata/baruipur']);
   assert.equal(stationFor('in/kolkata/baruipur'), null);
 });
 
@@ -57,7 +58,7 @@ test('Ballygunge keeps the WBPCB monitor as its nearest official one, labelled o
 
 test('no sensor is declared in ppb: units come from verification, never from OpenAQ labels', () => {
   for (const st of Object.values(AREAS)) {
-    if (!st) continue;
+    if (!st?.sensors) continue; // Bengaluru: no OpenAQ sensors at all (aqi-bengaluru.test.mjs)
     for (const s of Object.values(st.sensors)) assert.ok(s.unit === 'ug_m3' || s.unit === 'mg_m3');
     assert.equal(st.sensors.co.unit, 'mg_m3');
   }
@@ -67,9 +68,12 @@ import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 
 test("each station's CPCB name is in CPCB's feed, within 100 m of the registered position", () => {
-  const xml = gunzipSync(readFileSync(new URL('../fixtures/aqi/cpcb-feed-2026-09-27T0500IST.xml.gz', import.meta.url))).toString('utf8');
+  /* Kolkata's against the 27 Sep capture; Bengaluru's against 5 Oct's (Kasturi Nagar was absent on 27 Sep). */
+  const read = (f) => gunzipSync(readFileSync(new URL(`../fixtures/aqi/${f}`, import.meta.url))).toString('utf8');
+  const XML = { kolkata: read('cpcb-feed-2026-09-27T0500IST.xml.gz'), bengaluru: read('cpcb-feed-2026-10-05T0200IST.xml.gz') };
   for (const [key, st] of Object.entries(AREAS)) {
     if (!st) continue;
+    const xml = XML[key.split('/')[1]];
     const m = new RegExp(`<Station id="${st.cpcb_name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*latitude="([\\d.]+)" longitude="([\\d.]+)"`).exec(xml);
     assert.ok(m, `${key}: "${st.cpcb_name}" not in the feed`);
     assert.ok(havM(st.lat, st.lon, Number(m[1]), Number(m[2])) <= 100, `${key}: feed position is more than 100 m from the registry`);

@@ -24,7 +24,7 @@ calculation to a clear coverage claim.
 
 ### Status on 26 September 2026
 
-- **Scope:** Kolkata only; Bengaluru parked.
+- **Scope:** Kolkata only; Bengaluru parked. (Bengaluru added 5 Oct 2026 from CPCB's feed: register AQI-R51.)
 - **Work order:** contract → UI previews on fixtures → server function.
 - **Phase 0 progress:**
   - done: the OpenAQ key is provisioned; the Kolkata stations' coordinates are verified against a versioned geometry (the 3 km windows); the coverage classification is reviewed for all three areas.

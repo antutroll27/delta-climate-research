@@ -29,7 +29,12 @@ const WORD: Readonly<Record<CpcbCategory, string>> = { good: 'Good', satisfactor
 const POL: Readonly<Record<Pollutant, string>> = { pm25: 'PM2.5', pm10: 'PM10', no2: 'NO₂', so2: 'SO₂', co: 'CO', o3: 'O₃', nh3: 'NH₃' };
 const UNIT = { ug_m3: 'µg/m³', mg_m3: 'mg/m³' } as const;
 /** Owners the card abbreviates, as the preview did; any other owner prints in full. */
-const OWNER_SHORT: Readonly<Record<string, string>> = { 'West Bengal Pollution Control Board': 'WBPCB' };
+const OWNER_SHORT: Readonly<Record<string, string>> = {
+  'West Bengal Pollution Control Board': 'WBPCB', 'Karnataka State Pollution Control Board': 'KSPCB', 'Central Pollution Control Board': 'CPCB',
+};
+/* A station OBOS reads only from CPCB's feed (stations.ts `sensors: null`, id `cpcb:…`) has no
+   OpenAQ copy, so no 30-day chart or PM2.5 line will ever arrive for it: the pane says so. */
+const cpcbOnly = (s: AqiStation | null): boolean => s !== null && s.id.startsWith('cpcb:');
 
 export const esc = (s: unknown): string => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 /** A number as text, or a dash for anything that is not a finite number. */
@@ -294,7 +299,8 @@ const HATCH_KEY = '<svg width="10" height="10" aria-hidden="true"><defs><pattern
 type Origin = 'cpcb' | 'cpcb-none' | 'obos';
 
 function method(owner: string | null, origin: Origin, station: AqiStation | null = null): string {
-  const chart = `The 30-day chart and the PM2.5 line are calculated by OBOS with CPCB's method from OpenAQ's copy of the station's readings. `;
+  const chart = cpcbOnly(station) ? ''
+    : `The 30-day chart and the PM2.5 line are calculated by OBOS with CPCB's method from OpenAQ's copy of the station's readings. `;
   const who = !owner ? ''
     : origin === 'cpcb'
       ? `The AQI is CPCB's own published figure for this station (source: CPCB). Measured by the ${esc(owner)}. ${chart}`
@@ -319,7 +325,9 @@ export function paneHtml(p: AirQualityPayload, placeName: string, now: Date = ne
   if (c.state === 'no_station') return s + method(null, 'obos');
   s += polTable(c);
   if (!p.history && (c.state === 'live' || c.state === 'stale' || c.state === 'insufficient_data')) {
-    s += '<p class="pane-note">History is loading or unavailable; it comes from OpenAQ.</p>';
+    s += cpcbOnly(c.station)
+      ? '<p class="pane-note">No 30-day history for this station: CPCB\'s feed carries only the current hour, and OBOS has no OpenAQ copy of its readings.</p>'
+      : '<p class="pane-note">History is loading or unavailable; it comes from OpenAQ.</p>';
   }
   const h = p.history;
   if (h && h.days.length) {
@@ -355,9 +363,11 @@ export function loadingPaneHtml(place: string): string {
   return paneHead(place) + '<p class="pane-note">Loading air quality…</p>';
 }
 
-/** A city the first release does not cover. Painted by script too, since the console switches areas in place. */
+/** The one sentence for a city with no Air card; HeatMapStage.astro's first paint prints the same words. */
+export const UNCOVERED_NOTE = 'Air quality covers Kolkata and Bengaluru; this city is not yet covered.';
+/** A city with no Air card yet. Painted by script too, since the console switches areas in place. */
 export function uncoveredPaneHtml(place: string): string {
-  return paneHead(place) + '<p class="pane-note">Air quality covers Kolkata first; this city is not yet covered.</p>';
+  return paneHead(place) + `<p class="pane-note">${UNCOVERED_NOTE}</p>`;
 }
 
 /**

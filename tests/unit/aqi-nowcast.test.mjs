@@ -108,8 +108,8 @@ test('history: a new hour is added, a duplicate changes nothing, a skipped hour 
   /* Out of order: an older hour lands in its place. */
   const late = addHour(h, hourOf(FEED['07']));
   assert.deepEqual(late.hours.map((r) => r.at), ['05', '06', '07', '08'].map((k) => FEED[k][0].published_at));
-  /* Only the stations OBOS shows are recorded. */
-  assert.deepEqual(Object.keys(h.hours[0].stations).sort(), [BALLY, 'SVSPA Campus, Barrackpore - WBPCB'].sort());
+  /* Only the stations OBOS shows are recorded (Kasturi Nagar is absent from the 27 Sep capture, so not here). */
+  assert.deepEqual(Object.keys(h.hours[0].stations).sort(), [BALLY, 'Hombegowda Nagar, Bengaluru - KSPCB', 'SVSPA Campus, Barrackpore - WBPCB'].sort());
 });
 
 test('history keeps the newest 24 distinct hours, none older than 24 h; parseHistory refuses a bad body', () => {

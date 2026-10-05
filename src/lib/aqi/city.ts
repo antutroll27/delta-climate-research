@@ -24,9 +24,10 @@ export interface CityRef {
   cpcb_city: string;
 }
 
-/** OBOS cities with an Air card, by area-key prefix. Bengaluru has no Air card, so no entry. */
+/** OBOS cities with an Air card, by area-key prefix; ids exactly as CPCB's feed spells them. */
 export const CITIES: Readonly<Record<string, CityRef>> = {
   'in/kolkata': { name: 'Kolkata', cpcb_state: 'West Bengal', cpcb_city: 'Kolkata' },
+  'in/bengaluru': { name: 'Bengaluru', cpcb_state: 'Karnataka', cpcb_city: 'Bengaluru' },
 };
 
 /** The city an area key belongs to (`in/kolkata/ballygunge` → Kolkata), or null. */
