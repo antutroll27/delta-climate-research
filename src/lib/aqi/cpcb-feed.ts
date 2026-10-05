@@ -20,7 +20,7 @@
  */
 import { gunzipSync } from 'node:zlib';
 import type { FeedStore } from './relay-store.ts';
-import { stationPayload, type StationEntry } from './stations.ts';
+import { MAX_SERVE_M, stationPayload, type StationEntry } from './stations.ts';
 import { category } from './cpcb.ts';
 import { LIVE_H, STALE_DAYS } from './build.ts';
 import { SCHEMA, type AirQualityResponse, type AqiStation, type CpcbResult, type CpcbSubIndex, type Pollutant } from './types.ts';
@@ -235,12 +235,13 @@ export function pick(feed: readonly FeedStation[], st: StationEntry): FeedStatio
  * THE STATION SERVED from an area's ladder (stations.ts `candidatesFor`, nearest first): the first
  * that `pick` accepts AND that published an AQI this hour; failing that, the first `pick` accepts
  * at all (its no-AQI hour is then shown as CPCB's own, at that station); null when no rung is in
- * the feed. `fallback` is true for any rung but the first. A one-rung ladder (every Kolkata area)
+ * the feed. A rung farther than MAX_SERVE_M (20 km) is never served. `fallback` is true for any rung but the first. A one-rung ladder (every Kolkata area)
  * is exactly `pick`: same station, same answer.
  */
 export function pickServed(feed: readonly FeedStation[], ladder: readonly StationEntry[]): { st: StationEntry; f: FeedStation; fallback: boolean } | null {
   let present: { st: StationEntry; f: FeedStation; fallback: boolean } | null = null;
   for (const [i, st] of ladder.entries()) {
+    if (!(st.distance_m <= MAX_SERVE_M)) continue;
     const f = pick(feed, st);
     if (!f) continue;
     const hit = { st, f, fallback: i > 0 };

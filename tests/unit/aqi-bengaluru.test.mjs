@@ -8,10 +8,10 @@ import test from 'node:test';
 import { handle } from '../../api/air-quality.ts';
 import { allWards } from '../../src/data/cities.ts';
 import { cityAqi, cityFor } from '../../src/lib/aqi/city.ts';
-import { currentFromFeed, parseFeed, pick } from '../../src/lib/aqi/cpcb-feed.ts';
+import { currentFromFeed, parseFeed, pick, pickServed } from '../../src/lib/aqi/cpcb-feed.ts';
 import { hourOf, TRACKED } from '../../src/lib/aqi/hourly-history.ts';
 import { HISTORY_PATH, LATEST_PATH, memoryStore } from '../../src/lib/aqi/relay-store.ts';
-import { AREAS, candidatesFor, FALLBACKS, isAirArea, isAirCity, stationFor } from '../../src/lib/aqi/stations.ts';
+import { AREAS, candidatesFor, FALLBACKS, isAirArea, isAirCity, MAX_SERVE_M, stationFor } from '../../src/lib/aqi/stations.ts';
 import { isAirPayload } from '../../src/lib/aqi/valid.ts';
 import { cardHtml, paneHtml, statusText } from '../../src/scripts/climate-engine/air/air-panel.ts';
 
@@ -82,10 +82,11 @@ test('cityAqi: Bengaluru is 87 Satisfactory over 7 of its 8 stations (hand-compu
 
 test('the hourly record tracks every rung of every ladder, each once, and reads them from the feed', () => {
   assert.equal(new Set(TRACKED).size, TRACKED.length, 'a station on several ladders is recorded once');
-  /* Every Bengaluru station in either capture is on the record, so a fallback has its own hours for NowCast. */
-  const names = new Set([...blr, ...LIVE.filter((s) => s.city === 'Bengaluru')].map((s) => s.name));
+  /* Every rung is on the record, so a fallback has its own hours for NowCast. */
+  const names = new Set(WARDS.flatMap((id) => candidatesFor(`in/bengaluru/${id}`).map((s) => s.cpcb_name)));
   for (const n of names) assert.ok(TRACKED.includes(n), `${n} is not recorded`);
-  assert.equal(TRACKED.length, names.size + 2, 'Bengaluru\'s ten plus Kolkata\'s two, nothing else');
+  assert.equal(names.size, 8);
+  assert.equal(TRACKED.length, names.size + 2, 'Bengaluru\'s eight plus Kolkata\'s two, nothing else');
   const h = hourOf(FEED);
   assert.deepEqual(h.stations['Hombegowda Nagar, Bengaluru - KSPCB'], { pm25: 33, pm10: 49 });
   assert.deepEqual(h.stations['Kasturi Nagar, Bengaluru - KSPCB'], { pm25: null, pm10: null });
@@ -93,18 +94,21 @@ test('the hourly record tracks every rung of every ladder, each once, and reads 
 });
 
 /* THE LADDER, DERIVED: after the nearest monitor, every other Bengaluru station in either
-   capture, nearest first, each at its own haversine distance, outside the window, and with
-   a placement whose direction is the bearing's 16-point name (one point of slack). */
+   capture within 20 km (MAX_SERVE_M), less the two that never publish an AQI, nearest first,
+   each at its own haversine distance, outside the window, and with a placement whose
+   direction is the bearing's 16-point name (one point of slack). */
+const NEVER_REPORT = ['Shivapura_Peenya, Bengaluru - KSPCB', 'Jigani, Bengaluru - KSPCB'];
 const P16 = ['north', 'north-north-east', 'north-east', 'east-north-east', 'east', 'east-south-east', 'south-east', 'south-south-east',
   'south', 'south-south-west', 'south-west', 'west-south-west', 'west', 'west-north-west', 'north-west', 'north-north-west'];
 const bearing = (a, b, c, d) => { const r = Math.PI / 180, y = Math.sin((d - b) * r) * Math.cos(c * r), x = Math.cos(a * r) * Math.sin(c * r) - Math.sin(a * r) * Math.cos(c * r) * Math.cos((d - b) * r); return (Math.atan2(y, x) / r + 360) % 360; };
 test('each Bengaluru ward\'s ladder is every station in the feed, nearest first, at its true distance and direction', () => {
   const inFeed = new Map([...blr, ...LIVE.filter((s) => s.state === 'Karnataka' && s.city === 'Bengaluru')].map((s) => [s.name, s]));
-  assert.equal(inFeed.size, 10);
+  assert.equal(inFeed.size, 10, 'both captures together hold ten Bengaluru stations');
   for (const id of WARDS) {
     const w = allWards().find((x) => x.id === id), ladder = candidatesFor(`in/bengaluru/${id}`);
     assert.equal(ladder[0], stationFor(`in/bengaluru/${id}`), 'the first rung is the ward\'s nearest monitor');
-    assert.deepEqual(ladder.map((s) => s.cpcb_name).sort(), [...inFeed.keys()].sort(), `${id}: the ladder is not every Bengaluru station`);
+    const near = [...inFeed.values()].filter((f) => !NEVER_REPORT.includes(f.name) && havM(w.lat, w.lon, f.lat, f.lon) <= MAX_SERVE_M);
+    assert.deepEqual(ladder.map((s) => s.cpcb_name).sort(), near.map((f) => f.name).sort(), `${id}: the ladder is not every Bengaluru station within 20 km`);
     for (const [i, st] of ladder.entries()) {
       const f = inFeed.get(st.cpcb_name);
       assert.ok(havM(st.lat, st.lon, f.lat, f.lon) <= 1, `${id}/${st.name}: not the feed's position`);
@@ -120,6 +124,37 @@ test('each Bengaluru ward\'s ladder is every station in the feed, nearest first,
       assert.match(st.placement, new RegExp(` of ${id === 'mg-road' ? 'MG Road' : id[0].toUpperCase() + id.slice(1)}$`));
     }
   }
+});
+
+test('the 20 km cap: lengths, and no listed station past it', () => {
+  assert.equal(MAX_SERVE_M, 20_000);
+  assert.deepEqual(WARDS.map((id) => candidatesFor(`in/bengaluru/${id}`).length), [8, 8, 6]);
+  for (const id of WARDS) for (const st of candidatesFor(`in/bengaluru/${id}`)) assert.ok(st.distance_m <= MAX_SERVE_M, `${id}/${st.name}`);
+  assert.deepEqual(candidatesFor('in/bengaluru/whitefield').map((s) => s.distance_m), [10037, 14966, 17673, 17917, 18696, 18965]);
+});
+
+/* THE CAP AT THE BOUNDARY, enforced at serve time too: the same station at exactly 20,000 m is
+   served; at 20,001 m it is skipped, as if it were not in the feed. */
+test('pickServed: a rung at exactly 20,000 m is served, at 20,001 m it is never served', () => {
+  const silk = candidatesFor('in/bengaluru/whitefield')[1];
+  assert.equal(silk.name, 'Silk Board, Bengaluru');
+  const at = (d) => pickServed(LIVE, [stationFor('in/bengaluru/whitefield'), { ...silk, distance_m: d }]);
+  assert.equal(at(MAX_SERVE_M)?.st.name, 'Silk Board, Bengaluru');
+  assert.equal(at(MAX_SERVE_M)?.fallback, true);
+  assert.equal(at(MAX_SERVE_M + 1), null, 'past 20 km nothing is served');
+});
+
+test('Whitefield with nothing reporting within 20 km is station_not_reporting, not a far station', async () => {
+  /* Keep only Peenya (28.4 km) and Bapuji Nagar (22.9 km) in the Bengaluru block: both report, both are past the cap. */
+  const keep = ['Peenya, Bengaluru - CPCB', 'Bapuji Nagar, Bengaluru - KSPCB'];
+  let xml = XML;
+  for (const s of blr) if (!keep.includes(s.name)) xml = without(xml, s.name);
+  assert.deepEqual(parseFeed(xml).filter((s) => s.city === 'Bengaluru').map((s) => s.name).sort(), [...keep].sort());
+  const w = (await call('in/bengaluru/whitefield', NOW, { feed: gz(xml) })).body.current;
+  assert.deepEqual({ s: w.state, why: w.reason, n: w.station.name }, { s: 'unavailable', why: 'station_not_reporting', n: 'Kasturi Nagar, Bengaluru' });
+  /* The same feed still serves MG Road, whose Bapuji Nagar is 7.3 km away. */
+  const m = (await call('in/bengaluru/mg-road', NOW, { feed: gz(xml) })).body.current;
+  assert.deepEqual({ s: m.state, n: m.station.name, d: m.station.distance_m }, { s: 'live', n: 'Bapuji Nagar, Bengaluru', d: 7335 });
 });
 
 test('Kolkata has no ladder: each area is its one station, exactly as before', () => {
