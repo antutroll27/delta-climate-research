@@ -48,12 +48,14 @@
 import { gunzipSync } from 'node:zlib';
 import { FEED_MAX_BYTES, FeedError, parseFeed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import { readSigned, validKey, verifyV1 } from '../src/lib/aqi/relay-auth.ts';
+import { FUTURE_SLACK_MS } from '../src/lib/aqi/cpcb-archive.ts';
 import { archivePath, blobStore, RELAY_MAX_GZ_BYTES, type FeedStore } from '../src/lib/aqi/relay-store.ts';
 
 export const config = { maxDuration: 30 };
 
 export const MIN_STATIONS = 300;
-const FUTURE_SLACK_MS = 15 * 60_000, MAX_AGE_MS = 7 * 86_400_000;
+/* FUTURE_SLACK_MS is shared with the reader's walk (cpcb-archive.ts), so an hour accepted ahead is also found. */
+const MAX_AGE_MS = 7 * 86_400_000;
 const KINDS = new Set(['cpcb-feed', 'ping']);
 
 /** The archive put's whole budget, ms (see "THE DEADLINE" above). */
