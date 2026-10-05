@@ -3,6 +3,7 @@
 The ward-scale calibration set: ECOSTRESS over each ward, with its own surface.
 
     python3 scripts/build-ward-observations.py [--limit N]
+    python3 scripts/build-ward-observations.py --check   # offline wind-transform guard
 
 WHY THIS EXISTS. The existing calibration fits the model against two GHS-SMOD
 masks: an "urban" class covering 3,363 km2 and a "rural" class covering 1,568.
@@ -40,6 +41,7 @@ import datetime as _dt
 import hashlib
 import json
 import os
+import re
 import sys
 from typing import Any
 
@@ -114,6 +116,8 @@ MIN_CELLS = 40
 #: a surface temperature. Those scenes carried roughly two-thirds of the apparent
 #: ECOSTRESS-vs-Landsat disagreement: the published morning strata run 6.28 K
 #: against 3.07 K (2.04x), and 4.28 K against 3.07 K (1.39x) once they are gone.
+#: (The 3.07 K Landsat figure was scored at raw m/s wind — see landsat_rows();
+#: the bar itself reads no wind and no model, so the rejections stand.)
 #:
 #: WHY IT IS NOT CIRCULAR, which matters because dropping scenes to improve a
 #: statistic is exactly the move that deserves suspicion:
@@ -301,7 +305,13 @@ def landsat_rows(surf: dict[str, tuple[float, float, float]]) -> list[dict[str, 
             "lst_mean_c": r["lst_mean_c"], "lst_sd_c": r["lst_sd_c"],
             "cells": r["cells"], "cell_frac": r["cell_frac"],
             "fvc": round(fvc, 4), "albedo": round(alb, 4), "built": round(built, 4),
-            "tAir": f["tAir"], "rh": f["rh"], "wind": f["wind"], "cloud": f["cloud"],
+            # THE PAGE'S WIND, NOT THE CSV'S. The CSV holds raw 10 m m/s; the
+            # model runs on _physics.model_wind() of it, and the ECOSTRESS rows
+            # above carry exactly that via _physics.load(). Writing f["wind"]
+            # here scored every Landsat row at ~3x the page's convective
+            # cooling (commit 4ce2585 to 2026-10-05). `--check` guards it.
+            "tAir": f["tAir"], "rh": f["rh"], "wind": _physics.model_wind(f["wind"]),
+            "cloud": f["cloud"],
             "sun": round(sun, 4),
             # The row's OWN overpass hour, not the forcing scene's. Landsat sits
             # near 10:30 and this column is what the morning stratum is cut on.
@@ -320,10 +330,122 @@ def landsat_rows(surf: dict[str, tuple[float, float, float]]) -> list[dict[str, 
     return out
 
 
+HEAT_MAP_MODEL_TS = os.path.join(ROOT, "src", "scripts", "climate-engine", "heat-map-model.ts")
+
+#: Every wind transform in heat-map-model.ts: `Math.min(MAX, Math.max(MIN, x.wind / DIV))`.
+_TS_WIND = re.compile(r"Math\.min\(\s*([0-9.]+)\s*,\s*Math\.max\(\s*([0-9.]+)\s*,\s*"
+                      r"[A-Za-z_.]*\.wind\s*/\s*([0-9.]+)\s*\)\s*\)")
+
+
+def _raw_winds() -> tuple[dict[tuple[str, str], float], dict[str, float]]:
+    """Raw 10 m wind (m/s) from met-forcing.csv: ECOSTRESS by (date, phase), Landsat by date.
+
+    Refuses a duplicate key, because a guard that matches a row to the wrong
+    forcing line would pass or fail for a reason that has nothing to do with wind.
+    """
+    eco: dict[tuple[str, str], float] = {}
+    lan: dict[str, float] = {}
+    with open(MET_CSV, newline="") as fh:
+        for m in csv.DictReader(fh):
+            if m["suhii"]:
+                k = (m["date"], m["phase"])
+                if k in eco:
+                    sys.exit(f"  --check: duplicate ECOSTRESS forcing row {k} in {MET_CSV}")
+                eco[k] = float(m["wind"])
+            else:
+                if m["date"] in lan:
+                    sys.exit(f"  --check: duplicate Landsat forcing row {m['date']} in {MET_CSV}")
+                lan[m["date"]] = float(m["wind"])
+    return eco, lan
+
+
+def self_check() -> None:
+    """ONE WIND TRANSFORM FOR BOTH INSTRUMENTS, AND IT IS THE PAGE'S. Offline, no network.
+
+    Found 2026-10-05: Landsat rows carried raw m/s wind while ECOSTRESS rows carried
+    the page's wind/3 clamp, so the morning_landsat stratum was scored against a
+    model nobody runs (bias -2.49 K; +0.36 K corrected). Four checks, each of which
+    fails on its own:
+
+      1. the TypeScript's every `x.wind / d` site uses the constants _physics mirrors;
+      2. _physics.load() (the ECOSTRESS path) applies model_wind() to the CSV;
+      3. landsat_rows() (the Landsat path) applies model_wind() to the CSV — run
+         live, so reverting the code fails here without a 9-minute re-download;
+      4. every row of the COMMITTED ward-observations.json, both sensors, carries
+         model_wind() of its own forcing line, so a stale artefact fails too.
+    """
+    tol = 1e-9
+    # 1 — the TypeScript, read rather than re-typed.
+    with open(HEAT_MAP_MODEL_TS, encoding="utf-8") as fh:
+        ts = fh.read()
+    sites = _TS_WIND.findall(ts)
+    bare = len(re.findall(r"\.wind\s*/\s*[0-9]", ts))
+    if len(sites) < 2 or bare != len(sites):
+        sys.exit(f"  --check FAIL: expected every `.wind / n` in heat-map-model.ts to be the "
+                 f"clamped transform (found {len(sites)} clamped of {bare}); "
+                 f"re-mirror _physics.model_wind")
+    for mx, mn, dv in sites:
+        if (float(mx), float(mn), float(dv)) != (_physics.WIND_MAX, _physics.WIND_MIN,
+                                                 _physics.WIND_DIVISOR):
+            sys.exit(f"  --check FAIL: heat-map-model.ts wind is min({mx}, max({mn}, w/{dv})); "
+                     f"_physics mirrors min({_physics.WIND_MAX}, max({_physics.WIND_MIN}, "
+                     f"w/{_physics.WIND_DIVISOR}))")
+    for raw, want in ((0.0, 0.3), (3.0, 1.0), (4.5, 1.5), (30.0, 2.5)):
+        if abs(_physics.model_wind(raw) - want) > tol:
+            sys.exit(f"  --check FAIL: model_wind({raw}) = {_physics.model_wind(raw)}, want {want}")
+
+    eco_raw, lan_raw = _raw_winds()
+
+    # 2 — the ECOSTRESS path.
+    scenes, _lc, _d = _physics.load(all_angles=True)
+    for sc in scenes:
+        want = _physics.model_wind(eco_raw[(sc.date, sc.phase)])
+        if abs(sc.wind - want) > tol:
+            sys.exit(f"  --check FAIL: ECOSTRESS {sc.date}/{sc.phase} loaded wind {sc.wind}, "
+                     f"model_wind gives {want}")
+
+    # 3 — the Landsat path, live. The surface triple does not touch wind, so a fixed
+    # one keeps this independent of the local built cache (and runnable in CI).
+    fake = {w: (0.5, 0.1, 0.3) for w in _types.WARDS}
+    live = landsat_rows(fake)
+    if not live:
+        sys.exit("  --check FAIL: landsat_rows() produced nothing to check")
+    for r in live:
+        want = _physics.model_wind(lan_raw[r["date"]])
+        if abs(r["wind"] - want) > tol:
+            sys.exit(f"  --check FAIL: landsat_rows() wrote wind {r['wind']} for {r['date']}; "
+                     f"the page runs {want} (raw {lan_raw[r['date']]} m/s). Landsat and "
+                     f"ECOSTRESS would be scored with different wind transforms.")
+
+    # 4 — the committed artefact.
+    with open(OUT_JSON) as fh:
+        rows = json.load(fh)["rows"]
+    seen = {"ecostress": 0, "landsat": 0}
+    for r in rows:
+        s = r.get("sensor", "ecostress")
+        raw = lan_raw[r["date"]] if s == "landsat" else eco_raw[(r["date"], r["phase"])]
+        want = _physics.model_wind(raw)
+        if abs(r["wind"] - want) > tol:
+            sys.exit(f"  --check FAIL: {os.path.relpath(OUT_JSON, ROOT)} {s} row "
+                     f"{r['date']}/{r['ward']} has wind {r['wind']}, model_wind gives {want} "
+                     f"(raw {raw} m/s) — regenerate with this script")
+        seen[s] += 1
+    if not (seen["ecostress"] and seen["landsat"]):
+        sys.exit(f"  --check FAIL: artefact lacks one instrument ({seen}); nothing compared")
+    print(f"  build-ward-observations --check OK — one wind transform: {len(sites)} TS sites, "
+          f"{len(scenes)} ECOSTRESS scenes, {len(live)} live Landsat rows, artefact "
+          f"{seen['ecostress']} ECOSTRESS + {seen['landsat']} Landsat rows")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--check", action="store_true",
+                    help="offline: prove both instruments carry the page's wind transform")
     args = ap.parse_args()
+    if args.check:
+        self_check()
+        return
 
     scenes, _lc, dropped = _physics.load(all_angles=False)
     if args.limit:

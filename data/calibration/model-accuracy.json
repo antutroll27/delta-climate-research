@@ -65,9 +65,9 @@
       ],
       "offset_K": {
         "ecostress": 0.937,
-        "landsat": -2.494
+        "landsat": 0.362
       },
-      "delta_K": -3.431,
+      "delta_K": -0.575,
       "n_overpasses": {
         "ecostress": 2,
         "landsat": 50
@@ -117,14 +117,14 @@
       "morning_landsat": {
         "n_scenes": 212,
         "n_overpasses": 50,
-        "rmse_K": 3.253,
-        "bias_K": -2.494,
-        "loo_overpass_rmse_K": 2.129,
+        "rmse_K": 2.913,
+        "bias_K": 0.362,
+        "loo_overpass_rmse_K": 2.945,
         "ci95_K": [
-          2.718,
-          3.764
+          2.281,
+          3.504
         ],
-        "ci95_halfwidth_K": 0.523,
+        "ci95_halfwidth_K": 0.611,
         "hour_range": [
           10.39,
           10.41
