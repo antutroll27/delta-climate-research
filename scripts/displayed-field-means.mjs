@@ -4,11 +4,10 @@
  * WHY THIS EXISTS. Every published accuracy figure scores the closed-form
  * equilibrium `(gain + kRad·tSky + h·wind·tAir) / (kRad + h·wind)` at the ward's
  * mean surface (fit-ward-scale.py `predict`, heat-map-model.ts `eqMeanFromMeans`).
- * The solver the page runs is not that equation: `TsHeatSim.step` (and its GPU
- * twin) multiplies the convective term by a per-cell ventilation factor
- * `max(0.15, 1 − 0.55·built + 0.65·water)`, so a built cell sheds heat to the air
- * more slowly than the calibrated equation assumes, and adds lateral diffusion.
- * The number on screen therefore is not the number the bands were fitted on.
+ * The solver the page runs is not exactly that equation: `TsHeatSim.step` (and
+ * its GPU twin) adds lateral diffusion, and until 2026-10-05 it also multiplied
+ * the convective term by a per-cell ventilation factor
+ * `max(0.15, 1 − 0.55·built + 0.65·water)` the calibration never saw (removed).
  * This drives the SHIPPED solver — the same layers, params and mask path the app
  * uses — for each row, so the difference can be measured instead of argued.
  *

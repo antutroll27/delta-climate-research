@@ -415,14 +415,32 @@ export const SCALE_SKILL = Object.freeze({
  * The 2026-08-13 night-forcing caveat that stood here is retired: these are the
  * corrected-forcing figures.
  */
+/*
+ * RE-MEASURED 2026-10-05: THE PER-CELL VENTILATION FACTOR IS GONE. The solver's
+ * convective term carried `max(0.15, 1 − 0.55·built + 0.65·water)`, which no fit
+ * had seen. Scored with and without it on the same 85 ward-scenes
+ * (measure-shipped-amplitude.py, paired by ward-scene, 10,000-draw bootstrap):
+ *
+ *                     r ship (95 % CI)        r veg(diff)  amplitude
+ *   with factor       0.261 [0.205, 0.316]    0.308        1.11x
+ *   without factor    0.267 [0.211, 0.323]    0.306        0.97x
+ *   difference        +0.006 [+0.004, +0.009], better in 68 of 85 ward-scenes
+ *
+ * Every ward and both phases improved without it (Ward 68 +0.013, Barrackpore
+ * +0.004, Baruipur +0.002; day +0.008, night +0.005). It did not help place the
+ * heat, so it was removed and the page now draws the field the bands were
+ * calibrated on (known-limitations §18). The vegetation null still wins. Amplitude
+ * moves from over-drawn to about right overall; Ward 68 alone now draws 0.56 K
+ * against an observed 0.68 K (0.82x), so its contrasts are slightly understated.
+ */
 export const SPATIAL = {
   /** ward-scenes scored (3 wards x near-nadir scenes, after cloud/QC masking; Ballygunge
    *  on the Ward 68 polygon's pixels) */
   n: 85,
   /** correlation of the SHIPPED field — TsHeatSim, diffused — with ECOSTRESS */
-  rModel: 0.261,
+  rModel: 0.267,
   /** vegetation through the SAME solver: the like-for-like null, which still wins */
-  rVegOnly: 0.308,
+  rVegOnly: 0.306,
   /** built fraction alone, raw */
   rBuiltOnly: 0.135,
   /**
@@ -438,7 +456,7 @@ export const SPATIAL = {
    * contrast to draw. Do not read the drop as a model improvement — it is a
    * measurement that had been wrong. See docs/evidence/known-limitations.md.
    */
-  amplitudeRatio: 1.11,
+  amplitudeRatio: 0.97,
   /** RMSE that remains once ward-mean bias is removed, K */
   anomalyRmseK: 1.53,
   /**
@@ -449,12 +467,13 @@ export const SPATIAL = {
    * where they could. The scale sweep earned the middle tier.
    */
   note: 'Ward-level temperature is calibrated against ECOSTRESS. The pattern WITHIN a '
-      + 'ward is not: block by block it scores r = 0.26, still below the r = 0.31 of a '
+      + 'ward is not: block by block it scores r = 0.27, still below the r = 0.31 of a '
       + 'vegetation map given the same treatment, and coarsening the comparison does not '
       + 'close that gap at any scale. At neighbourhood scale (~300-500 m) it reaches '
       + 'r = 0.4, but only about 0.2 in KMC Ward 68, whose dense, uniform fabric leaves '
-      + 'the satellite little pattern to match. The colour range inside a ward is also '
-      + 'about 1.1x wider than the satellite measures, so read contrasts as exaggerated. '
+      + 'the satellite little pattern to match. The colour range inside a ward is close '
+      + 'to what the satellite measures (0.97x), though about 0.8x in Ward 68, where '
+      + 'contrasts are slightly understated. '
       + 'Ward figures are measured, neighbourhood contrast is indicative, block-by-block '
       + 'detail is illustrative.',
 } as const;
@@ -816,13 +835,11 @@ export function assertAccuracyLogic(): void {
   a(SCALE_SKILL.gapAtCoarsest < 0.05 && SCALE_SKILL.gapAtBlock < 0.05,
     'the physics-minus-vegetation gap closing would be a real result and would '
     + 'change what the map may claim — re-measure, do not edit this by hand');
-  a(SPATIAL.amplitudeRatio > 1.0,
-    'the map draws MORE within-ward contrast than the satellite measures; if this '
-    + 'ever drops to 1.0 the amplitude claim in the note is wrong — re-run '
+  /* Since 2026-10-05 the map draws about the satellite's contrast (0.97x). The note
+     must say which side of 1 it sits, because that is what a reader can SEE. */
+  a(SPATIAL.amplitudeRatio < 1.0 ? SPATIAL.note.includes('understated') : SPATIAL.note.includes('wider than the satellite'),
+    'the note must state which way the amplitude errs — re-run '
     + 'scripts/measure-shipped-amplitude.py rather than editing the number');
-  a(SPATIAL.note.includes('wider than the satellite'),
-    'the note must state the amplitude excess: it is the one defect here a reader '
-    + 'can SEE, and dropping it leaves the colour range reading as measured');
   a(SPATIAL.note.includes('neighbourhood'),
     'the note must carry the MIDDLE tier: block-scale detail is illustrative but '
     + '~300-500 m contrast is indicative at r = 0.5. Dropping it leaves the reader '

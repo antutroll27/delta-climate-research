@@ -64,7 +64,14 @@ export class TsHeatSim implements HeatSim {
           const temperature = this.field[index];
           const laplacian = this.field[y * n + west] + this.field[y * n + east]
             + this.field[north * n + x] + this.field[south * n + x] - 4 * temperature;
-          const ventilation = p.wind * Math.max(0.15, 1 - 0.55 * layers.built[index] + 0.65 * layers.water[index]);
+          /* NO PER-CELL VENTILATION FACTOR (removed 2026-10-05). The convective term
+             was multiplied by `max(0.15, 1 − 0.55·built + 0.65·water)`, which no fit
+             had ever seen: it ran the displayed ward mean +0.2 to +1.1 K warm of the
+             calibrated equation the bands describe, and measured against ECOSTRESS it
+             made within-ward skill WORSE, not better (r 0.267 → 0.261, paired 95 % CI
+             of the loss [0.004, 0.009], all three wards). The convective term is now
+             the calibrated `h·wind`. docs/evidence/known-limitations.md §18. */
+          const ventilation = p.wind;
           const delta = p.D * laplacian
             + p.S * (1 - layers.albedo[index]) * p.sun
             - p.kRad * (temperature - p.tSky)

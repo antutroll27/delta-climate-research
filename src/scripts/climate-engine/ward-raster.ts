@@ -131,10 +131,10 @@ export function rasterizeWardBuilt(ward: WardData, n: number): Float32Array {
  * Deterministic 2×2 supersampled OPEN-WATER coverage, from {ward}-water.json.
  *
  * A FRACTION OF CELL AREA, not a boolean, and that is the whole contract: the
- * solver multiplies by this number twice (`sim-ts.ts`, `1 - 0.55*built +
- * 0.65*water` on the ventilation and `water*0.35` on the relaxation toward
- * `tAir - 1.5`), so a boolean would model a 12 m tank and a 200 m river reach as
- * the same cell. Same convention as `built` for the same reason.
+ * solver multiplies by this number (`sim-ts.ts`, `water*0.35` on the relaxation
+ * toward `tAir - 1.5`; the `0.65*water` ventilation boost went with the per-cell
+ * ventilation factor on 2026-10-05), so a boolean would model a 12 m tank and a
+ * 200 m river reach as the same cell. Same convention as `built` for the same reason.
  *
  * UNTIL 2026-08-13 THIS DID NOT EXIST and `SimLayers.water` shipped as an
  * all-zero array. The water terms above were written, plumbed to the GPU

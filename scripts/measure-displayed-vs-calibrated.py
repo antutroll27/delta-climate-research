@@ -8,12 +8,11 @@ WHY THIS EXISTS. Every published accuracy figure — the night ±3.0 K, the peak
 ±4.5 K, the 7.54 K transition — scores the CALIBRATED EQUATION: fit-ward-scale.py
 `predict` at the ward's mean surface, which is the closed-form equilibrium
 `(gain + kRad·tSky + h·wind·tAir) / (kRad + h·wind)`. The page does not show that.
-It shows the field of `TsHeatSim` (or its GPU twin), whose convective term carries
-a per-cell ventilation factor `max(0.15, 1 − 0.55·built + 0.65·water)` that the
-calibration has never seen, plus lateral diffusion. A built cell sheds heat to the
-air more slowly than the equation assumes, so the displayed ward mean runs warm of
-the calibrated one, by an amount that grows with the ward's built fraction and with
-how much convection matters (low wind, strong sun).
+It shows the field of `TsHeatSim` (or its GPU twin), which adds lateral diffusion.
+Until 2026-10-05 its convective term also carried a per-cell ventilation factor
+`max(0.15, 1 − 0.55·built + 0.65·water)` that the calibration had never seen; that
+ran the displayed ward mean +0.2 to +1.1 K warm of the calibrated one, and this
+harness is how it was found and how its removal was shown to close the gap.
 
 This measures it rather than estimating it: for every scored observation row it
 drives the shipped solver through scripts/displayed-field-means.mjs (the app's own
@@ -235,7 +234,9 @@ def main() -> None:
         "scored": params,
         "solver": {"settle": "advanced in 400-step chunks until the ward mean moved "
                              "< 1e-4 K; first_frame = RESET_BURST steps after reset",
-                   "ventilation": "max(0.15, 1 - 0.55*built + 0.65*water); water layer off",
+                   "ventilation": "none: the per-cell max(0.15, 1 - 0.55*built + 0.65*water) "
+                                  "factor was removed 2026-10-05, so the convective term is "
+                                  "the calibrated h*wind; water layer off",
                    "rows_on_other_branch": mismatched_branch},
         "strata": out_strata,
     }

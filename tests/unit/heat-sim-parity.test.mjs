@@ -38,7 +38,7 @@ const f = Math.fround;
  * One texel of sim-gpu-webgl2.ts's FRAGMENT shader, evaluated in fp32.
  *
  *   float lap  = Tl + Tr + Tb + Tt - 4.0 * T;
- *   float vent = uWind * max(0.15, 1.0 - 0.55 * Ly.b + 0.65 * Ly.a);
+ *   float vent = uWind;   // the per-cell ventilation factor was removed 2026-10-05
  *   float dT   = uD*lap + uS*(1.0-Ly.r)*uSun - uKRad*(T-uTSky)
  *              - uL*Ly.g - uH*vent*(T-uTAir) + uQ*Ly.b + uStore;
  *   float Tn   = mix(T + uDt*dT, uTAir - 1.5, Ly.a * .35);
@@ -48,8 +48,7 @@ const f = Math.fround;
  */
 function gpuTexel(T, Tl, Tr, Tb, Tt, albedo, veg, built, water, u) {
   const lap = f(f(f(f(Tl + Tr) + Tb) + Tt) - f(4 * T));
-  const ventBase = Math.max(0.15, f(f(1 - f(0.55 * built)) + f(0.65 * water)));
-  const vent = f(u.wind * ventBase);
+  const vent = u.wind;
   let dT = f(u.D * lap);
   dT = f(dT + f(f(u.S * f(1 - albedo)) * u.sun));
   dT = f(dT - f(u.kRad * f(T - u.tSky)));
@@ -191,4 +190,25 @@ test('parity holds for the nocturnal storage phase too', () => {
   assert.ok(d.meanDelta <= CEILING.mean, `night mean parity ${d.meanDelta.toExponential(2)} K exceeds ${CEILING.mean} K`);
   assert.ok(d.peakDelta <= CEILING.peak, `night peak parity ${d.peakDelta.toExponential(2)} K exceeds ${CEILING.peak} K`);
   assert.ok(d.rms <= CEILING.rms, `night field RMS parity ${d.rms.toExponential(2)} K exceeds ${CEILING.rms} K`);
+});
+
+/* THE SOLVER HOLDS THE CALIBRATED EQUATION (2026-10-05). A uniform built ward has no
+   gradient for diffusion to act on, so the solver's fixed point must be exactly the
+   closed-form `equilibriumC` the bands were fitted on. Until 2026-10-05 the
+   convective term carried a per-cell `max(0.15, 1 − 0.55·built + 0.65·water)` that
+   no fit had seen; at built 0.8 it drifted this cell several kelvin warm of the
+   equation and the page with it. Both solvers share the stencil (parity above), so
+   pinning the CPU one pins both. */
+test('a uniform built ward relaxes to the calibrated equilibrium, not a damped one', () => {
+  const n = 16, count = n * n;
+  const layers = {
+    albedo: new Float32Array(count).fill(0.15), veg: new Float32Array(count).fill(0.1),
+    built: new Float32Array(count).fill(0.8), water: new Float32Array(count),
+  };
+  const sim = new TsHeatSim();
+  sim.reset({ n }, layers, DEFAULT_PARAMS);
+  sim.step(1, 4000);
+  const t = sim.temperature()[0];
+  const eq = equilibriumC(DEFAULT_PARAMS, 0.15, 0.1, 0.8);
+  assert.ok(Math.abs(t - eq) < 1e-3, `uniform cell settled at ${t.toFixed(3)} C, equation says ${eq.toFixed(3)} C`);
 });

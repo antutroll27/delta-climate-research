@@ -25,7 +25,7 @@ void main() {
   float Tt = texture(tT, vUv + vec2(0.0, uTexel)).r;
   vec4 Ly = texture(tLayers, vUv);
   float lap = Tl + Tr + Tb + Tt - 4.0 * T;
-  float vent = uWind * max(0.15, 1.0 - 0.55 * Ly.b + 0.65 * Ly.a);
+  float vent = uWind; // no per-cell ventilation factor since 2026-10-05; see sim-ts.ts
   float dT = uD * lap + uS * (1.0 - Ly.r) * uSun - uKRad * (T - uTSky)
     - uL * Ly.g - uH * vent * (T - uTAir) + uQ * Ly.b + uStore;
   float Tn = mix(T + uDt * dT, uTAir - 1.5, Ly.a * .35);

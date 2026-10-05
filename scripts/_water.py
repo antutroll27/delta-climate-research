@@ -7,9 +7,9 @@ does this, once, on every ward the map draws:
 
     const waterFraction = rasterizeWardWater(water, ward.sizeM, n);
 
-and the solver reads that array twice -- `sim-ts.ts` boosts ventilation by
-`0.65 * water[i]` and relaxes the cell toward `tAir - 1.5` with weight
-`water[i] * 0.35`. Until 2026-08-13 the array was `new Float32Array(count)` and
+and the solver reads that array -- `sim-ts.ts` relaxes the cell toward
+`tAir - 1.5` with weight `water[i] * 0.35` (it also boosted ventilation by
+`0.65 * water[i]` until the per-cell ventilation factor was removed on 2026-10-05). Until 2026-08-13 the array was `new Float32Array(count)` and
 nothing ever wrote it, so both terms collapsed to the identity and every pond in
 three wards was solved as warm land.
 
