@@ -16,7 +16,7 @@ import { detectHeatCaps } from './caps';
 import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import { isCurrentSnapshot, type HeatSimHost, type HeatSimRequest, type HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
-import { ACCURACY, SPATIAL, HEIGHTS, PEAK_CHIP_BASIS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K } from './accuracy';
+import { ACCURACY, SPATIAL, HEIGHTS, PEAK_CHIP_BASIS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K, seasonalCaveat, seasonalCaveatLine, seasonalCaveatDetail } from './accuracy';
 import { solarElevationFactor, solarDayHours } from './sky';
 import { loadLayerManifest } from './provenance';
 import * as U from './dc-urs';
@@ -3030,6 +3030,18 @@ export function mountHeatMap(): () => void {
     setText('lstPhase', live ? 'modelled now'
       : state.heatTairC != null ? 'modelled at 13:00 · 1-in-100 heat'
       : state.phase === 'night' ? 'modelled at 22:00' : 'modelled at 13:00');
+    /* THE SEASON CAN BREAK THE BAND (accuracy.ts SEASONAL_CAVEATS). Read in the
+       ward's own calendar month, because every view — Now, 13:00, 22:00 and the
+       1-in-100 heatwave — forces the physics with the current month. */
+    const season = seasonalCaveat(areaOf(state.ward), wardMonthHour(now(), WARD_TZ).month, state.phase, transition);
+    const seasonEl = el('seasonNote');
+    if (seasonEl) {
+      seasonEl.textContent = season ? seasonalCaveatLine(season) : '';
+      (seasonEl as HTMLElement).hidden = !season;
+      if (season) (seasonEl as HTMLElement).title = seasonalCaveatDetail(season);
+    }
+    const seasonChip = season ? ` · ${season.reader.toLowerCase()} warm` : '';
+    const seasonTip = season ? `${seasonalCaveatDetail(season)}\n\n` : '';
     const tag = el('conf');
     if (tag) {
       /* innerHTML, not textContent, so the FIGURES can be mono inside sans prose
@@ -3039,17 +3051,17 @@ export function mountHeatMap(): () => void {
          Sentence case because .conf no longer uppercases in CSS. */
       const fig = (t: string) => `<b>${t}</b>`;
       tag.innerHTML = transition
-        ? `Outside validation · ${fig(`~±${TRANSITION_RMSE_K.toFixed(1)} °C`)} at this hour`
+        ? `Outside validation · ${fig(`~±${TRANSITION_RMSE_K.toFixed(1)} °C`)} at this hour${seasonChip}`
         : a.confidence === 'quantitative'
-          ? `Calibrated · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}`
+          ? `Calibrated · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}${seasonChip}`
           /* THE PEAK BAND IS THE EARLIER EVIDENCE SET (accuracy.ts PEAK_EVIDENCE_BASIS):
              measured before Ballygunge became KMC Ward 68, kept because it is the wider,
              safer band, and said so ON the chip — a tooltip nobody hovers was the only
              place it was said (pre-ship audit 2026-10-03). */
-          : `Indicative only · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}${state.phase === 'peak' ? ` · ${PEAK_CHIP_BASIS}` : ''}`;
-      tag.className = `conf ${transition ? 'indicative' : a.confidence}`;
+          : `Indicative only · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}${state.phase === 'peak' ? ` · ${PEAK_CHIP_BASIS}` : ''}${seasonChip}`;
+      tag.className = `conf ${transition ? 'indicative' : a.confidence}${season ? ' seasonal' : ''}`;
       if (transition) {
-        (tag as HTMLElement).title =
+        (tag as HTMLElement).title = seasonTip +
           'Sunrise to mid-morning is the one window neither published figure '
           + `covers. Scored out-of-sample it reaches ${TRANSITION_RMSE_K.toFixed(2)} K — the surface is `
           + 'still releasing stored heat while the sun is already loading it, and a '
@@ -3062,10 +3074,10 @@ export function mountHeatMap(): () => void {
       // A reader who sees only the first will read the hot blocks as measured —
       // they are not (SPATIAL.rModel 0.22, below a plain vegetation map's 0.24,
       // and coarsening the comparison does not close that gap at any scale).
-      (tag as HTMLElement).title = `${a.note}\n\n${SPATIAL.note}`;
+      (tag as HTMLElement).title = `${seasonTip}${a.note}\n\n${SPATIAL.note}`;
     }
     const lstEl = el('lst');
-    if (lstEl) (lstEl as HTMLElement).title = `${a.note}\n\n${SPATIAL.note}`;
+    if (lstEl) (lstEl as HTMLElement).title = `${seasonTip}${a.note}\n\n${SPATIAL.note}`;
   }
   /* The legend states the limit of what its own colours mean. Written from the
      measured constant so it cannot drift from the number in accuracy.ts — the

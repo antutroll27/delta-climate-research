@@ -58,6 +58,8 @@
  *                  python3 scripts/fit-ward-scale.py
  *                  python3 scripts/measure-accuracy.py   (ACCURACY.night is copied from its output)
  */
+import SEASONAL_ARTEFACT from '../../../data/calibration/seasonal-caveat.json' with { type: 'json' };
+
 export interface PhaseAccuracy {
   /** scenes the figure is measured over */
   readonly n: number;
@@ -792,6 +794,106 @@ export const TRANSITION_RMSE_K = 7.54;
 /** True when a local solar hour falls in the sunrise window neither band covers. */
 export function isTransitionHour(solarHour: number): boolean {
   return solarHour >= TRANSITION_HOURS[0] && solarHour < TRANSITION_HOURS[1];
+}
+
+/**
+ * SEASONS IN WHICH THE NUMBER ON SCREEN BREAKS ITS OWN BAND (2026-10-05).
+ *
+ * The bands above are pooled over the year. Scoring the DISPLAYED field season by
+ * season (scripts/measure-displayed-vs-calibrated.py, known-limitations §18) shows
+ * the pool hides one season. With the ventilation damping still in the solver, the
+ * pre-monsoon 10:30 Landsat overpasses read the page +3.56 K warm at RMSE 4.81 K,
+ * outside the ±4.5 K daytime band. Since its removal (PR #48) that is +2.54 / 3.88 K
+ * and the band holds, so the artefact no longer lists a daytime caveat. Pre-monsoon
+ * night still runs +1.72 K warm at RMSE 3.06 K, just outside ±3.0. That is the
+ * calibrated equation's own error, not a display artefact.
+ *
+ * NOTHING IS TYPED HERE. Months, sensor, bias and RMSE come from
+ * data/calibration/seasonal-caveat.json, written by that harness: a season is
+ * listed only when its displayed error breaks the band by the band's own rule
+ * (in-sample and leave-one-overpass-out), and its months are only those holding
+ * scored rows. Night is March–April because ECOSTRESS has no pre-monsoon night
+ * rows in May or June; a month the data never saw is not claimed. If a re-run
+ * stops failing (or starts failing elsewhere), the page follows on its own.
+ *
+ * DISCLOSURE ONLY. The physics and the bands are unchanged; this says, in the
+ * months it applies, that the reading is likely warm.
+ */
+export interface SeasonalCaveat {
+  readonly stratum: string;
+  /** which readout it governs: the app's phase, or the sunrise transition */
+  readonly phase: 'peak' | 'night' | 'transition';
+  readonly sensor: string;
+  readonly season: string;
+  /** the season as the reader is told it, e.g. "Dry-season" */
+  readonly reader: string;
+  /** calendar months (1–12) in the ward's own time zone */
+  readonly months: readonly number[];
+  readonly band_K: number;
+  readonly n_scenes: number;
+  readonly n_overpasses: number;
+  /** displayed ward mean minus the satellite, K — positive means the page runs warm */
+  readonly bias_K: number;
+  readonly rmse_K: number;
+  readonly loo_overpass_rmse_K: number | null;
+  readonly calibrated_rmse_K: number;
+  readonly ward_68: { readonly bias_K: number; readonly rmse_K: number; readonly n_scenes: number } | null;
+}
+
+export const SEASONAL_CAVEATS: readonly SeasonalCaveat[] =
+  Object.freeze((SEASONAL_ARTEFACT.caveats as SeasonalCaveat[]).map((c) => Object.freeze({ ...c })));
+/** The wards the seasonal measurement covers. Elsewhere (Bengaluru) it is silent. */
+export const SEASONAL_WARDS: readonly string[] = Object.freeze([...SEASONAL_ARTEFACT.wards]);
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Mar–Jun" for a contiguous run, "Mar, May" otherwise. */
+export function monthSpan(months: readonly number[]): string {
+  const m = [...months].sort((a, b) => a - b);
+  if (m.length === 0) return '';
+  const contiguous = m.every((v, i) => i === 0 || v === m[i - 1] + 1);
+  if (m.length === 1) return MONTH_ABBR[m[0] - 1];
+  return contiguous ? `${MONTH_ABBR[m[0] - 1]}–${MONTH_ABBR[m[m.length - 1] - 1]}`
+    : m.map((v) => MONTH_ABBR[v - 1]).join(', ');
+}
+
+/**
+ * The caveat for this ward, month and readout, or null.
+ *
+ * `month` is the ward's LOCAL calendar month (wardMonthHour), because every view —
+ * Now, the 13:00 and 22:00 canonical views and the 1-in-100 heatwave — forces the
+ * physics with the current month. `transition` is the sunrise window; a daytime
+ * caveat still applies there, since the season's warm bias does not stop at 09:30.
+ */
+export function seasonalCaveat(ward: string, month: number, phase: 'peak' | 'night',
+  transition = false): SeasonalCaveat | null {
+  if (!SEASONAL_WARDS.includes(ward)) return null;
+  return SEASONAL_CAVEATS.find((c) => c.months.includes(month)
+    && (c.phase === phase || (transition && c.phase === 'transition'))) ?? null;
+}
+
+/** The readout's one-line note, e.g. "Dry-season reading: the model runs
+ *  ~3.6–4.2 °C warm in Mar–Jun against Landsat". The range is all wards to Ward 68. */
+export function seasonalCaveatLine(c: SeasonalCaveat): string {
+  const lo = Math.min(c.bias_K, c.ward_68?.bias_K ?? c.bias_K);
+  const hi = Math.max(c.bias_K, c.ward_68?.bias_K ?? c.bias_K);
+  const size = hi - lo >= 0.05 ? `~${lo.toFixed(1)}–${hi.toFixed(1)}` : `~${lo.toFixed(1)}`;
+  const dir = c.bias_K >= 0 ? 'warm' : 'cool';
+  const when = c.phase === 'night' ? 'at night ' : '';
+  return `${c.reader} reading: the model runs ${when}${size} °C ${dir} in ${monthSpan(c.months)} `
+    + `against ${c.sensor}`;
+}
+
+/** The longer form for the chip's tooltip: what failed, against which band, on how much data. */
+export function seasonalCaveatDetail(c: SeasonalCaveat): string {
+  const w68 = c.ward_68
+    ? ` On KMC Ward 68 alone: bias ${c.ward_68.bias_K >= 0 ? '+' : ''}${c.ward_68.bias_K.toFixed(2)} K, `
+      + `RMSE ${c.ward_68.rmse_K.toFixed(2)} K (${c.ward_68.n_scenes} scenes).`
+    : '';
+  return `${seasonalCaveatLine(c)}. Over ${c.n_scenes} ${c.sensor} ward-scenes (${c.n_overpasses} `
+    + `overpasses) in ${monthSpan(c.months)}, the displayed ward mean has a bias of `
+    + `${c.bias_K >= 0 ? '+' : ''}${c.bias_K.toFixed(2)} K and an RMSE of ${c.rmse_K.toFixed(2)} K, `
+    + `outside the published ±${c.band_K.toFixed(1)} K band, which holds over the year as a whole.${w68}`;
 }
 
 /** ponytail: one runnable check */

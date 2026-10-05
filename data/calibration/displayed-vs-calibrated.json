@@ -285,6 +285,36 @@
             "displayed_minus_calibrated_K": -0.161
           }
         }
+      },
+      "by_month": {
+        "1": {
+          "n_scenes": 9,
+          "displayed_bias_K": -1.465
+        },
+        "3": {
+          "n_scenes": 2,
+          "displayed_bias_K": 1.22
+        },
+        "4": {
+          "n_scenes": 16,
+          "displayed_bias_K": 1.776
+        },
+        "9": {
+          "n_scenes": 5,
+          "displayed_bias_K": 1.75
+        },
+        "10": {
+          "n_scenes": 12,
+          "displayed_bias_K": -0.162
+        },
+        "11": {
+          "n_scenes": 1,
+          "displayed_bias_K": 2.01
+        },
+        "12": {
+          "n_scenes": 5,
+          "displayed_bias_K": -2.189
+        }
       }
     },
     "morning_ecostress": {
@@ -477,6 +507,20 @@
             "app_equation_minus_calibrated_K": -0.004,
             "displayed_minus_calibrated_K": -0.061
           }
+        }
+      },
+      "by_month": {
+        "4": {
+          "n_scenes": 3,
+          "displayed_bias_K": 3.632
+        },
+        "9": {
+          "n_scenes": 1,
+          "displayed_bias_K": -7.217
+        },
+        "10": {
+          "n_scenes": 5,
+          "displayed_bias_K": -3.697
         }
       }
     },
@@ -697,6 +741,44 @@
             "displayed_minus_calibrated_K": -0.073
           }
         }
+      },
+      "by_month": {
+        "1": {
+          "n_scenes": 45,
+          "displayed_bias_K": -0.622
+        },
+        "2": {
+          "n_scenes": 45,
+          "displayed_bias_K": 0.29
+        },
+        "3": {
+          "n_scenes": 27,
+          "displayed_bias_K": 1.36
+        },
+        "4": {
+          "n_scenes": 26,
+          "displayed_bias_K": 2.91
+        },
+        "5": {
+          "n_scenes": 3,
+          "displayed_bias_K": 3.935
+        },
+        "6": {
+          "n_scenes": 4,
+          "displayed_bias_K": 7.063
+        },
+        "10": {
+          "n_scenes": 5,
+          "displayed_bias_K": -3.972
+        },
+        "11": {
+          "n_scenes": 28,
+          "displayed_bias_K": -0.75
+        },
+        "12": {
+          "n_scenes": 29,
+          "displayed_bias_K": -0.923
+        }
       }
     },
     "peak_ecostress": {
@@ -915,6 +997,20 @@
             "app_equation_minus_calibrated_K": -0.004,
             "displayed_minus_calibrated_K": -0.062
           }
+        }
+      },
+      "by_month": {
+        "1": {
+          "n_scenes": 9,
+          "displayed_bias_K": 0.076
+        },
+        "5": {
+          "n_scenes": 9,
+          "displayed_bias_K": 2.15
+        },
+        "11": {
+          "n_scenes": 5,
+          "displayed_bias_K": -1.079
         }
       }
     }
