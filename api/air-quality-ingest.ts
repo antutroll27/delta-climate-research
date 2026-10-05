@@ -15,18 +15,24 @@
  *   204 a valid ping (stores nothing) · 400 a ping with a body
  *   413 inflates past 2 MB · 400 not gzip
  *   422 not a feed, < 300 stations, more than one lastupdate, lastupdate > 15 min ahead or > 7 days old
- *   200 {"stored":"new"|"duplicate","lastupdate","stations"} · 503 the store failed (the Pi retries next tick)
+ *   200 {"stored":"new"|"duplicate","lastupdate","stations"} · 503 latest could not be stored (the Pi retries next tick)
+ *
+ * HOURLY ARCHIVE (cpcb-archive.ts): every verified feed is first offered to the write-once
+ * archive at cpcb/archive/YYYY/MM/DD/HH.xml.gz, its IST hour. It is BEST EFFORT: a failed archive
+ * put is logged and the ingest carries on, so the live path never depends on it.
  *
  * Latest only moves forward: a feed replaces it only when its lastupdate is later than the
  * stored latest's (an absent or unreadable latest is replaced), so a late or replayed older
- * hour is archived but never shown as current.
+ * hour is archived but never shown as current. This is judged on every verified feed, whatever
+ * the archive did, so a retry after a failed latest put repairs latest, and a newer lastupdate
+ * inside an hour already archived still becomes latest (the archive keeps the hour's first).
  *
- * A duplicate never rewrites latest. If the archive put succeeds and the latest put fails
- * (503), the Pi's retry comes back 'duplicate', so latest can lag by up to one hour until
- * the next hour's feed repairs it; one hour stays inside the 2 h "Live" rule.
+ * "new" means something was stored: the hour's archive, or a later latest. "duplicate" means
+ * neither: the hour was already archived (or its archive put failed) and latest already held
+ * this lastupdate or a later one. A duplicate never rewrites latest.
  *
- * NOWCAST HISTORY (hourly-history.ts): a NEW hour is also added to the rolling hourly PM record
- * once it is archived and latest is settled. It is best effort: a failure is logged and the answer
+ * NOWCAST HISTORY (hourly-history.ts): a NEW feed is also added to the rolling hourly PM record
+ * once latest is settled. It is best effort: a failure is logged and the answer
  * is still 200 "new", because the Pi's retry would come back "duplicate" and change nothing; the
  * read side lays the current hour over the record, so one lost write costs nothing. A missing
  * record (the first deploy) is rebuilt once from the previous 11 hourly archives.
@@ -38,7 +44,8 @@ import { gunzipSync } from 'node:zlib';
 import { FEED_MAX_BYTES, FeedError, parseFeed, readRelayFeed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import { readSigned, validKey, verifyV1 } from '../src/lib/aqi/relay-auth.ts';
 import { updateHistory } from '../src/lib/aqi/hourly-history.ts';
-import { archivePath, blobStore, RELAY_MAX_GZ_BYTES, type FeedStore } from '../src/lib/aqi/relay-store.ts';
+import { blobStore, RELAY_MAX_GZ_BYTES, type FeedStore } from '../src/lib/aqi/relay-store.ts';
+import { archiveFeed } from '../src/lib/aqi/cpcb-archive.ts';
 
 export const config = { maxDuration: 30 };
 
@@ -119,19 +126,22 @@ export async function handleIngest(request: Request, d: IngestDeps): Promise<Res
   if (age < -FUTURE_SLACK_MS) return refuse(422, 'lastupdate_in_future');
   if (age > MAX_AGE_MS) return refuse(422, 'lastupdate_too_old');
 
+  /* Best effort, never throws: a failure is logged inside and changes nothing below. */
+  const archived = await archiveFeed(d.store, lastupdate, body);
+  let moved: boolean;
   try {
-    const put = await d.store.putArchive(archivePath(lastupdate), body);
-    if (put === 'exists') {
-      console.info('air-quality-ingest duplicate', lastupdate);
-      return answer(200, { stored: 'duplicate', lastupdate, stations: stations.length });
-    }
-    if (await laterThanLatest(d.store, lastupdate)) await d.store.putLatest(body);
-    else console.info('air-quality-ingest archived; latest is newer', lastupdate);
+    moved = await laterThanLatest(d.store, lastupdate);
+    if (moved) await d.store.putLatest(body);
   } catch (e) {
     /* The class names the failure (a suspended store, a bad token, a timeout); the message may carry store details. */
     console.warn('air-quality-ingest store failed', e instanceof Error ? e.constructor.name : typeof e);
     return refuse(503, 'store_failed');
   }
+  if (archived !== 'stored' && !moved) {
+    console.info('air-quality-ingest duplicate', lastupdate, archived);
+    return answer(200, { stored: 'duplicate', lastupdate, stations: stations.length });
+  }
+  if (!moved) console.info('air-quality-ingest archived; latest is newer', lastupdate);
   try {
     await updateHistory(d.store, stations);
   } catch (e) {

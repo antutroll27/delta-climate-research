@@ -41,12 +41,15 @@ test('a new feed is archived by its IST hour, then becomes latest, and joins the
 test('the same hour again is a duplicate: 200, and latest is not rewritten', async () => {
   const d = deps();
   await call(req(FEED_GZ), d);
-  const sentinel = new Uint8Array([1, 2, 3]);
-  d.store.files.set(LATEST_PATH, sentinel);
+  const held = d.store.files.get(LATEST_PATH);
+  let writes = 0;
+  const putLatest = d.store.putLatest;
+  d.store.putLatest = async (gz) => { writes++; return putLatest(gz); };
   const r = await call(req(FEED_GZ, { ts: NOW.getTime() / 1000 + 60 }), d);
   assert.equal(r.status, 200);
   assert.deepEqual(await r.json(), { stored: 'duplicate', lastupdate: '2026-09-26T23:30:00.000Z', stations: 481 });
-  assert.equal(d.store.files.get(LATEST_PATH), sentinel);
+  assert.equal(writes, 0, 'latest already holds this hour');
+  assert.equal(d.store.files.get(LATEST_PATH), held);
 });
 
 test('a valid ping is 204 and stores nothing; a ping with a body is 400', async () => {
@@ -206,8 +209,9 @@ test('an unreadable latest is replaced, so a corrupt blob heals at the next feed
 
 test('a store failure logs its error class only, never its message', async () => {
   class BlobStoreSuspendedError extends Error {}
-  const broken = { getLatest: async () => null, putLatest: async () => {},
-    putArchive: async () => { throw new BlobStoreSuspendedError('store sk_secret_details'); } };
+  /* latest is the live path, so its failure is the 503 (an archive failure alone is not: cpcb-archive.test.mjs). */
+  const broken = { getLatest: async () => null, putArchive: async () => 'stored',
+    putLatest: async () => { throw new BlobStoreSuspendedError('store sk_secret_details'); } };
   const lines = [];
   const w = console.warn, i = console.info;
   console.warn = console.info = (...a) => lines.push(a.join(' '));
