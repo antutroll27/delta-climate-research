@@ -57,6 +57,9 @@ OBS = os.path.join(ROOT, "data", "calibration", "ward-observations.json")
 FIT = os.path.join(ROOT, "data", "calibration", "ward-scale-fit.json")
 ACC = os.path.join(ROOT, "data", "calibration", "model-accuracy.json")
 OUT = os.path.join(ROOT, "data", "calibration", "displayed-vs-calibrated.json")
+#: The page's seasonal caveat (accuracy.ts SEASONAL_CAVEATS reads it). Small on
+#: purpose: the browser bundles it, and it holds only what the readout prints.
+CAVEAT_OUT = os.path.join(ROOT, "data", "calibration", "seasonal-caveat.json")
 DRIVER = os.path.join(HERE, "displayed-field-means.mjs")
 
 #: The calibrated column may differ from model-accuracy.json by rounding only.
@@ -77,6 +80,29 @@ SEASONS: dict[str, tuple[int, ...]] = {
     "pre-monsoon (Mar-Jun)": (3, 4, 5, 6),
     "monsoon (Jul-Sep)": (7, 8, 9),
     "post-monsoon (Oct-Nov)": (10, 11),
+}
+
+
+#: What the readout calls a season when it warns about it. Only seasons whose
+#: displayed error breaks a band ever reach the page.
+SEASON_READER: dict[str, str] = {
+    "winter (Dec-Feb)": "Winter",
+    "pre-monsoon (Mar-Jun)": "Dry-season",
+    "monsoon (Jul-Sep)": "Monsoon",
+    "post-monsoon (Oct-Nov)": "Post-monsoon",
+}
+
+#: Which readout each stratum's band governs. The 10:30 Landsat stratum is scored
+#: against the daytime band (see BANDS), so a failure there is a daytime caveat.
+APP_PHASE: dict[str, str] = {
+    "night": "night",
+    "peak_ecostress": "peak",
+    "morning_landsat": "peak",
+    "morning_ecostress": "transition",
+}
+SENSOR: dict[str, str] = {
+    "night": "ECOSTRESS", "peak_ecostress": "ECOSTRESS",
+    "morning_ecostress": "ECOSTRESS", "morning_landsat": "Landsat",
 }
 
 
@@ -224,6 +250,56 @@ def main() -> None:
                                               if (blk := block(w68 & np.isin(month, mo)))}
         out_strata[name] = b
 
+    # 3 — per month, so a season's boundaries are read from rows, not assumed.
+    for name, m in strata.items():
+        out_strata[name]["by_month"] = {
+            str(mo): {"n_scenes": int((m & (month == mo)).sum()),
+                      "displayed_bias_K": round(float(np.mean(settled[m & (month == mo)]
+                                                              - obs[m & (month == mo)])), 3)}
+            for mo in range(1, 13) if (m & (month == mo)).any()}
+
+    # 4 — the caveats the page prints: every (stratum, season) whose DISPLAYED error
+    # breaks the band that stratum is published under, by the band's own rule
+    # (in-sample AND leave-one-overpass-out must both fit). `months` are the season's
+    # months that hold scored rows — a month the data never saw is not claimed.
+    # A season too thin to have a leave-one-overpass-out figure cannot be scored by
+    # that rule either way; it is recorded under `too_thin`, not printed on the page.
+    caveats: list[dict[str, Any]] = []
+    too_thin: list[dict[str, Any]] = []
+    for name, m in strata.items():
+        label, band = BANDS[name]
+        for season, blk in out_strata[name]["by_season"].items():
+            d = blk["displayed_settled"]
+            loo = d["loo_overpass_rmse_K"]
+            if d["rmse_K"] <= band and (loo is None or loo <= band):
+                continue
+            if loo is None:
+                too_thin.append({"stratum": name, "season": season,
+                                 "n_scenes": d["n_scenes"], "n_overpasses": d["n_overpasses"],
+                                 "bias_K": d["bias_K"], "rmse_K": d["rmse_K"], "band_K": band})
+                continue
+            seen = [mo for mo in SEASONS[season] if (m & (month == mo)).any()]
+            w68 = out_strata[name]["ward_68_only"].get("by_season", {}).get(season)
+            caveats.append({
+                "stratum": name, "phase": APP_PHASE[name], "sensor": SENSOR[name],
+                "season": season, "reader": SEASON_READER[season], "months": seen,
+                "band_K": band, "n_scenes": d["n_scenes"], "n_overpasses": d["n_overpasses"],
+                "bias_K": d["bias_K"], "rmse_K": d["rmse_K"], "loo_overpass_rmse_K": loo,
+                "calibrated_rmse_K": blk["calibrated"]["rmse_K"],
+                "ward_68": ({"bias_K": w68["displayed_settled"]["bias_K"],
+                             "rmse_K": w68["displayed_settled"]["rmse_K"],
+                             "n_scenes": w68["displayed_settled"]["n_scenes"]} if w68 else None),
+            })
+    caveat_doc = {
+        "note": "Seasons in which the DISPLAYED ward mean breaks the band the page "
+                "publishes for that phase. Written by measure-displayed-vs-calibrated.py; "
+                "read by src/scripts/climate-engine/accuracy.ts. Disclosure only.",
+        "source": os.path.relpath(OUT, ROOT),
+        "wards": sorted(set(ward.tolist())),
+        "caveats": caveats,
+        "too_thin": too_thin,
+    }
+
     doc = {
         "note": "Displayed (shipped TsHeatSim field, ward mean; Ward 68 polygon-masked) vs "
                 "calibrated (fit-ward-scale predict at the shipped constants, as "
@@ -243,6 +319,15 @@ def main() -> None:
     with open(OUT, "w") as fh:
         json.dump(doc, fh, indent=2)
         fh.write("\n")
+    with open(CAVEAT_OUT, "w") as fh:
+        json.dump(caveat_doc, fh, indent=2)
+        fh.write("\n")
+    for c in caveats:
+        print(f"  caveat: {c['stratum']} {c['season']} months {c['months']} "
+              f"bias {c['bias_K']:+.2f} RMSE {c['rmse_K']:.2f} > ±{c['band_K']}")
+    for c in too_thin:
+        print(f"  too thin to caveat: {c['stratum']} {c['season']} "
+              f"({c['n_scenes']} scenes, {c['n_overpasses']} overpasses) RMSE {c['rmse_K']:.2f}")
 
     print(f"\n  {'stratum':<19}{'n':>4} {'calibrated bias/RMSE/LOO':>27} "
           f"{'displayed bias/RMSE/LOO':>27}  band")

@@ -1249,3 +1249,31 @@ Pre-monsoon Landsat is +2.54 / 3.88 K, back inside the ±4.5 K band. Pre-monsoon
 calibrated equation itself also scores, so it is still just over ±3.0 K. That is a fact about the model,
 not about the display. Ward 68 alone now draws 0.56 K of within-ward SD against an observed 0.68 K (0.82x),
 so its contrasts are slightly understated. The vegetation null still beats the model.
+
+**Disclosed on the page (2026-10-05).** The readout now carries the seasonal failure where it applies.
+`measure-displayed-vs-calibrated.py` writes `data/calibration/seasonal-caveat.json`. It lists every
+(stratum, season) pair whose displayed error breaks the band that stratum is published under, using the
+band's own rule (in-sample RMSE and leave-one-overpass-out must both fit). Only months holding scored rows
+are listed. `accuracy.ts` (`SEASONAL_CAVEATS`) imports that file. The page types no figure.
+
+Re-run after the damping was removed, the file lists one caveat:
+
+- **Night, Mar–Apr:** displayed bias +1.72 K, RMSE 3.06 K, LOO 3.01 K against ±3.0. On Ward 68 it is
+  +1.91 / 3.42 K. This is the calibrated equation's own error, not a display artefact. Only Mar–Apr are
+  listed because ECOSTRESS has no pre-monsoon night rows in May or June.
+
+Two others are not on it:
+
+- **Day, Mar–Jun:** this was listed while the damping was in the solver (+3.56 K bias, 4.81 K RMSE).
+  It fell away on the re-run: 3.88 K holds ±4.5.
+- **Monsoon night:** 5 scenes over 2 overpasses, so no out-of-sample figure. It is recorded under
+  `too_thin` and not printed.
+
+The caveat appears when the ward's local calendar month is listed for the readout's phase. It shows as a
+bronze line under the chip, today "Dry-season reading: the model runs at night ~1.7–1.9 °C warm in Mar–Apr
+against ECOSTRESS". The chip also gets a suffix, and its tooltip carries the full figures.
+
+Every view forces the physics with the current month (Now, 13:00, 22:00 and the 1-in-100 heatwave), so
+the caveat applies in all of them. Compare and the paired brief print no band, so they carry no caveat.
+Bengaluru wards are not in the measurement, so they get none either. A refit only needs the harness re-run:
+it rewrites the file, and the caveat follows.

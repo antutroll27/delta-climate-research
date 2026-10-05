@@ -1,0 +1,45 @@
+{
+  "note": "Seasons in which the DISPLAYED ward mean breaks the band the page publishes for that phase. Written by measure-displayed-vs-calibrated.py; read by src/scripts/climate-engine/accuracy.ts. Disclosure only.",
+  "source": "data/calibration/displayed-vs-calibrated.json",
+  "wards": [
+    "ballygunge",
+    "barrackpore",
+    "baruipur"
+  ],
+  "caveats": [
+    {
+      "stratum": "night",
+      "phase": "night",
+      "sensor": "ECOSTRESS",
+      "season": "pre-monsoon (Mar-Jun)",
+      "reader": "Dry-season",
+      "months": [
+        3,
+        4
+      ],
+      "band_K": 3.0,
+      "n_scenes": 18,
+      "n_overpasses": 8,
+      "bias_K": 1.715,
+      "rmse_K": 3.06,
+      "loo_overpass_rmse_K": 3.013,
+      "calibrated_rmse_K": 3.064,
+      "ward_68": {
+        "bias_K": 1.905,
+        "rmse_K": 3.42,
+        "n_scenes": 5
+      }
+    }
+  ],
+  "too_thin": [
+    {
+      "stratum": "night",
+      "season": "monsoon (Jul-Sep)",
+      "n_scenes": 5,
+      "n_overpasses": 2,
+      "bias_K": 1.75,
+      "rmse_K": 3.82,
+      "band_K": 3.0
+    }
+  ]
+}
