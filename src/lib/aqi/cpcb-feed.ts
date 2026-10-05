@@ -7,7 +7,7 @@
  * predominant pollutant holds it. `pick` enforces that at runtime, so a change of
  * meaning upstream falls back to OBOS's own calculation instead of painting a wrong number.
  *
- * Pure except `fetchFeed` and `readRelayFeed`. No XML library: a strict reader for exactly
+ * Pure except `fetchFeed`. No XML library: a strict reader for exactly
  * <Station>, <Pollutant_Index/> and <Air_Quality_Index/>; a station with any
  * value that is not a whole number, "NA" or "" is dropped (never coerced).
  * IST is the fixed +05:30 offset (obos-scope forbids naming a zone).
@@ -19,7 +19,6 @@
  * on whitespace with capped name and value lengths, so it only ever runs on ≤ 1 KB.
  */
 import { gunzipSync } from 'node:zlib';
-import type { FeedStore } from './relay-store.ts';
 import { MAX_SERVE_M, stationPayload, type StationEntry } from './stations.ts';
 import { category } from './cpcb.ts';
 import { LIVE_H, STALE_DAYS } from './build.ts';
@@ -291,18 +290,12 @@ export async function fetchFeed(o: { fetch?: typeof fetch; signal?: AbortSignal 
 }
 
 /**
- * CPCB's feed as the Pi relayed it (spec 2026-09-29 §5): the stored gzip, inflated
- * under the same 2 MB cap as a direct fetch, then the same parser. Every failure is
- * a FeedError, so the caller falls back exactly as when CPCB itself is down.
+ * One relayed gzip (spec 2026-09-29 §5), as the Pi sent it and the archive keeps it, inflated
+ * under the same 2 MB cap as a direct fetch, then the same parser. Every failure is a FeedError,
+ * so the caller falls back exactly as when CPCB itself is down. Reading it from the store is
+ * cpcb-archive.ts's job (`readLiveFeed`).
  */
-export async function readRelayFeed(store: FeedStore): Promise<FeedStation[]> {
-  let gz: Uint8Array | null;
-  try {
-    gz = await store.getLatest();
-  } catch {
-    throw new FeedError('relay store unreachable'); // the store's own error may name the store: not logged
-  }
-  if (!gz) throw new FeedError('relay feed missing');
+export function parseRelayGzip(gz: Uint8Array): FeedStation[] {
   let xml: string;
   try {
     xml = gunzipSync(gz, { maxOutputLength: FEED_MAX_BYTES }).toString('utf8');
