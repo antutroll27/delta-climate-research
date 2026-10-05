@@ -10,7 +10,7 @@ import { allWards } from '../../src/data/cities.ts';
 import { cityAqi, cityFor } from '../../src/lib/aqi/city.ts';
 import { currentFromFeed, parseFeed, pick, pickServed } from '../../src/lib/aqi/cpcb-feed.ts';
 import { hourOf, TRACKED } from '../../src/lib/aqi/hourly-history.ts';
-import { HISTORY_PATH, LATEST_PATH, memoryStore } from '../../src/lib/aqi/relay-store.ts';
+import { archivePath, memoryStore } from '../../src/lib/aqi/relay-store.ts';
 import { AREAS, candidatesFor, FALLBACKS, isAirArea, isAirCity, MAX_SERVE_M, stationFor } from '../../src/lib/aqi/stations.ts';
 import { isAirPayload } from '../../src/lib/aqi/valid.ts';
 import { cardHtml, paneHtml, statusText } from '../../src/scripts/climate-engine/air/air-panel.ts';
@@ -164,8 +164,10 @@ test('Kolkata has no ladder: each area is its one station, exactly as before', (
   assert.deepEqual(candidatesFor('in/kolkata/baruipur'), []);
 });
 
+/** The feed's own archive path: the IST hour of its lastupdate. */
+const hourPath = (gzBytes) => archivePath(parseFeed(gunzipSync(gzBytes).toString('utf8'))[0].published_at);
 const call = async (area, now, { store = memoryStore(), cpcbFeed = true, feed = FEED_GZ } = {}) => {
-  if (!store.files.has(LATEST_PATH)) store.files.set(LATEST_PATH, feed);
+  if (!store.files.has(hourPath(feed))) store.files.set(hourPath(feed), feed);
   let openaqCalls = 0;
   const r = { code: 0, headers: {}, body: null, status(c) { r.code = c; return r; }, setHeader(k, v) { r.headers[k] = v; }, json(b) { r.body = b; } };
   const orig = console.error; console.error = () => {};
@@ -275,13 +277,19 @@ test('every rung present but none with an AQI: the nearest present monitor shows
    its NowCast appears; with only Kasturi Nagar's on record (the old TRACKED), none is invented. */
 test('US NowCast follows the served station: a fallback with its own hours on record gets one; none is invented', async () => {
   const at = (h) => new Date(Date.parse(LIVE[0].published_at) - h * 3_600_000).toISOString();
-  const shifted = (h) => ({ ...hourOf(LIVE), at: at(h) });
-  const withHistory = (hours) => { const store = memoryStore(); store.files.set(HISTORY_PATH, new TextEncoder().encode(JSON.stringify({ v: 1, hours }))); return store; };
+  /* The hours before the current one are their own archive objects: the 18:00 feed restamped 16:00 and 17:00 IST,
+     or a feed holding only Kasturi Nagar (the old TRACKED's one Indiranagar station) with its PM. */
+  const stamp = (h) => { const d = new Date(Date.parse(at(h)) + 5.5 * 3_600_000), p = (n) => String(n).padStart(2, '0');
+    return `${p(d.getUTCDate())}-${p(d.getUTCMonth() + 1)}-${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:00`; };
+  const LIVE_XML = gunzipSync(LIVE_GZ).toString('utf8'), LIVE_STAMP = /lastupdate="([^"]+)"/.exec(LIVE_XML)[1];
+  const shifted = (h) => gz(LIVE_XML.replaceAll(`lastupdate="${LIVE_STAMP}"`, `lastupdate="${stamp(h)}"`));
+  const only = (h) => gz(`<AqIndex><State id="Karnataka"><City id="Bengaluru"><Station id="Kasturi Nagar, Bengaluru - KSPCB" lastupdate="${stamp(h)}" latitude="13.003872" longitude="77.664217"><Pollutant_Index id="PM2.5" Min="1" Max="9" Avg="50" Hourly_sub_index="50"/><Pollutant_Index id="PM10" Min="1" Max="9" Avg="60" Hourly_sub_index="60"/><Air_Quality_Index Value="60" Predominant_Parameter="PM10"/></Station></City></State></AqIndex>`);
+  const withHistory = (feeds) => { const store = memoryStore(); for (const f of feeds) store.files.set(hourPath(f), f); return store; };
+  assert.equal(hourOf(parseFeed(gunzipSync(only(1)).toString('utf8')))?.stations['Kasturi Nagar, Bengaluru - KSPCB']?.pm25, 50, 'the stand-in feed parses');
   const r = await call('in/bengaluru/indiranagar', LIVE_NOW, { feed: LIVE_GZ, store: withHistory([shifted(2), shifted(1)]) });
   assert.equal(r.body.current.station.name, 'Hombegowda Nagar, Bengaluru');
   assert.ok(r.body.us_nowcast, 'the fallback station has its NowCast');
   assert.ok(r.body.us_nowcast.hours_used >= 2);
-  const only = (h) => ({ at: at(h), stations: { 'Kasturi Nagar, Bengaluru - KSPCB': { pm25: 50, pm10: 60 } } });
   const n = await call('in/bengaluru/indiranagar', LIVE_NOW, { feed: LIVE_GZ, store: withHistory([only(2), only(1)]) });
   assert.equal('us_nowcast' in n.body, false, 'one hour on record is not enough: no NowCast is made up');
 });

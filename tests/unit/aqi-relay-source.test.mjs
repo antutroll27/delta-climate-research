@@ -4,14 +4,18 @@ import { readFileSync } from 'node:fs';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import test from 'node:test';
 import handler, { feedSource, handle } from '../../api/air-quality.ts';
-import { FEED_MAX_BYTES, FeedError, readRelayFeed } from '../../src/lib/aqi/cpcb-feed.ts';
-import { LATEST_PATH, memoryStore } from '../../src/lib/aqi/relay-store.ts';
+import { newArchiveMemo, readLiveFeed } from '../../src/lib/aqi/cpcb-archive.ts';
+import { FEED_MAX_BYTES, FeedError } from '../../src/lib/aqi/cpcb-feed.ts';
+import { memoryStore } from '../../src/lib/aqi/relay-store.ts';
 
 const FEED_GZ = readFileSync(new URL('../fixtures/aqi/cpcb-feed-2026-09-27T0500IST.xml.gz', import.meta.url));
 const FEED_XML = gunzipSync(FEED_GZ).toString('utf8');
 const BALLY = 'in/kolkata/ballygunge';
 const CNOW = new Date('2026-09-27T00:30:00Z'); // CPCB published 23:30Z: 1 h old, live
-const storeWith = (gz) => { const s = memoryStore(); if (gz) s.files.set(LATEST_PATH, gz); return s; };
+/* The fixture's hour (05:00 IST) in the archive: the only object the relay keeps. */
+const ARCHIVE = 'cpcb/archive/2026/09/27/05.xml.gz';
+const storeWith = (gz) => { const s = memoryStore(); if (gz) s.files.set(ARCHIVE, gz); return s; };
+const readRelayFeed = (store, now = CNOW) => readLiveFeed(store, now, newArchiveMemo());
 const res = () => { const r = { code: 0, headers: {}, body: null, status(c) { r.code = c; return r; }, setHeader(k, v) { r.headers[k] = v; }, json(b) { r.body = b; } }; return r; };
 const quiet = async (fn) => { const orig = console.error; console.error = () => {}; try { return await fn(); } finally { console.error = orig; } };
 const isCpcb = (u) => String(u).includes('airquality.cpcb.gov.in');
@@ -24,14 +28,14 @@ const get = (d) => { const r = res(); return handle({ method: 'GET', query: { ar
 const relayDeps = (store, c, extra = {}) => ({ key: 'k', fetch: c.fetch, now: () => CNOW, cache: new Map(), inflight: new Map(),
   feedCache: { entry: null, inflight: null }, cpcbFeed: true, source: 'relay', store, ...extra });
 
-test('readRelayFeed inflates the stored gzip and parses it: the real capture, 481 stations', async () => {
+test('the relay read inflates the archived gzip and parses it: the real capture, 481 stations', async () => {
   const feed = await readRelayFeed(storeWith(FEED_GZ));
   assert.equal(feed.length, 481);
   assert.equal(feed.find((s) => s.name === 'Ballygunge, Kolkata - WBPCB').aqi, 38);
 });
 
-test('readRelayFeed: missing, unreachable, corrupt, oversize or not a feed are all FeedErrors', async () => {
-  const failing = { getLatest: async () => { throw new Error('blob token secret-xyz'); }, putLatest: async () => {}, putArchive: async () => 'stored' };
+test('the relay read: missing, unreachable, corrupt, oversize or not a feed are all FeedErrors', async () => {
+  const failing = { getArchive: async () => { throw new Error('blob token secret-xyz'); }, putArchive: async () => 'stored' };
   const cases = [
     ['relay feed missing', storeWith(null)],
     ['relay store unreachable', failing],
@@ -75,7 +79,7 @@ test('relay source: a stored feed older than 2 h falls back to OBOS (founder 202
 
 test('relay source with the feed switched off: the store is never read', async () => {
   let reads = 0;
-  const store = { ...storeWith(FEED_GZ), getLatest: async () => { reads++; return FEED_GZ; } };
+  const store = { ...storeWith(FEED_GZ), getArchive: async () => { reads++; return FEED_GZ; } };
   const r = await get(relayDeps(store, counting(), { cpcbFeed: false }));
   assert.equal(reads, 0);
   assert.equal(r.body.current.result.origin, 'obos');
