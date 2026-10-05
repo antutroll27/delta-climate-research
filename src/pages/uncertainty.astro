@@ -66,7 +66,7 @@ const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Un
         <tr><td>Ward-scenes scored</td><td><span class="n">{SPATIAL.n}</span></td><td>3 wards × near-nadir scenes after cloud and QC masking</td></tr>
         <tr><td>r, shipped field vs ECOSTRESS</td><td><span class="n">{SPATIAL.rModel.toFixed(3)}</span></td><td>within-ward correlation of the modelled pattern</td></tr>
         <tr><td>r, vegetation map alone</td><td><span class="n">{SPATIAL.rVegOnly.toFixed(3)}</span></td><td>the null — and it still wins</td></tr>
-        <tr><td>Amplitude ratio</td><td><span class="n">{SPATIAL.amplitudeRatio.toFixed(2)}</span></td><td>the map's within-ward colour range is this much wider than ECOSTRESS measures</td></tr>
+        <tr><td>Amplitude ratio</td><td><span class="n">{SPATIAL.amplitudeRatio.toFixed(2)}</span></td><td>the map's within-ward colour range against ECOSTRESS's (1 = the same; above 1 exaggerates, below understates)</td></tr>
         <tr><td>Anomaly RMSE</td><td><span class="n">{SPATIAL.anomalyRmseK.toFixed(2)} K</span></td><td>error once ward-mean bias is removed</td></tr>
       </tbody>
     </table></div>

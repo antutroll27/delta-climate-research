@@ -12,7 +12,7 @@
   },
   "solver": {
     "settle": "advanced in 400-step chunks until the ward mean moved < 1e-4 K; first_frame = RESET_BURST steps after reset",
-    "ventilation": "max(0.15, 1 - 0.55*built + 0.65*water); water layer off",
+    "ventilation": "none: the per-cell max(0.15, 1 - 0.55*built + 0.65*water) factor was removed 2026-10-05, so the convective term is the calibrated h*wind; water layer off",
     "rows_on_other_branch": 0
   },
   "strata": {
@@ -27,20 +27,20 @@
       "displayed_settled": {
         "n_scenes": 50,
         "n_overpasses": 20,
-        "bias_K": 0.594,
-        "rmse_K": 2.834,
-        "loo_overpass_rmse_K": 2.925
+        "bias_K": 0.311,
+        "rmse_K": 2.681,
+        "loo_overpass_rmse_K": 2.812
       },
       "displayed_first_frame": {
         "n_scenes": 50,
         "n_overpasses": 20,
-        "bias_K": 0.529,
-        "rmse_K": 2.793,
-        "loo_overpass_rmse_K": 2.895
+        "bias_K": 0.312,
+        "rmse_K": 2.681,
+        "loo_overpass_rmse_K": 2.812
       },
-      "solver_minus_equation_K": 0.276,
+      "solver_minus_equation_K": -0.007,
       "app_equation_minus_calibrated_K": -0.092,
-      "displayed_minus_calibrated_K": 0.184,
+      "displayed_minus_calibrated_K": -0.099,
       "band": {
         "label": "night \u00b13.0 K (ACCURACY.night.bandK)",
         "K": 3.0,
@@ -60,20 +60,20 @@
           "displayed_settled": {
             "n_scenes": 14,
             "n_overpasses": 5,
-            "bias_K": -1.57,
-            "rmse_K": 2.408,
-            "loo_overpass_rmse_K": 2.244
+            "bias_K": -1.724,
+            "rmse_K": 2.44,
+            "loo_overpass_rmse_K": 2.128
           },
           "displayed_first_frame": {
             "n_scenes": 14,
             "n_overpasses": 5,
-            "bias_K": -1.605,
-            "rmse_K": 2.412,
-            "loo_overpass_rmse_K": 2.214
+            "bias_K": -1.723,
+            "rmse_K": 2.439,
+            "loo_overpass_rmse_K": 2.128
           },
-          "solver_minus_equation_K": 0.146,
+          "solver_minus_equation_K": -0.008,
           "app_equation_minus_calibrated_K": -0.092,
-          "displayed_minus_calibrated_K": 0.053
+          "displayed_minus_calibrated_K": -0.101
         },
         "pre-monsoon (Mar-Jun)": {
           "calibrated": {
@@ -86,20 +86,20 @@
           "displayed_settled": {
             "n_scenes": 18,
             "n_overpasses": 8,
-            "bias_K": 2.0,
-            "rmse_K": 3.272,
-            "loo_overpass_rmse_K": 3.077
+            "bias_K": 1.715,
+            "rmse_K": 3.06,
+            "loo_overpass_rmse_K": 3.013
           },
           "displayed_first_frame": {
             "n_scenes": 18,
             "n_overpasses": 8,
-            "bias_K": 1.96,
-            "rmse_K": 3.234,
-            "loo_overpass_rmse_K": 3.057
+            "bias_K": 1.715,
+            "rmse_K": 3.06,
+            "loo_overpass_rmse_K": 3.013
           },
-          "solver_minus_equation_K": 0.282,
+          "solver_minus_equation_K": -0.003,
           "app_equation_minus_calibrated_K": -0.03,
-          "displayed_minus_calibrated_K": 0.251
+          "displayed_minus_calibrated_K": -0.033
         },
         "monsoon (Jul-Sep)": {
           "calibrated": {
@@ -112,20 +112,20 @@
           "displayed_settled": {
             "n_scenes": 5,
             "n_overpasses": 2,
-            "bias_K": 2.327,
-            "rmse_K": 4.218,
+            "bias_K": 1.75,
+            "rmse_K": 3.82,
             "loo_overpass_rmse_K": null
           },
           "displayed_first_frame": {
             "n_scenes": 5,
             "n_overpasses": 2,
-            "bias_K": 2.156,
-            "rmse_K": 4.08,
+            "bias_K": 1.752,
+            "rmse_K": 3.821,
             "loo_overpass_rmse_K": null
           },
-          "solver_minus_equation_K": 0.565,
+          "solver_minus_equation_K": -0.011,
           "app_equation_minus_calibrated_K": -0.003,
-          "displayed_minus_calibrated_K": 0.563
+          "displayed_minus_calibrated_K": -0.014
         },
         "post-monsoon (Oct-Nov)": {
           "calibrated": {
@@ -138,20 +138,20 @@
           "displayed_settled": {
             "n_scenes": 13,
             "n_overpasses": 5,
-            "bias_K": 0.312,
-            "rmse_K": 1.729,
-            "loo_overpass_rmse_K": 2.111
+            "bias_K": 0.005,
+            "rmse_K": 1.633,
+            "loo_overpass_rmse_K": 2.039
           },
           "displayed_first_frame": {
             "n_scenes": 13,
             "n_overpasses": 5,
-            "bias_K": 0.218,
-            "rmse_K": 1.689,
-            "loo_overpass_rmse_K": 2.083
+            "bias_K": 0.006,
+            "rmse_K": 1.633,
+            "loo_overpass_rmse_K": 2.039
           },
-          "solver_minus_equation_K": 0.297,
+          "solver_minus_equation_K": -0.009,
           "app_equation_minus_calibrated_K": -0.212,
-          "displayed_minus_calibrated_K": 0.086
+          "displayed_minus_calibrated_K": -0.221
         }
       },
       "ward_68_only": {
@@ -165,20 +165,20 @@
         "displayed_settled": {
           "n_scenes": 16,
           "n_overpasses": 16,
-          "bias_K": 0.988,
-          "rmse_K": 3.127,
-          "loo_overpass_rmse_K": 3.164
+          "bias_K": 0.553,
+          "rmse_K": 2.86,
+          "loo_overpass_rmse_K": 2.993
         },
         "displayed_first_frame": {
           "n_scenes": 16,
           "n_overpasses": 16,
-          "bias_K": 0.888,
-          "rmse_K": 3.054,
-          "loo_overpass_rmse_K": 3.117
+          "bias_K": 0.554,
+          "rmse_K": 2.86,
+          "loo_overpass_rmse_K": 2.993
         },
-        "solver_minus_equation_K": 0.414,
+        "solver_minus_equation_K": -0.022,
         "app_equation_minus_calibrated_K": -0.042,
-        "displayed_minus_calibrated_K": 0.372,
+        "displayed_minus_calibrated_K": -0.063,
         "by_season": {
           "winter (Dec-Feb)": {
             "calibrated": {
@@ -191,20 +191,20 @@
             "displayed_settled": {
               "n_scenes": 5,
               "n_overpasses": 5,
-              "bias_K": -1.565,
-              "rmse_K": 2.462,
+              "bias_K": -1.849,
+              "rmse_K": 2.539,
               "loo_overpass_rmse_K": null
             },
             "displayed_first_frame": {
               "n_scenes": 5,
               "n_overpasses": 5,
-              "bias_K": -1.632,
-              "rmse_K": 2.474,
+              "bias_K": -1.847,
+              "rmse_K": 2.538,
               "loo_overpass_rmse_K": null
             },
-            "solver_minus_equation_K": 0.261,
+            "solver_minus_equation_K": -0.023,
             "app_equation_minus_calibrated_K": -0.018,
-            "displayed_minus_calibrated_K": 0.243
+            "displayed_minus_calibrated_K": -0.041
           },
           "pre-monsoon (Mar-Jun)": {
             "calibrated": {
@@ -217,20 +217,20 @@
             "displayed_settled": {
               "n_scenes": 5,
               "n_overpasses": 5,
-              "bias_K": 2.316,
-              "rmse_K": 3.734,
+              "bias_K": 1.905,
+              "rmse_K": 3.42,
               "loo_overpass_rmse_K": null
             },
             "displayed_first_frame": {
               "n_scenes": 5,
               "n_overpasses": 5,
-              "bias_K": 2.272,
-              "rmse_K": 3.684,
+              "bias_K": 1.905,
+              "rmse_K": 3.421,
               "loo_overpass_rmse_K": null
             },
-            "solver_minus_equation_K": 0.4,
+            "solver_minus_equation_K": -0.011,
             "app_equation_minus_calibrated_K": -0.011,
-            "displayed_minus_calibrated_K": 0.39
+            "displayed_minus_calibrated_K": -0.022
           },
           "monsoon (Jul-Sep)": {
             "calibrated": {
@@ -243,20 +243,20 @@
             "displayed_settled": {
               "n_scenes": 2,
               "n_overpasses": 2,
-              "bias_K": 4.56,
-              "rmse_K": 4.81,
+              "bias_K": 3.788,
+              "rmse_K": 4.035,
               "loo_overpass_rmse_K": null
             },
             "displayed_first_frame": {
               "n_scenes": 2,
               "n_overpasses": 2,
-              "bias_K": 4.332,
-              "rmse_K": 4.57,
+              "bias_K": 3.791,
+              "rmse_K": 4.038,
               "loo_overpass_rmse_K": null
             },
-            "solver_minus_equation_K": 0.744,
+            "solver_minus_equation_K": -0.028,
             "app_equation_minus_calibrated_K": -0.002,
-            "displayed_minus_calibrated_K": 0.742
+            "displayed_minus_calibrated_K": -0.029
           },
           "post-monsoon (Oct-Nov)": {
             "calibrated": {
@@ -269,20 +269,20 @@
             "displayed_settled": {
               "n_scenes": 4,
               "n_overpasses": 4,
-              "bias_K": 0.734,
-              "rmse_K": 1.592,
+              "bias_K": 0.246,
+              "rmse_K": 1.374,
               "loo_overpass_rmse_K": null
             },
             "displayed_first_frame": {
               "n_scenes": 4,
               "n_overpasses": 4,
-              "bias_K": 0.583,
-              "rmse_K": 1.505,
+              "bias_K": 0.25,
+              "rmse_K": 1.375,
               "loo_overpass_rmse_K": null
             },
-            "solver_minus_equation_K": 0.457,
+            "solver_minus_equation_K": -0.03,
             "app_equation_minus_calibrated_K": -0.13,
-            "displayed_minus_calibrated_K": 0.327
+            "displayed_minus_calibrated_K": -0.161
           }
         }
       }
@@ -298,20 +298,20 @@
       "displayed_settled": {
         "n_scenes": 9,
         "n_overpasses": 4,
-        "bias_K": -1.109,
-        "rmse_K": 4.271,
-        "loo_overpass_rmse_K": 5.868
+        "bias_K": -1.645,
+        "rmse_K": 4.346,
+        "loo_overpass_rmse_K": 6.268
       },
       "displayed_first_frame": {
         "n_scenes": 9,
         "n_overpasses": 4,
-        "bias_K": -1.18,
-        "rmse_K": 4.276,
-        "loo_overpass_rmse_K": 5.882
+        "bias_K": -1.644,
+        "rmse_K": 4.346,
+        "loo_overpass_rmse_K": 6.269
       },
-      "solver_minus_equation_K": 0.516,
+      "solver_minus_equation_K": -0.02,
       "app_equation_minus_calibrated_K": -0.003,
-      "displayed_minus_calibrated_K": 0.513,
+      "displayed_minus_calibrated_K": -0.022,
       "band": {
         "label": "transition 7.54 K (TRANSITION_RMSE_K)",
         "K": 7.54,
@@ -331,20 +331,20 @@
           "displayed_settled": {
             "n_scenes": 3,
             "n_overpasses": 1,
-            "bias_K": 4.334,
-            "rmse_K": 4.444,
+            "bias_K": 3.632,
+            "rmse_K": 3.687,
             "loo_overpass_rmse_K": null
           },
           "displayed_first_frame": {
             "n_scenes": 3,
             "n_overpasses": 1,
-            "bias_K": 4.245,
-            "rmse_K": 4.347,
+            "bias_K": 3.632,
+            "rmse_K": 3.687,
             "loo_overpass_rmse_K": null
           },
-          "solver_minus_equation_K": 0.682,
+          "solver_minus_equation_K": -0.02,
           "app_equation_minus_calibrated_K": -0.001,
-          "displayed_minus_calibrated_K": 0.681
+          "displayed_minus_calibrated_K": -0.021
         },
         "monsoon (Jul-Sep)": {
           "calibrated": {
@@ -357,20 +357,20 @@
           "displayed_settled": {
             "n_scenes": 1,
             "n_overpasses": 1,
-            "bias_K": -6.326,
-            "rmse_K": 6.326,
+            "bias_K": -7.217,
+            "rmse_K": 7.217,
             "loo_overpass_rmse_K": null
           },
           "displayed_first_frame": {
             "n_scenes": 1,
             "n_overpasses": 1,
-            "bias_K": -6.408,
-            "rmse_K": 6.408,
+            "bias_K": -7.217,
+            "rmse_K": 7.217,
             "loo_overpass_rmse_K": null
           },
-          "solver_minus_equation_K": 0.891,
+          "solver_minus_equation_K": 0.0,
           "app_equation_minus_calibrated_K": -0.005,
-          "displayed_minus_calibrated_K": 0.886
+          "displayed_minus_calibrated_K": -0.005
         },
         "post-monsoon (Oct-Nov)": {
           "calibrated": {
@@ -383,20 +383,20 @@
           "displayed_settled": {
             "n_scenes": 5,
             "n_overpasses": 2,
-            "bias_K": -3.332,
-            "rmse_K": 3.602,
+            "bias_K": -3.697,
+            "rmse_K": 3.929,
             "loo_overpass_rmse_K": null
           },
           "displayed_first_frame": {
             "n_scenes": 5,
             "n_overpasses": 2,
-            "bias_K": -3.39,
-            "rmse_K": 3.655,
+            "bias_K": -3.696,
+            "rmse_K": 3.927,
             "loo_overpass_rmse_K": null
           },
-          "solver_minus_equation_K": 0.342,
+          "solver_minus_equation_K": -0.023,
           "app_equation_minus_calibrated_K": -0.003,
-          "displayed_minus_calibrated_K": 0.338
+          "displayed_minus_calibrated_K": -0.026
         }
       },
       "ward_68_only": {
@@ -410,20 +410,20 @@
         "displayed_settled": {
           "n_scenes": 3,
           "n_overpasses": 3,
-          "bias_K": -0.356,
-          "rmse_K": 4.245,
+          "bias_K": -1.138,
+          "rmse_K": 4.13,
           "loo_overpass_rmse_K": null
         },
         "displayed_first_frame": {
           "n_scenes": 3,
           "n_overpasses": 3,
-          "bias_K": -0.473,
-          "rmse_K": 4.233,
+          "bias_K": -1.135,
+          "rmse_K": 4.129,
           "loo_overpass_rmse_K": null
         },
-        "solver_minus_equation_K": 0.723,
+        "solver_minus_equation_K": -0.059,
         "app_equation_minus_calibrated_K": -0.004,
-        "displayed_minus_calibrated_K": 0.719,
+        "displayed_minus_calibrated_K": -0.062,
         "by_season": {
           "pre-monsoon (Mar-Jun)": {
             "calibrated": {
@@ -436,20 +436,20 @@
             "displayed_settled": {
               "n_scenes": 1,
               "n_overpasses": 1,
-              "bias_K": 5.614,
-              "rmse_K": 5.614,
+              "bias_K": 4.461,
+              "rmse_K": 4.461,
               "loo_overpass_rmse_K": null
             },
             "displayed_first_frame": {
               "n_scenes": 1,
               "n_overpasses": 1,
-              "bias_K": 5.46,
-              "rmse_K": 5.46,
+              "bias_K": 4.462,
+              "rmse_K": 4.462,
               "loo_overpass_rmse_K": null
             },
-            "solver_minus_equation_K": 1.092,
+            "solver_minus_equation_K": -0.061,
             "app_equation_minus_calibrated_K": -0.004,
-            "displayed_minus_calibrated_K": 1.088
+            "displayed_minus_calibrated_K": -0.065
           },
           "post-monsoon (Oct-Nov)": {
             "calibrated": {
@@ -462,20 +462,20 @@
             "displayed_settled": {
               "n_scenes": 2,
               "n_overpasses": 2,
-              "bias_K": -3.341,
-              "rmse_K": 3.358,
+              "bias_K": -3.937,
+              "rmse_K": 3.955,
               "loo_overpass_rmse_K": null
             },
             "displayed_first_frame": {
               "n_scenes": 2,
               "n_overpasses": 2,
-              "bias_K": -3.44,
-              "rmse_K": 3.459,
+              "bias_K": -3.934,
+              "rmse_K": 3.952,
               "loo_overpass_rmse_K": null
             },
-            "solver_minus_equation_K": 0.538,
+            "solver_minus_equation_K": -0.058,
             "app_equation_minus_calibrated_K": -0.004,
-            "displayed_minus_calibrated_K": 0.535
+            "displayed_minus_calibrated_K": -0.061
           }
         }
       }
@@ -491,20 +491,20 @@
       "displayed_settled": {
         "n_scenes": 212,
         "n_overpasses": 50,
-        "bias_K": 1.118,
-        "rmse_K": 3.363,
-        "loo_overpass_rmse_K": 3.228
+        "bias_K": 0.329,
+        "rmse_K": 2.889,
+        "loo_overpass_rmse_K": 2.924
       },
       "displayed_first_frame": {
         "n_scenes": 212,
         "n_overpasses": 50,
-        "bias_K": 0.982,
-        "rmse_K": 3.226,
-        "loo_overpass_rmse_K": 3.129
+        "bias_K": 0.331,
+        "rmse_K": 2.891,
+        "loo_overpass_rmse_K": 2.926
       },
-      "solver_minus_equation_K": 0.757,
+      "solver_minus_equation_K": -0.032,
       "app_equation_minus_calibrated_K": -0.001,
-      "displayed_minus_calibrated_K": 0.756,
+      "displayed_minus_calibrated_K": -0.033,
       "band": {
         "label": "peak \u00b14.5 K (10:30 sits outside TRANSITION_HOURS)",
         "K": 4.5,
@@ -524,20 +524,20 @@
           "displayed_settled": {
             "n_scenes": 119,
             "n_overpasses": 25,
-            "bias_K": 0.297,
-            "rmse_K": 2.686,
-            "loo_overpass_rmse_K": 2.749
+            "bias_K": -0.351,
+            "rmse_K": 2.419,
+            "loo_overpass_rmse_K": 2.473
           },
           "displayed_first_frame": {
             "n_scenes": 119,
             "n_overpasses": 25,
-            "bias_K": 0.177,
-            "rmse_K": 2.583,
-            "loo_overpass_rmse_K": 2.655
+            "bias_K": -0.349,
+            "rmse_K": 2.421,
+            "loo_overpass_rmse_K": 2.476
           },
-          "solver_minus_equation_K": 0.616,
+          "solver_minus_equation_K": -0.032,
           "app_equation_minus_calibrated_K": -0.001,
-          "displayed_minus_calibrated_K": 0.615
+          "displayed_minus_calibrated_K": -0.033
         },
         "pre-monsoon (Mar-Jun)": {
           "calibrated": {
@@ -550,20 +550,20 @@
           "displayed_settled": {
             "n_scenes": 60,
             "n_overpasses": 17,
-            "bias_K": 3.559,
-            "rmse_K": 4.811,
-            "loo_overpass_rmse_K": 3.45
+            "bias_K": 2.54,
+            "rmse_K": 3.876,
+            "loo_overpass_rmse_K": 3.127
           },
           "displayed_first_frame": {
             "n_scenes": 60,
             "n_overpasses": 17,
-            "bias_K": 3.399,
-            "rmse_K": 4.6,
-            "loo_overpass_rmse_K": 3.306
+            "bias_K": 2.542,
+            "rmse_K": 3.878,
+            "loo_overpass_rmse_K": 3.129
           },
-          "solver_minus_equation_K": 0.987,
+          "solver_minus_equation_K": -0.032,
           "app_equation_minus_calibrated_K": -0.002,
-          "displayed_minus_calibrated_K": 0.985
+          "displayed_minus_calibrated_K": -0.034
         },
         "post-monsoon (Oct-Nov)": {
           "calibrated": {
@@ -576,20 +576,20 @@
           "displayed_settled": {
             "n_scenes": 33,
             "n_overpasses": 8,
-            "bias_K": -0.357,
-            "rmse_K": 2.131,
-            "loo_overpass_rmse_K": 2.313
+            "bias_K": -1.238,
+            "rmse_K": 2.278,
+            "loo_overpass_rmse_K": 2.146
           },
           "displayed_first_frame": {
             "n_scenes": 33,
             "n_overpasses": 8,
-            "bias_K": -0.511,
-            "rmse_K": 2.081,
-            "loo_overpass_rmse_K": 2.226
+            "bias_K": -1.237,
+            "rmse_K": 2.278,
+            "loo_overpass_rmse_K": 2.148
           },
-          "solver_minus_equation_K": 0.851,
+          "solver_minus_equation_K": -0.029,
           "app_equation_minus_calibrated_K": -0.001,
-          "displayed_minus_calibrated_K": 0.85
+          "displayed_minus_calibrated_K": -0.03
         }
       },
       "ward_68_only": {
@@ -603,20 +603,20 @@
         "displayed_settled": {
           "n_scenes": 92,
           "n_overpasses": 47,
-          "bias_K": 2.302,
-          "rmse_K": 3.996,
-          "loo_overpass_rmse_K": 3.339
+          "bias_K": 1.08,
+          "rmse_K": 3.188,
+          "loo_overpass_rmse_K": 3.066
         },
         "displayed_first_frame": {
           "n_scenes": 92,
           "n_overpasses": 47,
-          "bias_K": 2.085,
-          "rmse_K": 3.775,
-          "loo_overpass_rmse_K": 3.217
+          "bias_K": 1.084,
+          "rmse_K": 3.193,
+          "loo_overpass_rmse_K": 3.07
         },
-        "solver_minus_equation_K": 1.149,
+        "solver_minus_equation_K": -0.073,
         "app_equation_minus_calibrated_K": -0.004,
-        "displayed_minus_calibrated_K": 1.144,
+        "displayed_minus_calibrated_K": -0.077,
         "by_season": {
           "winter (Dec-Feb)": {
             "calibrated": {
@@ -629,20 +629,20 @@
             "displayed_settled": {
               "n_scenes": 49,
               "n_overpasses": 25,
-              "bias_K": 1.695,
-              "rmse_K": 3.166,
-              "loo_overpass_rmse_K": 2.787
+              "bias_K": 0.627,
+              "rmse_K": 2.569,
+              "loo_overpass_rmse_K": 2.598
             },
             "displayed_first_frame": {
               "n_scenes": 49,
               "n_overpasses": 25,
-              "bias_K": 1.491,
-              "rmse_K": 2.972,
-              "loo_overpass_rmse_K": 2.681
+              "bias_K": 0.632,
+              "rmse_K": 2.574,
+              "loo_overpass_rmse_K": 2.602
             },
-            "solver_minus_equation_K": 0.99,
+            "solver_minus_equation_K": -0.078,
             "app_equation_minus_calibrated_K": -0.005,
-            "displayed_minus_calibrated_K": 0.985
+            "displayed_minus_calibrated_K": -0.083
           },
           "pre-monsoon (Mar-Jun)": {
             "calibrated": {
@@ -655,20 +655,20 @@
             "displayed_settled": {
               "n_scenes": 29,
               "n_overpasses": 15,
-              "bias_K": 4.169,
-              "rmse_K": 5.647,
-              "loo_overpass_rmse_K": 4.09
+              "bias_K": 2.732,
+              "rmse_K": 4.386,
+              "loo_overpass_rmse_K": 3.685
             },
             "displayed_first_frame": {
               "n_scenes": 29,
               "n_overpasses": 15,
-              "bias_K": 3.938,
-              "rmse_K": 5.355,
-              "loo_overpass_rmse_K": 3.897
+              "bias_K": 2.735,
+              "rmse_K": 4.391,
+              "loo_overpass_rmse_K": 3.689
             },
-            "solver_minus_equation_K": 1.371,
+            "solver_minus_equation_K": -0.066,
             "app_equation_minus_calibrated_K": -0.004,
-            "displayed_minus_calibrated_K": 1.367
+            "displayed_minus_calibrated_K": -0.07
           },
           "post-monsoon (Oct-Nov)": {
             "calibrated": {
@@ -681,20 +681,20 @@
             "displayed_settled": {
               "n_scenes": 14,
               "n_overpasses": 7,
-              "bias_K": 0.555,
-              "rmse_K": 1.947,
-              "loo_overpass_rmse_K": 2.177
+              "bias_K": -0.757,
+              "rmse_K": 1.962,
+              "loo_overpass_rmse_K": 2.112
             },
             "displayed_first_frame": {
               "n_scenes": 14,
               "n_overpasses": 7,
-              "bias_K": 0.323,
-              "rmse_K": 1.819,
-              "loo_overpass_rmse_K": 2.089
+              "bias_K": -0.753,
+              "rmse_K": 1.962,
+              "loo_overpass_rmse_K": 2.114
             },
-            "solver_minus_equation_K": 1.243,
+            "solver_minus_equation_K": -0.069,
             "app_equation_minus_calibrated_K": -0.004,
-            "displayed_minus_calibrated_K": 1.238
+            "displayed_minus_calibrated_K": -0.073
           }
         }
       }
@@ -710,20 +710,20 @@
       "displayed_settled": {
         "n_scenes": 23,
         "n_overpasses": 8,
-        "bias_K": 1.094,
-        "rmse_K": 2.423,
-        "loo_overpass_rmse_K": 2.373
+        "bias_K": 0.637,
+        "rmse_K": 2.219,
+        "loo_overpass_rmse_K": 2.352
       },
       "displayed_first_frame": {
         "n_scenes": 23,
         "n_overpasses": 8,
-        "bias_K": 1.05,
-        "rmse_K": 2.406,
-        "loo_overpass_rmse_K": 2.38
+        "bias_K": 0.638,
+        "rmse_K": 2.22,
+        "loo_overpass_rmse_K": 2.353
       },
-      "solver_minus_equation_K": 0.438,
+      "solver_minus_equation_K": -0.019,
       "app_equation_minus_calibrated_K": -0.001,
-      "displayed_minus_calibrated_K": 0.436,
+      "displayed_minus_calibrated_K": -0.021,
       "band": {
         "label": "peak \u00b14.5 K (ACCURACY.peak.bandK, n=29 earlier set)",
         "K": 4.5,
@@ -743,20 +743,20 @@
           "displayed_settled": {
             "n_scenes": 9,
             "n_overpasses": 3,
-            "bias_K": 0.5,
-            "rmse_K": 1.999,
+            "bias_K": 0.076,
+            "rmse_K": 1.864,
             "loo_overpass_rmse_K": null
           },
           "displayed_first_frame": {
             "n_scenes": 9,
             "n_overpasses": 3,
-            "bias_K": 0.453,
-            "rmse_K": 1.962,
+            "bias_K": 0.078,
+            "rmse_K": 1.866,
             "loo_overpass_rmse_K": null
           },
-          "solver_minus_equation_K": 0.397,
+          "solver_minus_equation_K": -0.026,
           "app_equation_minus_calibrated_K": -0.001,
-          "displayed_minus_calibrated_K": 0.396
+          "displayed_minus_calibrated_K": -0.028
         },
         "pre-monsoon (Mar-Jun)": {
           "calibrated": {
@@ -769,20 +769,20 @@
           "displayed_settled": {
             "n_scenes": 9,
             "n_overpasses": 3,
-            "bias_K": 2.505,
-            "rmse_K": 3.207,
+            "bias_K": 2.15,
+            "rmse_K": 2.843,
             "loo_overpass_rmse_K": null
           },
           "displayed_first_frame": {
             "n_scenes": 9,
             "n_overpasses": 3,
-            "bias_K": 2.493,
-            "rmse_K": 3.197,
+            "bias_K": 2.15,
+            "rmse_K": 2.843,
             "loo_overpass_rmse_K": null
           },
-          "solver_minus_equation_K": 0.344,
+          "solver_minus_equation_K": -0.011,
           "app_equation_minus_calibrated_K": -0.001,
-          "displayed_minus_calibrated_K": 0.344
+          "displayed_minus_calibrated_K": -0.011
         },
         "post-monsoon (Oct-Nov)": {
           "calibrated": {
@@ -795,20 +795,20 @@
           "displayed_settled": {
             "n_scenes": 5,
             "n_overpasses": 2,
-            "bias_K": -0.377,
-            "rmse_K": 1.144,
+            "bias_K": -1.079,
+            "rmse_K": 1.361,
             "loo_overpass_rmse_K": null
           },
           "displayed_first_frame": {
             "n_scenes": 5,
             "n_overpasses": 2,
-            "bias_K": -0.473,
-            "rmse_K": 1.141,
+            "bias_K": -1.078,
+            "rmse_K": 1.361,
             "loo_overpass_rmse_K": null
           },
-          "solver_minus_equation_K": 0.678,
+          "solver_minus_equation_K": -0.023,
           "app_equation_minus_calibrated_K": -0.003,
-          "displayed_minus_calibrated_K": 0.675
+          "displayed_minus_calibrated_K": -0.026
         }
       },
       "ward_68_only": {
@@ -822,20 +822,20 @@
         "displayed_settled": {
           "n_scenes": 8,
           "n_overpasses": 8,
-          "bias_K": 2.24,
-          "rmse_K": 2.985,
+          "bias_K": 1.452,
+          "rmse_K": 2.521,
           "loo_overpass_rmse_K": null
         },
         "displayed_first_frame": {
           "n_scenes": 8,
           "n_overpasses": 8,
-          "bias_K": 2.155,
-          "rmse_K": 2.942,
+          "bias_K": 1.455,
+          "rmse_K": 2.523,
           "loo_overpass_rmse_K": null
         },
-        "solver_minus_equation_K": 0.732,
+        "solver_minus_equation_K": -0.056,
         "app_equation_minus_calibrated_K": -0.004,
-        "displayed_minus_calibrated_K": 0.729,
+        "displayed_minus_calibrated_K": -0.06,
         "by_season": {
           "winter (Dec-Feb)": {
             "calibrated": {
@@ -848,20 +848,20 @@
             "displayed_settled": {
               "n_scenes": 3,
               "n_overpasses": 3,
-              "bias_K": 1.826,
-              "rmse_K": 2.295,
+              "bias_K": 1.048,
+              "rmse_K": 1.896,
               "loo_overpass_rmse_K": null
             },
             "displayed_first_frame": {
               "n_scenes": 3,
               "n_overpasses": 3,
-              "bias_K": 1.721,
-              "rmse_K": 2.213,
+              "bias_K": 1.054,
+              "rmse_K": 1.904,
               "loo_overpass_rmse_K": null
             },
-            "solver_minus_equation_K": 0.699,
+            "solver_minus_equation_K": -0.079,
             "app_equation_minus_calibrated_K": -0.004,
-            "displayed_minus_calibrated_K": 0.695
+            "displayed_minus_calibrated_K": -0.083
           },
           "pre-monsoon (Mar-Jun)": {
             "calibrated": {
@@ -874,20 +874,20 @@
             "displayed_settled": {
               "n_scenes": 3,
               "n_overpasses": 3,
-              "bias_K": 3.583,
-              "rmse_K": 4.228,
+              "bias_K": 2.962,
+              "rmse_K": 3.624,
               "loo_overpass_rmse_K": null
             },
             "displayed_first_frame": {
               "n_scenes": 3,
               "n_overpasses": 3,
-              "bias_K": 3.558,
-              "rmse_K": 4.21,
+              "bias_K": 2.963,
+              "rmse_K": 3.624,
               "loo_overpass_rmse_K": null
             },
-            "solver_minus_equation_K": 0.588,
+            "solver_minus_equation_K": -0.032,
             "app_equation_minus_calibrated_K": -0.002,
-            "displayed_minus_calibrated_K": 0.586
+            "displayed_minus_calibrated_K": -0.035
           },
           "post-monsoon (Oct-Nov)": {
             "calibrated": {
@@ -900,20 +900,20 @@
             "displayed_settled": {
               "n_scenes": 2,
               "n_overpasses": 2,
-              "bias_K": 0.848,
-              "rmse_K": 0.957,
+              "bias_K": -0.206,
+              "rmse_K": 0.574,
               "loo_overpass_rmse_K": null
             },
             "displayed_first_frame": {
               "n_scenes": 2,
               "n_overpasses": 2,
-              "bias_K": 0.701,
-              "rmse_K": 0.825,
+              "bias_K": -0.204,
+              "rmse_K": 0.573,
               "loo_overpass_rmse_K": null
             },
-            "solver_minus_equation_K": 0.997,
+            "solver_minus_equation_K": -0.058,
             "app_equation_minus_calibrated_K": -0.004,
-            "displayed_minus_calibrated_K": 0.993
+            "displayed_minus_calibrated_K": -0.062
           }
         }
       }

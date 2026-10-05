@@ -153,7 +153,8 @@ export const CANOPY_BLEND_STRENGTH = 0;
  *
  * DO NOT "restore" it to true because the zero layer looks like an oversight. It looked
  * like one for months and it was: `sim-ts.ts` has always READ this layer — a ventilation
- * boost `1 - 0.55*built + 0.65*water`, and a relaxation `next*(1 - 0.35*water) + (tAir -
+ * boost `1 - 0.55*built + 0.65*water` (removed with the whole per-cell ventilation
+ * factor 2026-10-05; known-limitations §18), and a relaxation `next*(1 - 0.35*water) + (tAir -
  * 1.5)*0.35*water` — while `rasterWardBase` allocated it and never wrote it, so both terms
  * collapsed to the identity and every pond in three wards was solved as warm land. Filling
  * it is the obvious fix. It is also, measured, a worse model.

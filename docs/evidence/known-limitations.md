@@ -1147,7 +1147,7 @@ the live check, and the pre-fix artefact fails the artefact check.
 
 ## 18. Displayed vs calibrated: the page draws a damped field the bands were never fitted on
 
-**Status:** measured, not changed · **See:** `scripts/measure-displayed-vs-calibrated.py`,
+**Status:** factor REMOVED 2026-10-05 (see the end of this section) · **See:** `scripts/measure-displayed-vs-calibrated.py`,
 `scripts/displayed-field-means.mjs`, `data/calibration/displayed-vs-calibrated.json`.
 
 Every published accuracy figure scores the calibrated equation, `(gain + kRad·tSky + h·wind·tAir) /
@@ -1209,3 +1209,43 @@ three-ward claim and is not published per ward, but Ward 68 is the default view.
 above are evidence for a decision: remove the factor (the page then draws the calibrated field), carry it into
 the calibration and re-fit (a reviewed recalibration), or keep it and score the bands against the displayed
 field. Its effect on within-ward spatial skill has not been measured, and should be before choosing.
+
+**Decision, 2026-10-05: removed.** The founder's rule was to remove the factor unless it improved where
+the map puts the heat inside a ward, and to recalibrate with it if it did. It was scored both ways with
+`measure-shipped-amplitude.py`, which drives the real solver against ECOSTRESS. Both runs used the same
+85 ward-scenes, the corrected wind and the Ward 68 polygon. Rows were paired by ward-scene and resampled
+10,000 times in a bootstrap.
+
+| | r shipped (95 % CI) | vegetation null | amplitude |
+|---|---|---|---|
+| with factor | 0.261 [0.205, 0.316] | 0.308 | 1.11x |
+| without | 0.267 [0.211, 0.323] | 0.306 | 0.97x |
+| difference | **+0.006 [+0.004, +0.009]**, better in 68 of 85 ward-scenes | | |
+
+The change is the same sign in every split:
+
+| split | change in r without the factor |
+|---|---|
+| Ward 68 | +0.013 |
+| Barrackpore | +0.004 |
+| Baruipur | +0.002 |
+| day | +0.008 |
+| night | +0.005 |
+
+The factor made the within-ward pattern slightly worse. It also made the colour range over-drawn
+(1.11x → 0.97x). So it was removed from both solvers: the GPU parity transcription moved with them, and a
+new test pins a uniform built cell to `equilibriumC`.
+
+The re-run artefact (`displayed-vs-calibrated.json`) shows displayed within 0.1 K of calibrated on every
+stratum:
+
+| stratum | displayed bias / RMSE / LOO |
+|---|---|
+| night | +0.31 / 2.68 / 2.81 K |
+| Landsat | +0.33 / 2.89 / 2.92 K |
+| peak | +0.64 / 2.22 / 2.35 K |
+
+Pre-monsoon Landsat is +2.54 / 3.88 K, back inside the ±4.5 K band. Pre-monsoon night is 3.06 K, which the
+calibrated equation itself also scores, so it is still just over ±3.0 K. That is a fact about the model,
+not about the display. Ward 68 alone now draws 0.56 K of within-ward SD against an observed 0.68 K (0.82x),
+so its contrasts are slightly understated. The vegetation null still beats the model.
