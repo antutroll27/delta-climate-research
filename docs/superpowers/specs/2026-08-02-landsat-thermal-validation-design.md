@@ -5,6 +5,12 @@
 below regenerates from `data/calibration/*`)
 **Predecessor:** `docs/heat-map-calibration-spec.md` (the ECOSTRESS campaign this extends)
 
+> **Correction, 2026-10-05.** Every Landsat figure in this document was scored with the Landsat rows'
+> wind in raw NASA POWER m/s instead of the page's `wind / 3` clamped to 0.3–2.5, a bug present since
+> the Landsat campaign (commit `4ce2585`). At the page's wind `morning_landsat` is bias +0.36 K, RMSE
+> 2.91 K, LOO-overpass 2.95 K, and the intercomparison `delta_K` is −0.575 K, not −3.4 to −3.6 K.
+> The CI half-width on the Landsat stratum is ±0.61 K, not ±0.49 K. See `docs/evidence/known-limitations.md` §17.
+
 ---
 
 ## 1 · Why

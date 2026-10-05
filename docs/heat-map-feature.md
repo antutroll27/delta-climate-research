@@ -331,7 +331,10 @@ The accuracy story moved from "measured" to "measured, with known uncertainty":
 - **Landsat campaign: LANDED (2026-08-02).** 213 ward-scenes over **50 overpasses**
   from Landsat 8/9 C2 L2 via Planetary Computer — no credentials, no new dependency.
   The daytime CI half-width goes **±1.87 K → ±0.49 K** on the Landsat morning
-  stratum, better than the ±1.1 K the spec asked for. Strata are published
+  stratum, better than the ±1.1 K the spec asked for. (**Corrected 2026-10-05:** the
+  Landsat rows had been scored at raw m/s wind, not the page's wind/3 clamp. At the
+  page's wind the stratum is bias +0.36 K, RMSE 2.91 K, LOO-overpass 2.95 K, CI
+  half-width ±0.61 K; see `docs/evidence/known-limitations.md` §17.) Strata are published
   separately by hour: night · morning_ecostress (7.1–11.1 h) · morning_landsat
   (10.4 h) · peak_ecostress (11.8–17.4 h).
   - **Sensor pooling is BLOCKED, honestly.** Only 2 ECOSTRESS overpasses fall in

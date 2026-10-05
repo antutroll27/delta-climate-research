@@ -72,6 +72,31 @@ def evap_scale(rh: float) -> float:
 
 K_SUM = 0.01 + 0.05          # kRad + h at wind = 1; the RATIO is fitted, the sum is held
 
+#: The forcing wind the model runs on, from a raw 10 m wind in m/s. Mirrors
+#: `Math.min(2.5, Math.max(0.3, wind / 3))` in currentParams and
+#: currentParamsForReference (src/scripts/climate-engine/heat-map-model.ts).
+#: `h·wind` is the convective conductance, so `wind` here is a dimensionless
+#: multiplier on `h`, not a speed: a third of the 10 m wind, clamped.
+WIND_DIVISOR = 3.0
+WIND_MIN = 0.3
+WIND_MAX = 2.5
+
+
+def model_wind(raw_ms: float) -> float:
+    """The model's wind multiplier for a raw 10 m wind in m/s. Mirrors heat-map-model.ts.
+
+    ONE DEFINITION ON PURPOSE, for the reason evap_scale() has one. Until
+    2026-10-05 the transform lived inline in load(), and the Landsat rows in
+    build-ward-observations.py were written from the CSV without it, so every
+    Landsat ward-scene was scored at a raw m/s wind — about three times the
+    convective cooling the page applies — while the ECOSTRESS rows beside them
+    were scored at the page's value. That alone moved the published
+    morning_landsat bias from +0.36 K to -2.49 K (since commit 4ce2585).
+    `build-ward-observations.py --check` holds every observation row to this
+    function and this function to the TypeScript.
+    """
+    return max(WIND_MIN, min(WIND_MAX, raw_ms / WIND_DIVISOR))
+
 #: Nocturnal heat release, night only — the storage flux (ΔQs) a steady-state
 #: balance omits. Mirrors STORE_NIGHT in types.ts. Without it the modelled night
 #: surface sits BELOW air while the measurement puts it 2.10 K above; that is a
@@ -301,7 +326,7 @@ def load(all_angles: bool) -> tuple[list[Scene], LandCoverClasses, int]:
             sun=solar_factor(hour, d.timetuple().tm_yday),
             tAir=float(r["tAir"]),
             rh=float(r["rh"]),
-            wind=max(0.3, min(2.5, float(r["wind"]) / 3)),
+            wind=model_wind(float(r["wind"])),
             cloud=float(r["cloud"]),
             w=math.sqrt(float(r["usable_frac"])),
             urban=float(r["urban_mean"]),

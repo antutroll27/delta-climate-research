@@ -1093,3 +1093,54 @@ wind and cloud can change within-ward contrast.
 **`model-accuracy.json` still carries `phases.night.reported_band_K: 3.5`.** That is the older mask-scale
 block: it scores the unshipped `fit-physics.py` point, and nothing reads it. The published night band comes
 from `ward_scale.strata.night`.
+
+## 17. Landsat rows were scored at the wrong wind (corrected 2026-10-05)
+
+**Status:** fixed · **See:** `scripts/_physics.py` `model_wind`, `scripts/build-ward-observations.py`
+`landsat_rows` and `--check`, `data/calibration/model-accuracy.json`.
+
+The model runs on a wind multiplier, not a wind speed: `wind / 3` of the 10 m reading, clamped to 0.3–2.5
+(`currentParams` in `heat-map-model.ts`). The ECOSTRESS rows in `ward-observations.json` carried that value
+through `_physics.load()`. The Landsat rows, added by the 2026-08-02 campaign (commit `4ce2585`), were written
+straight from `met-forcing.csv` and carried the **raw NASA POWER m/s**: a mean of 2.15 against the page's
+0.72 over the 212 rows. Every Landsat ward-scene was therefore scored with about three times the convective
+cooling the page applies, which drags the modelled 10:30 surface toward air and reads as the model running
+cold. No other field differed: rebuilding the artefact changed exactly the 212 Landsat `wind` values and nothing
+else, and the same pipeline on unmodified `main` reproduces the committed artefact byte for byte.
+
+| `morning_landsat` (n = 212, 50 overpasses) | published (raw m/s) | corrected (page wind) |
+|---|---|---|
+| bias, model − measured | −2.494 K | **+0.362 K** |
+| RMSE | 3.253 K | **2.913 K** |
+| leave-one-overpass-out RMSE | 2.129 K | **2.945 K** |
+| bootstrap 95 % CI (half-width) | 2.718–3.764 K (±0.523) | 2.281–3.504 K (±0.611) |
+| data ceiling (LOO-overpass) | 1.597 K | 1.597 K |
+| Ward 68 / Barrackpore / Baruipur bias | −2.83 / −2.12 / −2.31 K | +1.16 / +0.60 / −0.80 K |
+| `intercomparison.offset_K.landsat` | −2.494 K | +0.362 K |
+| `intercomparison.delta_K` (Landsat − ECOSTRESS, 9.5–11.5 h) | −3.431 K | **−0.575 K** |
+
+Night, `morning_ecostress` and `peak_ecostress` do not change (ECOSTRESS rows only), so no published band
+moves. `ward-scale-fit.json` is untouched: the shipping fit reads ECOSTRESS alone, and it was not re-run (it is
+the pre-Ward-68 fit by decision, §16).
+
+**What the correction says.**
+- The 10:30 out-of-sample error got **worse**, not better: 2.13 → 2.95 K. The old LOO looked good because the
+  leave-one-overpass-out method removes the mean bias, and most of the old error *was* a wind-induced bias.
+  The scatter around the bias is the real 10:30 error, and it is 2.95 K. That is still inside the ±4.5 K
+  daytime band and under half the 7.54 K transition figure, so `TRANSITION_HOURS`' 9.5 h upper bound was
+  re-derived and **holds**. The model now sits further above the data ceiling at 10:30 (2.91 against 1.60 K)
+  than any earlier figure implied.
+- The "sensor offset" mostly disappears. `delta_K` was −3.639 K, then −3.431 K, and was already known not to
+  be an instrument offset (the 2026-08-09 adjudication spec). About 2.9 K of it was this bug. At −0.575 K it
+  is inside the 1.0 K pooling threshold, but pooling stays **blocked** because only 2 ECOSTRESS overpasses fall
+  in Landsat's window against a minimum of 5. Do not read −0.575 K as a measured offset either.
+- **The 2026-08-09 hybrid-fit analysis used the corrupted rows.** Its finding that a Landsat+ECOSTRESS fit
+  rails `q_day` to 0.6 and `l_et` to 0.4 (`docs/superpowers/specs/2026-08-09-sensor-offset-adjudication-design.md`)
+  was produced at raw m/s wind and should be re-run before anyone cites it.
+- The published daytime CI half-width on the Landsat stratum is ±0.61 K, not ±0.49 K (campaign) or ±0.52 K.
+
+**Guard.** `python3 scripts/build-ward-observations.py --check` (in `npm run test:py`) fails if any of these
+diverge: the TypeScript's every `x.wind / n` site against `_physics`' constants; `_physics.load()` against
+`model_wind`; a live `landsat_rows()` against `model_wind`; and every committed row, both instruments, against
+`model_wind` of its own forcing line. Mutation-proved both ways: reverting `landsat_rows` to `f["wind"]` fails
+the live check, and the pre-fix artefact fails the artefact check.

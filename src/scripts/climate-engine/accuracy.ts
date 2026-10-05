@@ -730,25 +730,40 @@ export function bandLabel(phase: 'peak' | 'night'): string {
  * close to their published bands. One did not:
  *
  *     morning_ecostress   hours 7.09–11.06   LOO-overpass 7.54 K   n=11
- *     morning_landsat     hours 10.39–10.41  LOO-overpass 2.25 K   n=213
+ *     morning_landsat     hours 10.39–10.41  LOO-overpass 2.25 K   n=213  (wrong wind, below)
  *     peak_ecostress      hours 11.76–17.45  LOO-overpass 2.40 K   n=24
  *     night               hours 0.7–23.84    LOO-overpass 2.79 K   n=50
  *
  * That table is the 2026-08-02 campaign, scored with Ballygunge as the OLD 1400 m
  * box and before the sun-up bar and the forcing-date correction. The artefact
  * today (Ballygunge = KMC Ward 68 polygon, 2026-10-03) reads morning_ecostress
- * LOO 6.29 K n=9, morning_landsat 2.13 K n=212, peak_ecostress 2.36 K n=23,
- * night 2.78 K n=50. TRANSITION_RMSE_K keeps the campaign's 7.54 K, the larger
- * and so the more cautious of the two; moving it is a reviewed change.
+ * LOO 6.29 K n=9, peak_ecostress 2.36 K n=23, night 2.78 K n=50.
+ * TRANSITION_RMSE_K keeps the campaign's 7.54 K, the larger and so the more
+ * cautious of the two; moving it is a reviewed change.
+ *
+ * EVERY LANDSAT FIGURE ABOVE WAS SCORED AT THE WRONG WIND, from the campaign
+ * (commit 4ce2585) until 2026-10-05. build-ward-observations.py wrote Landsat rows
+ * with raw NASA POWER m/s while ECOSTRESS rows and this page use wind/3 clamped to
+ * 0.3–2.5, so every Landsat ward-scene was scored with about three times the
+ * convective cooling the page applies. The "2.25 K" and the later "2.13 K" both
+ * described a model nobody runs, and their small LOO came from removing a large
+ * wind-induced bias (−2.49 K). Scored at the page's wind, morning_landsat is
+ * RMSE 2.91 K, bias +0.36 K, LOO-overpass 2.95 K, n=212 over 50 overpasses
+ * (known-limitations §17; `build-ward-observations.py --check` now holds both
+ * instruments to one transform).
  *
  * Sunrise to mid-morning is where a STEADY-STATE model has least to work with:
  * the surface is still shedding stored heat while the sun is already loading it,
  * and an equilibrium solution cannot represent a system that is not near
  * equilibrium. 7.54 K is two and a half times the daytime band.
  *
- * The upper bound stops at 9.5 rather than 11.06 because Landsat's 213 scenes
- * pin 10:30 at 2.25 K — the stratum is only unreliable BEFORE that anchor, and
- * shading the good hours would overstate the caveat.
+ * The upper bound stops at 9.5 rather than 11.06 because Landsat's 212 scenes
+ * pin 10:30 at 2.95 K out of sample — inside the ±4.5 K daytime band and less than
+ * half the 7.54 K transition figure, so the stratum is only unreliable BEFORE that
+ * anchor, and shading the good hours would overstate the caveat. Re-derived on the
+ * corrected wind 2026-10-05: the bound holds. It also holds for the field the page
+ * DRAWS rather than the calibrated equation (3.23 K out of sample, known-limitations
+ * §18 "displayed vs calibrated").
  *
  * A live "now" view can enter this window, so it must be able to say so.
  */

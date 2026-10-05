@@ -58,7 +58,8 @@ The general rule this buys: **more rows of the same instrument, wards and forcin
 constants, not the error.** Accuracy comes from a different instrument, a different forcing
 resolution, or a different model structure — not from waiting for the archive to grow. The
 one thing archive growth genuinely buys is a tighter interval on the error itself, which is
-what the Landsat campaign delivered (±1.87 → ±0.49 K).
+what the Landsat campaign delivered (±1.87 → ±0.49 K as first scored; ±0.61 K once the Landsat
+rows were re-scored at the page's wind on 2026-10-05, known-limitations §17).
 Do not retry statistics on the daytime residual — it is not predictable from POWER forcing. The
 night-phase regression is the one that survives (2.81 → 2.14–2.31 K depending on term count) and
 has its own shipping decision pending (see the 2026-08-02 Landsat validation spec, §7.1).

@@ -71,7 +71,8 @@ test('the sunrise window is flagged, and its published band is not claimed there
     'a flagged window must be worse than the daytime band, or it needs no flag');
   assert.ok(TRANSITION_RMSE_K > ACCURACY.night.bandK);
 
-  // Landsat's 10:30 anchor is 2.25 K out-of-sample; shading it would overstate
-  // the caveat, so the window must end before it.
+  // Landsat's 10:30 anchor is 2.95 K out-of-sample (2.25 K until 2026-10-05, when
+  // its rows were found scored at raw m/s wind); still inside the daytime band, so
+  // shading it would overstate the caveat and the window must end before it.
   assert.ok(hi <= 10.39, 'the window must stop short of the validated 10:30 stratum');
 });

@@ -155,7 +155,8 @@ evidence; accuracy floor ~2.09 K (QC bits show 0% "good/excellent" pixels over K
 **Landsat 8/9 Collection 2 Level-2 (TIRS)** — USGS/NASA · 30 m (100 m thermal resampled) · **US public
 domain** · via Microsoft Planetary Computer, no credentials · **role:** daytime LST validation; 213
 ward-scenes over 50 overpasses · status: shipped 2026-08-02; tightened daytime CI to ±0.49 K on the
-Landsat morning stratum.
+Landsat morning stratum (±0.61 K once its rows were re-scored at the page's wind, 2026-10-05;
+known-limitations §17).
 
 **ICESat-2 ATL03** — NASA, photon-counting laser altimeter · decimetre-class, since 2018, tracks RGT
 0416/0744/0858 · **NASA public data** (via `fetch-icesat2.py` against Earthdata/CMR) · **role:**
