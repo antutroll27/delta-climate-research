@@ -3,7 +3,7 @@
  *
  * Private Vercel Blob, two kinds of object, both gzip of CPCB's XML unchanged:
  *   cpcb/latest.xml.gz                      overwritten on each new hour
- *   cpcb/archive/YYYY/MM/DD/HH.xml.gz       keyed by the feed's IST lastupdate, written once
+ *   cpcb/archive/YYYY/MM/DD/HH.xml.gz       keyed by the feed's IST lastupdate, written once, best effort (cpcb-archive.ts)
  *   cpcb/hourly-pm.json                     the rolling hourly PM record behind NowCast (hourly-history.ts)
  *
  * Only OBOS writes here (api/air-quality-ingest.ts, after verifying the Pi's

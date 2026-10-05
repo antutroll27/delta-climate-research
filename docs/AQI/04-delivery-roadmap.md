@@ -101,6 +101,37 @@ Exit criteria:
 
 **Objective:** Turn government-station snapshots into a reproducible recent history.
 
+### Raw hourly archive of CPCB's feed (live since 4 Oct 2026; best effort since 5 Oct)
+
+The ingest (`api/air-quality-ingest.ts`, `src/lib/aqi/cpcb-archive.ts`) keeps CPCB's whole
+national feed (~507 stations, including Bengaluru's, for which there is no other history source)
+once per hour, as raw evidence for later charts. There is no reader or UI yet.
+
+- **Path:** `cpcb/archive/YYYY/MM/DD/HH.xml.gz` in the private Blob store `obos-cpcb-relay`.
+  `YYYY/MM/DD HH` is the **IST** wall-clock hour of CPCB's own `lastupdate`, which CPCB
+  stamps in IST. So 00:00 IST on 6 Oct is `2026/10/06/00`, although that instant is
+  18:30 UTC on 5 Oct. IST has no daylight saving, so every key is unambiguous.
+- **Contents:** the gzip the Pi relay sent, byte for byte (CPCB's XML unchanged), with
+  `access: private`, `addRandomSuffix: false`, `contentType: application/gzip`. There are no
+  public URLs.
+- **Once per hour:** the put refuses to overwrite. A repeat of the same `lastupdate`, or a newer
+  `lastupdate` inside an hour already archived, leaves the first object alone (first write
+  wins). Latest still advances to the newer feed.
+- **Only verified feeds:** the archive is written only after the signature, size, gzip and
+  parser checks have passed.
+- **Best effort:** a failed archive put is logged (`air-quality-ingest archive failed <class> <path>`).
+  The ingest still stores latest and answers the Pi exactly as on success. The Pi resubmits
+  only when `lastupdate` advances, so an hour lost this way stays a gap. If latest also fails,
+  the answer is 503 and the Pi's retry archives the hour too.
+- **No index:** a reader computes the path and `get`s it (`readArchivedHour`). On Blob, `list()`
+  is an Advanced Operation, the scarce kind, so history reads should not list.
+- **Size and cost:** one feed is about 43 KB gzipped, so 24 × 365 × 43 KB ≈ 0.38 GB a year,
+  with no pruning. On the Hobby plan (1 GB storage, 2,000 Advanced and 10,000 Simple
+  Operations a month, then **Blob is blocked for 30 days**, not billed), storage lasts about
+  2.5 years. The archive costs one Advanced Operation (a put) per CPCB hour, about 744 a month.
+  Together with latest and the NowCast history, that makes three puts per hour, about 2,232
+  a month, which is over the Hobby allowance (founder decision pending, see the archive PR).
+
 Tasks:
 
 - Store normalized government-station readings and source metadata in PostgreSQL.
