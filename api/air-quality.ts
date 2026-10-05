@@ -31,12 +31,12 @@
 import { waitUntil } from '@vercel/functions';
 import { buildPayload } from '../src/lib/aqi/build.ts';
 import { cityAqi, cityFor } from '../src/lib/aqi/city.ts';
-import { currentFromFeed, fetchFeed, FeedError, pick, readRelayFeed, requireLive, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
+import { currentFromFeed, fetchFeed, FeedError, pickServed, readRelayFeed, requireLive, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import type { Raw } from '../src/lib/aqi/hours.ts';
 import { nowcastFor, readHistory, type History } from '../src/lib/aqi/hourly-history.ts';
 import { fetchSensorWindow, OpenAqError } from '../src/lib/aqi/openaq.ts';
 import { blobStore, type FeedStore } from '../src/lib/aqi/relay-store.ts';
-import { isAirArea, POLLUTANTS, stationFor, stationPayload, type StationEntry } from '../src/lib/aqi/stations.ts';
+import { candidatesFor, isAirArea, POLLUTANTS, stationFor, stationPayload, type StationEntry } from '../src/lib/aqi/stations.ts';
 import { SCHEMA, type AirQualityPayload, type Pollutant } from '../src/lib/aqi/types.ts';
 
 /** Vercel reads this: the handler's own deadline is 20 s, so 30 s leaves room to answer. */
@@ -187,11 +187,12 @@ function rawFor(area: string, sensors: NonNullable<StationEntry['sensors']>, now
   return p;
 }
 
-function upstreamError(area: string, st: StationEntry, now: Date): AirQualityPayload {
+/** No figure, with the area's nearest station: `upstream_error` when a source failed, `station_not_reporting` when the feed was read and no rung is in it. */
+function unavailable(area: string, st: StationEntry, now: Date, reason: 'upstream_error' | 'station_not_reporting' = 'upstream_error'): AirQualityPayload {
   const station = stationPayload(st);
   return { current: { schema: SCHEMA, area_id: area, served_at: now.toISOString(),
     source: { owner: st.owner, via: st.sensors ? 'CPCB via OpenAQ' : 'CPCB', standard: 'CPCB National AQI' },
-    state: 'unavailable', station, last_observed_at: null, reason: 'upstream_error' }, history: null };
+    state: 'unavailable', station, last_observed_at: null, reason }, history: null };
 }
 
 export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
@@ -212,8 +213,11 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
     : null;
   const snap = await feedP;
   const feed = snap?.stations ?? null;
-  const f = feed ? pick(feed, st) : null;
-  const current = f ? currentFromFeed(f, area, st, now) : null;
+  /* The area's ladder (stations.ts candidatesFor): Kolkata's is its one station, so this is `pick` exactly;
+     Bengaluru's runs on to the nearest monitor that publishes an AQI this hour (`served`). */
+  const served = feed ? pickServed(feed, candidatesFor(area)) : null;
+  const f = served?.f ?? null;
+  const current = served ? currentFromFeed(served.f, area, served.st, now, served.fallback) : null;
 
   if (current) {
     let history: AirQualityPayload['history'] = null;
@@ -233,7 +237,8 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
        fallback below never carries one, so no card mixes sources. */
     const ref = cityFor(area);
     const city = feed && ref && current.state === 'live' ? cityAqi(feed, ref) : null;
-    /* NowCast likewise: only beside a live CPCB figure, from that station's own hours. */
+    /* NowCast likewise: only beside a live CPCB figure, from the SERVED station's own hours (a fallback's too:
+       the ingest records every rung, hourly-history.ts TRACKED). */
     const usNowcast = f && current.state === 'live' ? nowcastFor(snap?.history ?? null, f) : null;
     /* No OpenAQ sensors: no history is coming, so the CPCB answer is already whole. */
     res.setHeader('Cache-Control', history || !sensors ? OK_CACHE : PARTIAL_CACHE);
@@ -244,14 +249,21 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
   // CPCB unusable: today's path. A misconfiguration must never be cached at the CDN: it would outlive the fix.
   /* No OpenAQ copy of this station to fall back on: the honest unavailable state, uncached like any failure,
      so the CDN keeps serving its last good CPCB answer and the next request asks the feed again. */
-  if (!sensors) { res.setHeader('Cache-Control', FAIL_CACHE); res.status(200).json(upstreamError(area, st, now)); return; }
+  if (!sensors) {
+    /* A current feed with no rung of the ladder in it is the stations' silence, not a failure to read
+       (a feed older than 7 days, or the relay's 2 h rule, already counts as a failure). */
+    const quiet = feed !== null && !served;
+    res.setHeader('Cache-Control', FAIL_CACHE);
+    res.status(200).json(unavailable(area, st, now, quiet ? 'station_not_reporting' : 'upstream_error'));
+    return;
+  }
   if (!rawP) { res.setHeader('Cache-Control', 'no-store'); res.status(503).json({ error: 'air quality not configured' }); return; }
   const r = await rawP;
   if ('e' in r) {
     // Never log `e` itself: only the area and the numeric status. OpenAqError messages carry no key.
     logUpstream(area, r.e);
     res.setHeader('Cache-Control', FAIL_CACHE);
-    res.status(200).json(upstreamError(area, st, now));
+    res.status(200).json(unavailable(area, st, now));
     return;
   }
   /* With the feed on, this is a fallback from a failed CPCB and lives 60 s at the CDN (M-2); with it off,

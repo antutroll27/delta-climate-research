@@ -69,11 +69,13 @@ const head = (title: string, chip: string): string => `<div class="k legend-head
 
 /* A MONITOR OUTSIDE THE AREA SAYS SO, in the same line as its distance: "nearest
    official monitor", the true distance, and where it stands. Never just the distance,
-   which alone would read as a monitor in the area. */
+   which alone would read as a monitor in the area. A FALLBACK (stations.ts FALLBACKS)
+   is not the nearest official monitor, only the nearest one reporting this hour: it says
+   "nearest reporting", with its own distance. */
 function stationLine(s: AqiStation, owner: string | null, place: string): string {
   const who = `${esc((owner && OWNER_SHORT[owner]) ?? owner ?? '')} monitor`;
   return s.inside === 'outside_window'
-    ? `<p class="meta"><b>${esc(s.name.replace(' – WBPCB', ''))}</b> · nearest official ${who} · ${km(s.distance_m)} from the ${esc(place)} centre, ${esc(s.placement ?? 'outside the area')}</p>`
+    ? `<p class="meta"><b>${esc(s.name.replace(' – WBPCB', ''))}</b> · nearest ${s.fallback ? 'reporting' : 'official'} ${who} · ${km(s.distance_m)} from the ${esc(place)} centre, ${esc(s.placement ?? 'outside the area')}</p>`
     : `<p class="meta"><b>${esc(s.name.replace(' – WBPCB', ''))}</b> · ${who} · ${km(s.distance_m)} from the ${esc(place)} centre</p>`;
 }
 
@@ -117,10 +119,10 @@ const shortStation = (n: string): string => n.replace(/, [^,]+ - [A-Za-z]+$/, ''
    voice, so it is visibly subordinate to the ward's own number and says it covers the whole
    city. The note (tap, keyboard or hover, like the US note) lists every station averaged.
    No colour of its own: the category is a word. */
-function cityLine(city: CityAqi | undefined): string {
+function cityLine(city: CityAqi | undefined, fallback = false): string {
   if (!city) return '';
   const n = num(city.stations);
-  const note = `Average of all ${n} CPCB stations reporting in ${city.name} right now (CPCB's city method). The big number above is this ward's nearest station.`;
+  const note = `Average of all ${n} CPCB stations reporting in ${city.name} right now (CPCB's city method). The big number above is this ward's nearest ${fallback ? 'reporting ' : ''}station.`;
   const list = city.members.map((m) => `<li><span>${esc(shortStation(m.name))}</span><span>${num(m.aqi)}</span></li>`).join('');
   return `<details class="aq-city"><summary title="${esc(note)}">${esc(city.name)} (entire city) · ${num(city.aqi)} ${word(city.category)} · <span style="white-space:nowrap">${n} stations<span class="aq-us-i" aria-hidden="true">i</span></span></summary><p>${esc(note)}</p><ul>${list}</ul></details>`;
 }
@@ -133,6 +135,8 @@ const nowcastIn = (p: AirQualityPayload): UsNowcast | undefined => (isUsNowcast(
 /* NEUTRAL ABOUT WHOSE FAULT A GAP IS: a quiet feed may be the station, CPCB, OpenAQ
    or us, so each sentence says what reached us and makes no claim about who stopped. */
 const FAILED = 'Air-quality data could not be loaded just now. Try again shortly.';
+/* `station_not_reporting`: CPCB's feed was read, and none of the area's monitors is in it this hour. */
+const NOT_REPORTING = 'None of the nearby monitors is reporting to CPCB this hour.';
 const noFigure = (title: string, chip: string, say: string, meta = ''): string =>
   head(title, `<span class="chip off">${chip}</span>`) + `<p class="empty">${say}</p>` + (meta ? `\n     <p class="meta">${meta}</p>` : '');
 /** A date and its IST time never break apart on a narrow card. */
@@ -150,7 +154,8 @@ function block(c: Current, title: string, place: string, city?: CityAqi, nc?: Us
       /* The server's reason decides the sentence; the viewer's clock never guesses it. */
       const text = c.reason === 'feed_quiet' ? noFigure(title, 'No data', 'No readings have reached us from this station for more than 7 days.', lastReading(c.last_observed_at))
         : c.reason === 'no_valid_aqi' ? noFigure(title, 'No AQI', 'Too few recent readings for an official AQI.', lastReading(c.last_observed_at))
-          : noFigure(title, 'Not loaded', FAILED);
+          : c.reason === 'station_not_reporting' ? noFigure(title, 'No data', NOT_REPORTING)
+            : noFigure(title, 'Not loaded', FAILED);
       return text + stationLine(c.station, c.source.owner, place);
     }
     case 'insufficient_data': {
@@ -177,7 +182,7 @@ function block(c: Current, title: string, place: string, city?: CityAqi, nc?: Us
         : `${stale ? 'No readings have reached us since' : 'Readings to'} ${t}${stale ? '.' : ''}`;
       /* The city line is as live as the ward figure it rides with: a demoted (stale) card drops it. */
       const live = !stale && c.result.origin === 'cpcb';
-      const cityHtml = live ? cityLine(city) : '';
+      const cityHtml = live ? cityLine(city, c.station.fallback === true) : '';
       return head(title, chip) + hero(c.result, stale, cityHtml, live ? nc : undefined) + stationLine(c.station, c.source.owner, place) + `<p class="meta">${when}</p>`;
     }
     default:
@@ -307,7 +312,9 @@ function method(owner: string | null, origin: Origin, station: AqiStation | null
       : origin === 'cpcb-none'
         ? `CPCB published no AQI for this hour (source: CPCB). Measured by the ${esc(owner)}. ${chart}`
       : `AQI calculated by OBOS with CPCB's National AQI method from the station's readings (received via CPCB and OpenAQ); it can differ slightly from CPCB's own published figure. Measured by the ${esc(owner)}. `;
-  const where = station?.inside === 'outside_window'
+  const where = station?.inside === 'outside_window' && station.fallback
+    ? `No monitor stands inside the 3 km window around the OBOS centre, and the nearer ones published no AQI this hour; this is the nearest one reporting, ${km(station.distance_m)} away ${esc(station.placement ?? 'outside the area')}, shown as the nearest reporting reading, not as a measurement inside the area. `
+    : station?.inside === 'outside_window'
     ? `No monitor stands inside the 3 km window around the OBOS centre; this is the nearest official one, ${km(station.distance_m)} away ${esc(station.placement ?? 'outside the area')}, shown as the nearest official reading, not as a measurement inside the area. `
     : 'A monitor counts for a place when it stands inside the 3 km window around the OBOS centre. ';
   return `<p class="pane-note">${who}${where}Air quality is a separate layer: it does not enter the heat model.</p>`;
@@ -379,7 +386,8 @@ export function statusText(p: AirQualityPayload, place: string, now: Date = new 
   switch (c.state) {
     case 'live': return `${at}${num(c.result.aqi)} ${word(c.result.category)}, live`;
     case 'stale': return `${at}${num(c.result.aqi)} ${word(c.result.category)}, not live, ${num(c.age_h)} hours old`;
-    case 'unavailable': return at + (c.reason === 'feed_quiet' ? 'no readings for more than 7 days.' : c.reason === 'no_valid_aqi' ? 'too few recent readings for an official AQI.' : 'could not be loaded just now.');
+    case 'unavailable': return at + (c.reason === 'feed_quiet' ? 'no readings for more than 7 days.' : c.reason === 'no_valid_aqi' ? 'too few recent readings for an official AQI.'
+      : c.reason === 'station_not_reporting' ? 'no nearby monitor is reporting this hour.' : 'could not be loaded just now.');
     case 'insufficient_data': return c.origin === 'cpcb' ? `${at}CPCB published no AQI. ${c.reasons[0] ?? ''}.` : `${at}no official AQI, too few hours of readings.`;
     case 'no_station': return `${at}no government monitor within 3 km.`;
     default: return `${at}could not be loaded just now.`;

@@ -17,7 +17,7 @@ const STATES = ['live', 'stale', 'unavailable', 'insufficient_data', 'no_station
 const CATEGORIES = ['good', 'satisfactory', 'moderate', 'poor', 'very_poor', 'severe'] as const;
 const POLLUTANTS = ['pm25', 'pm10', 'no2', 'so2', 'co', 'o3', 'nh3'] as const;
 const UNITS = ['ug_m3', 'mg_m3'] as const;
-const REASONS = ['feed_quiet', 'no_valid_aqi', 'upstream_error'] as const;
+const REASONS = ['feed_quiet', 'no_valid_aqi', 'upstream_error', 'station_not_reporting'] as const;
 const isSchema = (s: unknown): boolean => s === 1 || s === SCHEMA;
 
 const obj = (x: unknown): x is Obj => typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -32,7 +32,8 @@ const arrOf = (x: unknown, ok: (v: unknown) => boolean): boolean => Array.isArra
    with no placement would paint a distance with nothing saying it is not in the area. */
 const isStation = (s: unknown): boolean =>
   obj(s) && str(s['id']) && str(s['name']) && fin(s['lat']) && fin(s['lon']) && fin(s['distance_m'])
-  && (s['inside'] === 'window_3km' || (s['inside'] === 'outside_window' && str(s['placement']) && s['placement'] !== ''));
+  && (s['inside'] === 'window_3km' || (s['inside'] === 'outside_window' && str(s['placement']) && s['placement'] !== ''))
+  && (s['fallback'] === undefined || s['fallback'] === true);
 
 const isReading = (q: unknown): boolean =>
   obj(q) && oneOf(POLLUTANTS, q['parameter']) && finOrNull(q['value']) && oneOf(UNITS, q['unit']) &&

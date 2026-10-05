@@ -16,7 +16,7 @@
 import { gunzipSync } from 'node:zlib';
 import { FEED_MAX_BYTES, parseFeed, type FeedStation } from './cpcb-feed.ts';
 import { archivePath, HISTORY_PATH, type FeedStore } from './relay-store.ts';
-import { AREAS } from './stations.ts';
+import { AREAS, candidatesFor } from './stations.ts';
 import { naqiToConcentration, NOWCAST_HOURS, usNowcast, type UsPollutant } from './us-aqi.ts';
 import type { UsNowcast } from './types.ts';
 
@@ -25,8 +25,12 @@ export { HISTORY_PATH };
 export const HISTORY_HOURS = 24;
 const HOUR_MS = 3_600_000;
 
-/** CPCB's exact names of the stations OBOS shows (stations.ts), Kolkata's and Bengaluru's, the only ones recorded; each once (two Bengaluru wards share Kasturi Nagar). */
-export const TRACKED: readonly string[] = [...new Set(Object.values(AREAS).flatMap((s) => (s ? [s.cpcb_name] : [])))];
+/**
+ * CPCB's exact names of every station OBOS may show (stations.ts), Kolkata's and every rung of
+ * Bengaluru's ladders, the only ones recorded; each once (the ladders share their stations). Every
+ * rung is recorded so a fallback station has its own hours, and so its own NowCast, when it is served.
+ */
+export const TRACKED: readonly string[] = [...new Set(Object.keys(AREAS).flatMap((k) => candidatesFor(k).map((s) => s.cpcb_name)))];
 
 export interface PmHour { pm25: number | null; pm10: number | null }
 export interface HourRecord {
