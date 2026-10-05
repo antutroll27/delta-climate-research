@@ -133,8 +133,9 @@ figure, city mean, Bengaluru ladders and US NowCast are all read back from it
 - **No latest, no NowCast record.** `cpcb/latest.xml.gz` and `cpcb/hourly-pm.json` are no longer
   written or read. They were left in the store (deleting is free but unnecessary).
 - **Reading "current":** the reader walks the IST hours from the one containing "now" back
-  `LIVE_H` (2 h), so at most 3 `get`s, and serves the newest it finds; three hours are exactly
-  enough, since anything older is past `LIVE_H` anyway. A 404 means "try the hour before"; a read
+  `LIVE_H` (2 h), so 3 `get`s, and serves the newest it finds; three hours are exactly
+  enough, since anything older is past `LIVE_H` anyway. Within 15 minutes of the next IST hour it
+  asks that hour first (4 gets), because the ingest accepts a `lastupdate` up to 15 minutes ahead. A 404 means "try the hour before"; a read
   error is a failure (the same OpenAQ fallback for Kolkata, `upstream_error` for Bengaluru), never
   treated as missing. These probes bypass the CDN (`useCache: false`), because a cached 404 could
   hide an hour written a minute ago and Vercel does not document 404 caching. A found hour is kept
@@ -172,9 +173,12 @@ and checking one is about one cold refresh (2–3 probes; the six areas share on
 realistic total is a few thousand Simple Operations a month, under the 10,000 cap. Before, one
 busy instance (8,928) plus the ingest (1,488) was already over it.
 
-During a relay outage (no archive within 2 h), each refresh attempt is 3 probes, retried every
-`FEED_RETRY_MS` (60 s) while traffic arrives: up to 180 Simple Operations an hour per busy instance
-(before: 120). A long outage under steady traffic is the one case to watch.
+During a relay outage (the store answers, but nothing within 2 h, or the newest too old), the
+handler does not ask again for 10 minutes (`RELAY_QUIET_RETRY_MS`; a store that cannot be read
+keeps the 60 s retry). So an outage costs at most 6 attempts of 3–4 probes, about 20 Simple
+Operations an hour per busy instance (before: up to 120), and every request in between, including
+Bengaluru's uncached failure answers, is answered from the in-process memo with no store operation.
+A recovered relay shows within 10 minutes, as any new hour does.
 
 **Do not browse the store in the Vercel dashboard, and do not run `vercel blob list`**: every
 listing, folder click and blob detail view is an Advanced Operation. Monitor usage from
