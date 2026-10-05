@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import test from 'node:test';
 import { BlobError, BlobNotFoundError, BlobServiceNotAvailable } from '@vercel/blob';
 import { handle } from '../../api/air-quality.ts';
@@ -13,7 +13,8 @@ import { handleIngest, STORE_BUDGET_MS } from '../../api/air-quality-ingest.ts';
 import { signV1 } from '../../src/lib/aqi/relay-auth.ts';
 import { archivePath, blobStore, memoryStore } from '../../src/lib/aqi/relay-store.ts';
 import { newArchiveMemo, readArchivedHour, readLiveFeed, readNowcastHistory, readRelay, walkPaths } from '../../src/lib/aqi/cpcb-archive.ts';
-import { FeedError } from '../../src/lib/aqi/cpcb-feed.ts';
+import { FeedError, parseFeed } from '../../src/lib/aqi/cpcb-feed.ts';
+import { addHour, hourOf, nowcastFor } from '../../src/lib/aqi/hourly-history.ts';
 
 const FEED_GZ = readFileSync(new URL('../fixtures/aqi/cpcb-feed-2026-09-27T0500IST.xml.gz', import.meta.url));
 const KEY = '5a'.repeat(32); // a test value, not a secret
@@ -330,8 +331,10 @@ test('a warm instance re-asks only the hours NEWER than the one it holds', async
   const f = await readLiveFeed(b.store, at('2026-09-27T01:10:00Z'), memo);
   assert.equal(f[0].published_at, '2026-09-27T00:30:00.000Z', 'the new hour appears at the next refresh');
   b.ops.fresh = 0;
+  await readLiveFeed(b.store, at('2026-09-27T01:14:00Z'), memo);
+  assert.equal(b.ops.fresh, 0, '06:44 IST: the current hour is held, no operation at all');
   await readLiveFeed(b.store, at('2026-09-27T01:20:00Z'), memo);
-  assert.equal(b.ops.fresh, 0, 'the current hour is held: no operation at all');
+  assert.equal(b.ops.fresh, 1, '06:50 IST, inside 15 min of 07:00: one probe for the next hour, then the held hour');
 });
 
 /* ================= NOWCAST HOURS: settled, so CDN-cached and remembered ================= */
@@ -425,3 +428,99 @@ test('round trip: an hour the ingest archived reads back by any instant inside t
   assert.equal(await readArchivedHour(store, '2026-09-27T06:00:00+05:30'), null);
   await assert.rejects(readArchivedHour(store, 'not a date'), RangeError);
 });
+
+/* ================= OUTAGE BACKOFF: a quiet relay is asked at most every 10 minutes ================= */
+
+/** One request a minute for `minutes`, on ONE instance (shared feed cache), the clock moved by `now` injection. */
+async function minuteByMinute(area, store, startIso, minutes) {
+  const feedCache = { entry: null, inflight: null }, t0 = Date.parse(startIso), answers = [];
+  for (let m = 0; m < minutes; m++) {
+    const r = res();
+    await quiet(() => handle({ method: 'GET', query: { area } }, r, { key: 'k', fetch: openaqRows, now: () => new Date(t0 + m * 60_000),
+      cache: new Map(), inflight: new Map(), feedCache, cpcbFeed: true, source: 'relay', store }));
+    answers.push(r);
+  }
+  return answers;
+}
+
+test('a relay outage costs at most ~20 Simple Operations an hour per instance; every Bengaluru visit in the wait costs none', async () => {
+  const b = fakeBlob(); // the store answers, but nothing within LIVE_H: the Pi is down
+  const answers = await minuteByMinute('in/bengaluru/indiranagar', b.store, '2026-09-27T00:31:00Z', 60); // 06:01–07:00 IST
+  /* Attempts at 06:01, :11, :21, :31, :41 (3 probes each) and :51 (4: inside 15 min of 07:00). */
+  assert.equal(b.ops.fresh, 19);
+  assert.equal(b.ops.cached + b.advanced() + b.ops.head, 0);
+  for (const r of answers) {
+    assert.deepEqual({ s: r.body.current.state, why: r.body.current.reason }, { s: 'unavailable', why: 'upstream_error' });
+    assert.equal(r.headers['Cache-Control'], 'no-store', 'uncached at the CDN, so every visit reaches the function, which answers from the memo');
+  }
+  const k = fakeBlob();
+  const kol = await minuteByMinute('in/kolkata/ballygunge', k.store, '2026-09-27T00:31:00Z', 60);
+  assert.equal(k.ops.fresh, 19, 'Kolkata the same; it serves OpenAQ meanwhile');
+  assert.ok(kol.every((r) => r.body.current.result.origin === 'obos'));
+});
+
+test('a relay whose newest archive is too old is quiet too (10 min); a store that cannot be read keeps the 60 s retry', async () => {
+  const old = holding(['27-09-2026 03:30:00']); // 03:00 IST hour: outside the walk, never reached
+  old.objects.set('cpcb/archive/2026/09/27/04.xml.gz', new Uint8Array(feedOf('27-09-2026 04:00:00'))); // in the walk but > 2 h old
+  await minuteByMinute('in/bengaluru/indiranagar', old.store, '2026-09-27T00:31:00Z', 20);
+  assert.equal(old.ops.fresh, 3 + 2, 'not live: attempts at 06:01 (3 probes) and 06:11 (2: the 04:00 hour is held) only');
+
+  const down = fakeBlob({ get: () => { throw new BlobServiceNotAvailable(); } });
+  await minuteByMinute('in/bengaluru/indiranagar', down.store, '2026-09-27T00:31:00Z', 10);
+  assert.equal(down.ops.fresh, 10, 'unreachable: one probe a minute, so a blip never pins the fallback');
+});
+
+test('a relay that recovers during the wait is served at the next attempt, within 10 minutes', async () => {
+  const b = fakeBlob();
+  const feedCache = { entry: null, inflight: null };
+  const at = async (iso) => { const r = res(); await quiet(() => handle({ method: 'GET', query: { area: 'in/bengaluru/indiranagar' } }, r,
+    { key: 'k', now: () => new Date(iso), cache: new Map(), inflight: new Map(), feedCache, cpcbFeed: true, source: 'relay', store: b.store })); return r.body.current.state; };
+  assert.equal(await at('2026-09-27T00:31:00Z'), 'unavailable');
+  b.objects.set(ARCHIVE, new Uint8Array(FEED_GZ)); // the 05:00 IST capture, late (it has Bengaluru's stations)
+  assert.equal(await at('2026-09-27T00:40:00Z'), 'unavailable', 'inside the wait: not asked');
+  assert.equal(b.ops.fresh, 3);
+  assert.equal(await at('2026-09-27T00:41:00Z'), 'live', 'the next attempt finds it');
+});
+
+/* ================= A FEED STAMPED UP TO 15 MIN AHEAD ================= */
+
+test('the walk looks into the next IST hour only within 15 minutes of it', () => {
+  assert.deepEqual(walkPaths(new Date('2026-09-27T06:14:59Z')), ['11', '10', '09'].map((h) => `cpcb/archive/2026/09/27/${h}.xml.gz`), '11:44:59 IST');
+  assert.deepEqual(walkPaths(new Date('2026-09-27T06:15:00Z')), ['12', '11', '10', '09'].map((h) => `cpcb/archive/2026/09/27/${h}.xml.gz`), '11:45 IST');
+  assert.deepEqual(walkPaths(new Date('2026-12-31T18:20:00Z')), ['2027/01/01/00', '2026/12/31/23', '2026/12/31/22', '2026/12/31/21'].map((h) => `cpcb/archive/${h}.xml.gz`), 'across the year');
+});
+
+test('audit case: 10:00 then 12:00 ingested at 11:50 IST; at 11:55 the reader serves 12:00, and NowCast matches the old record', async () => {
+  const b = fakeBlob();
+  const istToUtc = (s) => new Date(Date.parse(`2026-09-27T${s}:00+05:30`));
+  const ten = synthetic('10:00'), noon = synthetic('12:00');
+  await ingest(req(ten.gz, { ts: istToUtc('10:10').getTime() / 1000 }), b.store, istToUtc('10:10'));
+  const r = await ingest(req(noon.gz, { ts: istToUtc('11:50').getTime() / 1000 }), b.store, istToUtc('11:50'));
+  assert.equal((await r.json()).stored, 'new', 'the ingest accepts 10 min ahead');
+  const memo = newArchiveMemo();
+  b.ops.fresh = 0;
+  const snap = await readRelay(b.store, istToUtc('11:55'), memo);
+  assert.equal(snap.stations[0].published_at, istToUtc('12:00').toISOString(), 'the 12:00 hour, not 10:00');
+  assert.equal(b.ops.fresh, 1, 'found at the first of the four probes');
+  /* The old record held 10:00 and 12:00 and served latest = 12:00: the same NowCast. */
+  const legacyHistory = addHour(addHour(null, hourOf(ten.feed)), hourOf(noon.feed));
+  const want = nowcastFor(legacyHistory, noon.feed[0]), got = nowcastFor(snap.history, snap.stations[0]);
+  assert.ok(want, 'a real NowCast (2 of the latest 3 hours)');
+  assert.deepEqual(got, want);
+  /* Warm: at 11:58 and at 12:05 the held hour costs nothing. */
+  b.ops.fresh = 0;
+  await readLiveFeed(b.store, istToUtc('11:58'), memo);
+  await readLiveFeed(b.store, istToUtc('12:05'), memo);
+  assert.equal(b.ops.fresh, 0);
+  /* Through the handler too. */
+  const api1 = await api('in/kolkata/ballygunge', b.store, istToUtc('11:55'));
+  assert.equal(api1.body.current.observed_at, istToUtc('12:00').toISOString());
+});
+
+/** A 300-station feed stamped `hhmm` IST on 27 Sep, Ballygunge with its own PM sub-indices. */
+function synthetic(hhmm) {
+  const stamp = `27-09-2026 ${hhmm}:00`, v = Number(hhmm.slice(0, 2)) * 7;
+  const st = (id, aqi) => `<Station id="${id}" lastupdate="${stamp}" latitude="22.5367507" longitude="88.3638022"><Pollutant_Index id="PM2.5" Min="1" Max="300" Avg="${aqi}" Hourly_sub_index="${aqi}"/><Pollutant_Index id="PM10" Min="1" Max="300" Avg="${aqi - 5}" Hourly_sub_index="${aqi - 5}"/><Air_Quality_Index Value="${aqi}" Predominant_Parameter="PM2.5"/></Station>`;
+  const gz = gzipSync(`<AqIndex>${st('Ballygunge, Kolkata - WBPCB', 60 + v)}${Array.from({ length: 300 }, (_, i) => st(`S${i}`, 50)).join('')}</AqIndex>`);
+  return { gz, feed: parseFeed(gunzipSync(gz).toString('utf8')).filter((s) => s.name.startsWith('Ballygunge')) };
+}

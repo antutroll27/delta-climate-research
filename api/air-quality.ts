@@ -34,7 +34,7 @@
 import { waitUntil } from '@vercel/functions';
 import { buildPayload } from '../src/lib/aqi/build.ts';
 import { cityAqi, cityFor } from '../src/lib/aqi/city.ts';
-import { newArchiveMemo, readRelay, type ArchiveMemo } from '../src/lib/aqi/cpcb-archive.ts';
+import { newArchiveMemo, readRelay, RelayQuietError, type ArchiveMemo } from '../src/lib/aqi/cpcb-archive.ts';
 import { currentFromFeed, fetchFeed, FeedError, pickServed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import type { Raw } from '../src/lib/aqi/hours.ts';
 import { nowcastFor, type History } from '../src/lib/aqi/hourly-history.ts';
@@ -98,11 +98,23 @@ export interface FeedCache {
   failedAt?: number;
   /** The relay archive objects this instance already holds (immutable), so a refresh re-asks only newer hours. */
   memo?: ArchiveMemo;
+  /** How long the last failure holds off the next attempt, ms: FEED_RETRY_MS, or RELAY_QUIET_RETRY_MS for a quiet relay. */
+  retryMs?: number;
 }
 const FEED: FeedCache = { entry: null, inflight: null };
 export const GRACE_MS = 1_500;
 /** A failed feed is not refetched for this long, so an outage costs one 8 s wait a minute, not one per request. */
 export const FEED_RETRY_MS = 60_000;
+/**
+ * A QUIET relay (store read fine, but no archive within LIVE_H, or the newest too old: RelayQuietError) is
+ * not asked again for 10 min, the feed cache's own lifetime. Each attempt is 3–4 Blob probes, so an outage
+ * costs at most 6 attempts, ~20 Simple Operations, an hour per instance instead of ~180 at FEED_RETRY_MS;
+ * a recovered relay shows within 10 min, as any new hour does. A store that cannot be read
+ * (StoreUnreachableError) keeps FEED_RETRY_MS: a blip must not pin the fallback (re-audit M-2).
+ * Every request inside the wait, including Bengaluru's uncached (no-store) failure answers, is answered
+ * from this memo with no store operation.
+ */
+export const RELAY_QUIET_RETRY_MS = 10 * 60_000;
 /**
  * 60 s at the CDN, for any answer the next visitor may improve on: CPCB current without history (the chart
  * should follow), and OBOS's fallback where a CPCB figure is expected (the server asks CPCB again after
@@ -119,7 +131,7 @@ interface FeedSnapshot { stations: FeedStation[]; history: History | null }
 function feedFor(now: Date, d: Deps): Promise<FeedSnapshot | null> {
   const c = d.feedCache ?? FEED;
   if (c.entry && now.getTime() - c.entry.at < CACHE_TTL_MS) return Promise.resolve({ stations: c.entry.stations, history: c.entry.history ?? null });
-  if (c.failedAt !== undefined && now.getTime() - c.failedAt < FEED_RETRY_MS) return Promise.resolve(null);
+  if (c.failedAt !== undefined && now.getTime() - c.failedAt < (c.retryMs ?? FEED_RETRY_MS)) return Promise.resolve(null);
   if (!c.inflight) {
     const store = d.store ?? (d.source === 'relay' ? blobStore() : null);
     /* The NowCast hours never fail the feed: readRelay answers history null instead of throwing. */
@@ -127,7 +139,11 @@ function feedFor(now: Date, d: Deps): Promise<FeedSnapshot | null> {
       ? readRelay(store, now, (c.memo ??= newArchiveMemo()))
       : fetchFeed({ fetch: d.fetch }).then((stations) => ({ stations, history: null }));
     c.inflight = read
-      .then((snap) => { c.entry = { at: now.getTime(), ...snap }; delete c.failedAt; return snap; }, (e: unknown) => { c.failedAt = now.getTime(); throw e; })
+      .then((snap) => { c.entry = { at: now.getTime(), ...snap }; delete c.failedAt; return snap; }, (e: unknown) => {
+        c.failedAt = now.getTime();
+        c.retryMs = e instanceof RelayQuietError ? RELAY_QUIET_RETRY_MS : FEED_RETRY_MS;
+        throw e;
+      })
       .finally(() => { c.inflight = null; });
   }
   return c.inflight.catch((e: unknown) => {

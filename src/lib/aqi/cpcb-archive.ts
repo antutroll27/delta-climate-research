@@ -16,7 +16,8 @@
  * Advanced Operation, the scarce kind on Hobby (2,000 a month), so nothing here lists.
  *
  * READING "CURRENT" (`readLiveFeed`). Walk the IST hours from the one containing `now` back
- * LIVE_H hours (2 h → at most 3 gets); the newest archive found is the current feed. Three hours
+ * LIVE_H hours (2 h → 3 gets; 4 within 15 min of the next hour, see `walkPaths`); the newest archive
+ * found is the current feed. Three hours
  * are exactly enough: a feed archived in hour H-3 has a `lastupdate` before H-2:00, so it is more
  * than LIVE_H old at any instant of hour H and `requireLive` would refuse it anyway. Each probe is
  * `fresh` (useCache: false): it asks whether an hour has arrived, and a cached 404 could hide an
@@ -50,6 +51,18 @@ const HOUR_MS = 3_600_000;
 
 /** The store could not be read (not a 404). A FeedError, so every caller that falls back on one still does. */
 export class StoreUnreachableError extends FeedError {}
+/**
+ * The store answered, but no archive within LIVE_H ('relay feed missing') or the newest is too old
+ * ('relay feed not live'): the relay is quiet, not the store broken. The handler waits longer before
+ * asking again (api/air-quality.ts RELAY_QUIET_RETRY_MS), which is what bounds an outage's cost.
+ */
+export class RelayQuietError extends FeedError {}
+
+/**
+ * How far ahead of the clock a lastupdate may be; the ingest accepts a feed up to this far in the
+ * future (api/air-quality-ingest.ts), so the walk looks into the next IST hour inside this window.
+ */
+export const FUTURE_SLACK_MS = 15 * 60_000;
 
 /** What one instance remembers between refreshes. Every entry is an immutable archive object, or a known gap. */
 export interface ArchiveMemo {
@@ -60,9 +73,15 @@ export interface ArchiveMemo {
 }
 export const newArchiveMemo = (): ArchiveMemo => ({ newest: null, hours: new Map() });
 
-/** The walk's paths, newest first: the IST hour containing `now`, then the LIVE_H hours before it. */
+/**
+ * The walk's paths, newest first: the IST hour containing `now`, then the LIVE_H hours before it;
+ * and, only within FUTURE_SLACK_MS of the next IST hour, that hour first (a feed stamped up to 15 min
+ * ahead is accepted by the ingest, so it may already be archived). 3 paths, or 4 in that window.
+ */
 export function walkPaths(now: Date): string[] {
-  return Array.from({ length: LIVE_H + 1 }, (_, k) => archivePath(new Date(now.getTime() - k * HOUR_MS).toISOString()));
+  const back = Array.from({ length: LIVE_H + 1 }, (_, k) => archivePath(new Date(now.getTime() - k * HOUR_MS).toISOString()));
+  const ahead = archivePath(new Date(now.getTime() + FUTURE_SLACK_MS).toISOString());
+  return ahead === back[0] ? back : [ahead, ...back];
 }
 
 /**
@@ -102,7 +121,7 @@ export async function readLiveFeed(store: FeedStore, now: Date, memo: ArchiveMem
       return feed;
     }
   }
-  throw new FeedError('relay feed missing');
+  throw new RelayQuietError('relay feed missing');
 }
 
 /**
@@ -122,6 +141,7 @@ export async function readNowcastHistory(store: FeedStore, current: readonly Fee
     if (hit) return hit;
     try {
       /* Never seen: through the CDN. Seen missing (null): fresh, so a cached 404 cannot hide a late hour. */
+      /* A cold instance's first CDN read may still meet a 404 cached by another reader; it self-heals at the next refresh (null → fresh). */
       const feed = await readArchive(store, path, { signal, fresh: hit === null });
       const rec = feed ? hourOf(feed) : null;
       memo.hours.set(path, rec);
@@ -151,7 +171,13 @@ export interface RelaySnapshot { stations: FeedStation[]; history: History | nul
  * STORE_TIMEOUT_MS deadline, so the whole read is bounded at twice that.
  */
 export async function readRelay(store: FeedStore, now: Date, memo: ArchiveMemo): Promise<RelaySnapshot> {
-  const stations = requireLive(await readLiveFeed(store, now, memo, AbortSignal.timeout(STORE_TIMEOUT_MS)), now);
+  const feed = await readLiveFeed(store, now, memo, AbortSignal.timeout(STORE_TIMEOUT_MS));
+  let stations: FeedStation[];
+  try {
+    stations = requireLive(feed, now);
+  } catch (e) {
+    throw e instanceof FeedError ? new RelayQuietError(e.message) : e;
+  }
   const history = await readNowcastHistory(store, stations, memo, AbortSignal.timeout(STORE_TIMEOUT_MS));
   return { stations, history };
 }
