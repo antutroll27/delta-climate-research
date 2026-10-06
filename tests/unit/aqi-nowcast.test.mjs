@@ -1,14 +1,15 @@
 // tests/unit/aqi-nowcast.test.mjs — the US line by EPA NowCast, from CPCB's hourly sub-indices.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import test from 'node:test';
 import { handle } from '../../api/air-quality.ts';
 import { handleIngest } from '../../api/air-quality-ingest.ts';
+import { newArchiveMemo, readRelay } from '../../src/lib/aqi/cpcb-archive.ts';
 import { parseFeed } from '../../src/lib/aqi/cpcb-feed.ts';
-import { addHour, HISTORY_PATH, hourOf, nowcastFor, parseHistory, series, updateHistory } from '../../src/lib/aqi/hourly-history.ts';
+import { addHour, hourOf, nowcastFor, series, TRACKED } from '../../src/lib/aqi/hourly-history.ts';
 import { signV1 } from '../../src/lib/aqi/relay-auth.ts';
-import { archivePath, LATEST_PATH, memoryStore } from '../../src/lib/aqi/relay-store.ts';
+import { archivePath, memoryStore } from '../../src/lib/aqi/relay-store.ts';
 import { nowcast, usIndex, usNowcast } from '../../src/lib/aqi/us-aqi.ts';
 import { isAirPayload, isUsNowcast } from '../../src/lib/aqi/valid.ts';
 import { cardHtml } from '../../src/scripts/climate-engine/air/air-panel.ts';
@@ -115,52 +116,115 @@ test('history: a new hour is added, a duplicate changes nothing, a skipped hour 
     ...['Bapuji Nagar', 'Hebbal', 'Hombegowda Nagar', 'Jayanagar 5th Block', 'Silk Board'].map((n) => `${n}, Bengaluru - KSPCB`)].sort());
 });
 
-test('history keeps the newest 24 distinct hours, none older than 24 h; parseHistory refuses a bad body', () => {
+test('history keeps the newest 24 distinct hours, none older than 24 h', () => {
   const t0 = Date.parse('2026-09-27T00:30:00Z');
   let h = null;
   for (let i = 0; i < 30; i++) h = addHour(h, { at: new Date(t0 + i * 3_600_000).toISOString(), stations: { [BALLY]: { pm25: 10, pm10: 20 } } });
   assert.equal(h.hours.length, 24);
   assert.equal(h.hours[0].at, new Date(t0 + 6 * 3_600_000).toISOString());
-  assert.deepEqual(parseHistory(JSON.stringify(h)), h);
-  for (const bad of ['', 'null', '{"v":2,"hours":[]}', '{"v":1,"hours":[{"at":"x","stations":{}}]}',
-    JSON.stringify({ v: 1, hours: [{ at: h.hours[0].at, stations: { [BALLY]: { pm25: 9.5, pm10: 1 } } }] })]) {
-    assert.equal(parseHistory(bad), null, bad);
-  }
 });
 
-/* ---- the ingest ---- */
+/* ---- the ingest and the archive read-back ---- */
 
 const KEY = '5a'.repeat(32);
 const signed = (body, now) => { const ts = now.getTime() / 1000;
   return new Request('https://deltaclimate.earth/api/air-quality-ingest', { method: 'POST', body,
     headers: { 'X-OBOS-Kind': 'cpcb-feed', 'X-OBOS-Timestamp': String(ts), 'X-OBOS-Signature': signV1(KEY, ts, body) } }); };
-const ingest = (store, h) => { const now = new Date(Date.parse(FEED[h][0].published_at) + 10 * 60_000);
-  return quiet(() => handleIngest(signed(GZ[h], now), { key: KEY, store, now: () => now })); };
-const stored = (store) => parseHistory(new TextDecoder().decode(store.files.get(HISTORY_PATH)));
+const ingestGz = (store, gz, now) => quiet(() => handleIngest(signed(gz, now), { key: KEY, store, now: () => now }));
+const ingest = (store, h) => ingestGz(store, GZ[h], new Date(Date.parse(FEED[h][0].published_at) + 10 * 60_000));
 
-test('ingest: each new hour updates the history; a duplicate post leaves it untouched', async () => {
+test('ingest: each new hour is one archive object and nothing else; a duplicate post writes nothing', async () => {
   const store = memoryStore();
   assert.equal((await ingest(store, '05')).status, 200);
   assert.equal((await ingest(store, '06')).status, 200);
-  assert.equal(stored(store).hours.length, 2);
-  const before = store.files.get(HISTORY_PATH);
+  assert.deepEqual([...store.files.keys()], ['05', '06'].map((h) => archivePath(FEED[h][0].published_at)));
   assert.deepEqual(await (await ingest(store, '06')).json(), { stored: 'duplicate', lastupdate: FEED['06'][0].published_at, stations: FEED['06'].length });
-  assert.equal(store.files.get(HISTORY_PATH), before, 'a duplicate never rewrites it');
+  assert.equal(store.files.size, 2);
 });
 
-test('ingest, first deploy: no history yet, so it is rebuilt once from the previous archives', async () => {
+test('first deploy: hours archived before this release are the NowCast record at once (no rebuild, no record to write)', async () => {
   const store = memoryStore();
   /* 05–10 archived before this release; 08 was never relayed. */
   for (const h of ['05', '06', '07', '09', '10']) store.files.set(archivePath(FEED[h][0].published_at), GZ[h]);
   assert.equal((await ingest(store, '11')).status, 200);
-  assert.deepEqual(stored(store).hours.map((r) => r.at), ['05', '06', '07', '09', '10', '11'].map((k) => FEED[k][0].published_at));
+  const snap = await readRelay(store, new Date(Date.parse(FEED['11'][0].published_at) + 20 * 60_000), newArchiveMemo());
+  assert.deepEqual(snap.history.hours.map((r) => r.at), ['05', '06', '07', '09', '10', '11'].map((k) => FEED[k][0].published_at));
 });
 
-test('ingest: a history failure is logged, never fails the feed', async () => {
-  const store = { ...memoryStore(), getHistory: async () => { throw new Error('blob down'); } };
-  const r = await ingest(store, '05');
-  assert.equal(r.status, 200);
-  assert.equal((await r.json()).stored, 'new');
+/* ---- PARITY: the old stored record (cpcb/hourly-pm.json, main @ afab7d7) vs the archive read-back ----
+   The old path, exactly as main ran it: on a NEW archive put (a duplicate returned before this), the ingest
+   read the JSON record, added hourOf(feed) with addHour and wrote it back; the reader parsed the record and
+   called nowcastFor(record, station of latest). Latest moved only forward. The new path is the real ingest
+   and the real reader. For the same submissions, every TRACKED station must get the same NowCast. */
+
+function legacy() {
+  const archived = new Set();
+  let record = null, latest = null; // record: the JSON text of cpcb/hourly-pm.json
+  return {
+    submit(feed) {
+      const path = archivePath(feed[0].published_at);
+      if (archived.has(path)) return 'duplicate';
+      archived.add(path);
+      if (!latest || Date.parse(feed[0].published_at) > Date.parse(latest[0].published_at)) latest = feed;
+      record = JSON.stringify(addHour(record === null ? null : JSON.parse(record), hourOf(feed)));
+      return 'new';
+    },
+    nowcasts() {
+      const h = record === null ? null : JSON.parse(record);
+      return Object.fromEntries(TRACKED.map((n) => { const f = latest?.find((s) => s.name === n); return [n, f ? nowcastFor(h, f) : null]; }));
+    },
+  };
+}
+async function archived(store, memo, now) {
+  const snap = await readRelay(store, now, memo);
+  return Object.fromEntries(TRACKED.map((n) => { const f = snap.stations.find((s) => s.name === n); return [n, f ? nowcastFor(snap.history, f) : null]; }));
+}
+/** One synthetic CPCB hour: every TRACKED station with its own PM sub-indices (a few blank), plus fillers to 300. */
+function synthetic(ms, seed) {
+  const d = new Date(ms + 5.5 * 3_600_000), p = (n) => String(n).padStart(2, '0');
+  const stamp = `${p(d.getUTCDate())}-${p(d.getUTCMonth() + 1)}-${d.getUTCFullYear()} ${p(d.getUTCHours())}:00:00`;
+  const v = (i, k) => { const x = (seed * 31 + i * 17 + k * 7) % 211; return x % 13 === 0 ? '' : String(20 + x); };
+  const st = (name, i) => `<Station id="${name}" lastupdate="${stamp}" latitude="22.5" longitude="88.3"><Pollutant_Index id="PM2.5" Min="1" Max="400" Avg="${v(i, 1) || 50}" Hourly_sub_index="${v(i, 1)}"/><Pollutant_Index id="PM10" Min="1" Max="400" Avg="${v(i, 2) || 50}" Hourly_sub_index="${v(i, 2)}"/><Air_Quality_Index Value="${Math.max(Number(v(i, 1) || 50), Number(v(i, 2) || 50))}" Predominant_Parameter="${Number(v(i, 1) || 50) >= Number(v(i, 2) || 50) ? 'PM2.5' : 'PM10'}"/></Station>`;
+  const xml = `<AqIndex>${TRACKED.map(st).join('')}${Array.from({ length: 300 }, (_, i) => st(`F${i}`, 99)).join('')}</AqIndex>`;
+  return gzipSync(xml);
+}
+
+test('PARITY: the 27 Sep captures (a duplicate, a skipped 08:00), old record vs archive read-back, every tracked station, every hour', async () => {
+  const old = legacy(), store = memoryStore(), memo = newArchiveMemo();
+  let compared = 0;
+  for (const h of ['05', '06', '06', '07', '09', '10', '11']) {
+    old.submit(FEED[h]);
+    await ingest(store, h);
+    const now = new Date(Date.parse(FEED[h][0].published_at) + 20 * 60_000);
+    const want = old.nowcasts(), got = await archived(store, memo, now);
+    assert.deepEqual(got, want, `after ${h}:00`);
+    compared += Object.values(want).filter(Boolean).length;
+  }
+  assert.ok(compared >= 20, `real NowCasts were compared (${compared})`);
+  /* And through the API for Ballygunge at 11:00: the figure the card shows. */
+  const body = await api(store);
+  assert.deepEqual(body.us_nowcast, old.nowcasts()[BALLY]);
+});
+
+test('PARITY over 30 synthetic hours: gaps, a duplicate, a late hour, the 12-hour edge; old and new agree at every step', async () => {
+  const old = legacy(), store = memoryStore(), memo = newArchiveMemo();
+  const t0 = Date.parse('2026-10-05T18:30:00Z'); // 06-10-2026 00:00 IST
+  const gaps = new Set([3, 9, 16, 17, 18, 25]);
+  const order = Array.from({ length: 30 }, (_, i) => i).filter((i) => !gaps.has(i) && i !== 4);
+  order.splice(order.indexOf(6) + 1, 0, 4); // hour 4 arrives late, after 6 (never archived before)
+  order.splice(order.indexOf(12) + 1, 0, 8); // hour 8 submitted again after 12 (a duplicate)
+  let compared = 0, wall = 0;
+  for (const i of order) {
+    const ms = t0 + i * 3_600_000, gz = synthetic(ms, i);
+    const feed = parseFeed(gunzipSync(gz).toString('utf8'));
+    wall = Math.max(wall, ms + 20 * 60_000); // the clock never runs back for a late or repeated hour
+    old.submit(feed);
+    await ingestGz(store, gz, new Date(wall - 10 * 60_000));
+    const want = old.nowcasts(), got = await archived(store, memo, new Date(wall));
+    assert.deepEqual(got, want, `hour ${i}`);
+    compared += Object.values(want).filter(Boolean).length;
+  }
+  assert.ok(compared > 100, `real NowCasts were compared (${compared})`);
 });
 
 /* ---- the API and the card ---- */
@@ -173,10 +237,10 @@ async function api(store, now = NOW11) {
     { key: '', now: () => now, feedCache: { entry: null, inflight: null }, cpcbFeed: true, source: 'relay', store }));
   return r.body;
 }
+/** 11:00 archived, and with `withHistory` the six hours before it too. */
 async function storeAt11(withHistory = true) {
   const store = memoryStore();
-  store.files.set(LATEST_PATH, GZ['11']);
-  if (withHistory) for (const h of HOURS) await updateHistory(store, FEED[h]);
+  for (const h of withHistory ? HOURS : ['11']) store.files.set(archivePath(FEED[h][0].published_at), GZ[h]);
   return store;
 }
 

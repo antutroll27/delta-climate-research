@@ -20,20 +20,24 @@
  * otherwise this function is main's OpenAQ path, byte for byte in its caching.
  *
  * RELAY SOURCE (spec 2026-09-29 §5): with AIR_CPCB_SOURCE exactly "relay", the feed is read from the
- * Raspberry Pi relay's copy in private Vercel Blob (readRelayFeed) instead of from CPCB itself.
- * A relayed feed older than LIVE_H counts as a failure (requireLive), so a dead relay hands
- * over to OpenAQ instead of ageing the card; everything else after the read is unchanged.
+ * Raspberry Pi relay's hourly archive in private Vercel Blob (lib/aqi/cpcb-archive.ts `readRelay`)
+ * instead of from CPCB itself: the newest archived IST hour within LIVE_H of now. A relayed feed
+ * older than LIVE_H, or none archived in that window, counts as a failure (requireLive), so a dead
+ * relay hands over to OpenAQ instead of ageing the card; a store that cannot be read is a failure
+ * too, never mistaken for an absent hour. Everything after the read is unchanged.
  *
- * US NOWCAST (lib/aqi/hourly-history.ts): with the relay source, the rolling hourly PM record the
- * ingest keeps is read with the feed and cached with it; a live CPCB answer then carries
- * `us_nowcast`. The record is optional: missing or unreadable, the card shows the 24-hour US line.
+ * US NOWCAST (lib/aqi/hourly-history.ts): with the relay source, the 11 archived hours before the
+ * current one are read with it (immutable, so CDN-cached and remembered in-process) and cached with
+ * the feed; a live CPCB answer then carries `us_nowcast`. Optional: with an hour unreadable, or
+ * fewer than 2 of the latest 3 on record, the card shows the 24-hour US line.
  */
 import { waitUntil } from '@vercel/functions';
 import { buildPayload } from '../src/lib/aqi/build.ts';
 import { cityAqi, cityFor } from '../src/lib/aqi/city.ts';
-import { currentFromFeed, fetchFeed, FeedError, pickServed, readRelayFeed, requireLive, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
+import { newArchiveMemo, readRelay, RelayQuietError, type ArchiveMemo } from '../src/lib/aqi/cpcb-archive.ts';
+import { currentFromFeed, fetchFeed, FeedError, pickServed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import type { Raw } from '../src/lib/aqi/hours.ts';
-import { nowcastFor, readHistory, type History } from '../src/lib/aqi/hourly-history.ts';
+import { nowcastFor, type History } from '../src/lib/aqi/hourly-history.ts';
 import { fetchSensorWindow, OpenAqError } from '../src/lib/aqi/openaq.ts';
 import { blobStore, type FeedStore } from '../src/lib/aqi/relay-store.ts';
 import { candidatesFor, isAirArea, POLLUTANTS, stationFor, stationPayload, type StationEntry } from '../src/lib/aqi/stations.ts';
@@ -87,16 +91,30 @@ const CACHE = new Map<string, CacheEntry>();
 const INFLIGHT = new Map<string, Promise<RawSet>>();
 
 export interface FeedCache {
-  /** `history`: the relay's hourly PM record read with the feed (null when none; absent for the direct source). */
+  /** `history`: the relay's archived NowCast hours read with the feed (null when none; absent for the direct source). */
   entry: { at: number; stations: FeedStation[]; history?: History | null } | null;
   inflight: Promise<FeedSnapshot> | null;
   /** When the last fetch failed; CPCB is not asked again for FEED_RETRY_MS (the fallback answers meanwhile). */
   failedAt?: number;
+  /** The relay archive objects this instance already holds (immutable), so a refresh re-asks only newer hours. */
+  memo?: ArchiveMemo;
+  /** How long the last failure holds off the next attempt, ms: FEED_RETRY_MS, or RELAY_QUIET_RETRY_MS for a quiet relay. */
+  retryMs?: number;
 }
 const FEED: FeedCache = { entry: null, inflight: null };
 export const GRACE_MS = 1_500;
 /** A failed feed is not refetched for this long, so an outage costs one 8 s wait a minute, not one per request. */
 export const FEED_RETRY_MS = 60_000;
+/**
+ * A QUIET relay (store read fine, but no archive within LIVE_H, or the newest too old: RelayQuietError) is
+ * not asked again for 10 min, the feed cache's own lifetime. Each attempt is 3–4 Blob probes, so an outage
+ * costs at most 6 attempts, ~20 Simple Operations, an hour per instance instead of ~180 at FEED_RETRY_MS;
+ * a recovered relay shows within 10 min, as any new hour does. A store that cannot be read
+ * (StoreUnreachableError) keeps FEED_RETRY_MS: a blip must not pin the fallback (re-audit M-2).
+ * Every request inside the wait, including Bengaluru's uncached (no-store) failure answers, is answered
+ * from this memo with no store operation.
+ */
+export const RELAY_QUIET_RETRY_MS = 10 * 60_000;
 /**
  * 60 s at the CDN, for any answer the next visitor may improve on: CPCB current without history (the chart
  * should follow), and OBOS's fallback where a CPCB figure is expected (the server asks CPCB again after
@@ -113,15 +131,19 @@ interface FeedSnapshot { stations: FeedStation[]; history: History | null }
 function feedFor(now: Date, d: Deps): Promise<FeedSnapshot | null> {
   const c = d.feedCache ?? FEED;
   if (c.entry && now.getTime() - c.entry.at < CACHE_TTL_MS) return Promise.resolve({ stations: c.entry.stations, history: c.entry.history ?? null });
-  if (c.failedAt !== undefined && now.getTime() - c.failedAt < FEED_RETRY_MS) return Promise.resolve(null);
+  if (c.failedAt !== undefined && now.getTime() - c.failedAt < (c.retryMs ?? FEED_RETRY_MS)) return Promise.resolve(null);
   if (!c.inflight) {
     const store = d.store ?? (d.source === 'relay' ? blobStore() : null);
-    /* The history read never fails the feed: readHistory answers null instead of throwing. */
+    /* The NowCast hours never fail the feed: readRelay answers history null instead of throwing. */
     const read: Promise<FeedSnapshot> = d.source === 'relay' && store
-      ? Promise.all([readRelayFeed(store).then((s) => requireLive(s, now)), readHistory(store)]).then(([stations, history]) => ({ stations, history }))
+      ? readRelay(store, now, (c.memo ??= newArchiveMemo()))
       : fetchFeed({ fetch: d.fetch }).then((stations) => ({ stations, history: null }));
     c.inflight = read
-      .then((snap) => { c.entry = { at: now.getTime(), ...snap }; delete c.failedAt; return snap; }, (e: unknown) => { c.failedAt = now.getTime(); throw e; })
+      .then((snap) => { c.entry = { at: now.getTime(), ...snap }; delete c.failedAt; return snap; }, (e: unknown) => {
+        c.failedAt = now.getTime();
+        c.retryMs = e instanceof RelayQuietError ? RELAY_QUIET_RETRY_MS : FEED_RETRY_MS;
+        throw e;
+      })
       .finally(() => { c.inflight = null; });
   }
   return c.inflight.catch((e: unknown) => {
@@ -238,7 +260,7 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
     const ref = cityFor(area);
     const city = feed && ref && current.state === 'live' ? cityAqi(feed, ref) : null;
     /* NowCast likewise: only beside a live CPCB figure, from the SERVED station's own hours (a fallback's too:
-       the ingest records every rung, hourly-history.ts TRACKED). */
+       every rung is tracked, hourly-history.ts TRACKED). */
     const usNowcast = f && current.state === 'live' ? nowcastFor(snap?.history ?? null, f) : null;
     /* No OpenAQ sensors: no history is coming, so the CPCB answer is already whole. */
     res.setHeader('Cache-Control', history || !sensors ? OK_CACHE : PARTIAL_CACHE);

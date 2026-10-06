@@ -5,7 +5,7 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import test from 'node:test';
 import { handleIngest, MIN_STATIONS, POST } from '../../api/air-quality-ingest.ts';
 import { signV1 } from '../../src/lib/aqi/relay-auth.ts';
-import { HISTORY_PATH, LATEST_PATH, memoryStore } from '../../src/lib/aqi/relay-store.ts';
+import { memoryStore } from '../../src/lib/aqi/relay-store.ts';
 
 const FEED_GZ = readFileSync(new URL('../fixtures/aqi/cpcb-feed-2026-09-27T0500IST.xml.gz', import.meta.url));
 const FEED_XML = gunzipSync(FEED_GZ).toString('utf8');
@@ -29,24 +29,24 @@ const feedOf = (n, stamp = '27-09-2026 05:00:00') => gzipSync(`<?xml version='1.
   Array.from({ length: n }, (_, i) => `<Station id="S${i}" lastupdate="${stamp}" latitude="22.5" longitude="88.3"><Pollutant_Index id="PM10" Min="1" Max="9" Avg="5" Hourly_sub_index="5"/><Air_Quality_Index Value="5" Predominant_Parameter="PM10"/></Station>`).join('')
 }</City></State></Country></AqIndex>`);
 
-test('a new feed is archived by its IST hour, then becomes latest, and joins the NowCast history: 200 new', async () => {
+test('a new feed is archived by its IST hour, and that is the only object written: 200 new', async () => {
   const d = deps();
   const r = await call(req(FEED_GZ), d);
   assert.equal(r.status, 200);
   assert.deepEqual(await r.json(), { stored: 'new', lastupdate: '2026-09-26T23:30:00.000Z', stations: 481 });
-  assert.deepEqual([...d.store.files.keys()].sort(), [ARCHIVE, LATEST_PATH, HISTORY_PATH].sort());
-  assert.deepEqual(Buffer.from(d.store.files.get(LATEST_PATH)), FEED_GZ, 'stored exactly as sent');
+  assert.deepEqual([...d.store.files.keys()], [ARCHIVE], 'no cpcb/latest.xml.gz, no cpcb/hourly-pm.json');
+  assert.deepEqual(Buffer.from(d.store.files.get(ARCHIVE)), FEED_GZ, 'stored exactly as sent');
 });
 
-test('the same hour again is a duplicate: 200, and latest is not rewritten', async () => {
+test('the same hour again is a duplicate: 200, and the archive is not rewritten', async () => {
   const d = deps();
   await call(req(FEED_GZ), d);
-  const sentinel = new Uint8Array([1, 2, 3]);
-  d.store.files.set(LATEST_PATH, sentinel);
+  const first = d.store.files.get(ARCHIVE);
   const r = await call(req(FEED_GZ, { ts: NOW.getTime() / 1000 + 60 }), d);
   assert.equal(r.status, 200);
   assert.deepEqual(await r.json(), { stored: 'duplicate', lastupdate: '2026-09-26T23:30:00.000Z', stations: 481 });
-  assert.equal(d.store.files.get(LATEST_PATH), sentinel);
+  assert.equal(d.store.files.get(ARCHIVE), first);
+  assert.equal(d.store.files.size, 1);
 });
 
 test('a valid ping is 204 and stores nothing; a ping with a body is 400', async () => {
@@ -138,7 +138,7 @@ test('the boundaries pass: 300 stations, 15 min ahead, 7 days old', async () => 
 });
 
 test('a store failure is 503, so the Pi retries at its next tick', async () => {
-  const broken = { getLatest: async () => null, putLatest: async () => { throw new Error('blob down'); }, putArchive: async () => { throw new Error('blob down'); } };
+  const broken = { getArchive: async () => null, putArchive: async () => { throw new Error('blob down'); } };
   assert.equal((await call(req(FEED_GZ), deps({ store: broken }))).status, 503);
 });
 
@@ -182,32 +182,21 @@ test('the ingest function declares maxDuration 30', async () => {
 
 const FEED_06 = feedOf(300, '27-09-2026 06:00:00'); // NOW is 06:00 IST
 
-test('latest only moves forward: a later hour replaces it, an older hour is archived but never replaces it', async () => {
+test('each hour is its own object: a later hour and a late older hour are both archived, neither touches the other', async () => {
   const d = deps();
   await call(req(FEED_06), d);
+  const six = d.store.files.get('cpcb/archive/2026/09/27/06.xml.gz');
   const r = await call(req(FEED_GZ, { ts: NOW.getTime() / 1000 + 60 }), d); // 05:00 IST arrives late
   assert.equal(r.status, 200);
-  assert.equal((await r.json()).stored, 'new', 'the older hour is still archived');
-  assert.ok(d.store.files.has(ARCHIVE));
-  assert.deepEqual(Buffer.from(d.store.files.get(LATEST_PATH)), Buffer.from(FEED_06), 'latest stays at 06:00');
-
-  const e = deps();
-  await call(req(FEED_GZ), e);
-  await call(req(FEED_06, { ts: NOW.getTime() / 1000 + 60 }), e);
-  assert.deepEqual(Buffer.from(e.store.files.get(LATEST_PATH)), Buffer.from(FEED_06), 'a later hour replaces latest');
-});
-
-test('an unreadable latest is replaced, so a corrupt blob heals at the next feed', async () => {
-  const d = deps();
-  d.store.files.set(LATEST_PATH, new Uint8Array([1, 2, 3]));
-  await call(req(FEED_GZ), d);
-  assert.deepEqual(Buffer.from(d.store.files.get(LATEST_PATH)), FEED_GZ);
+  assert.equal((await r.json()).stored, 'new', 'the older hour is archived');
+  assert.deepEqual(Buffer.from(d.store.files.get(ARCHIVE)), FEED_GZ);
+  assert.equal(d.store.files.get('cpcb/archive/2026/09/27/06.xml.gz'), six, 'the newer hour is untouched');
+  assert.equal(d.store.files.size, 2);
 });
 
 test('a store failure logs its error class only, never its message', async () => {
   class BlobStoreSuspendedError extends Error {}
-  const broken = { getLatest: async () => null, putLatest: async () => {},
-    putArchive: async () => { throw new BlobStoreSuspendedError('store sk_secret_details'); } };
+  const broken = { getArchive: async () => null, putArchive: async () => { throw new BlobStoreSuspendedError('store sk_secret_details'); } };
   const lines = [];
   const w = console.warn, i = console.info;
   console.warn = console.info = (...a) => lines.push(a.join(' '));

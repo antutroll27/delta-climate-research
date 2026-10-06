@@ -7,7 +7,7 @@ import test from 'node:test';
 import { handle } from '../../api/air-quality.ts';
 import { cityAqi, cityFor, MIN_CITY_STATIONS } from '../../src/lib/aqi/city.ts';
 import { parseFeed } from '../../src/lib/aqi/cpcb-feed.ts';
-import { LATEST_PATH, memoryStore } from '../../src/lib/aqi/relay-store.ts';
+import { archivePath, memoryStore } from '../../src/lib/aqi/relay-store.ts';
 import { isAirPayload, isCity } from '../../src/lib/aqi/valid.ts';
 import { cardHtml, loadAir } from '../../src/scripts/climate-engine/air/air-panel.ts';
 
@@ -62,7 +62,7 @@ const rows = (sensor) => ({ results: Array.from({ length: 48 }, (_, i) => ({ val
   period: { datetimeTo: { utc: new Date(Date.parse('2026-09-24T13:00:00Z') - i * 3_600_000).toISOString() } } })) });
 const openaq = async (u) => new Response(JSON.stringify(rows(Number(/sensors\/(\d+)\//.exec(String(u))[1]))));
 const get = async (now) => {
-  const store = memoryStore(); store.files.set(LATEST_PATH, FEED_GZ);
+  const store = memoryStore(); store.files.set(archivePath('2026-09-26T23:30:00Z'), FEED_GZ); // the fixture's hour, 05:00 IST
   const r = { code: 0, headers: {}, body: null, status(c) { r.code = c; return r; }, setHeader(k, v) { r.headers[k] = v; }, json(b) { r.body = b; } };
   const orig = console.error; console.error = () => {};
   try {

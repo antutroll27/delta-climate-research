@@ -101,6 +101,89 @@ Exit criteria:
 
 **Objective:** Turn government-station snapshots into a reproducible recent history.
 
+### Raw hourly archive of CPCB's feed: the relay's only write (archive live since 4 Oct 2026; the only write since the single-write redesign, Oct 2026)
+
+The ingest (`api/air-quality-ingest.ts`) keeps CPCB's whole national feed (~500 stations,
+including Bengaluru's, for which there is no other history source) once per hour. Since the
+single-write redesign this archive is **the only object the relay writes**: the Air card's current
+figure, city mean, Bengaluru ladders and US NowCast are all read back from it
+(`src/lib/aqi/cpcb-archive.ts`).
+
+- **Path:** `cpcb/archive/YYYY/MM/DD/HH.xml.gz` in the private Blob store `obos-cpcb-relay`.
+  `YYYY/MM/DD HH` is the **IST** wall-clock hour of CPCB's own `lastupdate`, which CPCB
+  stamps in IST. So 00:00 IST on 6 Oct is `2026/10/06/00`, although that instant is
+  18:30 UTC on 5 Oct. IST has no daylight saving, so every key is unambiguous. Keys are built
+  from UTC getters plus 5:30, so the server's own time zone never enters (tested under four TZs).
+- **Contents:** the gzip the Pi relay sent, byte for byte (CPCB's XML unchanged), with
+  `access: private`, `addRandomSuffix: false`, `contentType: application/gzip`. There are no
+  public URLs.
+- **Exactly one put per new hour**, `allowOverwrite: false`, only after the signature, size, gzip
+  and parser checks have passed. Stored → 200 `new`. Already there → 200 `duplicate`: the put's
+  own refusal, confirmed by a `head` (a Simple Operation, never a second Advanced one); a repeat
+  the same warm instance already stored costs no operation at all. Any other failure → 503, and
+  the Pi retries at its next 15-minute tick.
+- **First write wins.** A newer `lastupdate` inside an hour already archived is answered
+  `duplicate` and not stored. CPCB stamps on the hour, so this has not been seen; if it happens,
+  the card shows that hour's first feed until the next hour.
+- **A 20 s deadline on the put.** The Blob SDK retries a 5xx or network error up to 10 times with
+  backoff (1, 2, 4, 8, 16 s ...) and only notices an abort at its next attempt, so the put is raced
+  against the deadline: at 20 s the answer is 503 whatever the SDK is doing. That leaves ~10 s of
+  the function's 30 s `maxDuration` for the body, gunzip, parse and a cold start, and answers
+  inside the Pi's own 30 s client timeout.
+- **No latest, no NowCast record.** `cpcb/latest.xml.gz` and `cpcb/hourly-pm.json` are no longer
+  written or read. They were left in the store (deleting is free but unnecessary).
+- **Reading "current":** the reader walks the IST hours from the one containing "now" back
+  `LIVE_H` (2 h), so 3 `get`s, and serves the newest it finds; three hours are exactly
+  enough, since anything older is past `LIVE_H` anyway. Within 15 minutes of the next IST hour it
+  asks that hour first (4 gets), because the ingest accepts a `lastupdate` up to 15 minutes ahead. A 404 means "try the hour before"; a read
+  error is a failure (the same OpenAQ fallback for Kolkata, `upstream_error` for Bengaluru), never
+  treated as missing. These probes bypass the CDN (`useCache: false`), because a cached 404 could
+  hide an hour written a minute ago and Vercel does not document 404 caching. A found hour is kept
+  in-process, so a warm instance only re-asks hours newer than the one it holds.
+- **NowCast** is rebuilt from the 11 archived hours before the current one. Those hours are
+  settled and immutable, so they are read through the CDN (a cache HIT is not a Simple Operation)
+  and kept in-process. A missing hour is a gap, as in the old record, and is asked again (at
+  origin) at each refresh, so a late hour is taken just as the old record took it. A parity test
+  feeds the same submissions through the old record's logic and the new read-back and requires
+  identical NowCasts for every tracked station (`tests/unit/aqi-nowcast.test.mjs`).
+- **No index:** a reader computes the path and `get`s it. `list()` is an Advanced Operation, so
+  nothing lists.
+- **Size:** one feed is about 43 KB gzipped, so 24 × 365 × 43 KB ≈ 0.38 GB a year with no
+  pruning; Hobby's 1 GB lasts about 2.5 years.
+
+**Operation budget (Vercel Hobby: 2,000 Advanced and 10,000 Simple Operations a month; past
+either, Blob is BLOCKED for 30 days and the Air card goes down).** A 31-day month has 744 hours.
+
+| | Before (archive + latest + NowCast record) | After (archive only) |
+|---|---|---|
+| Ingest, per new hour | 3 puts (Advanced) + 2 uncached reads (Simple) | 1 put (Advanced), 0 Simple |
+| Ingest, per month | 2,232 Advanced (over the cap ~1 Nov) + 1,488 Simple | **744 Advanced** + 0 Simple |
+| A repeated hour | 1 refused put + 1 head | 0 on a warm instance; 1 refused put + 1 head on a cold one |
+| Reader, per 10-minute refresh | 2 uncached reads (latest + record) | 0–3 uncached probes + NowCast hours from the CDN |
+| Reader, one instance busy all month (a refresh every 10 min) | ≤ 12/h ≈ 8,928 Simple | ≈ 4/h ≈ 3,000 Simple (bound 7/h ≈ 5,200) |
+
+The reader estimate: CPCB's hour `H:00` reaches the archive about 15–40 minutes into hour `H`
+(measured on production, 6 Oct: `lastupdate` 01:00 IST served at 01:37 IST). Until it lands, each
+refresh probes it once (a 404); when it lands, one read; for the rest of the hour, nothing. The
+NowCast hours cost a Simple Operation only on a CDN miss: about once per hour object per Blob CDN
+region, shared by production and every Preview (same store, same URLs), so at most ~744 a month
+in all. Each warm instance that refreshes all month adds its own ~3,000; Previews read the store
+too (PR #49 set `AIR_CPCB_FEED`/`AIR_CPCB_SOURCE` on Preview), but an idle Preview costs nothing
+and checking one is about one cold refresh (2–3 probes; the six areas share one read). So the
+realistic total is a few thousand Simple Operations a month, under the 10,000 cap. Before, one
+busy instance (8,928) plus the ingest (1,488) was already over it.
+
+During a relay outage (the store answers, but nothing within 2 h, or the newest too old), the
+handler does not ask again for 10 minutes (`RELAY_QUIET_RETRY_MS`; a store that cannot be read
+keeps the 60 s retry). So an outage costs at most 6 attempts of 3–4 probes, about 20 Simple
+Operations an hour per busy instance (before: up to 120), and every request in between, including
+Bengaluru's uncached failure answers, is answered from the in-process memo with no store operation.
+A recovered relay shows within 10 minutes, as any new hour does.
+
+**Do not browse the store in the Vercel dashboard, and do not run `vercel blob list`**: every
+listing, folder click and blob detail view is an Advanced Operation. Monitor usage from
+Observability → Blob instead.
+
 Tasks:
 
 - Store normalized government-station readings and source metadata in PostgreSQL.

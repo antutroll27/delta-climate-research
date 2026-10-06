@@ -15,38 +15,89 @@
  *   204 a valid ping (stores nothing) · 400 a ping with a body
  *   413 inflates past 2 MB · 400 not gzip
  *   422 not a feed, < 300 stations, more than one lastupdate, lastupdate > 15 min ahead or > 7 days old
- *   200 {"stored":"new"|"duplicate","lastupdate","stations"} · 503 the store failed (the Pi retries next tick)
+ *   200 {"stored":"new"|"duplicate","lastupdate","stations"} · 503 the store failed or ran out of time (the Pi retries next tick)
  *
- * Latest only moves forward: a feed replaces it only when its lastupdate is later than the
- * stored latest's (an absent or unreadable latest is replaced), so a late or replayed older
- * hour is archived but never shown as current.
+ * ONE WRITE PER HOUR (single-write redesign, 2026-10-06; docs/AQI/04-delivery-roadmap.md). A
+ * verified feed costs exactly one Blob put: the hour's archive object, cpcb/archive/YYYY/MM/DD/HH.xml.gz
+ * (IST hour of its lastupdate, cpcb-archive.ts), with allowOverwrite false. Vercel Hobby allows 2,000
+ * Advanced Operations a month and BLOCKS Blob for 30 days past that; one put an hour is ~744 a month.
+ * Nothing else is written: "current" and the NowCast hours are read back from the archive.
  *
- * A duplicate never rewrites latest. If the archive put succeeds and the latest put fails
- * (503), the Pi's retry comes back 'duplicate', so latest can lag by up to one hour until
- * the next hour's feed repairs it; one hour stays inside the 2 h "Live" rule.
+ *   stored  → 200 "new"
+ *   exists  → 200 "duplicate" (the put's refusal, confirmed by a head(): a Simple Operation, never a
+ *             second Advanced one). A repeat of a path this instance already stored or confirmed
+ *             answers "duplicate" with no store call at all (`archivedFor`).
+ *   failure → 503, so the Pi retries at its next tick.
  *
- * NOWCAST HISTORY (hourly-history.ts): a NEW hour is also added to the rolling hourly PM record
- * once it is archived and latest is settled. It is best effort: a failure is logged and the answer
- * is still 200 "new", because the Pi's retry would come back "duplicate" and change nothing; the
- * read side lays the current hour over the record, so one lost write costs nothing. A missing
- * record (the first deploy) is rebuilt once from the previous 11 hourly archives.
+ * FIRST WRITE WINS. A newer lastupdate inside an hour already archived is answered "duplicate" and
+ * not stored. CPCB stamps lastupdate on the hour, so a second stamp inside one IST hour has not been
+ * seen; if it happens, the card shows that hour's first feed until the next hour.
+ *
+ * THE DEADLINE (STORE_BUDGET_MS, 20 s). The @vercel/blob SDK retries a 5xx or a network error up to
+ * 10 times with exponential backoff (1, 2, 4, 8, 16 s ...), and an abort only takes effect at its next
+ * attempt. So the put is RACED against the deadline, not merely given the signal: at 20 s the answer is
+ * 503 whatever the SDK is doing. 20 s leaves the 30 s maxDuration ~10 s for the body read, gunzip,
+ * parse (well under 1 s for a 43 KB feed) and a cold start, and answers inside the Pi's own 30 s
+ * client timeout (pi/internal/ingest/client.go DefaultTimeout), so the Pi hears a 503 and retries
+ * instead of timing out. Twenty seconds also fits the SDK's first five attempts (0, 1, 3, 7, 15 s).
+ * A put the deadline cut off may still land; the Pi's retry then finds it and answers "duplicate".
  *
  * Logs carry only the outcome and a machine reason: never the key, a signature or the body.
  * Every response is Cache-Control: no-store.
  */
 import { gunzipSync } from 'node:zlib';
-import { FEED_MAX_BYTES, FeedError, parseFeed, readRelayFeed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
+import { FEED_MAX_BYTES, FeedError, parseFeed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import { readSigned, validKey, verifyV1 } from '../src/lib/aqi/relay-auth.ts';
-import { updateHistory } from '../src/lib/aqi/hourly-history.ts';
+import { FUTURE_SLACK_MS } from '../src/lib/aqi/cpcb-archive.ts';
 import { archivePath, blobStore, RELAY_MAX_GZ_BYTES, type FeedStore } from '../src/lib/aqi/relay-store.ts';
 
 export const config = { maxDuration: 30 };
 
 export const MIN_STATIONS = 300;
-const FUTURE_SLACK_MS = 15 * 60_000, MAX_AGE_MS = 7 * 86_400_000;
+/* FUTURE_SLACK_MS is shared with the reader's walk (cpcb-archive.ts), so an hour accepted ahead is also found. */
+const MAX_AGE_MS = 7 * 86_400_000;
 const KINDS = new Set(['cpcb-feed', 'ping']);
 
-export interface IngestDeps { key: string; store: FeedStore; now: () => Date }
+/** The archive put's whole budget, ms (see "THE DEADLINE" above). */
+export const STORE_BUDGET_MS = 20_000;
+/** Paths kept in `ARCHIVED`: about two days of hours. */
+const ARCHIVED_MAX = 48;
+/**
+ * Per store, the archive paths this instance has stored or seen refused as existing: immutable
+ * facts (nothing overwrites or deletes an archive), so a repeat costs no operation at all. Keyed by
+ * the store object, so a test's fresh store starts empty; production uses one store, STORE.
+ */
+const ARCHIVED = new WeakMap<FeedStore, Set<string>>();
+const archivedFor = (store: FeedStore): Set<string> => {
+  let s = ARCHIVED.get(store);
+  if (!s) ARCHIVED.set(store, (s = new Set()));
+  return s;
+};
+let STORE: FeedStore | null = null;
+
+export interface IngestDeps {
+  key: string; store: FeedStore; now: () => Date;
+  /** The put's deadline, ms; tests shorten it. */
+  budgetMs?: number;
+  /** Injected by tests; otherwise the store's own set in ARCHIVED. */
+  archived?: Set<string>;
+}
+
+class StoreDeadline extends Error {}
+
+/** `p`, or a StoreDeadline once `ms` pass, whichever settles first. The timer is always cleared. */
+async function within<T>(p: Promise<T>, ms: number, ctl: AbortController): Promise<T> {
+  p.catch(() => {}); // a put cut off by the deadline may still fail later: never an unhandled rejection
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { ctl.abort(); reject(new StoreDeadline('store deadline')); }, ms);
+  });
+  try {
+    return await Promise.race([p, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const answer = (status: number, body?: Record<string, unknown>, headers: Record<string, string> = {}): Response => {
   const h = { 'Cache-Control': 'no-store', ...headers };
@@ -119,40 +170,30 @@ export async function handleIngest(request: Request, d: IngestDeps): Promise<Res
   if (age < -FUTURE_SLACK_MS) return refuse(422, 'lastupdate_in_future');
   if (age > MAX_AGE_MS) return refuse(422, 'lastupdate_too_old');
 
+  const path = archivePath(lastupdate);
+  const known = d.archived ?? archivedFor(d.store);
+  const dup = (): Response => {
+    console.info('air-quality-ingest duplicate', lastupdate);
+    return answer(200, { stored: 'duplicate', lastupdate, stations: stations.length });
+  };
+  if (known.has(path)) return dup();
+  const ctl = new AbortController();
+  let put: 'stored' | 'exists';
   try {
-    const put = await d.store.putArchive(archivePath(lastupdate), body);
-    if (put === 'exists') {
-      console.info('air-quality-ingest duplicate', lastupdate);
-      return answer(200, { stored: 'duplicate', lastupdate, stations: stations.length });
-    }
-    if (await laterThanLatest(d.store, lastupdate)) await d.store.putLatest(body);
-    else console.info('air-quality-ingest archived; latest is newer', lastupdate);
+    put = await within(d.store.putArchive(path, body, ctl.signal), d.budgetMs ?? STORE_BUDGET_MS, ctl);
   } catch (e) {
-    /* The class names the failure (a suspended store, a bad token, a timeout); the message may carry store details. */
+    /* The class names the failure (a suspended store, a bad token, the deadline); the message may carry store details. */
     console.warn('air-quality-ingest store failed', e instanceof Error ? e.constructor.name : typeof e);
     return refuse(503, 'store_failed');
   }
-  try {
-    await updateHistory(d.store, stations);
-  } catch (e) {
-    console.warn('air-quality-ingest history failed', e instanceof Error ? e.constructor.name : typeof e);
-  }
+  known.add(path);
+  if (known.size > ARCHIVED_MAX) known.delete(known.values().next().value!);
+  if (put === 'exists') return dup();
   console.info('air-quality-ingest stored', lastupdate, stations.length);
   return answer(200, { stored: 'new', lastupdate, stations: stations.length });
 }
 
 /** Vercel's fetch-style entry point. Every other method is answered 405 by handleIngest's first check. */
 export async function POST(request: Request): Promise<Response> {
-  return handleIngest(request, { key: process.env.RELAY_HMAC_KEY ?? '', store: blobStore(), now: () => new Date() });
-}
-
-/** Whether `lastupdate` is later than the stored latest's. An absent or unreadable latest is replaced. */
-async function laterThanLatest(store: FeedStore, lastupdate: string): Promise<boolean> {
-  let current: string | undefined;
-  try {
-    current = (await readRelayFeed(store))[0]?.published_at;
-  } catch (e) {
-    if (!(e instanceof FeedError)) throw e;
-  }
-  return current === undefined || Date.parse(lastupdate) > Date.parse(current);
+  return handleIngest(request, { key: process.env.RELAY_HMAC_KEY ?? '', store: (STORE ??= blobStore()), now: () => new Date() });
 }
