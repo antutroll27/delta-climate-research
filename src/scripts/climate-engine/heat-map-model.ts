@@ -212,7 +212,177 @@ export interface Ambient {
    * dial must render as unknown rather than as fresh.
    */
   validAt?: string;
+  /**
+   * Present only when the reading is an OBSERVATION (an airport METAR) rather
+   * than met.no's forecast. Absent, every term below takes the calibrated path
+   * unchanged — that is the guarantee the Landsat/ECOSTRESS validation rests on.
+   */
+  observed?: ObservedForcing;
 }
+
+/** What an observed reading adds to the physics. Scalars only: the model is 2-D. */
+export interface ObservedForcing {
+  /**
+   * `cloud` is a station observer's cover (oktas, via the METAR cover words), the
+   * quantity Kasten & Czeplak fitted against. false when the station said nothing
+   * about cloud and `cloud` was borrowed from met.no's model fraction.
+   */
+  readonly stationCloud: boolean;
+  /** CB/TCU reported (cumuliform), or a thunderstorm AT the station (thunder). */
+  readonly convective: Convective;
+  /** Surface wetness 0–1 at the reading's moment of use (`surfaceWetness`). */
+  readonly wet: number;
+}
+export type Convective = 'none' | 'cumuliform' | 'thunder';
+
+/* ── cloud transmission ───────────────────────────────────────────────────
+   TWO FORMULAE, ON PURPOSE, and the reason is a measurement.
+
+   `1 − 0.6·C` is uncited, passes 40 % of the sun at full overcast and cuts thin
+   cloud far harder than any observation (0.92 at 13 % cover). The founder's
+   decision (2026-10-07) was to replace it with Kasten & Czeplak (1980). Done
+   globally, with the fitted constants held, that MOVED THE PUBLISHED VALIDATION:
+     morning_landsat  RMSE 2.913 → 3.170 K, bias +0.36 → +1.12 K
+     peak_ecostress   RMSE 2.233 → 2.459 K, bias +0.66 → +1.11 K
+     morning_ecostress 4.340 → 4.695 K; night unchanged (no sun term)
+   (scripts/measure-accuracy.py, 2026-10-07; record in
+   docs/evidence/2026-10-07-observed-weather.md). The calibration was fitted
+   against NASA POWER's 50 km MODEL cloud fraction through `1 − 0.6·C`, so its
+   constants absorbed that pairing; changing half of it decalibrates the rest.
+
+   So: model cloud (met.no, POWER, every calibration and Compare record) keeps the
+   calibrated formula, bit for bit. Station cloud — a human or AWOS cover in
+   oktas, which is what Kasten & Czeplak's Hamburg series was — uses theirs. No
+   calibration scene carries station cloud, so no published figure moves. A
+   refit on both together is the founder's call, not a side effect of this fix. */
+
+/** The calibrated transmission, for MODEL cloud fractions. Do not change without a refit. */
+export function legacyCloudTransmission(cloud: number): number {
+  return 1 - 0.6 * cloud;
+}
+
+/**
+ * Kasten & Czeplak (1980), Solar Energy 24(2):177–189: G/G_clear = 1 − 0.75·(N/8)^3.4,
+ * fitted to ten years (1964–73) of hourly Hamburg global radiation with simultaneous
+ * observer cloud amounts. 25 % of clear-sky shortwave at overcast; 0.998 at 1/8.
+ */
+export const KC_A = 0.75, KC_B = 3.4;
+
+/**
+ * EXTRA ATTENUATION FOR CONVECTIVE CLOUD — A JUDGEMENT, NOT A FITTED VALUE.
+ *
+ * Kasten & Czeplak's 1−0.75·C^3.4 is their all-cloud-types fit. Their paper also
+ * tabulates transmission by cloud genus, which we could not obtain to cite; the
+ * direction is not in doubt — a cumulonimbus is the optically thickest cloud there
+ * is and a METAR names it precisely because it matters — but the size is. These
+ * factors are chosen so that BKN with a CB (0.718 → 0.54) sits between K&C's
+ * BKN and its overcast floor of 0.25, and a thunderstorm overhead (×0.5) falls
+ * near that floor. They act only on station reports and only while CB/TCU or TS is
+ * reported; replace them with the genus table when it is in hand.
+ */
+export const CONVECTIVE_TRANSMISSION: Readonly<Record<Convective, number>> = Object.freeze({
+  none: 1, cumuliform: 0.75, thunder: 0.5,
+});
+
+/** Transmission for a STATION-observed cloud fraction, 0–1. */
+export function stationCloudTransmission(cloud: number, convective: Convective): number {
+  const c = Math.min(1, Math.max(0, cloud));
+  return (1 - KC_A * c ** KC_B) * CONVECTIVE_TRANSMISSION[convective];
+}
+
+function cloudTransmission(L: Ambient | null, cloud: number): number {
+  return L?.observed?.stationCloud
+    ? stationCloudTransmission(cloud, L.observed.convective)
+    : legacyCloudTransmission(cloud);
+}
+
+/**
+ * The fraction of clear-sky sun a reading lets through — the SAME number the
+ * physics multiplies `sun` by. The cloud deck dims its key light with this, so
+ * what the eye infers about sunlight cannot drift from what the model computes.
+ */
+export function ambientCloudTransmission(L: Ambient): number {
+  return cloudTransmission(L, L.cloud / 100);
+}
+
+/* ── rain ─────────────────────────────────────────────────────────────────
+   The model had no wet surface at all, so a light-rain morning under cloud still
+   drew a 40+ °C ward. While it rains, surfaces RELAX TOWARDS AIR TEMPERATURE;
+   after it stops they RE-WARM towards the dry model (founder decision 3).
+
+   WHY TOWARDS AIR, NOT THE WET BULB. Rain arrives at roughly the wet-bulb
+   temperature and an evaporating film can hold a surface a little below air;
+   that is a refinement with constants of its own. Air is what was decided, and
+   it is the conservative target: it never cools a surface below the air the
+   reader can feel. */
+
+/**
+ * e-folding time of the fall towards air while it rains, minutes.
+ *
+ * 20, the low end of the decided 20–40. The order of magnitude is an energy
+ * budget, not a fit: a sunlit pavement 12 K above air holds ~2 MJ/m³K × 12 K over
+ * its diurnal skin; over 20 minutes heat penetrates √(κt) ≈ √(1e-6·1200) ≈ 3.5 cm,
+ * so the skin to discharge is ~0.8 MJ/m². A wetted surface sheds that through
+ * evaporation (several hundred W/m² at 12 K above air) plus the rain's own
+ * sensible flux and the cut in sunshine, i.e. 20–30 minutes. No measured
+ * time constant for these wards exists; this is that estimate, taken at its
+ * faster end because what a reader sees during rain is the thing being fixed.
+ */
+export const TAU_WET_MIN = 20;
+
+/**
+ * e-folding time of the re-warming after rain stops, minutes. "Over about an
+ * hour" (decision 3): with τ = 30 min, 86 % of the dry departure is back after
+ * 60 minutes and 95 % after 90. Slower than the wetting because the film must
+ * evaporate first. A JUDGEMENT within the decided range, not a measurement.
+ */
+export const TAU_DRY_MIN = 30;
+
+/** One rain episode, ms since epoch. `endMs` null: still raining at the last report. */
+export interface RainEpisode { readonly startMs: number; readonly endMs: number | null }
+
+/**
+ * Surface wetness 0–1 at `nowMs`, integrating every episode in order: during rain
+ * w → 1 with TAU_WET_MIN, after it w → 0 with TAU_DRY_MIN. An ongoing episode is
+ * taken to continue to `nowMs` (persistence, the standard nowcast; the caller
+ * stops trusting the report once it is stale).
+ */
+export function surfaceWetness(episodes: readonly RainEpisode[], nowMs: number): number {
+  let w = 0, t = -Infinity;
+  const MIN = 60_000;
+  const sorted = [...episodes].sort((a, b) => a.startMs - b.startMs);
+  for (const e of sorted) {
+    if (e.startMs >= nowMs) break;
+    if (Number.isFinite(t)) w *= Math.exp(-Math.max(0, e.startMs - t) / (TAU_DRY_MIN * MIN));
+    const end = Math.min(nowMs, e.endMs ?? nowMs);
+    const s = Math.max(e.startMs, Number.isFinite(t) ? t : e.startMs);
+    w = 1 - (1 - w) * Math.exp(-Math.max(0, end - s) / (TAU_WET_MIN * MIN));
+    t = Math.max(t, end);
+  }
+  if (Number.isFinite(t) && nowMs > t) w *= Math.exp(-(nowMs - t) / (TAU_DRY_MIN * MIN));
+  return Math.min(1, Math.max(0, w));
+}
+
+/**
+ * Params under which every cell's equilibrium sits (1 − w) of the way from air to
+ * where it would sit dry — EXACTLY, for every cell, by construction:
+ *
+ *   T − tAir = (S(1−a)·sun + Q·b − L·v + store + kRad·(tSky − tAir)) / k
+ *
+ * so scaling `sun`, `Q`, `L`, `store` and the sky's departure from air by (1 − w)
+ * scales T − tAir by (1 − w). The conductance k = kRad + h·wind is untouched, so
+ * the solver's step, its relaxation and its diffusion length are those of the dry
+ * field; the solver is linear and a uniform field is in its kernel, so the
+ * diffused field relaxes by the same factor. Scalars only — no spatial field.
+ */
+export function wetSurfaceParams(p: SimParams, wet: number): SimParams {
+  const w = Math.min(1, Math.max(0, wet));
+  if (w === 0) return p;
+  const f = 1 - w;
+  return { ...p, sun: p.sun * f, Q: p.Q * f, L: p.L * f, store: p.store * f,
+    tSky: p.tAir + (p.tSky - p.tAir) * f };
+}
+
 export interface Spatial {
   corridorSorted: Int32Array; corridorKm: number; parkCenters: [number, number][];
   roofM2: number; facadeM2: number; cellArea: number; cellM: number;
@@ -659,16 +829,20 @@ export function currentParams(s: ScenarioState): SimParams {
      than a clock hour so it tracks the season: Kolkata's sunrise moves about
      40 minutes across the year and a fixed 06:00 cutoff would be wrong at both
      solstices. */
+  const trans = cloudTransmission(L, cloud);
   if (s.sunNow != null) {
     const lit = s.sunNow > SUN_LIT;
     const tSky = skyTemperatureC(baseTair, rh, cloud);
-    if (lit) return { ...b, sun: s.sunNow * (1 - 0.6 * cloud), tAir: baseTair, tSky };
+    /* RAIN IS A PROPERTY OF THIS MINUTE, so it acts on "now" only — never on the
+       canonical 13:00 / 22:00 scenarios, which describe a representative day. */
+    const wet = L?.observed?.wet ?? 0;
+    if (lit) return wetSurfaceParams({ ...b, sun: s.sunNow * trans, tAir: baseTair, tSky }, wet);
     const dark: SimParams = { ...b, sun: 0, tAir: baseTair, Q: Q * Q_NIGHT_RATIO, tSky, store: STORE_NIGHT };
-    return { ...dark, L: nightLatent(dark, rh) };
+    return wetSurfaceParams({ ...dark, L: nightLatent(dark, rh) }, wet);
   }
 
   if (s.phase === 'peak') {
-    return { ...b, sun: 1 * (1 - 0.6 * cloud), tAir: baseTair, tSky: skyTemperatureC(baseTair, rh, cloud) };
+    return { ...b, sun: 1 * trans, tAir: baseTair, tSky: skyTemperatureC(baseTair, rh, cloud) };
   }
   const tAir = baseTair - 2.5;
   const night: SimParams = { ...b, sun: 0, tAir, Q: Q * Q_NIGHT_RATIO,
@@ -691,7 +865,7 @@ export function currentParamsForReference(
   const Q = DEFAULT_PARAMS.Q * (1 - FACADE_Q * (iv.facades / 15));
   const base: SimParams = { ...DEFAULT_PARAMS, D: SIM_D, Q, wind, L: DEFAULT_PARAMS.L * evap, tAir: ambient.tAir };
   const tSky = skyTemperatureC(ambient.tAir, ambient.rh, cloud);
-  if (phase === 'peak') return { ...base, sun: 1 * (1 - 0.6 * cloud), tSky };
+  if (phase === 'peak') return { ...base, sun: 1 * legacyCloudTransmission(cloud), tSky };
   // store: the compare view runs the same physics as the explorer. Omitting it
   // here would make the two views disagree at night by ~1.7 K, and only one of
   // them would be right.

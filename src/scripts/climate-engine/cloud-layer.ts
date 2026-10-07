@@ -29,6 +29,7 @@ import {
   CLOUD, cloudFuse, cloudShadowOffset, fitLobes, layoutCumulus, layoutVeil,
   paintCumulus, paintVeil, paintShadow, CUMULUS_ASPECT, VEIL_ASPECT,
 } from './cloud-sprites';
+import { ambientCloudTransmission, type Ambient } from './heat-map-model';
 
 /**
  * The sun in the scene's frame: x east, y up, z north, pointing TOWARD it.
@@ -63,12 +64,14 @@ export interface CloudLayer {
    */
   update(seconds: number, cover: number, windMs: number, fromDeg: number, night: boolean,
     sun: CloudSun): void;
-  /** key-light multiplier for this cover. Returns the SAME 0.6 coefficient the
-   *  physics applies at heat-map-model.ts:371 and :394 (`sun: 1 * (1 - 0.6 * cloud)`),
-   *  so what the eye infers about sunlight cannot drift from what the model computes.
-   *  The caller multiplies its ENVIRONMENT's own key intensity by this — never a
-   *  literal, or the studio environment's dimmer key is silently overwritten. */
-  sunFactor(cover: number): number;
+  /** key-light multiplier for this reading. Returns `ambientCloudTransmission`,
+   *  the SAME factor the physics multiplies `sun` by (heat-map-model.ts) — the
+   *  calibrated 1 − 0.6·C for model cloud, Kasten & Czeplak for an airport's
+   *  observed cover — so what the eye infers about sunlight cannot drift from what
+   *  the model computes. The caller multiplies its ENVIRONMENT's own key intensity
+   *  by this — never a literal, or the studio environment's dimmer key is
+   *  silently overwritten. */
+  sunFactor(live: Ambient): number;
   dispose(): void;
 }
 
@@ -136,10 +139,10 @@ export function createCloudLayer(
 
   return {
     group,
-    /* 0.6, matching heat-map-model.ts exactly. It was 0.62 and nobody would have
-       seen the difference — but the docstring claims this tracks the physics, and a
-       claim that is 97 % true is the kind that rots. */
-    sunFactor: (cover) => 1 - cover * 0.6,
+    /* The physics' own function, not a copy of its coefficient. It was a copied
+       0.6 (and before that 0.62), which stayed true only until the physics gained
+       a second formula for observed cloud on 2026-10-07. */
+    sunFactor: (live) => ambientCloudTransmission(live),
     update(seconds, cover, windMs, fromDeg, night, sun) {
       const fuse = cloudFuse(cover);
       /* At night there is no sun to light a cloud top or cast its shadow. The deck

@@ -510,7 +510,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
          It was `keyBase` here, which threw away the elevation term every frame the
          live ambient existed — i.e. every frame — and would have left the 22:00
          phase lit by a sun that had set. */
-      this.key.intensity = this.keyLevel * this.clouds.sunFactor(this.visual.live.cloud / 100);
+      this.key.intensity = this.keyLevel * this.clouds.sunFactor(this.visual.live);
     }
     this.renderer.resetState();
     this.consumePendingSky();

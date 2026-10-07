@@ -185,8 +185,10 @@ test('there is exactly one cloud source, and the model already reads it', async 
   assert.match(model, /skyTemperatureC\(baseTair, rh, cloud\)/,
     'the model must still consume measured cover for T_sky — if this moved, the deck '
     + 'is no longer drawing the input the simulation uses, which is its entire claim');
-  assert.match(model, /sun: 1 \* \(1 - 0\.6 \* cloud\)/,
+  assert.match(model, /sun: 1 \* trans\b/,
     'cover must still cut direct sun; the layer dims the key light to match');
+  assert.match(model, /const trans = cloudTransmission\(L, cloud\)/,
+    'the sun is cut by the ONE transmission function the deck also reads');
   for (const f of ['cloud-sprites.ts', 'cloud-layer.ts']) {
     const t = await code(f);
     assert.doesNotMatch(t, /gibs|earthdata|himawari|forecast/i,

@@ -253,6 +253,12 @@ def predict(sc: Scene, lc: LandCoverClasses,
 
     tAir, rh, wind, cloud = sc.tAir, sc.rh, sc.wind, sc.cloud
     tSky = sky_temp(tAir, rh, cloud, c)
+    # 1 - 0.6*cloud IS DELIBERATE, for MODEL cloud (NASA POWER, met.no). Since
+    # 2026-10-07 the TypeScript instrument applies Kasten & Czeplak (1980) to
+    # STATION-observed cloud (airport METARs) and a rain-wetting term, neither
+    # of which any calibration scene carries; swapping this line to K&C with the
+    # fitted constants held moved morning_landsat RMSE 2.913 -> 3.170 K. See
+    # docs/evidence/2026-10-07-observed-weather.md. Change only with a refit.
     sun = 0.0 if night else sc.sun * (1 - 0.6 * cloud)
     Q = q_day * (Q_NIGHT_RATIO if night else 1.0)
 
