@@ -712,17 +712,18 @@ const newCity = scope.area.hasData
           labelled as what they are. The source line names where "now" came from. */}
       <div class="metric livem">
         <div class="k"><span id="liveSrc">Air now · Met Norway forecast</span> <span class="livedot" id="livedot"></span></div>
+        {/* ONE ROW: air leads; feels-like, humidity and wind stack beside it. A separate
+            RH/wind grid cost the rail ~40 px and pushed the legend under its fold. */}
         <div class="airrow">
           <div class="air"><b id="liveT">—</b><span class="u">°C air</span></div>
-          <div class="feel"><b id="liveFeel">—</b><span class="u">°C feels</span></div>
-        </div>
-        <div class="liverow">
-          <div><b id="liveRH">—</b><span>% RH</span></div>
-          <div><b id="liveWind">—</b><span>m/s wind</span></div>
+          <div class="side">
+            <div class="feel"><b id="liveFeel">—</b><span class="u">°C feels</span></div>
+            <div class="aux"><span id="liveRH">—</span>% RH · <span id="liveWind">—</span> m/s</div>
+          </div>
         </div>
       </div>
       <div class="metric">
-        <div class="k">Ground &amp; rooftop surface · <span id="lstPhase">modelled now</span></div>
+        <div class="k surface-k">Ground &amp; rooftop surface · <span id="lstPhase">modelled now</span></div>
         <div class="lst sec" id="lst" style="color:var(--red)">—<span class="u">°C</span></div>
         <div class="conf" id="conf"></div>
         {/* THE SEASON'S WARNING, when the current month is one in which the displayed
@@ -2316,15 +2317,20 @@ const newCity = scope.area.hasData
   .liverow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
   /* Air leads at the size the surface figure used to have; feels-like beside it.
      Paper, not the heat ramp: this is the air, not a cell of the map. */
-  .airrow{display:flex;align-items:baseline;gap:12px;margin-top:8px}
+  .airrow{display:flex;align-items:center;gap:12px;margin-top:6px}
   .airrow b{font-family:var(--mono);font-weight:400;letter-spacing:.01em;color:var(--paper);line-height:1}
+  .airrow .air{white-space:nowrap}
   .airrow .air b{font-size:1.9rem}
   .airrow .feel b{font-size:1.05rem}
+  .airrow .side{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .airrow .aux{font-family:var(--mono);font-size:.56rem;letter-spacing:.02em;color:var(--cyan);white-space:nowrap}
   .airrow .u{font-family:var(--sans);font-size:.58rem;color:var(--ink);margin-left:.25rem}
-  .livem .liverow{margin-top:8px}
-  /* the surface is the SECOND reading now: same mono, one step down */
-  .metric .lst.sec{font-size:1.6rem}
-  .wx-line{margin:.55rem 0 0;font-family:var(--sans);font-size:.58rem;line-height:1.5;color:var(--ink)}
+  /* the surface is the SECOND reading now: same mono, one step down. Its label is set
+     a hair smaller so "Ground & rooftop surface · modelled now" holds one line in the
+     210 px column (measured 211 px at .68rem). */
+  .metric .k.surface-k{font-size:.66rem;letter-spacing:0}
+  .metric .lst.sec{font-size:1.45rem;margin-top:6px}
+  .wx-line{margin:.4rem 0 0;font-family:var(--sans);font-size:.56rem;line-height:1.4;color:var(--ink)}
   .wx-line[hidden]{display:none}
   .wx-line .wx-ico{font-style:normal;margin-right:.3rem}
   .wx-line b{font-family:var(--mono);font-weight:400;color:var(--paper)}
@@ -2720,6 +2726,7 @@ const newCity = scope.area.hasData
     .rail-r .lst{font-size:1.5rem}
     .rail-r .lst.sec{font-size:1.15rem}
     .rail-r .airrow{gap:8px;margin-top:4px}
+    .rail-r .airrow .aux{font-size:.42rem}
     .rail-r .airrow .air b{font-size:1.5rem}
     .rail-r .airrow .feel b{font-size:.95rem}
     .rail-r .airrow .u{font-size:.42rem}
