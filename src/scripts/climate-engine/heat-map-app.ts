@@ -17,7 +17,7 @@ import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import { isCurrentSnapshot, type HeatSimHost, type HeatSimRequest, type HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
 import { parseMetar, type Metar } from '../../lib/weather/metar.ts';
-import { describeWeather, observedNow, rankStations, type ObservedNow } from '../../lib/weather/observed.ts';
+import { describeWeather, fallbackAmbient, observedNow, rankStations, type ObservedNow } from '../../lib/weather/observed.ts';
 import { METAR_STATIONS } from '../../data/metar-stations.ts';
 import { ACCURACY, SPATIAL, HEIGHTS, PEAK_CHIP_BASIS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K, seasonalCaveat, seasonalCaveatLine, seasonalCaveatDetail } from './accuracy';
 import { solarElevationFactor, solarDayHours } from './sky';
@@ -2110,7 +2110,9 @@ export function mountHeatMap(): () => void {
          solve the renderer holds no field for the ward on screen (`setWard` clears
          it), and an overlay over an empty field would draw the cold end of the ramp. */
       overlayOpacity: surfaceOn && fieldOnGrid() ? opBase * Math.min(1, growProgress * 1.6) : 0,
-      live: state.live, phase: state.phase,
+      /* The deck dims the key light with the physics' own transmission, so it must be
+         handed the reading as THIS view uses it: scenarios run the calibrated physics. */
+      live: state.sunNow != null ? state.live : M.asScenarioAmbient(state.live), phase: state.phase,
       /* The same computation the compass dial reads, handed to the renderer rather
          than recomputed there — see currentSun. It aims the key light and nothing
          else: the solve has never had a shade term and still does not. */
@@ -2705,11 +2707,14 @@ export function mountHeatMap(): () => void {
     const cached = metarCache[city];
     const byStation: Record<string, Metar[]> = {};
     for (const m of cached?.reports ?? []) (byStation[m.station] ??= []).push(m);
+    const ranked = rankStations(city, w.lat, w.lon);
     observed = cached
-      ? observedNow(byStation, rankStations(city, w.lat, w.lon), now(),
+      ? observedNow(byStation, ranked, now(),
         { cloudPct: metno?.cloud ?? null, rh: metno?.rh ?? null, windMs: metno?.wind ?? null })
       : null;
-    return observed?.ambient ?? metno;
+    /* A stale airport hands "now" to met.no WITH the rain's memory: the surface keeps
+       drying from where it was rather than snapping back to the dry model. */
+    return observed?.ambient ?? fallbackAmbient(metno, byStation, ranked, now());
   }
 
   async function fetchMetar(name: AreaKey, force: boolean): Promise<void> {
@@ -2721,6 +2726,9 @@ export function mountHeatMap(): () => void {
     const ids = stations.map((s) => s.icao).sort().join(',');
     const r = await fetch(`/api/metar?ids=${ids}`);
     if (!r.ok) throw new Error('metar ' + r.status);
+    /* The report's AGE is judged on this clock too, so it takes the server's Date
+       (+ Age on a CDN hit), exactly as the met.no fetch does. */
+    adoptServerClock(r);
     const body = await r.json() as { fetchedAt?: unknown; reports?: unknown };
     const ref = typeof body.fetchedAt === 'string' ? Date.parse(body.fetchedAt) : NaN;
     if (!Number.isFinite(ref) || !Array.isArray(body.reports)) throw new Error('metar: unexpected body');
@@ -2813,6 +2821,16 @@ export function mountHeatMap(): () => void {
      reading was served. */
   let clockSkewMs = 0;
   const now = () => Date.now() + clockSkewMs;
+  /** `Date + Age` from one of our own functions: "now" at the edge. Ignored under 2 min. */
+  function adoptServerClock(r: Response): void {
+    const dateHdr = Date.parse(r.headers.get('date') ?? '');
+    const ageSec = Number(r.headers.get('age')) || 0;
+    const served = dateHdr + ageSec * 1000;
+    if (Number.isFinite(served)) {
+      const skew = served - Date.now();
+      clockSkewMs = Math.abs(skew) > 120_000 ? skew : 0;
+    }
+  }
 
   function ageMinutes(iso: string | undefined): number | null {
     if (!iso) return null;
@@ -2967,11 +2985,14 @@ export function mountHeatMap(): () => void {
     if (observed) {
       const wx = describeWeather(observed);
       const parts = [
-        `${esc(wx.text)} at ${esc(observed.station.name)} (<b>${Math.round(observed.km)} km</b>)`,
-        `observed <b>${esc(istLike(observed.latest.time))}</b>`,
+        `${esc(wx.text)} at ${esc(observed.station.name)} (<b>${Math.round(observed.km)} km</b>)`
+          + ` at <b>${esc(istLike(observed.latest.time))}</b>`,
       ];
       if (wx.effect) parts.push(esc(wx.effect));
-      parts.push('conditions over the ward may differ');
+      /* Short on purpose: the rail must keep the legend above its fold at 1280x720
+         (solar-pane.spec). Every clause is still here: what, where, how far, when,
+         what the model does, and that the ward is not the airport. */
+      parts.push('may differ over the ward');
       /* The pictograph is an image with a name, not decoration: screen readers get
          "Rain", sighted readers the glyph, and the sentence never depends on it. */
       line.innerHTML = `<i class="wx-ico" role="img" aria-label="${esc(wx.iconLabel)}" title="${esc(wx.iconLabel)}">${wx.icon}</i>`
@@ -2980,8 +3001,9 @@ export function mountHeatMap(): () => void {
     }
     /* No usable airport report: say so, and say what is standing in for it. */
     const why = METAR_STATIONS[splitKey(state.ward).city]?.length
-      ? 'no airport report in the last 90 min' : 'no airport report for this city';
-    line.innerHTML = `Met Norway forecast${L.validAt ? ` (<b>${esc(istLike(L.validAt))}</b>)` : ''} · ${why}`;
+      ? 'no airport report in 90 min' : 'no airport report for this city';
+    const drying = (L.observed?.wet ?? 0) > 0 ? ' · surfaces drying after rain' : '';
+    line.innerHTML = `Met Norway forecast${L.validAt ? ` (<b>${esc(istLike(L.validAt))}</b>)` : ''} · ${why}${drying}`;
   }
 
   function paintLive() {
@@ -3058,13 +3080,7 @@ export function mountHeatMap(): () => void {
            mis-colour the very freshness bar this arithmetic exists to keep
            honest. `Date + Age` reconstructs "now" at the edge. Same-origin, so
            the header is readable without a CORS expose list. */
-        const dateHdr = Date.parse(r.headers.get('date') ?? '');
-        const ageSec = Number(r.headers.get('age')) || 0;
-        const served = dateHdr + ageSec * 1000;
-        if (Number.isFinite(served)) {
-          const skew = served - Date.now();
-          clockSkewMs = Math.abs(skew) > 120_000 ? skew : 0;
-        }
+        adoptServerClock(r);
         /* PARSED, NOT DESTRUCTURED. This used to read the three numbers straight
            off the body; all three are optional in met.no's schema, so a whole-but-
            short response arrived as a complete reading holding `undefined` — which
@@ -3160,14 +3176,22 @@ export function mountHeatMap(): () => void {
       /* WET SURFACES ARE OUTSIDE EVERY PUBLISHED FIGURE. Each validation scene is a
          clear-sky satellite pass (Landsat, ECOSTRESS); not one was taken in rain, so
          no band describes a rain-relaxed field. Said on the chip, before the band. */
-      const wet = live && (state.live?.observed?.wet ?? 0) > 0.05;
-      if (wet) {
-        tag.innerHTML = `Outside validation · wet surfaces${seasonChip}`;
+      /* ...AND SO IS STATION CLOUD. The band was measured with model cloud through
+         the calibrated 1 − 0.6·C; an airport's oktas through Kasten & Czeplak is not
+         that physics, so no band may be printed over it either. One predicate
+         (M.outsideValidation) decides both, here and beside the number. */
+      const outside = live ? M.outsideValidation(state.live) : null;
+      if (outside) {
+        tag.innerHTML = `Outside validation · ${outside === 'wet' ? 'wet surfaces' : 'station cloud'}${seasonChip}`;
         tag.className = 'conf indicative';
-        (tag as HTMLElement).title = 'Rain at the airport is being applied to this ward: surfaces relax towards the '
-          + `air temperature while it rains (e-folding ${M.TAU_WET_MIN} min) and re-warm after it stops `
-          + `(${M.TAU_DRY_MIN} min). Every published accuracy figure was measured on clear-sky satellite passes, `
-          + 'so none of them covers a wet ward.';
+        (tag as HTMLElement).title = outside === 'wet'
+          ? 'Rain at the airport is being applied to this ward: surfaces relax towards the '
+            + `air temperature while it rains (e-folding ${M.TAU_WET_MIN} min) and re-warm after it stops `
+            + `(${M.TAU_DRY_MIN} min). Every published accuracy figure was measured on clear-sky satellite passes, `
+            + 'so none of them covers a wet ward.'
+          : 'The airport\'s observed cloud cuts the sun here through Kasten & Czeplak (1980). Every published '
+            + 'accuracy figure was measured with model cloud through the calibrated 1 − 0.6·C, so none of them '
+            + 'covers this reading. The 13:00 and 22:00 views keep the calibrated physics and their bands.';
         const lstWet = el('lst');
         if (lstWet) (lstWet as HTMLElement).title = (tag as HTMLElement).title;
         return;
@@ -3282,9 +3306,9 @@ export function mountHeatMap(): () => void {
       // The band is measured, not decorative: it is this model's out-of-sample
       // error against ECOSTRESS for the phase on screen. See accuracy.ts.
       // ...and no band at all on a wet ward, which no measurement covers (applyConfidence).
-      const wetNow = state.sunNow != null && (state.live?.observed?.wet ?? 0) > 0.05;
+      const unvalidated = state.sunNow != null && M.outsideValidation(state.live) !== null;
       lst.innerHTML = `${st.meanC.toFixed(1)}<span class="u">°C</span>`
-        + (wetNow ? '' : `<span class="band">${bandLabel(state.phase)}</span>`);
+        + (unvalidated ? '' : `<span class="band">${bandLabel(state.phase)}</span>`);
       (lst as HTMLElement).style.color = lstColor(st.meanC);
     }
     applyConfidence();

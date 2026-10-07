@@ -300,9 +300,40 @@ function cloudTransmission(L: Ambient | null, cloud: number): number {
  * The fraction of clear-sky sun a reading lets through — the SAME number the
  * physics multiplies `sun` by. The cloud deck dims its key light with this, so
  * what the eye infers about sunlight cannot drift from what the model computes.
+ * The caller hands it the reading AS THE VIEW USES IT: `asScenarioAmbient(L)` for
+ * the 13:00 / 22:00 scenarios, which run the calibrated formula only.
  */
 export function ambientCloudTransmission(L: Ambient): number {
   return cloudTransmission(L, L.cloud / 100);
+}
+
+/**
+ * The reading as a CANONICAL SCENARIO sees it: the observation's extra physics
+ * removed, so 13:00 and 22:00 run exactly the calibrated model whatever feeds
+ * "now". Station cloud and wetness describe this minute; a representative day
+ * that borrowed them would print a published band over physics it never had.
+ */
+export function asScenarioAmbient(L: Ambient | null): Ambient | null {
+  if (!L?.observed) return L;
+  const { observed: _dropped, ...model } = L;
+  return model;
+}
+
+/**
+ * Why "now" is outside every published accuracy figure, or null when it runs
+ * exactly the calibrated physics. Every validation scene is a clear-sky satellite
+ * pass forced with MODEL cloud through `1 − 0.6·C`; so a wet surface is outside
+ * them, and so is station cloud wherever its transmission differs from the
+ * calibrated one. A clear station sky (C = 0, no CB/TCU/TS) transmits exactly 1
+ * under both formulae, is the calibrated physics, and keeps its band.
+ */
+export function outsideValidation(L: Ambient | null): 'wet' | 'station-cloud' | null {
+  const o = L?.observed;
+  if (!L || !o) return null;
+  if (o.wet > 0) return 'wet';
+  const c = L.cloud / 100;
+  if (o.stationCloud && stationCloudTransmission(c, o.convective) !== legacyCloudTransmission(c)) return 'station-cloud';
+  return null;
 }
 
 /* ── rain ─────────────────────────────────────────────────────────────────
@@ -338,6 +369,9 @@ export const TAU_WET_MIN = 20;
  */
 export const TAU_DRY_MIN = 30;
 
+/** Wetness below this is dry: on a 15 K surface–air departure it moves the surface < 0.15 K. */
+export const WET_FLOOR = 0.01;
+
 /** One rain episode, ms since epoch. `endMs` null: still raining at the last report. */
 export interface RainEpisode { readonly startMs: number; readonly endMs: number | null }
 
@@ -360,7 +394,10 @@ export function surfaceWetness(episodes: readonly RainEpisode[], nowMs: number):
     t = Math.max(t, end);
   }
   if (Number.isFinite(t) && nowMs > t) w *= Math.exp(-(nowMs - t) / (TAU_DRY_MIN * MIN));
-  return Math.min(1, Math.max(0, w));
+  /* An exponential never reaches zero, and any w > 0 takes the page outside
+     validation (outsideValidation). Below 1 % the surface shift is < 0.15 K on a
+     15 K departure — under the readout's precision — so it is called dry. */
+  return w < WET_FLOOR ? 0 : Math.min(1, w);
 }
 
 /**
@@ -829,8 +866,8 @@ export function currentParams(s: ScenarioState): SimParams {
      than a clock hour so it tracks the season: Kolkata's sunrise moves about
      40 minutes across the year and a fixed 06:00 cutoff would be wrong at both
      solstices. */
-  const trans = cloudTransmission(L, cloud);
   if (s.sunNow != null) {
+    const trans = cloudTransmission(L, cloud);
     const lit = s.sunNow > SUN_LIT;
     const tSky = skyTemperatureC(baseTair, rh, cloud);
     /* RAIN IS A PROPERTY OF THIS MINUTE, so it acts on "now" only — never on the
@@ -842,7 +879,8 @@ export function currentParams(s: ScenarioState): SimParams {
   }
 
   if (s.phase === 'peak') {
-    return { ...b, sun: 1 * trans, tAir: baseTair, tSky: skyTemperatureC(baseTair, rh, cloud) };
+    /* THE CALIBRATED FORMULA, ALWAYS: a scenario is not this minute (asScenarioAmbient). */
+    return { ...b, sun: 1 * legacyCloudTransmission(cloud), tAir: baseTair, tSky: skyTemperatureC(baseTair, rh, cloud) };
   }
   const tAir = baseTair - 2.5;
   const night: SimParams = { ...b, sun: 0, tAir, Q: Q * Q_NIGHT_RATIO,
