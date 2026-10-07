@@ -468,7 +468,7 @@ export const SPATIAL = {
    * "illustrative", which told them where NOT to trust the map and nothing about
    * where they could. The scale sweep earned the middle tier.
    */
-  note: 'Ward-level temperature is calibrated against ECOSTRESS. The pattern WITHIN a '
+  note: 'Ward-level surface temperature is calibrated against ECOSTRESS. The pattern WITHIN a '
       + 'ward is not: block by block it scores r = 0.27, still below the r = 0.31 of a '
       + 'vegetation map given the same treatment, and coarsening the comparison does not '
       + 'close that gap at any scale. At neighbourhood scale (~300-500 m) it reaches '
@@ -873,14 +873,14 @@ export function seasonalCaveat(ward: string, month: number, phase: 'peak' | 'nig
 }
 
 /** The readout's one-line note, e.g. "Dry-season reading: the model runs
- *  ~3.6–4.2 °C warm in Mar–Jun against Landsat". The range is all wards to Ward 68. */
+ *  ~3.6–4.2 °C warm in Mar–Jun against Landsat" (as "the modelled surface runs"). The range is all wards to Ward 68. */
 export function seasonalCaveatLine(c: SeasonalCaveat): string {
   const lo = Math.min(c.bias_K, c.ward_68?.bias_K ?? c.bias_K);
   const hi = Math.max(c.bias_K, c.ward_68?.bias_K ?? c.bias_K);
   const size = hi - lo >= 0.05 ? `~${lo.toFixed(1)}–${hi.toFixed(1)}` : `~${lo.toFixed(1)}`;
   const dir = c.bias_K >= 0 ? 'warm' : 'cool';
   const when = c.phase === 'night' ? 'at night ' : '';
-  return `${c.reader} reading: the model runs ${when}${size} °C ${dir} in ${monthSpan(c.months)} `
+  return `${c.reader} reading: the modelled surface runs ${when}${size} °C ${dir} in ${monthSpan(c.months)} `
     + `against ${c.sensor}`;
 }
 
@@ -891,7 +891,7 @@ export function seasonalCaveatDetail(c: SeasonalCaveat): string {
       + `RMSE ${c.ward_68.rmse_K.toFixed(2)} K (${c.ward_68.n_scenes} scenes).`
     : '';
   return `${seasonalCaveatLine(c)}. Over ${c.n_scenes} ${c.sensor} ward-scenes (${c.n_overpasses} `
-    + `overpasses) in ${monthSpan(c.months)}, the displayed ward mean has a bias of `
+    + `overpasses) in ${monthSpan(c.months)}, the displayed ward-mean surface temperature has a bias of `
     + `${c.bias_K >= 0 ? '+' : ''}${c.bias_K.toFixed(2)} K and an RMSE of ${c.rmse_K.toFixed(2)} K, `
     + `outside the published ±${c.band_K.toFixed(1)} K band, which holds over the year as a whole.${w68}`;
 }
