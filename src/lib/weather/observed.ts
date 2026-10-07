@@ -164,6 +164,52 @@ export function observedNow(
   return null;
 }
 
+/**
+ * Wetness from a station's history when its newest report is STALE — so a feed
+ * that goes quiet in the rain decays the surface instead of snapping it dry.
+ *
+ * WHY. Without this, falling back to met.no dropped `observed.wet`: a frozen VECC
+ * feed read a wet 31 °C at 07:29 and 46.7 °C at 07:31 — the original defect,
+ * back in one step. Rain still falling at the newest report is taken to persist
+ * exactly as long as the fresh path trusts that report (METAR_STALE_MIN) and to
+ * stop there; from that moment the surface re-warms with τ_dry. Continuous by
+ * construction: at the stale limit both paths give the same wetness.
+ */
+export function carriedWetness(
+  reportsByStation: Readonly<Record<string, readonly Metar[]>>,
+  ranked: readonly RankedStation[],
+  nowMs: number,
+): number {
+  for (const { icao } of ranked) {
+    const reports = (reportsByStation[icao] ?? [])
+      .filter((m) => !m.nil && m.station === icao && ms(m) <= nowMs + FUTURE_SLACK_MS);
+    if (!reports.length) continue;
+    const newest = Math.max(...reports.map(ms));
+    const trustedUntil = newest + METAR_STALE_MIN * 60_000;
+    const episodes = rainEpisodes(reports).map((e) => ({
+      startMs: e.startMs, endMs: e.endMs ?? Math.min(nowMs, trustedUntil),
+    }));
+    return surfaceWetness(episodes, nowMs);
+  }
+  return 0;
+}
+
+/**
+ * met.no's reading as the fallback "now", carrying any wetness the airport's
+ * history still implies. Cloud stays met.no's MODEL cloud (calibrated formula);
+ * only the wetting term is carried, because it is the one with memory.
+ */
+export function fallbackAmbient(
+  metno: Ambient | null,
+  reportsByStation: Readonly<Record<string, readonly Metar[]>>,
+  ranked: readonly RankedStation[],
+  nowMs: number,
+): Ambient | null {
+  if (!metno) return null;
+  const wet = carriedWetness(reportsByStation, ranked, nowMs);
+  return wet > 0 ? { ...metno, observed: { stationCloud: false, convective: 'none', wet } } : metno;
+}
+
 export interface WeatherWords {
   /** a single pictograph, decorative on its own */
   readonly icon: string;

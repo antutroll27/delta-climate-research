@@ -180,3 +180,85 @@ test('the same morning without the rain term would still be far above air', () =
   const mean = M.eqMeanFromMeans(BG_MEANS, nowParams(dry, at));
   assert.ok(mean > 36, `dry under the same cloud: ${mean.toFixed(2)}`);
 });
+
+/* ── audit fixes (PR #52 review) ──────────────────────────────────────── */
+
+import { fallbackAmbient, carriedWetness } from '../../src/lib/weather/observed.ts';
+
+const STATION_BKN_CB = { tAir: 31, rh: 62, wind: 2, cloud: 75, feels: 35,
+  observed: { stationCloud: true, convective: 'cumuliform', wet: 0 } };
+
+test('the 13:00 scenario runs the CALIBRATED cloud formula even when "now" is a METAR', () => {
+  // A representative midday must not borrow this minute's physics: its band was
+  // measured with 1 − 0.6·C, so that is what it runs, exactly.
+  const peak = M.currentParams({ live: STATION_BKN_CB, phase: 'peak', path: '2025', climate: SCOPE.climate, iv: ZERO, clock: { month: 10, hour: 13 } });
+  assert.equal(peak.sun, 1 * (1 - 0.6 * 0.75));
+  const metno = M.currentParams({ live: M.asScenarioAmbient(STATION_BKN_CB), phase: 'peak', path: '2025', climate: SCOPE.climate, iv: ZERO, clock: { month: 10, hour: 13 } });
+  assert.deepEqual(peak, metno, 'the scenario is blind to the observation');
+  // and the deck is handed the same: the scenario reading has no observed term
+  assert.equal(M.asScenarioAmbient(STATION_BKN_CB).observed, undefined);
+  assert.equal(M.ambientCloudTransmission(M.asScenarioAmbient(STATION_BKN_CB)), 1 - 0.6 * 0.75);
+  // "now" with the same reading does use Kasten & Czeplak
+  const now = nowParams(STATION_BKN_CB, Date.parse('2026-10-07T06:00:00Z'));
+  close(now.sun, sunAt(Date.parse('2026-10-07T06:00:00Z')).sunNow * M.stationCloudTransmission(0.75, 'cumuliform'), 1e-12, 'now');
+});
+
+test('outside validation: wet, or station cloud that is not the calibrated physics', () => {
+  assert.equal(M.outsideValidation(null), null);
+  assert.equal(M.outsideValidation({ tAir: 30, rh: 60, wind: 2, cloud: 40, feels: 33 }), null, 'met.no: calibrated');
+  assert.equal(M.outsideValidation(STATION_BKN_CB), 'station-cloud');
+  // HAL at 0600Z: SCT012, no CB — still K&C, still outside
+  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, cloud: 43.75, observed: { stationCloud: true, convective: 'none', wet: 0 } }), 'station-cloud');
+  // a clear station sky transmits 1 under both formulae: calibrated, band kept
+  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, cloud: 0, observed: { stationCloud: true, convective: 'none', wet: 0 } }), null);
+  // a clear sky with a CB reported is not
+  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, cloud: 0, observed: { stationCloud: true, convective: 'cumuliform', wet: 0 } }), 'station-cloud');
+  // wet wins, whatever the cloud
+  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, observed: { ...STATION_BKN_CB.observed, wet: 0.3 } }), 'wet');
+  assert.equal(M.outsideValidation({ tAir: 30, rh: 60, wind: 2, cloud: 40, feels: 33, observed: { stationCloud: false, convective: 'none', wet: 0.2 } }), 'wet');
+  // model cloud carried with wet = 0 is the calibrated physics
+  assert.equal(M.outsideValidation({ tAir: 30, rh: 60, wind: 2, cloud: 40, feels: 33, observed: { stationCloud: false, convective: 'none', wet: 0 } }), null);
+});
+
+test('wetness below 1 % is dry, so the chip can clear', () => {
+  const T0 = Date.parse('2026-10-07T05:00:00Z'), min = 60_000;
+  const ep = [{ startMs: T0, endMs: T0 + 30 * min }];
+  assert.ok(M.surfaceWetness(ep, T0 + 100 * min) > 0);
+  assert.equal(M.surfaceWetness(ep, T0 + 30 * min + 200 * min), 0);
+  assert.equal(M.WET_FLOOR, 0.01);
+});
+
+test('a feed that freezes in the rain decays the surface — no snap back to the dry model', () => {
+  // The audit's case: VECC's feed stops after 06:00Z (-RA). Before the fix it read a
+  // wet 31 °C at 07:29 and 46.7 °C at 07:31.
+  const frozen = { VECC: reportsOf('VECC', Date.parse('2026-10-07T06:00:00Z')) };
+  const metno = M.asAmbient(JSON.parse(readFileSync(join(FIX, 'metno-ballygunge-20261007T0609Z.json'), 'utf8')));
+  const ranked = [{ icao: 'VECC', km: 16 }];
+  let prev = null, worst = 0, at729 = 0, at731 = 0;
+  for (let t = Date.parse('2026-10-07T06:00:00Z'); t <= Date.parse('2026-10-07T09:30:00Z'); t += 60_000) {
+    const live = observedNow(frozen, ranked, t)?.ambient ?? fallbackAmbient(metno, frozen, ranked, t);
+    const mean = M.eqMeanFromMeans(BG_MEANS, nowParams(live, t));
+    if (prev !== null) worst = Math.max(worst, Math.abs(mean - prev));
+    prev = mean;
+    if (t === Date.parse('2026-10-07T07:29:00Z')) at729 = mean;
+    if (t === Date.parse('2026-10-07T07:31:00Z')) at731 = mean;
+  }
+  /* The handover is not seamless and should not pretend to be: met.no's air is 32 °C
+     where the airport's was 31, so the surface steps by about that — and NOT by the
+     15 K it used to. Wetness itself is continuous across the stale limit. */
+  assert.ok(at731 - metno.tAir < 1, `07:31: surface ${at731.toFixed(2)} must stay near met.no's ${metno.tAir} °C air`);
+  assert.ok(Math.abs(at731 - at729) < 2, `07:29 ${at729.toFixed(2)} → 07:31 ${at731.toFixed(2)}`);
+  assert.ok(worst < 2, `largest one-minute step ${worst.toFixed(2)} K`);
+  const wAt = (t) => observedNow(frozen, ranked, t)?.ambient.observed.wet ?? fallbackAmbient(metno, frozen, ranked, t).observed.wet;
+  assert.ok(Math.abs(wAt(Date.parse('2026-10-07T07:30:00Z')) - wAt(Date.parse('2026-10-07T07:31:00Z'))) < 0.05,
+    'wetness is continuous across the stale limit');
+  // it does dry out: an hour past the stale limit the surface has mostly re-warmed
+  const later = Date.parse('2026-10-07T08:30:00Z');
+  const w = carriedWetness(frozen, ranked, later);
+  // onset 05:45 (midpoint), trusted to 07:30 (06:00 + 90 min), then an hour of τ_dry
+  close(w, (1 - Math.exp(-105 / M.TAU_WET_MIN)) * Math.exp(-60 / M.TAU_DRY_MIN), 1e-9, 'one hour of τ_dry after the trust ran out');
+  assert.equal(fallbackAmbient(metno, frozen, ranked, Date.parse('2026-10-07T13:00:00Z')).observed, undefined,
+    'once dry, the fallback is met.no unchanged');
+  // and with no airport history at all, met.no is untouched
+  assert.equal(fallbackAmbient(metno, {}, ranked, later), metno);
+});

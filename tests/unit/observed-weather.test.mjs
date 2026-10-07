@@ -144,3 +144,13 @@ test('a report with no temperature cannot drive the model', () => {
   const r = [parseMetar('METAR VECC 070700Z 05004KT 4000 HZ BKN020 Q1015', ref)];
   assert.equal(observedNow({ VECC: r }, [{ icao: 'VECC', km: 16 }], Date.parse('2026-10-07T07:05:00Z')), null);
 });
+
+test('a report with a trend but no temperature cannot invent a rain episode', () => {
+  const ref = Date.parse('2026-10-07T08:00:00Z');
+  const r = [
+    parseMetar('METAR VECC 070630Z 05004KT 4000 HZ BKN020 30/25 Q1015', ref),
+    parseMetar('METAR VECC 070700Z 05004KT 3200 FEW020 Q1006 TEMPOO 2000 TSRA', ref),
+    parseMetar('METAR VECC 070730Z 05004KT 3200 FEW020 TEMP 2000 RA', ref),
+  ];
+  assert.deepEqual(rainEpisodes(r), []);
+});

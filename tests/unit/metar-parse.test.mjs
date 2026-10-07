@@ -158,3 +158,31 @@ test('cloud fraction is the largest reported layer (METAR\'s summation principle
   const m = parseMetar('METAR VECC 071200Z 18005KT 6000 FEW010 SCT020 BKN080 30/25 Q1010', REF);
   assert.equal(cloudFraction(m), 0.75);
 });
+
+test('with no temperature group, the pressure group or ///// still ends the observation', () => {
+  // the audit's case: missing temperature AND a misspelt trend word
+  const a = parseMetar('METAR VECC 070600Z 05004KT 3200 FEW020 Q1006 TEMPOO 2000 TSRA', REF);
+  assert.equal(rainingAtStation(a), false, 'TSRA after the pressure group is the trend');
+  assert.equal(a.qnhHpa, 1006); assert.equal(a.tempC, null);
+  const b = parseMetar('METAR VECC 070600Z AUTO 05004KT 9999 FEW020 ///// Q1006 TEMPOO 2000 TSRA', REF);
+  assert.equal(rainingAtStation(b), false, 'TSRA after a missing-temperature group is not observed');
+  const b2 = parseMetar('METAR VECC 070600Z AUTO 05004KT 9999 FEW020 ///// TEMPOO 2000 TSRA', REF);
+  assert.equal(rainingAtStation(b2), false, '///// alone ends the observation');
+  // and with neither, the trend keyword itself ends it — spelt right, or as VOBG writes it
+  for (const kw of ['TEMPO', 'TEMP', 'BECMG', 'NOSIG']) {
+    const c = parseMetar(`METAR VECC 070600Z 05004KT 3200 FEW020 ${kw} 2000 TSRA`, REF);
+    assert.equal(rainingAtStation(c), false, kw);
+    assert.equal(thunderAtStation(c), false, kw);
+  }
+});
+
+test('AUTO convective cloud with no amount: //////CB and //////TCU', () => {
+  const a = parseMetar('METAR VOBL 071200Z AUTO 27005KT 9999 //////CB 30/22 Q1012', REF);
+  assert.equal(convectiveCloud(a), true);
+  assert.deepEqual(a.clouds, [{ cover: '///', baseFt: null, convective: 'CB' }]);
+  assert.equal(cloudFraction(a), null, 'presence is known, amount is not');
+  const b = parseMetar('METAR VOBL 071200Z AUTO 27005KT 9999 SCT020 //////TCU 30/22 Q1012', REF);
+  assert.equal(convectiveCloud(b), true);
+  assert.equal(b.clouds[1].convective, 'TCU');
+  assert.equal(cloudFraction(b), 0.4375);
+});

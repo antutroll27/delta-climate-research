@@ -12,9 +12,10 @@
  * (tests/fixtures/metar): an observer writes `TEMP` for `TEMPO`, the live feed
  * served `Q101 5` for `Q1015`, `NOSIG` arrives as `N OSIG`. So:
  *   · nothing throws — an unrecognised token lands in `unparsed`, never in a field;
- *   · present weather and cloud are read ONLY before the temperature group, which
- *     always precedes the trend. That is what stops `TEMPO 2000 RA` (a forecast)
- *     from becoming rain (an observation) — including when TEMPO is misspelt;
+ *   · present weather and cloud are read ONLY before the temperature group (or,
+ *     when it is missing, the `/////` standing for it or the pressure group), all of
+ *     which precede the trend. That is what stops `TEMPO 2000 RA` (a forecast) from
+ *     becoming rain (an observation) — including when TEMPO is misspelt;
  *   · a report with no station or no time is refused (null), because an
  *     observation that cannot be placed and dated is not one.
  *
@@ -35,7 +36,8 @@ export const COVER_FRACTION: Readonly<Record<Cover, number>> = Object.freeze({
 });
 
 export interface CloudLayer {
-  readonly cover: Cover | 'VV';
+  /** '///': an AUTO station that detected CB/TCU but could not measure its amount */
+  readonly cover: Cover | 'VV' | '///';
   /** height of base, feet above the aerodrome; null when reported as `///` */
   readonly baseFt: number | null;
   /** CB (cumulonimbus) or TCU (towering cumulus), the two types METAR names */
@@ -188,6 +190,20 @@ export function parseMetar(raw: string, refMs: number): Metar | null {
         continue;
       }
       if (/^\d{3}V\d{3}$/.test(s)) continue;                       // wind variation sector
+      /* THE OBSERVATION ENDS at the temperature group, at the pressure group, or at
+         the `/////` an AUTO station writes for a missing temperature — whichever
+         comes first. A report lacking temperature must still never read a trend
+         (`… FEW020 Q1006 TEMPOO 2000 TSRA`) as weather. */
+      if (/^\/{5}$/.test(s)) { afterTemp = true; continue; }        // missing temperature
+      if ((m = /^([QA])(\d{4})$/.exec(s))) {
+        qnhHpa = m[1] === 'Q' ? Number(m[2]) : Math.round(Number(m[2]) / 100 * 33.8639);
+        afterTemp = true; continue;
+      }
+      if (/^[QA]\d/.test(s)) { unparsed.push(s); afterTemp = true; continue; } // a mangled pressure group
+      if (/^\/{6}(CB|TCU)$/.test(s)) {                               // AUTO: convective cloud, amount unknown
+        clouds.push({ cover: '///', baseFt: null, convective: s.endsWith('TCU') ? 'TCU' : 'CB' });
+        continue;
+      }
       if (/^\/{3,}(KT|MPS)?$/.test(s)) continue;                   // missing group
       if (s === 'CAVOK') { cavok = true; skyClear = true; visibilityM = 10000; continue; }
       if (visibilityM === null && (m = /^(\d{4})(NDV)?$/.exec(s))) {
@@ -286,7 +302,10 @@ export function vicinityWeather(m: Metar): readonly WeatherGroup[] {
 export function cloudFraction(m: Metar): number | null {
   if (m.skyClear && m.clouds.length === 0) return 0;
   if (m.clouds.length === 0) return null;
-  let c = 0;
-  for (const l of m.clouds) c = Math.max(c, l.cover === 'VV' ? 1 : COVER_FRACTION[l.cover]);
+  let c: number | null = null;
+  for (const l of m.clouds) {
+    if (l.cover === '///') continue;                                   // amount not measured
+    c = Math.max(c ?? 0, l.cover === 'VV' ? 1 : COVER_FRACTION[l.cover]);
+  }
   return c;
 }
