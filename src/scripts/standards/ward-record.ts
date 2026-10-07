@@ -294,7 +294,7 @@ export function wardRecord(w: Ward): WardRecord {
     attribution: 'DataMeet (Municipal_Spatial_Data)',
     shareAlike: 'Share-alike: this polygon, and any adaptation of it, may be redistributed only under CC BY-SA 2.5 India (or a later or compatible CC BY-SA licence), with this attribution. It is not covered by the ODbL that governs the rest of this record.',
     areaM2: mask.areaM2,
-    statistics: 'Every ward statistic (mean surface temperature, area above 40 °C, the heat-stress histogram, rooftop solar totals, building counts) is taken inside this polygon: field statistics over solver cells whose centre lies inside it, per-building statistics over footprints that touch it.',
+    statistics: 'Every ward statistic (mean surface temperature, area above 40 °C, the surface-temperature histogram, rooftop solar totals, building counts) is taken inside this polygon: field statistics over solver cells whose centre lies inside it, per-building statistics over footprints that touch it.',
     buildingsInWard: mask.inWardCount,
     buildingsInDomain: mask.inWard.length,
     inWardRule: 'footprint intersects the polygon',

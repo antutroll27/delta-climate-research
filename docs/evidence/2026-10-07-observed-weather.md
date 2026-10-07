@@ -66,6 +66,34 @@ calibration scene carries station cloud, so no published figure moves.
 **A refit on station cloud is the founder's call**, and it would need historical METARs at each
 overpass.
 
+## Revised after the PR #52 audit
+
+- **The 13:00 and 22:00 scenarios always run the calibrated physics.** Station cloud and wetness act
+  only on "now". The cloud deck is handed the scenario reading (`asScenarioAmbient`), so its light
+  matches.
+- **No ± band is printed over unvalidated physics.** Whenever "now" is wet, or uses station cloud
+  whose transmission differs from `1 − 0.6·C`, the chip reads "Outside validation · wet surfaces"
+  or "Outside validation · station cloud", and the band is withheld.
+  - A clear station sky transmits 1 under both formulae, so it keeps its band.
+  - One predicate decides both cases: `outsideValidation`.
+- **A feed that goes stale in the rain no longer snaps back to dry.** Rain still falling at the
+  newest report is trusted for as long as that report is (90 min). The met.no fallback then
+  carries the wetness and lets it decay with τ_dry.
+  - The handover moves the surface only by the difference between the two sources' air
+    temperatures (31 → 32 °C on the test morning). It used to move by about 15 K.
+  - Wetness below 1 % counts as dry, so the chip clears.
+- **The observation section now also ends at the pressure group and at `/////`** (a missing
+  temperature). AUTO `//////CB` and `//////TCU` count as convective cloud of unknown amount.
+- **The client's clock now also follows `/api/metar`'s `Date` (+`Age`) header.**
+
+## Known limitations (left deliberately)
+
+- Drizzle intensity is not used: any RA or DZ wets the surface identically.
+- A rain report with no cloud group borrows met.no's model cloud, with the calibrated formula.
+- With `stale-while-revalidate`, the edge copy can be up to about 40 min old. The report's age is
+  always computed from its own observation time, so the page never claims more freshness than it has.
+- The forward month rollover in the day-of-month resolution is unreachable in practice.
+
 ## Validation after the change: unchanged
 
 - `scripts/measure-accuracy.py` reproduces `model-accuracy.json` byte for byte.

@@ -45,7 +45,8 @@
  * weather or on being online, and running it must not put ten met.no calls through
  * an endpoint whose terms cap the whole APPLICATION at 20 requests a second.
  *
- * ONLY /api/live IS CANNED. /api/climate-clock is the landing page's, not the
+ * /api/live IS CANNED, and /api/metar answers an honest empty list (see cannedMetar),
+ * so the console runs on met.no exactly as it did. /api/climate-clock is the landing page's, not the
  * console's, and leaving it to 404 exactly as `astro preview` does keeps the
  * landing-page specs looking at the server they were written against.
  *
@@ -101,7 +102,23 @@ function cannedLive(res) {
 const FUNCTIONS = {
   '/api/live': () => import('../api/live.js'),
   '/api/climate-clock': () => import('../api/climate-clock.js'),
+  /* A .ts module: Node strips its types natively from 23.6 (the repo's .nvmrc is
+     newer). On an older Node the import throws and the route answers 500, loudly. */
+  '/api/metar': () => import('../api/metar.ts'),
 };
+
+/**
+ * /api/metar, CANNED: an honest "no reports". Every console spec was written against
+ * met.no as "now"; an empty airport answer keeps them there (the client falls back,
+ * exactly as it does in production when a report is stale), instead of a 404 that
+ * only looks like the same thing. heat-map-observed-weather.spec.ts stubs the route
+ * itself with real reports.
+ */
+function cannedMetar(res) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Date', new Date().toUTCString());
+  res.status(200).json({ source: 'aviationweather.gov', fetchedAt: new Date().toISOString(), reports: [] });
+}
 
 /* 127.0.0.1 ON BOTH SIDES OF THE PROXY, SPELLED OUT RATHER THAN LEFT TO DNS.
    `localhost` is not one address: since Node 17 the resolver no longer prefers
@@ -161,6 +178,7 @@ createServer(async (req, res) => {
      for a widget no console spec looks at. */
   if (CANNED) {
     if (url.pathname === '/api/live') { cannedLive(vercelRes(res)); return; }
+    if (url.pathname === '/api/metar') { cannedMetar(vercelRes(res)); return; }
   } else if (fn) {
     try {
       const mod = await fn();

@@ -50,7 +50,7 @@ test.describe('observed weather', () => {
     await expect(page.locator('#liveT')).toHaveText('31');
     const line = page.locator('#wxLine');
     await expect(line).toHaveText(
-      '🌧Light rain at Dum Dum airport (16 km) · observed 11:30 IST · surfaces cooling · conditions over the ward may differ');
+      '🌧Light rain at Dum Dum airport (16 km) at 11:30 IST · surfaces cooling · may differ over the ward');
     // the pictograph has a name
     await expect(line.locator('[role="img"]')).toHaveAttribute('aria-label', 'Rain');
     // no published band covers a wet ward, and the chip says so
@@ -66,14 +66,39 @@ test.describe('observed weather', () => {
     expect(await surfaceMean(page)).toBeGreaterThan(30);
   });
 
-  test('a stale report hands "now" back to met.no, and says so', async ({ page }) => {
-    // 2 h after the newest report: past the 90-minute limit
+  test('a feed that froze in the rain hands "now" to met.no, still drying — not snapped dry', async ({ page }) => {
+    // 2 h after the newest report (06:00Z, -RA): past the 90-minute limit
     await stub(page, '2026-10-07T08:05:00Z');
     await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator('#liveSrc')).toHaveText('Air now · Met Norway forecast', { timeout: 60_000 });
     await expect(page.locator('#liveT')).toHaveText('32.0');
-    await expect(page.locator('#wxLine')).toContainText('no airport report in the last 90 min');
-    await expect(page.locator('#conf')).not.toContainText('wet surfaces');
+    await expect(page.locator('#wxLine')).toContainText('no airport report in 90 min · surfaces drying after rain');
+    await expect(page.locator('#conf')).toContainText('Outside validation · wet surfaces');
+    // the defect was 46.7 here; drying from wet leaves it well short of the dry model
+    await expect.poll(() => surfaceMean(page), { timeout: 60_000 }).toBeLessThan(42);
+  });
+
+  test('hours later the rain is spent: met.no, dry, with its band back', async ({ page }) => {
+    await stub(page, '2026-10-07T11:00:00Z');
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
+    await expect(page.locator('#liveSrc')).toHaveText('Air now · Met Norway forecast', { timeout: 60_000 });
+    await expect(page.locator('#wxLine')).not.toContainText('drying');
+    await expect(page.locator('#conf')).not.toContainText('Outside validation');
+  });
+
+  test('the page takes its clock from /api/metar when met.no is down', async ({ page }) => {
+    // met.no fails, so the only Date header the page sees is the airport function's
+    await page.route(/\/api\/live\?/, (route) => route.fulfill({ status: 502, body: '{"error":"x"}' }));
+    await page.route(/\/api\/metar\?/, (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      headers: { date: new Date('2026-10-07T06:05:00Z').toUTCString(), age: '0' },
+      body: JSON.stringify({ source: 'aviationweather.gov', fetchedAt: '2026-10-07T06:09:00.000Z',
+        reports: METAR.filter((r) => r.icaoId === 'VECC').map((r) => ({ icao: r.icaoId, raw: r.rawOb })) }),
+    }));
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
+    // judged on the visitor's clock the 06:00Z report would be stale; on the server's it is 5 min old
+    await expect(page.locator('#liveSrc')).toHaveText('Air now · Dum Dum airport (16 km)', { timeout: 60_000 });
+    await expect(page.locator('#liveT')).toHaveText('31');
   });
 
   test('no airport answer at all: met.no, as before', async ({ page }) => {
@@ -92,6 +117,13 @@ test.describe('observed weather', () => {
     await page.goto('/heat-map/in/bengaluru/indiranagar/');
     await expect(page.locator('#liveSrc')).toHaveText('Air now · HAL airport (4 km)', { timeout: 60_000 });
     await expect(page.locator('#liveT')).toHaveText('28');
-    await expect(page.locator('#wxLine')).toContainText('Partly cloudy at HAL airport (4 km) · observed 11:30 IST');
+    await expect(page.locator('#wxLine')).toContainText('Partly cloudy at HAL airport (4 km) at 11:30 IST');
+    // SCT012 through Kasten & Czeplak is not the calibrated physics: no band may be printed over it
+    await expect(page.locator('#conf')).toHaveText('Outside validation · station cloud');
+    await expect(page.locator('#lst .band')).toHaveCount(0);
+    // ...and the 13:00 scenario runs the calibrated physics, so its band comes back
+    await page.locator('#segPhase button[data-p="peak"]').click();
+    await expect(page.locator('#conf')).not.toContainText('Outside validation', { timeout: 30_000 });
+    await expect(page.locator('#lst .band')).toHaveCount(1);
   });
 });
