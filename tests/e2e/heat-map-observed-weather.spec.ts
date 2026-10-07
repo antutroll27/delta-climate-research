@@ -70,8 +70,9 @@ test.describe('observed weather', () => {
     // 2 h after the newest report (06:00Z, -RA): past the 90-minute limit
     await stub(page, '2026-10-07T08:05:00Z');
     await page.goto('/heat-map/in/kolkata/ballygunge/');
-    await expect(page.locator('#liveSrc')).toHaveText('Air now · Met Norway forecast', { timeout: 60_000 });
-    await expect(page.locator('#liveT')).toHaveText('32.0');
+    /* the reading itself first: a source label alone can be read before any reading lands */
+    await expect(page.locator('#liveT')).toHaveText('32.0', { timeout: 60_000 });
+    await expect(page.locator('#liveSrc')).toHaveText('Air now · Met Norway forecast');
     await expect(page.locator('#wxLine')).toContainText('no airport report in 90 min · surfaces drying after rain');
     await expect(page.locator('#conf')).toContainText('Outside validation · wet surfaces');
     // the defect was 46.7 here; drying from wet leaves it well short of the dry model
@@ -81,7 +82,8 @@ test.describe('observed weather', () => {
   test('hours later the rain is spent: met.no, dry, with its band back', async ({ page }) => {
     await stub(page, '2026-10-07T11:00:00Z');
     await page.goto('/heat-map/in/kolkata/ballygunge/');
-    await expect(page.locator('#liveSrc')).toHaveText('Air now · Met Norway forecast', { timeout: 60_000 });
+    await expect(page.locator('#liveT')).toHaveText('32.0', { timeout: 60_000 });
+    await expect(page.locator('#liveSrc')).toHaveText('Air now · Met Norway forecast');
     await expect(page.locator('#wxLine')).not.toContainText('drying');
     await expect(page.locator('#conf')).not.toContainText('Outside validation');
   });
@@ -108,8 +110,9 @@ test.describe('observed weather', () => {
     }));
     await page.route(/\/api\/metar\?/, (route) => route.fulfill({ status: 502, body: '{"error":"x"}' }));
     await page.goto('/heat-map/in/kolkata/ballygunge/');
-    await expect(page.locator('#liveSrc')).toHaveText('Air now · Met Norway forecast', { timeout: 60_000 });
-    await expect(page.locator('#liveT')).toHaveText('32.0');
+    /* the reading itself first: a source label alone can be read before any reading lands */
+    await expect(page.locator('#liveT')).toHaveText('32.0', { timeout: 60_000 });
+    await expect(page.locator('#liveSrc')).toHaveText('Air now · Met Norway forecast');
   });
 
   test('Bengaluru reads the nearer airport, HAL, with its distance', async ({ page }) => {

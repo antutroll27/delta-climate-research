@@ -2726,9 +2726,9 @@ export function mountHeatMap(): () => void {
     const ids = stations.map((s) => s.icao).sort().join(',');
     const r = await fetch(`/api/metar?ids=${ids}`);
     if (!r.ok) throw new Error('metar ' + r.status);
-    /* The report's AGE is judged on this clock too, so it takes the server's Date
-       (+ Age on a CDN hit), exactly as the met.no fetch does. */
-    adoptServerClock(r);
+    /* The report's AGE is judged on this clock too. Recorded, not applied: two
+       responses racing to set one clock is nondeterminism (fetchLive decides). */
+    metarServedMs = servedAt(r);
     const body = await r.json() as { fetchedAt?: unknown; reports?: unknown };
     const ref = typeof body.fetchedAt === 'string' ? Date.parse(body.fetchedAt) : NaN;
     if (!Number.isFinite(ref) || !Array.isArray(body.reports)) throw new Error('metar: unexpected body');
@@ -2821,16 +2821,20 @@ export function mountHeatMap(): () => void {
      reading was served. */
   let clockSkewMs = 0;
   const now = () => Date.now() + clockSkewMs;
-  /** `Date + Age` from one of our own functions: "now" at the edge. Ignored under 2 min. */
-  function adoptServerClock(r: Response): void {
+  /** `Date + Age` from one of our own functions: "now" at the edge, or NaN. */
+  function servedAt(r: Response): number {
     const dateHdr = Date.parse(r.headers.get('date') ?? '');
     const ageSec = Number(r.headers.get('age')) || 0;
-    const served = dateHdr + ageSec * 1000;
-    if (Number.isFinite(served)) {
-      const skew = served - Date.now();
-      clockSkewMs = Math.abs(skew) > 120_000 ? skew : 0;
-    }
+    return dateHdr + ageSec * 1000;
   }
+  /** Adopt a server instant as the page clock. Ignored under 2 min. */
+  function adoptServerClock(served: number): void {
+    if (!Number.isFinite(served)) return;
+    const skew = served - Date.now();
+    clockSkewMs = Math.abs(skew) > 120_000 ? skew : 0;
+  }
+  /** The last /api/metar response's server instant, used only when met.no has none. */
+  let metarServedMs = NaN;
 
   function ageMinutes(iso: string | undefined): number | null {
     if (!iso) return null;
@@ -3059,6 +3063,8 @@ export function mountHeatMap(): () => void {
      "live" dot over yesterday evening's weather, while that same reading went on
      setting the simulation's boundary conditions. The freshness dial exposes the
      age; this is how a reader acts on it. */
+  /** Set by a successful met.no fetch in this round; read by fetchLive. */
+  let metnoAnswered = false;
   async function fetchMetno(name: AreaKey, force = false) {
     const w = wardOf(name);
     try {
@@ -3080,7 +3086,8 @@ export function mountHeatMap(): () => void {
            mis-colour the very freshness bar this arithmetic exists to keep
            honest. `Date + Age` reconstructs "now" at the edge. Same-origin, so
            the header is readable without a CORS expose list. */
-        adoptServerClock(r);
+        adoptServerClock(servedAt(r));
+        metnoAnswered = true;
         /* PARSED, NOT DESTRUCTURED. This used to read the three numbers straight
            off the body; all three are optional in met.no's schema, so a whole-but-
            short response arrived as a complete reading holding `undefined` — which
@@ -3105,12 +3112,19 @@ export function mountHeatMap(): () => void {
    * whatever arrived (composeLive) — the observation when it is fresh.
    */
   async function fetchLive(name: AreaKey, force = false) {
+    metnoAnswered = false; metarServedMs = NaN;
     await Promise.all([
       fetchMetno(name, force),
       fetchMetar(name, force).catch((e: unknown) => {
         console.warn('airport observation unavailable, using met.no:', (e as Error).message);
       }),
     ]);
+    /* ONE CLOCK, CHOSEN, NOT RACED. met.no's Date stays the authority whenever it
+       answered — exactly as before /api/metar existed; the airport function's Date
+       stands in only when met.no did not. Both are our own servers, so in production
+       they agree; letting the later response win made the page's clock depend on
+       which landed second (seen: a stubbed April night overwritten by today). */
+    if (!metnoAnswered) adoptServerClock(metarServedMs);
     if (appDisposed || state.ward !== name) return;
     const next = composeLive(name);
     if (!next) return;
@@ -3180,7 +3194,7 @@ export function mountHeatMap(): () => void {
          the calibrated 1 − 0.6·C; an airport's oktas through Kasten & Czeplak is not
          that physics, so no band may be printed over it either. One predicate
          (M.outsideValidation) decides both, here and beside the number. */
-      const outside = live ? M.outsideValidation(state.live) : null;
+      const outside = live ? M.outsideValidation(state.live, state.phase === 'peak') : null;
       if (outside) {
         tag.innerHTML = `Outside validation · ${outside === 'wet' ? 'wet surfaces' : 'station cloud'}${seasonChip}`;
         tag.className = 'conf indicative';
@@ -3306,7 +3320,7 @@ export function mountHeatMap(): () => void {
       // The band is measured, not decorative: it is this model's out-of-sample
       // error against ECOSTRESS for the phase on screen. See accuracy.ts.
       // ...and no band at all on a wet ward, which no measurement covers (applyConfidence).
-      const unvalidated = state.sunNow != null && M.outsideValidation(state.live) !== null;
+      const unvalidated = state.sunNow != null && M.outsideValidation(state.live, state.phase === 'peak') !== null;
       lst.innerHTML = `${st.meanC.toFixed(1)}<span class="u">°C</span>`
         + (unvalidated ? '' : `<span class="band">${bandLabel(state.phase)}</span>`);
       (lst as HTMLElement).style.color = lstColor(st.meanC);
