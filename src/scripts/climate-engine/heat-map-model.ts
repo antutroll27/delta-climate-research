@@ -325,14 +325,18 @@ export function asScenarioAmbient(L: Ambient | null): Ambient | null {
  * pass forced with MODEL cloud through `1 − 0.6·C`; so a wet surface is outside
  * them, and so is station cloud wherever its transmission differs from the
  * calibrated one. A clear station sky (C = 0, no CB/TCU/TS) transmits exactly 1
- * under both formulae, is the calibrated physics, and keeps its band.
+ * under both formulae, is the calibrated physics, and keeps its band — and so
+ * does any station sky after dark: transmission multiplies `sun`, which is 0
+ * then, and cloud reaches the night balance only through the sky temperature,
+ * which is the same function of cover either way. `sunUp` is the "now" branch's
+ * own test (sunNow > SUN_LIT).
  */
-export function outsideValidation(L: Ambient | null): 'wet' | 'station-cloud' | null {
+export function outsideValidation(L: Ambient | null, sunUp: boolean): 'wet' | 'station-cloud' | null {
   const o = L?.observed;
   if (!L || !o) return null;
   if (o.wet > 0) return 'wet';
   const c = L.cloud / 100;
-  if (o.stationCloud && stationCloudTransmission(c, o.convective) !== legacyCloudTransmission(c)) return 'station-cloud';
+  if (sunUp && o.stationCloud && stationCloudTransmission(c, o.convective) !== legacyCloudTransmission(c)) return 'station-cloud';
   return null;
 }
 

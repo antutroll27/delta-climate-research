@@ -204,20 +204,26 @@ test('the 13:00 scenario runs the CALIBRATED cloud formula even when "now" is a 
 });
 
 test('outside validation: wet, or station cloud that is not the calibrated physics', () => {
-  assert.equal(M.outsideValidation(null), null);
-  assert.equal(M.outsideValidation({ tAir: 30, rh: 60, wind: 2, cloud: 40, feels: 33 }), null, 'met.no: calibrated');
-  assert.equal(M.outsideValidation(STATION_BKN_CB), 'station-cloud');
+  assert.equal(M.outsideValidation(null, true), null);
+  assert.equal(M.outsideValidation({ tAir: 30, rh: 60, wind: 2, cloud: 40, feels: 33 }, true), null, 'met.no: calibrated');
+  assert.equal(M.outsideValidation(STATION_BKN_CB, true), 'station-cloud');
   // HAL at 0600Z: SCT012, no CB — still K&C, still outside
-  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, cloud: 43.75, observed: { stationCloud: true, convective: 'none', wet: 0 } }), 'station-cloud');
+  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, cloud: 43.75, observed: { stationCloud: true, convective: 'none', wet: 0 } }, true), 'station-cloud');
   // a clear station sky transmits 1 under both formulae: calibrated, band kept
-  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, cloud: 0, observed: { stationCloud: true, convective: 'none', wet: 0 } }), null);
+  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, cloud: 0, observed: { stationCloud: true, convective: 'none', wet: 0 } }, true), null);
   // a clear sky with a CB reported is not
-  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, cloud: 0, observed: { stationCloud: true, convective: 'cumuliform', wet: 0 } }), 'station-cloud');
+  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, cloud: 0, observed: { stationCloud: true, convective: 'cumuliform', wet: 0 } }, true), 'station-cloud');
   // wet wins, whatever the cloud
-  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, observed: { ...STATION_BKN_CB.observed, wet: 0.3 } }), 'wet');
-  assert.equal(M.outsideValidation({ tAir: 30, rh: 60, wind: 2, cloud: 40, feels: 33, observed: { stationCloud: false, convective: 'none', wet: 0.2 } }), 'wet');
+  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, observed: { ...STATION_BKN_CB.observed, wet: 0.3 } }, true), 'wet');
+  assert.equal(M.outsideValidation({ tAir: 30, rh: 60, wind: 2, cloud: 40, feels: 33, observed: { stationCloud: false, convective: 'none', wet: 0.2 } }, true), 'wet');
+  // AFTER DARK station cloud is the calibrated physics: transmission multiplies a sun of 0
+  assert.equal(M.outsideValidation(STATION_BKN_CB, false), null, 'night: band stands');
+  const dark = (L) => nowParams(L, Date.parse('2026-10-07T16:30:00Z'));   // 22:00 IST
+  assert.deepEqual(dark(STATION_BKN_CB), dark(M.asScenarioAmbient(STATION_BKN_CB)), 'night params identical either way');
+  // ...but wet is wet at night too
+  assert.equal(M.outsideValidation({ ...STATION_BKN_CB, observed: { ...STATION_BKN_CB.observed, wet: 0.3 } }, false), 'wet');
   // model cloud carried with wet = 0 is the calibrated physics
-  assert.equal(M.outsideValidation({ tAir: 30, rh: 60, wind: 2, cloud: 40, feels: 33, observed: { stationCloud: false, convective: 'none', wet: 0 } }), null);
+  assert.equal(M.outsideValidation({ tAir: 30, rh: 60, wind: 2, cloud: 40, feels: 33, observed: { stationCloud: false, convective: 'none', wet: 0 } }, true), null);
 });
 
 test('wetness below 1 % is dry, so the chip can clear', () => {
