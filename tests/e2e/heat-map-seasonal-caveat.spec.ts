@@ -32,7 +32,7 @@ test.describe('the seasonal caveat', () => {
     await page.goto('/heat-map/in/kolkata/ballygunge/');
     const note = page.locator('#seasonNote');
     await expect(note).toBeVisible({ timeout: 60_000 });
-    await expect(note).toHaveText(/^Dry-season reading: the model runs at night ~\d\.\d–\d\.\d °C warm in Mar–Apr against ECOSTRESS$/);
+    await expect(note).toHaveText(/^Dry-season reading: the modelled surface runs at night ~\d\.\d–\d\.\d °C warm in Mar–Apr against ECOSTRESS$/);
     await expect(page.locator('#conf')).toContainText('dry-season warm');
     await expect(page.locator('#conf')).toHaveAttribute('title', /outside the published ±3\.0 K band/);
     await page.locator('.metric:has(#lst)').screenshot({ path: test.info().outputPath('april-night-readout.png') });

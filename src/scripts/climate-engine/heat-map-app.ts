@@ -16,6 +16,9 @@ import { detectHeatCaps } from './caps';
 import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import { isCurrentSnapshot, type HeatSimHost, type HeatSimRequest, type HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
+import { parseMetar, type Metar } from '../../lib/weather/metar.ts';
+import { describeWeather, fallbackAmbient, observedNow, rankStations, type ObservedNow } from '../../lib/weather/observed.ts';
+import { METAR_STATIONS } from '../../data/metar-stations.ts';
 import { ACCURACY, SPATIAL, HEIGHTS, PEAK_CHIP_BASIS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K, seasonalCaveat, seasonalCaveatLine, seasonalCaveatDetail } from './accuracy';
 import { solarElevationFactor, solarDayHours } from './sky';
 import { loadLayerManifest } from './provenance';
@@ -2107,7 +2110,9 @@ export function mountHeatMap(): () => void {
          solve the renderer holds no field for the ward on screen (`setWard` clears
          it), and an overlay over an empty field would draw the cold end of the ramp. */
       overlayOpacity: surfaceOn && fieldOnGrid() ? opBase * Math.min(1, growProgress * 1.6) : 0,
-      live: state.live, phase: state.phase,
+      /* The deck dims the key light with the physics' own transmission, so it must be
+         handed the reading as THIS view uses it: scenarios run the calibrated physics. */
+      live: state.sunNow != null ? state.live : M.asScenarioAmbient(state.live), phase: state.phase,
       /* The same computation the compass dial reads, handed to the renderer rather
          than recomputed there — see currentSun. It aims the key light and nothing
          else: the solve has never had a shade term and still does not. */
@@ -2567,7 +2572,7 @@ export function mountHeatMap(): () => void {
       ?.setData(b.labels as never);
     state.spatial = b.spatial;
     cooling = b.cooling; coolingLo = b.coolingLo; coolingHi = b.coolingHi;
-    state.live = liveCache[name] ?? null; paintLive();
+    state.live = composeLive(name); paintLive();
 
     setHTML('pname', w.name); setText('pzone', w.zone); setText('coord', formatLatLon(w.lat, w.lon, ' · ', 3));
     /* THE WARD'S COUNT FIRST, the drawn count beside it: with a polygon, most of the
@@ -2682,7 +2687,59 @@ export function mountHeatMap(): () => void {
   }
 
   /* ── live ambient (Met Norway direct; production proxies via /api/ambient) ── */
+  /** met.no's forecast reading per ward — the FALLBACK since 2026-10-07. */
   const liveCache: Record<string, M.Ambient> = {};
+  /* ── observed "now": the airport METAR (founder decision 2, 2026-10-07) ──
+     met.no's forecast said fair while Kolkata airport reported rain, and the page
+     drew a 46.7 °C surface in it. "Now" is the nearest airport's report when it is
+     fresh (src/lib/weather/observed.ts); met.no's reading is the fallback when it
+     is stale or absent, and lends any figure a report is silent on. Reports are
+     cached per CITY: every ward of a city reads the same airports. */
+  const metarCache: Record<string, { fetchedMs: number; reports: Metar[] }> = {};
+  /** The observation behind `state.live`, or null when met.no is in charge. */
+  let observed: ObservedNow | null = null;
+  /** Re-read the airport this often. Reports are half-hourly; the CDN holds 10 min. */
+  const METAR_POLL_MS = 10 * 60_000;
+
+  function composeLive(name: AreaKey): M.Ambient | null {
+    const metno = liveCache[name] ?? null;
+    const w = wardOf(name), city = splitKey(name).city;
+    const cached = metarCache[city];
+    const byStation: Record<string, Metar[]> = {};
+    for (const m of cached?.reports ?? []) (byStation[m.station] ??= []).push(m);
+    const ranked = rankStations(city, w.lat, w.lon);
+    observed = cached
+      ? observedNow(byStation, ranked, now(),
+        { cloudPct: metno?.cloud ?? null, rh: metno?.rh ?? null, windMs: metno?.wind ?? null })
+      : null;
+    /* A stale airport hands "now" to met.no WITH the rain's memory: the surface keeps
+       drying from where it was rather than snapping back to the dry model. */
+    return observed?.ambient ?? fallbackAmbient(metno, byStation, ranked, now());
+  }
+
+  async function fetchMetar(name: AreaKey, force: boolean): Promise<void> {
+    const city = splitKey(name).city;
+    const stations = METAR_STATIONS[city];
+    if (!stations?.length) return;
+    const c = metarCache[city];
+    if (!force && c && now() - c.fetchedMs < METAR_POLL_MS) return;
+    const ids = stations.map((s) => s.icao).sort().join(',');
+    const r = await fetch(`/api/metar?ids=${ids}`);
+    if (!r.ok) throw new Error('metar ' + r.status);
+    /* The report's AGE is judged on this clock too. Recorded, not applied: two
+       responses racing to set one clock is nondeterminism (fetchLive decides). */
+    metarServedMs = servedAt(r);
+    const body = await r.json() as { fetchedAt?: unknown; reports?: unknown };
+    const ref = typeof body.fetchedAt === 'string' ? Date.parse(body.fetchedAt) : NaN;
+    if (!Number.isFinite(ref) || !Array.isArray(body.reports)) throw new Error('metar: unexpected body');
+    const reports: Metar[] = [];
+    for (const x of body.reports as unknown[]) {
+      const raw = (x as { raw?: unknown } | null)?.raw;
+      const m = typeof raw === 'string' ? parseMetar(raw, ref) : null;
+      if (m) reports.push(m);
+    }
+    metarCache[city] = { fetchedMs: now(), reports };
+  }
   /* ── live-reading freshness dial ──
      met.no publishes hourly, so a reading is at worst an hour behind reality by
      construction: FRESH covers that. Past two hours the sim is running on
@@ -2764,6 +2821,20 @@ export function mountHeatMap(): () => void {
      reading was served. */
   let clockSkewMs = 0;
   const now = () => Date.now() + clockSkewMs;
+  /** `Date + Age` from one of our own functions: "now" at the edge, or NaN. */
+  function servedAt(r: Response): number {
+    const dateHdr = Date.parse(r.headers.get('date') ?? '');
+    const ageSec = Number(r.headers.get('age')) || 0;
+    return dateHdr + ageSec * 1000;
+  }
+  /** Adopt a server instant as the page clock. Ignored under 2 min. */
+  function adoptServerClock(served: number): void {
+    if (!Number.isFinite(served)) return;
+    const skew = served - Date.now();
+    clockSkewMs = Math.abs(skew) > 120_000 ? skew : 0;
+  }
+  /** The last /api/metar response's server instant, used only when met.no has none. */
+  let metarServedMs = NaN;
 
   function ageMinutes(iso: string | undefined): number | null {
     if (!iso) return null;
@@ -2903,9 +2974,48 @@ export function mountHeatMap(): () => void {
       + 'The map itself shows a modelled phase, not a time of day. Activate to re-read.';
   }
 
+  /** "11:30 IST" — the ward's own clock and zone abbreviation. */
+  const wardHm = new Intl.DateTimeFormat('en-GB', { timeZone: WARD_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'short' });
+  const istLike = (iso: string) => wardHm.format(new Date(Date.parse(iso))).replace('GMT+5:30', 'IST');
+
+  function paintWeatherLine(L: M.Ambient | null): void {
+    const line = el('wxLine');
+    setText('liveSrc', observed ? `Air now · ${observed.station.name} (${Math.round(observed.km)} km)`
+      : L ? 'Air now · Met Norway forecast' : 'Air now · no reading');
+    if (!line) return;
+    if (!L) { line.hidden = true; line.textContent = ''; return; }
+    line.hidden = false;
+    const esc = (t: string) => t.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+    if (observed) {
+      const wx = describeWeather(observed);
+      const parts = [
+        `${esc(wx.text)} at ${esc(observed.station.name)} (<b>${Math.round(observed.km)} km</b>)`
+          + ` at <b>${esc(istLike(observed.latest.time))}</b>`,
+      ];
+      if (wx.effect) parts.push(esc(wx.effect));
+      /* Short on purpose: the rail must keep the legend above its fold at 1280x720
+         (solar-pane.spec). Every clause is still here: what, where, how far, when,
+         what the model does, and that the ward is not the airport. */
+      parts.push('may differ over the ward');
+      /* The pictograph is an image with a name, not decoration: screen readers get
+         "Rain", sighted readers the glyph, and the sentence never depends on it. */
+      line.innerHTML = `<i class="wx-ico" role="img" aria-label="${esc(wx.iconLabel)}" title="${esc(wx.iconLabel)}">${wx.icon}</i>`
+        + parts.join(' · ');
+      return;
+    }
+    /* No usable airport report: say so, and say what is standing in for it. */
+    const why = METAR_STATIONS[splitKey(state.ward).city]?.length
+      ? 'no airport report in 90 min' : 'no airport report for this city';
+    const drying = (L.observed?.wet ?? 0) > 0 ? ' · surfaces drying after rain' : '';
+    line.innerHTML = `Met Norway forecast${L.validAt ? ` (<b>${esc(istLike(L.validAt))}</b>)` : ''} · ${why}${drying}`;
+  }
+
   function paintLive() {
     const L = state.live;
-    setText('liveT', L ? L.tAir.toFixed(1) : '—'); setText('liveFeel', L ? L.feels.toFixed(1) : '—');
+    /* A METAR carries whole degrees; printing "31.0" would claim a tenth it does not have. */
+    const dp = observed ? 0 : 1;
+    setText('liveT', L ? L.tAir.toFixed(dp) : '—'); setText('liveFeel', L ? L.feels.toFixed(dp) : '—');
+    paintWeatherLine(L);
     setText('liveRH', L ? String(Math.round(L.rh)) : '—'); setText('liveWind', L ? L.wind.toFixed(1) : '—');
     /* The dot claims "live"; it may only do so while the reading still is.
 
@@ -2953,7 +3063,9 @@ export function mountHeatMap(): () => void {
      "live" dot over yesterday evening's weather, while that same reading went on
      setting the simulation's boundary conditions. The freshness dial exposes the
      age; this is how a reader acts on it. */
-  async function fetchLive(name: AreaKey, force = false) {
+  /** Set by a successful met.no fetch in this round; read by fetchLive. */
+  let metnoAnswered = false;
+  async function fetchMetno(name: AreaKey, force = false) {
     const w = wardOf(name);
     try {
       if (force || !liveCache[name]) {
@@ -2974,13 +3086,8 @@ export function mountHeatMap(): () => void {
            mis-colour the very freshness bar this arithmetic exists to keep
            honest. `Date + Age` reconstructs "now" at the edge. Same-origin, so
            the header is readable without a CORS expose list. */
-        const dateHdr = Date.parse(r.headers.get('date') ?? '');
-        const ageSec = Number(r.headers.get('age')) || 0;
-        const served = dateHdr + ageSec * 1000;
-        if (Number.isFinite(served)) {
-          const skew = served - Date.now();
-          clockSkewMs = Math.abs(skew) > 120_000 ? skew : 0;
-        }
+        adoptServerClock(servedAt(r));
+        metnoAnswered = true;
         /* PARSED, NOT DESTRUCTURED. This used to read the three numbers straight
            off the body; all three are optional in met.no's schema, so a whole-but-
            short response arrived as a complete reading holding `undefined` — which
@@ -2996,10 +3103,40 @@ export function mountHeatMap(): () => void {
         if (!reading) throw new Error('met.no returned a reading with no usable numbers');
         liveCache[name] = reading;
       }
-      if (appDisposed || state.ward !== name) return;
-      state.live = liveCache[name]; paintLive(); resetSim();
     } catch (e) { console.warn('live ambient unavailable, using fallback:', (e as Error).message); }
   }
+
+  /**
+   * Both sources, independently: the airport's observation and met.no's forecast.
+   * Either may fail without costing the other, and "now" is composed from
+   * whatever arrived (composeLive) — the observation when it is fresh.
+   */
+  async function fetchLive(name: AreaKey, force = false) {
+    metnoAnswered = false; metarServedMs = NaN;
+    await Promise.all([
+      fetchMetno(name, force),
+      fetchMetar(name, force).catch((e: unknown) => {
+        console.warn('airport observation unavailable, using met.no:', (e as Error).message);
+      }),
+    ]);
+    /* ONE CLOCK, CHOSEN, NOT RACED. met.no's Date stays the authority whenever it
+       answered — exactly as before /api/metar existed; the airport function's Date
+       stands in only when met.no did not. Both are our own servers, so in production
+       they agree; letting the later response win made the page's clock depend on
+       which landed second (seen: a stubbed April night overwritten by today). */
+    if (!metnoAnswered) adoptServerClock(metarServedMs);
+    if (appDisposed || state.ward !== name) return;
+    const next = composeLive(name);
+    if (!next) return;
+    state.live = next; paintLive(); resetSim();
+  }
+  /* The airport reports every 30 minutes and wet surfaces change by the minute;
+     re-read it on a slow tick (CDN-cached, so this is not an upstream call per
+     visitor) and re-compose, which also advances the wetness. Hidden tabs skip. */
+  const metarTick = window.setInterval(() => {
+    if (!document.hidden && !appDisposed) void fetchLive(state.ward, true);
+  }, METAR_POLL_MS);
+  cleanup.push(() => clearInterval(metarTick));
 
   /* ── readouts ── */
   const lstColor = (t: number) => t >= 40 ? 'var(--red)' : t >= 37 ? '#d46b4a' : t >= 33 ? 'var(--bronze)' : 'var(--cyan)';
@@ -3050,6 +3187,29 @@ export function mountHeatMap(): () => void {
          through toFixed, never user or network text.
          Sentence case because .conf no longer uppercases in CSS. */
       const fig = (t: string) => `<b>${t}</b>`;
+      /* WET SURFACES ARE OUTSIDE EVERY PUBLISHED FIGURE. Each validation scene is a
+         clear-sky satellite pass (Landsat, ECOSTRESS); not one was taken in rain, so
+         no band describes a rain-relaxed field. Said on the chip, before the band. */
+      /* ...AND SO IS STATION CLOUD. The band was measured with model cloud through
+         the calibrated 1 − 0.6·C; an airport's oktas through Kasten & Czeplak is not
+         that physics, so no band may be printed over it either. One predicate
+         (M.outsideValidation) decides both, here and beside the number. */
+      const outside = live ? M.outsideValidation(state.live, state.phase === 'peak') : null;
+      if (outside) {
+        tag.innerHTML = `Outside validation · ${outside === 'wet' ? 'wet surfaces' : 'station cloud'}${seasonChip}`;
+        tag.className = 'conf indicative';
+        (tag as HTMLElement).title = outside === 'wet'
+          ? 'Rain at the airport is being applied to this ward: surfaces relax towards the '
+            + `air temperature while it rains (e-folding ${M.TAU_WET_MIN} min) and re-warm after it stops `
+            + `(${M.TAU_DRY_MIN} min). Every published accuracy figure was measured on clear-sky satellite passes, `
+            + 'so none of them covers a wet ward.'
+          : 'The airport\'s observed cloud cuts the sun here through Kasten & Czeplak (1980). Every published '
+            + 'accuracy figure was measured with model cloud through the calibrated 1 − 0.6·C, so none of them '
+            + 'covers this reading. The 13:00 and 22:00 views keep the calibrated physics and their bands.';
+        const lstWet = el('lst');
+        if (lstWet) (lstWet as HTMLElement).title = (tag as HTMLElement).title;
+        return;
+      }
       tag.innerHTML = transition
         ? `Outside validation · ${fig(`~±${TRANSITION_RMSE_K.toFixed(1)} °C`)} at this hour${seasonChip}`
         : a.confidence === 'quantitative'
@@ -3159,8 +3319,10 @@ export function mountHeatMap(): () => void {
     if (lst) {
       // The band is measured, not decorative: it is this model's out-of-sample
       // error against ECOSTRESS for the phase on screen. See accuracy.ts.
+      // ...and no band at all on a wet ward, which no measurement covers (applyConfidence).
+      const unvalidated = state.sunNow != null && M.outsideValidation(state.live, state.phase === 'peak') !== null;
       lst.innerHTML = `${st.meanC.toFixed(1)}<span class="u">°C</span>`
-        + `<span class="band">${bandLabel(state.phase)}</span>`;
+        + (unvalidated ? '' : `<span class="band">${bandLabel(state.phase)}</span>`);
       (lst as HTMLElement).style.color = lstColor(st.meanC);
     }
     applyConfidence();
@@ -3305,7 +3467,7 @@ export function mountHeatMap(): () => void {
    * computed" would read as some third state the reader has to interpret. Two
    * literals in two places would drift the first time either is touched.
    */
-  function meanTile(value: string) { return `${value}<span>°C mean</span>`; }
+  function meanTile(value: string) { return `${value}<span>°C surface</span>`; }
 
   /**
    * A SCENARIO MOVED: blank every tile it just falsified, then re-solve.

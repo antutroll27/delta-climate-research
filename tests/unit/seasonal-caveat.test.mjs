@@ -56,7 +56,7 @@ test('the printed figures are the artefact\'s, and the artefact is the harness\'
   assert.equal(night.ward_68.bias_K,
     full.strata.night.ward_68_only.by_season[PRE].displayed_settled.bias_K);
   assert.equal(seasonalCaveatLine(night),
-    `Dry-season reading: the model runs at night ~${src.bias_K.toFixed(1)}–${night.ward_68.bias_K.toFixed(1)} °C `
+    `Dry-season reading: the modelled surface runs at night ~${src.bias_K.toFixed(1)}–${night.ward_68.bias_K.toFixed(1)} °C `
     + 'warm in Mar–Apr against ECOSTRESS');
 });
 

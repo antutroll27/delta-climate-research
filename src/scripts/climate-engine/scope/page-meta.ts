@@ -55,6 +55,6 @@ export function areaPageDescription(scope: ResolvedScope): string {
   const costs = scope.climate.costs;
   const money = costs === null ? '' : ` and cost in ${currencyMark(costs)}`;
   return `Interactive urban-heat-island simulator for ${scope.area.name}, ${scope.city.name} `
-    + `(${scope.area.descriptor}) — test green interventions and see cooling in °C`
+    + `(${scope.area.descriptor}) — test green interventions and see ground and rooftop surface cooling in °C`
     + `${money} on a live 3D map. Modelled scenario, screening-grade.`;
 }

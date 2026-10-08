@@ -160,7 +160,7 @@ export function mountPairedBench(): () => void {
           const output = one<HTMLOutputElement>(`[data-map-probe="${slot}"]`);
           if (!output) return;
           output.hidden = probe === null;
-          output.textContent = probe ? `${probe.temperatureC.toFixed(1)}°C · model cell` : '';
+          output.textContent = probe ? `${probe.temperatureC.toFixed(1)}°C surface · model cell` : '';
         },
       });
       if (!mounted) return;

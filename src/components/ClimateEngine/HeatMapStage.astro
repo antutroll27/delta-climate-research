@@ -706,18 +706,25 @@ const newCity = scope.area.hasData
 
     <div class="rail-r">
     <aside class="panel right">
+      {/* AIR FIRST (founder decision 1, 2026-10-07). The surface figure used to be the
+          big number here and was read as the air temperature — 46.7 °C in the rain.
+          What a person feels is the air; the modelled ground and rooftops follow,
+          labelled as what they are. The source line names where "now" came from. */}
       <div class="metric livem">
-        <div class="k">Live ambient · Met Norway <span class="livedot" id="livedot"></span></div>
-        <div class="liverow">
-          <div><b id="liveT">—</b><span>air °C</span></div>
-          <div><b id="liveFeel">—</b><span>feels °C</span></div>
-          <div><b id="liveRH">—</b><span>% RH</span></div>
-          <div><b id="liveWind">—</b><span>m/s wind</span></div>
+        <div class="k"><span id="liveSrc">Air now</span> <span class="livedot" id="livedot"></span></div>
+        {/* ONE ROW: air leads; feels-like, humidity and wind stack beside it. A separate
+            RH/wind grid cost the rail ~40 px and pushed the legend under its fold. */}
+        <div class="airrow">
+          <div class="air"><b id="liveT">—</b><span class="u">°C air</span></div>
+          <div class="side">
+            <div class="feel"><b id="liveFeel">—</b><span class="u">°C feels</span></div>
+            <div class="aux"><span id="liveRH">—</span>% RH · <span id="liveWind">—</span> m/s</div>
+          </div>
         </div>
       </div>
       <div class="metric">
-        <div class="k">Mean surface temp · <span id="lstPhase">modelled now</span></div>
-        <div class="lst" id="lst" style="color:var(--red)">—<span class="u">°C</span></div>
+        <div class="k surface-k">Ground &amp; rooftop surface · <span id="lstPhase">modelled now</span></div>
+        <div class="lst sec" id="lst" style="color:var(--red)">—<span class="u">°C</span></div>
         <div class="conf" id="conf"></div>
         {/* THE SEASON'S WARNING, when the current month is one in which the displayed
             mean breaks its own band (accuracy.ts SEASONAL_CAVEATS). Painted by the
@@ -728,12 +735,15 @@ const newCity = scope.area.hasData
             histogram are the polygon's, not the square's. Painted by the instrument;
             hidden for an area whose square is its study area. */}
         <p class="ward-scope" id="wardScope" hidden></p>
+        {/* THE WEATHER LINE: condition, source, distance and observation time, and
+            what the model is doing about it. Painted by the instrument (paintLive). */}
+        <p class="wx-line" id="wxLine" hidden></p>
       </div>
       <div class="mrow">
         <div><div class="k" title="Modelled land-cover thermal contrast: this ward's mean surface temperature minus a fully-vegetated reference cell under identical forcing. NOT a measured urban heat island — published Kolkata surface UHI is 0.85–1.5 °C from 1 km satellite data, a different quantity.">Δ vs all-green ref</div><div class="val" style="color:var(--cyan)" id="uhi">—</div></div>
-        <div><div class="k">Area above 40 °C</div><div class="val" style="color:var(--red-ink)" id="area">—</div></div>
+        <div><div class="k">Surface above 40 °C</div><div class="val" style="color:var(--red-ink)" id="area">—</div></div>
       </div>
-      <div class="metric sep" style="padding-bottom:0"><div class="k">Heat-stress distribution</div></div>
+      <div class="metric sep" style="padding-bottom:0"><div class="k">Surface temperature distribution</div></div>
       <div class="histo" id="histo"></div>
       {/* The ward record used to end this card. It is now the Reports pane's one
           piece of content — a download named after itself, in the section named
@@ -811,7 +821,7 @@ const newCity = scope.area.hasData
       <div class:list={['ward', { on: row.key === scope.key }]} data-w={row.id}>
         <span class="sw" style={row.swatch}></span>
         <div><div class="nm">{row.name}</div><div class="ty">{row.kind}</div></div>
-        <div class="big" id={`big-${row.id}`}>—<span>°C mean</span></div>
+        <div class="big" id={`big-${row.id}`}>—<span>°C surface</span></div>
       </div>
     ))}
   </div>
@@ -2305,6 +2315,25 @@ const newCity = scope.area.hasData
   /* was `gap:1px` over a --line background — a trick that fakes four 1 px rules.
      That is what made this read as a grid of boxes. Real gaps, no cell fills. */
   .liverow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+  /* Air leads at the size the surface figure used to have; feels-like beside it.
+     Paper, not the heat ramp: this is the air, not a cell of the map. */
+  .airrow{display:flex;align-items:center;gap:12px;margin-top:6px}
+  .airrow b{font-family:var(--mono);font-weight:400;letter-spacing:.01em;color:var(--paper);line-height:1}
+  .airrow .air{white-space:nowrap}
+  .airrow .air b{font-size:1.9rem}
+  .airrow .feel b{font-size:1.05rem}
+  .airrow .side{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .airrow .aux{font-family:var(--mono);font-size:.56rem;letter-spacing:.02em;color:var(--cyan);white-space:nowrap}
+  .airrow .u{font-family:var(--sans);font-size:.58rem;color:var(--ink);margin-left:.25rem}
+  /* the surface is the SECOND reading now: same mono, one step down. Its label is set
+     a hair smaller so "Ground & rooftop surface · modelled now" holds one line in the
+     210 px column (measured 211 px at .68rem). */
+  .metric .k.surface-k{font-size:.66rem;letter-spacing:0}
+  .metric .lst.sec{font-size:1.45rem;margin-top:6px}
+  .wx-line{margin:.4rem 0 0;font-family:var(--sans);font-size:.56rem;line-height:1.4;color:var(--ink)}
+  .wx-line[hidden]{display:none}
+  .wx-line .wx-ico{font-style:normal;margin-right:.3rem}
+  .wx-line b{font-family:var(--mono);font-weight:400;color:var(--paper)}
   .liverow b{display:block;font-family:var(--mono);font-weight:400;font-size:.9rem;color:var(--cyan);letter-spacing:.02em}
   .liverow span{font-family:var(--sans);font-size:.56rem;color:var(--faint);line-height:1.3;display:block;margin-top:2px}
   .mrow{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px 16px}
@@ -2695,6 +2724,13 @@ const newCity = scope.area.hasData
     .rail-r .metric .val{font-size:.82rem}
     .rail-r .metric .k,.rail-r .metric .u{font-size:.42rem;letter-spacing:.07em}
     .rail-r .lst{font-size:1.5rem}
+    .rail-r .lst.sec{font-size:1.15rem}
+    .rail-r .airrow{gap:8px;margin-top:4px}
+    .rail-r .airrow .aux{font-size:.42rem}
+    .rail-r .airrow .air b{font-size:1.5rem}
+    .rail-r .airrow .feel b{font-size:.95rem}
+    .rail-r .airrow .u{font-size:.42rem}
+    .rail-r .wx-line{font-size:.46rem}
     .rail-r .conf{font-size:.46rem;padding:.22rem .4rem}
     .rail-r .season-note{font-size:.46rem}
     /* the distribution chart is the tallest thing in the card and the least
