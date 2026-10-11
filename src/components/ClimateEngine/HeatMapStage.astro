@@ -2450,6 +2450,23 @@ const newCity = scope.area.hasData
   :is(.aqblock,[data-pane="air"]) :is(.aq-us,.aq-city) summary:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
   :is(.aqblock,[data-pane="air"]) .aq-us-i{display:inline-grid;place-items:center;width:1.3em;height:1.3em;margin-left:.5em;vertical-align:.05em;border:1px solid currentColor;border-radius:50%;font:500 .5rem/1 var(--sans);text-transform:none;letter-spacing:0}
   :is(.aqblock,[data-pane="air"]) :is(.aq-us,.aq-city) p{margin:4px 0 0;font-size:.62rem;line-height:1.45;color:var(--ink)}
+  /* The PM2.5 concentration (air-panel.ts pmLine): the .meta voice, so the unit is set in the sans face,
+     opening its own note like the US line because the figure is worked back, not published. */
+  :is(.aqblock,[data-pane="air"]) .aq-pm{margin:2px 0 0}
+  :is(.aqblock,[data-pane="air"]) .aq-pm summary{list-style:none;cursor:pointer;display:block;font:400 .68rem/1.5 var(--sans);color:var(--ink)}
+  :is(.aqblock,[data-pane="air"]) .aq-pm summary::-webkit-details-marker{display:none}
+  :is(.aqblock,[data-pane="air"]) .aq-pm summary b{font-weight:500;color:var(--paper)}
+  :is(.aqblock,[data-pane="air"]) .aq-pm summary:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  :is(.aqblock,[data-pane="air"]) .aq-pm p{margin:4px 0 5px;font-size:.62rem;line-height:1.45;color:var(--ink)}
+  /* "Why do other apps show a different number?" (air-panel.ts why): last in the block, under a hairline,
+     in sentence case so it reads as a question and not as another data label. */
+  :is(.aqblock,[data-pane="air"]) .aq-why{margin:8px 0 0;padding-top:7px;border-top:1px solid var(--line)}
+  :is(.aqblock,[data-pane="air"]) .aq-why summary{list-style:none;cursor:pointer;font:500 .68rem/1.4 var(--sans);color:var(--cyan)}
+  :is(.aqblock,[data-pane="air"]) .aq-why summary::-webkit-details-marker{display:none}
+  :is(.aqblock,[data-pane="air"]) .aq-why summary::after{content:' +'}
+  :is(.aqblock,[data-pane="air"]) .aq-why[open] summary::after{content:' \2013'}
+  :is(.aqblock,[data-pane="air"]) .aq-why summary:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  :is(.aqblock,[data-pane="air"]) .aq-why p{margin:6px 0 2px;font-size:.68rem;line-height:1.5;color:var(--ink)}
   /* The city-wide AQI (air-panel.ts cityLine): the US line's own voice and token, a step smaller, so it
      can never read as the ward's figure; its note lists the stations averaged. */
   :is(.aqblock,[data-pane="air"]) .aq-city{margin:0}

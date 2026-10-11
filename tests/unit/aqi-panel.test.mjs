@@ -301,8 +301,12 @@ test('CPCB live: published line, 24-hour average, published time, no concentrati
   assert.match(card, /Published by CPCB at <span style="white-space:nowrap"><b>27 Sept 05:00 IST<\/b><\/span>/);
   assert.match(pane, /Pollutants · CPCB sub-indices/);
   assert.match(pane, /<th>Pollutant<\/th><th>Sub-index<\/th><th>Range<\/th><th>Latest hour<\/th>/);
-  assert.doesNotMatch(pane, /µg\/m³|mg\/m³/);
-  assert.match(pane, /The largest is the AQI/);
+  /* The TABLE carries no concentration: CPCB publishes none. The one µg/m³ figure in the pane is the PM2.5
+     line above it, which is worked back from the hourly sub-index and says so (aqi-explainer.test.mjs). */
+  const table = pane.match(/<table class="pol[\s\S]*?<\/table>/)?.[0] ?? '';
+  assert.ok(table, 'the sub-index table is drawn');
+  assert.doesNotMatch(table, /µg\/m³|mg\/m³/);
+  assert.match(pane, /The largest is the AQI\. CPCB's feed carries no concentrations; where a PM2\.5 figure in µg\/m³ appears above, it is worked back from these\./);
 });
 
 test('CPCB table rows: PM10 38 with range 18–53 and latest 45; a null hourly is a dash', () => {
@@ -413,7 +417,7 @@ test('I1: the CPCB table marks CO and O₃ as 8-hour, as the OBOS table does, an
   assert.equal(pane.match(/>8-h</g)?.length, 2, 'exactly two 8-h marks');
   const table = /<table class="pol">[^]*?<\/table>/.exec(pane)[0];
   assert.doesNotMatch(table, /24-h/, 'the table itself never says 24-h');
-  assert.match(pane, /Sub-indices on the AQI scale, as CPCB publishes them: 24-hour window; CO and O₃ over the last 8 hours\. The largest is the AQI\. CPCB's feed carries no concentrations\./);
+  assert.match(pane, /Sub-indices on the AQI scale, as CPCB publishes them: 24-hour window; CO and O₃ over the last 8 hours\. The largest is the AQI\. CPCB's feed carries no concentrations; where a PM2\.5 figure in µg\/m³ appears above, it is worked back from these\./);
 });
 
 /* ---- Re-audit I-2: the PM2.5 line is labelled by its own last hour, not by the card's state. ---- */

@@ -18,7 +18,7 @@
 import { category } from '../../../lib/aqi/cpcb.ts';
 import { LIVE_H } from '../../../lib/aqi/build.ts';
 import { AIR_STATES, isAirPayload, isCity, isUsNowcast } from '../../../lib/aqi/valid.ts';
-import { US_WORD, usAqiOf } from '../../../lib/aqi/us-aqi.ts';
+import { US_WORD, naqiToConcentration, usAqiOf } from '../../../lib/aqi/us-aqi.ts';
 import type { AirQualityPayload, AqiResult, CityAqi, UsNowcast, AqiStation, CpcbCategory, CpcbSubIndex, HistoryDay, HistoryResponse, Pollutant, PollutantReading, Result } from '../../../lib/aqi/types.ts';
 
 type Current = AirQualityPayload['current'];
@@ -84,19 +84,19 @@ const windowOf = (r: AqiResult): string => (r.pollutants.find((q) => q.parameter
 
 /* The fallback names no cause: the feed may be down, the station missing from it (register AQI-R47), stale, moved,
    or its published figure rejected by `pick` (off-scale, ambiguous, or not the largest sub-index). */
-function hero(r: Result, muted: boolean, city = '', nc?: UsNowcast): string {
+function hero(r: Result, muted: boolean, pm: string, us: string, city = ''): string {
   const meta = r.origin === 'cpcb'
     ? `Led by <b>${pol(r.dominant)}</b> · CPCB published AQI · <span style="white-space:nowrap">${r.window_h === 8 ? '8-hour average' : '24-hour average'}</span>`
     : `Led by <b>${pol(r.dominant)}</b> · AQI computed by OBOS from OpenAQ (no usable current CPCB figure for this station) · <span style="white-space:nowrap">${windowOf(r)}</span>`;
   return `<div class="hero"><span class="num${muted ? ' muted' : ''}" style="color:${col(r.category)}">${num(r.aqi)}</span>
-    <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>${usLine(r, nc)}${city}
+    <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>${pm}${us}${city}
     <p class="meta">${meta}</p>`;
 }
 
 const NOWCAST_NOTE = "Same air on the US EPA scale (NowCast, recent hours weighted, as used by AirNow), converted from this CPCB station's hourly PM2.5/PM10. The official Indian AQI above is the legal standard.";
 const US_NOTE = {
-  cpcb: "Same air, US EPA scale (used by IQAir, aqi.in): converted from CPCB's 24-hour PM2.5/PM10. The official Indian AQI above is the legal standard.",
-  obos: 'Same air, US EPA scale (used by IQAir, aqi.in): computed from the same 24-hour PM2.5/PM10 means. The official Indian AQI above is the legal standard.',
+  cpcb: "Same air, US EPA scale: converted from CPCB's 24-hour PM2.5/PM10. The official Indian AQI above is the legal standard.",
+  obos: 'Same air, US EPA scale: computed from the same 24-hour PM2.5/PM10 means. The official Indian AQI above is the legal standard.',
 } as const;
 
 /* THE US EPA EQUIVALENT, one small muted line under the official number, so a reader
@@ -111,6 +111,46 @@ function usLine(r: Result, nc?: UsNowcast): string {
   /* The info mark rides with the basis label, so it never wraps onto a line alone. */
   return `<details class="aq-us"><summary title="${esc(note)}">≈ US AQI ${u.capped ? '500+' : num(u.aqi)} · ${US_WORD[u.category]} · <span style="white-space:nowrap">${nc ? 'NowCast' : '24-h'}<span class="aq-us-i" aria-hidden="true">i</span></span></summary><p>${esc(note)}</p></details>`;
 }
+
+/* THE PM2.5 CONCENTRATION, in the one unit every air-quality app can be checked against. It is
+   CPCB's latest HOURLY PM2.5 sub-index turned back into µg/m³ (the inverse the US line already
+   uses), so it exists only for a CPCB figure that carries one: never a guess, and never for a
+   stale card, whose hour is as old as the card. Nor for a sub-index of 0, which CPCB's own
+   calculator treats as a missing reading, nor above 400, where CPCB's top band is open-ended
+   and the inverse would be an extrapolation.
+
+   IT IS DERIVED, AND SAYS SO. CPCB's feed carries sub-indices and no concentrations (the pane's
+   table says as much), so a bare µg/m³ here would read as a published measurement. "about",
+   because the sub-index is a whole number; and a note, opened like the US line's, that names the
+   index it was worked back from. In the sans voice: the mono face is capitals-only and has no µ. */
+function pmLine(r: Result): string {
+  /* A type guard, not a branch anyone reaches: `block` calls this for a live CPCB figure only. */
+  if (r.origin !== 'cpcb') return '';
+  const hourly = r.subindices.find((q) => q.parameter === 'pm25')?.hourly;
+  if (typeof hourly !== 'number' || !Number.isFinite(hourly) || hourly <= 0 || hourly > 400) return '';
+  const note = `Worked back from CPCB's latest hourly PM2.5 sub-index (${num(hourly)}) on CPCB's own scale. CPCB publishes the index, not the concentration, so this is approximate, to within about 2 µg/m³.`;
+  return `<details class="aq-pm"><summary title="${esc(note)}">Fine particles (PM2.5) · <b>about ${num(Math.round(naqiToConcentration('pm25', hourly)))} µg/m³</b> <span style="white-space:nowrap">in the latest hour<span class="aq-us-i" aria-hidden="true">i</span></span></summary><p>${esc(note)}</p></details>`;
+}
+
+/* WHY ANOTHER APP'S NUMBER DIFFERS, for the reader who has just looked at one. It names other apps
+   and NEVER SAYS ONE IS WRONG, nor that OBOS is the more official: part of the gap is scale and
+   timing, and the cause of the rest is not established. The closing sentence points at the PM2.5
+   line, so it is said only when that line is on the card. A <details>, closed until asked, last
+   in the block.
+
+   EVERY SENTENCE HOLDS IN EVERY STATE THE QUESTION IS SHOWN IN. "Scores differently", not
+   "higher": above about 80 µg/m³ of PM2.5, and on PM10-led days, the US figure is the LOWER one.
+   Nothing about this card's own US timing: that line is NowCast on some cards and 24-hour on
+   others, and its own note says which.
+
+   "LOOKS BACK OVER MANY HOURS", NOT "24 HOURS": an AQI led by ozone or carbon monoxide rests on
+   an 8-hour window, and this sentence is printed under those too. */
+const WHY_ANSWER = "Apps such as IQAir and aqi.in show the American scale, which scores the same air differently from India's. "
+  + "The US figure above is on that scale. Apps also differ in timing: India's official index looks back over many hours, "
+  + 'and some apps weight the most recent hours instead. '
+  + 'Apps can also differ in which readings they use.';
+const why = (hasPm: boolean): string =>
+  `<details class="aq-why"><summary>Why do other apps show a different number?</summary><p>${esc(WHY_ANSWER)}${hasPm ? ' The PM2.5 figure above is in µg/m³, a unit that means the same on every scale.' : ''}</p></details>`;
 
 /** CPCB's station name without its city and agency: "Ballygunge, Kolkata - WBPCB" → "Ballygunge". */
 const shortStation = (n: string): string => n.replace(/, [^,]+ - [A-Za-z]+$/, '');
@@ -183,7 +223,11 @@ function block(c: Current, title: string, place: string, city?: CityAqi, nc?: Us
       /* The city line is as live as the ward figure it rides with: a demoted (stale) card drops it. */
       const live = !stale && c.result.origin === 'cpcb';
       const cityHtml = live ? cityLine(city, c.station.fallback === true) : '';
-      return head(title, chip) + hero(c.result, stale, cityHtml, live ? nc : undefined) + stationLine(c.station, c.source.owner, place) + `<p class="meta">${when}</p>`;
+      const pm = live ? pmLine(c.result) : '';
+      const us = usLine(c.result, live ? nc : undefined);
+      /* The question rides with the US line: with no US figure on the card there is nothing to explain. */
+      return head(title, chip) + hero(c.result, stale, pm, us, cityHtml) + stationLine(c.station, c.source.owner, place) + `<p class="meta">${when}</p>`
+        + (us ? why(pm !== '') : '');
     }
     default:
       return noFigure(title, 'Not loaded', FAILED);
@@ -220,7 +264,7 @@ function subTable(subs: readonly CpcbSubIndex[], lead: Pollutant | null): string
     return `<tr${q.parameter === lead ? ' class="aq-top"' : ''}><td>${pol(q.parameter)}${q.parameter === 'co' || q.parameter === 'o3' ? EIGHT_H : ''}</td><td><span class="si"><i style="width:${w}%;background:${bar}"></i>${num(q.avg)}</span></td><td class="n">${range}</td><td class="n">${num(q.hourly)}</td></tr>`;
   }).join('');
   return `<p class="pane-h">Pollutants · CPCB sub-indices</p><table class="pol"><thead><tr><th>Pollutant</th><th>Sub-index</th><th>Range</th><th>Latest hour</th></tr></thead><tbody>${rows}</tbody></table>` +
-    `<p class="pane-note">Sub-indices on the AQI scale, as CPCB publishes them: 24-hour window; CO and O₃ over the last 8 hours. The largest is the AQI. CPCB's feed carries no concentrations.</p>`;
+    `<p class="pane-note">Sub-indices on the AQI scale, as CPCB publishes them: 24-hour window; CO and O₃ over the last 8 hours. The largest is the AQI. CPCB's feed carries no concentrations; where a PM2.5 figure in µg/m³ appears above, it is worked back from these.</p>`;
 }
 
 function polTable(c: Current): string {
