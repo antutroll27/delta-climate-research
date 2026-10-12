@@ -11,7 +11,43 @@ export default defineConfig({
   // being mistaken for a production regression.
   workers: 1,
   retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? 'github' : 'list',
+  /* ONE LINE PER TEST IN CI, WITH ITS DURATION, AS IT FINISHES.
+     This was `github` alone, which prints nothing until the run ends: a run left
+     9-16 minutes of silence in the log, and a run cancelled at the job limit left
+     no record of which test it was in or how long any had taken. Six cancellations
+     were diagnosed from the timestamps of single-character progress marks.
+       list   — a line per test as it ends, so the log of a cancelled run still says
+                where the time went and what was running when it stopped;
+       github — the failure annotations on the pull request, as before;
+       json   — every duration in one file, uploaded by verify.yml on passing runs
+                too, so "which tests got slower" is a diff and not an excavation.
+     The file sits in test-results/ because that directory is what the workflow
+     already uploads; Playwright empties it at the START of a run and the reporter
+     writes at the end. */
+  reporter: process.env.CI
+    ? [['list'], ['github'], ['json', { outputFile: 'test-results/durations.json' }]]
+    : 'list',
+  /* STOP BEFORE THE JOB LIMIT DOES, WHERE THE ARITHMETIC ALLOWS IT. CI only.
+     A job cancelled at its limit reports "cancelled", prints no summary, writes no
+     durations and uploads nothing. A run stopped HERE fails instead: Playwright
+     prints what passed, what failed and what never ran, the json above is written,
+     and the upload step still has time to run.
+
+     THE NUMBER, FROM 17 LOGGED RUNS (2026-10-05 to 10-12), in minutes:
+       · the runner ends the job 38.8-39.0 after its first log line, not 40.0;
+       · everything before "Running N tests" took 3.1-6.2;
+       · the slowest browser run that PASSED took 32.5 (after 6.1 of setup).
+     So on the slowest runners the suite has 38.8 - 6.2 = 32.6, of which a healthy
+     run has used 32.5. NO VALUE both spares that run and leaves time to upload.
+     33 is chosen on the side of never failing a run that would have passed: it is
+     half a minute above the slowest healthy one. What that costs is stated rather
+     than hidden — when setup takes more than about 5.3 (38.8 - 33 - 0.5 to upload)
+     the job limit still fires first, and the `list` lines above are then the
+     record. On the quicker runners, where setup takes 3-5, this fires first and
+     the run ends with a summary and its artifact.
+     Neither the job limit nor any test timeout is changed here; raising the first
+     is what would make this hold on every runner, and it is a separate decision. */
+  globalTimeout: process.env.CI ? 33 * 60_000 : undefined,
   use: {
     baseURL: 'http://127.0.0.1:4322',
     trace: 'on-first-retry',
