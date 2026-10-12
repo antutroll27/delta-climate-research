@@ -5,8 +5,16 @@ on:
   push:
     branches: [main]
 
+# A newer push to a pull request supersedes the run for the older one. Runs on main are never
+# cancelled: each one is the only check of that merge.
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# pull-requests: read is for listing a pull request's changed files (the scope step).
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   quality:
@@ -22,6 +30,34 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      # Measured 2026-10-12: 65 runs and 1,958 minutes in 30 days, of which 789 were the full
+      # suite running a second time on main straight after it passed on the pull request, and
+      # 200 were documents-only changes. A private repository gets 2,000 minutes a month and is
+      # blocked when they run out, so the browser contracts (the bulk of a 29-minute run) now
+      # run only where they add coverage: on a pull request that changes something the site is
+      # built from. Everything else in `verify` still runs every time, on main included, because
+      # unit tests read docs/ and a merge can break against newer work on main.
+      # The site build reads nothing under docs/ and no .md file (checked the same day).
+      # Fails OPEN: if the changed files cannot be listed, the browser contracts run.
+      - name: Decide whether the browser contracts run
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          browser=true
+          changed="$RUNNER_TEMP/changed.txt"
+          if [ "$EVENT" != "pull_request" ]; then
+            browser=false
+          elif ! gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate \
+              -q '.[] | .filename, (.previous_filename // empty)' > "$changed"; then
+            echo "Could not list the changed files; running the browser contracts."
+          elif [ -s "$changed" ] && ! grep -qvE '^docs/|\.md$' "$changed"; then
+            browser=false
+          fi
+          echo "browser=$browser" | tee -a "$GITHUB_OUTPUT"
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -60,6 +96,7 @@ jobs:
       # Browser binary is cached; only the download is version-dependent, so key
       # on the lockfile. A cache hit turns the step below into a no-op.
       - name: Cache Playwright browsers
+        if: steps.scope.outputs.browser == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
@@ -86,11 +123,13 @@ jobs:
       # WebKit test then failed at browserType.launch. The libraries were never the problem the
       # second time; the second apt call was.
       - name: Install Chromium system libraries (best effort)
+        if: steps.scope.outputs.browser == 'true'
         timeout-minutes: 4
         continue-on-error: true
         run: npx playwright install-deps chromium
 
       - name: Install Chromium
+        if: steps.scope.outputs.browser == 'true'
         timeout-minutes: 6
         run: npx playwright install chromium
 
@@ -99,6 +138,7 @@ jobs:
       # likely to disagree about print CSS and date inputs, both of which that page leans on.
       # It has already earned the slot — it caught a mega-menu bug Chromium could not see.
       - name: Install Firefox
+        if: steps.scope.outputs.browser == 'true'
         timeout-minutes: 6
         run: npx playwright install firefox
 
@@ -106,8 +146,9 @@ jobs:
       # just built and audited -- which is what the removed "Run browser
       # contracts" step existed to do. Keeping both ran the whole e2e suite twice
       # per CI run for no added coverage.
+      # `verify` is `verify:static` followed by the browser contracts.
       - name: Verify build, publication and browser contracts
-        run: npm run verify
+        run: npm run ${{ steps.scope.outputs.browser == 'true' && 'verify' || 'verify:static' }}
 
       - name: Upload browser failure artifacts
         if: failure()
