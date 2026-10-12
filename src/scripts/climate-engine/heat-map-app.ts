@@ -46,7 +46,7 @@ import { createLoadChip } from './load-chip';
 import { createExploreFrameScheduler } from './explore/frame-scheduler';
 import { exploreRuntimeBudget, nextFrameDelayMs, type ExploreDeviceTier } from './explore/runtime-budget';
 import {
-  dayOfYearUtc, maplibreSky, representativeSolarHour, sunPlacement, wardMonthHour,
+  dayOfYearUtc, maplibreSky, representativeSolarHour, skyElevationStep, sunPlacement, wardMonthHour,
 } from './explore/sun-lighting';
 import { createCoreFieldLayer, CORE_FIELD_SOURCE, WARD_OUTLINE_SOURCE } from './explore/core-field-layer';
 import { CLASSIC, LAB_HOOK } from './explore/look';
@@ -541,6 +541,17 @@ export function mountHeatMap(): () => void {
    * unguarded call here would ask for a repaint from inside the repaint it was
    * called by, forever. Comparing the produced spec (not the inputs) also means a
    * palette edit still lands on the very next call.
+   *
+   * AND IT ONLY HOLDS IF THE SPEC CAN STAND STILL. It could not: in "Now" the
+   * elevation comes off the clock in milliseconds and `sky-horizon-blend` is a
+   * float of it, so through every dawn and dusk (-8° to +12°) each frame's spec
+   * differed from the last, the comparison below never matched, and this was the
+   * unguarded call the paragraph above describes — MEASURED, `setSky` on every
+   * render and a map that never went idle. Hence `skyElevationStep`: the sky is
+   * asked for at a stepped height (sun-lighting.ts has the measurement that chose
+   * the step). The cloud fraction is the only other input that varies, and it
+   * moves once per weather reading, not per frame. The dial, the sun line and the
+   * key light still read the unstepped placement.
    */
   let appliedSky = '';
   /* Whether MapLibre has fired `load`. The one thing `syncSky` is allowed to wait
@@ -548,7 +559,7 @@ export function mountHeatMap(): () => void {
   let mapHasLoaded = false;
   function syncSky(): void {
     const spec = maplibreSky(
-      currentSun().placement.elevationDeg,
+      skyElevationStep(currentSun().placement.elevationDeg),
       (state.live?.cloud ?? 0) / 100,
       env,
       CLASSIC,

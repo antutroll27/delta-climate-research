@@ -312,6 +312,47 @@ export function maplibreSky(
   };
 }
 
+/**
+ * THE SKY MOVES IN STEPS, BECAUSE A SKY THAT MOVES EVERY MILLISECOND NEVER RESTS.
+ *
+ * In the live "Now" view the sun's height comes off the clock at millisecond
+ * resolution (about 4e-6 degrees per millisecond at Kolkata's dawn), and
+ * `sky-horizon-blend` above is a float of it. Between -8° and +12° that made every
+ * frame's spec differ from the last far down the decimals, so heat-map-app's
+ * `appliedSky` guard — which exists to stop `setSky` asking for a repaint from
+ * inside the repaint it was called by — never once held. MEASURED 2026-10-13 with
+ * the page clock at 00:30 UTC: `setSky` on every render and a map that never went
+ * idle; at noon and at night, none. That is an hour and a half of every dawn and
+ * every dusk on every visitor's device, and it is why CI's browser suite ran about
+ * twice as slow, and was cancelled at its limit, in those two windows.
+ *
+ * So the sky is asked for at a STEPPED height. The guard compares what
+ * `maplibreSky` produces, and that now changes only when the picture would.
+ *
+ * WHY A TENTH OF A DEGREE. MEASURED over the whole ramp, all three palettes, cloud
+ * 0 to 1: a 0.1° step moves no colour channel by more than 1/255 and the blend by
+ * at most 0.0026 — one level is the smallest change an 8-bit sky can show, so
+ * nothing is given up to the eye. The half degree first proposed moved a channel
+ * by up to 5/255 and the blend by 0.013 in a single frame, across the whole sky at
+ * once. The price of the finer step is one `setSky` per ~26 s of twilight (the sun
+ * climbs about 13.7°/h there in October) rather than one per ~2 min — against one
+ * per frame before.
+ *
+ * PRESENTATION ONLY, like everything else in this file. The compass, the sun line
+ * and the key light go on reading the unstepped placement; only the sky's colour
+ * is asked for in steps, and the solver has never seen any of it.
+ */
+export const SKY_ELEVATION_STEP_DEG = 0.1;
+
+/** The height the SKY is coloured at: `elevationDeg` to the nearest step. */
+export function skyElevationStep(elevationDeg: number): number {
+  /* Divide by the count per degree rather than multiply by the step: 0.1 is not a
+     binary fraction, and `3 * 0.1` is 0.30000000000000004 where `3 / 10` is 0.3.
+     Either would stand still from frame to frame; this one also reads in a log. */
+  const perDegree = Math.round(1 / SKY_ELEVATION_STEP_DEG);
+  return Math.round(elevationDeg * perDegree) / perDegree;
+}
+
 /* OBOS Slate's own family — ground #14131f, arterial #726d99. The sky is a
    deep blue-violet by day rather than a photographic blue, because this is an
    instrument and the heat ramp has to own warm outright. The climate-stripes red

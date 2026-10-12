@@ -13,6 +13,8 @@ const {
   imageBasedLightingAllowed,
   maplibreSky,
   representativeSolarHour,
+  SKY_ELEVATION_STEP_DEG,
+  skyElevationStep,
   skyEnvironment,
   sunLighting,
   sunPlacement,
@@ -285,6 +287,106 @@ test('the renderer reads the device tier late, not at construction', async () =>
   const relief = await read('src/scripts/climate-engine/explore/relief-renderer.ts');
   assert.match(relief, /imageBasedLightingAllowed\(this\.options\.deviceTier\(\)\)/,
     'and the renderer must CALL it, at the moment it wants to know');
+});
+
+/**
+ * THE SKY STANDS STILL BETWEEN FRAMES (2026-10-13).
+ *
+ * `syncSky` runs on every MapLibre `render`, and its guard compares the produced
+ * spec with the last one applied. In "Now" the elevation comes off the clock in
+ * milliseconds and `sky-horizon-blend` is a float of it, so between -8° and +12°
+ * no two frames ever produced the same spec: `setSky` ran on every render, asked
+ * for the next one, and the map never idled through any dawn or dusk.
+ *
+ * The first test walks the page's own pipeline — clock -> solar hour -> placement
+ * -> stepped height -> spec — across five seconds of a Kolkata dawn at 60 frames
+ * a second. It is run both ways on purpose: unstepped it must produce a new spec
+ * on every frame, or the test would pass against the bug it is named for.
+ */
+const KOLKATA_LON = 88.3659;
+/** heat-map-app's `wardSolarHour`, restated: local SOLAR time from a UTC instant. */
+const solarHourAt = (ms) => ((((ms / 3_600_000) % 24) + KOLKATA_LON / 15) % 24 + 24) % 24;
+const elevationAt = (ms) =>
+  sunPlacement(solarHourAt(ms), dayOfYearUtc(ms), KOLKATA_LAT).elevationDeg;
+
+test('five seconds of dawn ask for at most two skies, not three hundred', () => {
+  const dawn = Date.UTC(2026, 9, 12, 0, 30);            // 06:00 IST, sun ~2.7° up
+  const at = elevationAt(dawn);
+  assert.ok(at > -8 && at < 12, `the instant must sit on the twilight ramp; elevation was ${at}`);
+
+  const stepped = new Set(), raw = new Set();
+  let frames = 0;
+  for (let ms = dawn; ms < dawn + 5000; ms += 1000 / 60) {
+    frames++;
+    const elevation = elevationAt(ms);
+    stepped.add(JSON.stringify(maplibreSky(skyElevationStep(elevation), 0.2)));
+    raw.add(JSON.stringify(maplibreSky(elevation, 0.2)));
+  }
+  assert.equal(raw.size, frames, 'unstepped, every frame is a new spec — that is the defect');
+  assert.ok(stepped.size <= 2, `stepped, ${stepped.size} specs in ${frames} frames; the guard cannot hold`);
+});
+
+test('one millisecond never moves the sky, anywhere on the ramp', () => {
+  let changes = 0, instants = 0;
+  // the whole of an October dawn, sampled every 7 s, each compared with 1 ms later
+  for (let ms = Date.UTC(2026, 9, 11, 23, 40); ms < Date.UTC(2026, 9, 12, 1, 15); ms += 7000) {
+    instants++;
+    const a = JSON.stringify(maplibreSky(skyElevationStep(elevationAt(ms)), 0));
+    const b = JSON.stringify(maplibreSky(skyElevationStep(elevationAt(ms + 1)), 0));
+    if (a !== b) changes++;
+  }
+  // a step boundary can fall inside a sampled millisecond; a loop is every one of them
+  assert.ok(changes <= 1, `${changes} of ${instants} millisecond steps changed the sky`);
+});
+
+/**
+ * …AND THE STEP IS TOO SMALL TO SEE. The numbers quoted beside
+ * `SKY_ELEVATION_STEP_DEG`, re-measured here so the comment cannot outlive them:
+ * across the ramp, in every palette and at every cloud cover, one step moves no
+ * 8-bit channel by more than one level. A coarser constant fails this before it
+ * reaches a screen.
+ */
+test('one step of sky is at most one 8-bit level, in every palette', () => {
+  const channels = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const perDegree = Math.round(1 / SKY_ELEVATION_STEP_DEG);
+  let worstChannel = 0, worstBlend = 0;
+  for (const [environment, classic] of [['dark', false], ['studio', false], ['studio', true]]) {
+    for (const cloud of [0, 0.2, 0.5, 1]) {
+      let previous = null;
+      for (let k = -9 * perDegree; k <= 13 * perDegree; k++) {
+        const sky = maplibreSky(skyElevationStep(k / perDegree), cloud, environment, classic);
+        if (previous) {
+          const now = [...channels(sky['sky-color']), ...channels(sky['horizon-color'])];
+          const was = [...channels(previous['sky-color']), ...channels(previous['horizon-color'])];
+          for (let i = 0; i < 6; i++) worstChannel = Math.max(worstChannel, Math.abs(now[i] - was[i]));
+          worstBlend = Math.max(worstBlend,
+            Math.abs(sky['sky-horizon-blend'] - previous['sky-horizon-blend']));
+        }
+        previous = sky;
+      }
+    }
+  }
+  assert.ok(worstChannel <= 1, `a step moved a colour channel by ${worstChannel}/255`);
+  assert.ok(worstBlend < 0.003, `a step moved the horizon blend by ${worstBlend}`);
+});
+
+test('the stepped height is the nearest step, and noon and night are untouched', () => {
+  assert.equal(skyElevationStep(2.6549), 2.7);
+  assert.equal(skyElevationStep(-4.214), -4.2);
+  assert.equal(skyElevationStep(0.04), 0);
+  assert.ok(Math.abs(skyElevationStep(71.337) - 71.337) <= SKY_ELEVATION_STEP_DEG / 2 + 1e-12);
+  // off the ramp the sky was already constant; stepping must not have moved it
+  assert.deepEqual(maplibreSky(skyElevationStep(71.337), 0.2), maplibreSky(71.337, 0.2));
+  assert.deepEqual(maplibreSky(skyElevationStep(-47.21), 0.2), maplibreSky(-47.21, 0.2));
+});
+
+/** The wiring: the page's `syncSky` must ask for the sky THROUGH the step. */
+test('heat-map-app asks for the sky at the stepped height', async () => {
+  const app = await read('src/scripts/climate-engine/heat-map-app.ts');
+  assert.match(app, /maplibreSky\(\s*skyElevationStep\(currentSun\(\)\.placement\.elevationDeg\),/,
+    'an unstepped elevation here is a new spec every frame, and setSky on every render');
+  const calls = app.match(/\bmaplibreSky\(/g) ?? [];
+  assert.equal(calls.length, 1, `maplibreSky is called ${calls.length} times; each one needs the step`);
 });
 
 /**
