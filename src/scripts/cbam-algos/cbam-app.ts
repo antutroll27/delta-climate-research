@@ -1919,7 +1919,28 @@ export function initCbam(): void {
    */
   let lastRoutePick = '';
 
-  async function ensurePack(): Promise<EstimatorPack | null> {
+  /**
+   * ONE LOAD IN FLIGHT, SHARED BY EVERY CALLER. Two listeners ask for the pack before it has
+   * arrived (the code field's focus and its change), and onAdd can be a third. They always
+   * shared one download (loadPack's own promise), but each then ran the rest of this function
+   * for itself: its own hash of the pack, and, when that came back, its own rebuild of the
+   * origin list — which puts the list back on "Select origin…". The first caller populated the
+   * list; the second, finishing later, wiped whatever origin and route had been chosen in
+   * between, leaving the route control disabled and Add answering "Complete the line first".
+   *
+   * The gap is normally under a millisecond, which is why it hid. It is as wide as the second
+   * hash is slow: a 37 MB pack on a slow device, or a throttled CI runner, where it failed one
+   * test three times in a row (run 38459464137). Sharing the promise means the list is built
+   * once. A failed load clears it, so the next call tries again as before.
+   */
+  let ensuring: Promise<EstimatorPack | null> | null = null;
+  function ensurePack(): Promise<EstimatorPack | null> {
+    if (pack) return Promise.resolve(pack);
+    ensuring ??= loadAndPopulate().finally(() => { ensuring = null; });
+    return ensuring;
+  }
+
+  async function loadAndPopulate(): Promise<EstimatorPack | null> {
     if (pack) return pack;
     status!.textContent = 'Loading published rule values…';
     // Both awaits land in local variables first, and `pack`/`snapshot` are only assigned once

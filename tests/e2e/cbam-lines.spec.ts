@@ -1029,6 +1029,39 @@ test.describe('multi-line CBAM estimate — the Add guard and failure surfacing'
     await expect(page.locator('.cb-line')).toHaveCount(2);
   });
 
+  test('a second caller of the pack loader does not reset an origin already chosen', async ({ page, browserName }) => {
+    // THE RACE BEHIND THREE CI FAILURES OF THE TEST ABOVE (run 38459464137, 13 Oct 2026), made
+    // deterministic. Two things ask for the pack before it has arrived: the code field's focus
+    // listener and its change listener. They shared one download but each then hashed the pack
+    // and, when its own hash came back, REBUILT THE ORIGIN LIST, putting it back on "Select
+    // origin…". Normally the two finish within a millisecond of each other, before anyone can
+    // choose an origin. When the second hash is slow, the visitor (or a test) has already picked
+    // an origin and a route, and the second caller wipes both: the route control goes disabled
+    // and Add does nothing, with "Complete the line first" in the status line.
+    //
+    // Here every digest is later than the one before it, so the second caller always finishes
+    // well after the first. Chromium only: this is the page's own sequencing, not an engine's.
+    test.skip(browserName !== 'chromium', 'engine-independent; covered in Chromium');
+    await page.addInitScript(() => {
+      const real = crypto.subtle.digest.bind(crypto.subtle);
+      let calls = 0;
+      crypto.subtle.digest = (algorithm: AlgorithmIdentifier, data: BufferSource): Promise<ArrayBuffer> => {
+        const wait = 150 + 450 * calls;
+        calls += 1;
+        return new Promise((resolve, reject) => { setTimeout(() => { real(algorithm, data).then(resolve, reject); }, wait); });
+      };
+    });
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, GOOD_LINE);
+    await expect(page.locator('#cbOut')).toContainText('€');
+    // Long enough for every delayed hash to have come back.
+    await page.waitForTimeout(2500);
+    await expect(page.locator('#cbCountry')).toHaveValue(GOOD_LINE.country);
+    await expect(page.locator('#cbRoute')).toBeEnabled();
+    await expect(page.locator('#cbRoute')).toHaveValue(GOOD_LINE.route);
+    await expect(page.locator('#cbOut')).toContainText('€');
+  });
+
   test('a failure inside onAdd surfaces to #cbStatus and re-enables #cbAdd', async ({ page }) => {
     // Pins item 7 (quality review item 1): with crypto.subtle.digest forced to reject, clicking
     // Add used to do nothing visible at all.
