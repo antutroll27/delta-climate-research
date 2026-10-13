@@ -33,8 +33,8 @@ will ever fill it. It is the engine's quarter key carrying "no price published".
 person can read about it must come from the row's own `sourceLocator`, never from the quarter key.
 
 The Commission's price page on 2026-10-13 shows no 2027 price. It also shows a Q3 2026 price,
-published 5 October 2026. Recording that is out of scope here (spec section 7) and is reported
-to the owner as its own change.
+published 5 October 2026. Recording that is out of scope here (spec section 7). The owner agreed on
+2026-10-14 that it is added as its own later change.
 
 ## Measured before writing this plan
 
@@ -51,7 +51,8 @@ The last row conflicts with the spec. Section 4.1 says no vendored file changes.
 attaches that note to every line whose price row is pending, the page prints notes verbatim, and
 "the 2027-Q1 certificate price" names a figure that will never exist. The safer reading is taken:
 one sentence in the engine is reworded so it is true of a pending row in either regime. No figure,
-status or selector moves. It is its own upstream commit so it can be reviewed, or dropped, alone.
+status or selector moves. It is its own upstream commit so it can be reviewed alone. The owner approved the
+reworded sentence on 2026-10-14.
 
 ## Traps that bind this plan
 
@@ -142,17 +143,17 @@ price row, and it is tested on such a pack.
 that is on its way. It becomes "Certificate price · imports in 2027-Q1" and "none published". The
 same words serve 2026-Q3. A published price is unchanged apart from the label.
 
-### Task B4. The banner (awaiting the owner's approval)
+### Task B4. The banner (option A approved 2026-10-14)
 
 `src/pages/cbam/cbam-calculator.astro` and `BANNER_71` in `tests/unit/cbam-render.test.mjs`. The
-two sentences beginning "This tool prices 2026 imports" are replaced. Three options go to the
-owner. The one implemented is marked in the page source as awaiting approval. The banner cannot
-read the pack, so it states no date; the dated statement is the pack row's own locator.
+two sentences beginning "This tool prices 2026 imports" are replaced. Three options went to the
+owner, who approved option A as drafted on 2026-10-14. The banner is markup and cannot read the
+pack, so its "as at" date is typed, and a test fails if it is not the pack manifest's own date.
 
 **The options.** Each replaces the sentences from "This tool prices 2026 imports" to "labelled
 what-if". The date is the pack's own and is checked by a test.
 
-- **A (implemented, awaiting approval).** "This tool counts certificates for 2026, 2027 and 2028
+- **A (implemented; approved 2026-10-14).** "This tool counts certificates for 2026, 2027 and 2028
   imports, and shows a cost only where the Commission has published a certificate price. For 2026
   the price is set per quarter. From 2027 it is set weekly: none published as at 18 August 2026,
   so a 2027 or 2028 import shows certificates and no cost. No final figure exists for any of these
@@ -169,7 +170,7 @@ what-if". The date is the pack's own and is checked by a test.
   shown, no final figure exists — the cross-sectoral correction factor is unpublished — so any
   number below is a labelled what-if."
 
-A is recommended: it is the only one that says in so many words what a 2027 or 2028 import
+A was recommended and chosen: it is the only one that says in so many words what a 2027 or 2028 import
 returns, which is the sentence the old banner got wrong.
 
 ### Task B5. Unit tests

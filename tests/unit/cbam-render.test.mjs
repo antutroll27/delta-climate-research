@@ -159,8 +159,7 @@ const BANNER_71 =
   '<div class="cb-banner" role="note"> '
   + 'Prototype estimator · Commission default values or your own verified figures · '
   + 'decision-support, not a declaration. Computed in your browser from the published rules, '
-  // WORDING AWAITING THE OWNER'S APPROVAL (drafted 2026-10-13): from 'This tool counts' to
-  // 'labelled what-if'. When the approved wording lands, change it here in the same commit.
+  // Wording approved 2026-10-14: from 'This tool counts' to 'labelled what-if'.
   + 'and never sent anywhere. This tool counts certificates for 2026, 2027 and 2028 imports, '
   + 'and shows a cost only where the Commission has published a certificate price. For 2026 '
   + 'the price is set per quarter. From 2027 it is set weekly: none published as at '
