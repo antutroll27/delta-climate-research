@@ -25,6 +25,13 @@ jobs:
     # c2b7bbb was cancelled at 21.8 min once test:py grew by the tree-shading self-check.
     # 30 is a ceiling against a hung step, not a budget.
     # 2026-09-06: the verify step ran 26.6 min on 2a35c56 (two flaky retries, ~6 min, plus the solar specs, ~3 min); 40 keeps it a ceiling.
+    # 2026-10-13: it stopped being only a ceiling. Six runs between 10-07 and 10-12 were cancelled
+    # here with the browser contracts still running (five of them while it was dawn or dusk in
+    # Kolkata: the heat map repainted without rest in "Now", fixed the same day). The limit is
+    # unchanged; playwright.config.ts now sets a `globalTimeout` of 33 min in CI so that an
+    # overrun on a runner with quick setup ends as a failure with a summary instead of a
+    # cancellation with nothing. Measured: the runner ends the job 38.8-39.0 min after its first
+    # log line, and setup plus the static checks take 3.1-6.2 of that.
     timeout-minutes: 40
 
     steps:
@@ -147,11 +154,24 @@ jobs:
       # contracts" step existed to do. Keeping both ran the whole e2e suite twice
       # per CI run for no added coverage.
       # `verify` is `verify:static` followed by the browser contracts.
+      # In CI the browser contracts print one line per test with its duration (the `list`
+      # reporter beside `github`; see playwright.config.ts), so this step's log says where the
+      # time went even when the run is cancelled before its summary.
       - name: Verify build, publication and browser contracts
         run: npm run ${{ steps.scope.outputs.browser == 'true' && 'verify' || 'verify:static' }}
 
-      - name: Upload browser failure artifacts
-        if: failure()
+      # ON SUCCESS TOO (it was `if: failure()`), for one file: test-results/durations.json, the
+      # json reporter's record of how long every test took. A passing run is the baseline a slow
+      # one is compared with, and until now passing runs left none. `always()` rather than
+      # `!cancelled()`: if a cancelled job is still given this step, the traces it has are worth
+      # having (not yet observed either way on a job stopped at its limit).
+      # It stays small: traces are still recorded only on a test's first retry
+      # (`trace: 'on-first-retry'`), so a clean pass uploads the json and the few screenshots
+      # specs save for themselves, well under a megabyte; a failing run uploads what it always
+      # did. When the browser contracts did not run there is no directory and nothing is uploaded.
+      # Seven days, as before: these are for diagnosing the run in front of you, not an archive.
+      - name: Upload browser results and durations
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-results
