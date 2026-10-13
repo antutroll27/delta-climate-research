@@ -566,7 +566,9 @@ export function renderOutlookWhy(view: Outlook): string {
     label: 'Benchmark',
   });
 
-  const bar = rows.map((r) => `<span class="${r.cls}" style="flex-grow:${
+  // A part that is zero draws no segment (it would be a zero-width box holding a gap open); its
+  // legend row still stands and says so.
+  const bar = rows.filter((r) => !new D(r.value).isZero()).map((r) => `<span class="${r.cls}" style="flex-grow:${
     new D(r.value).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toFixed()}"></span>`).join('');
   const aria = rows.map((r) => `${r.label} ${count1(r.value)}`).join(', ');
   const legend = rows.map((r) => `<li>

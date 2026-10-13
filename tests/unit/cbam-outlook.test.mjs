@@ -508,7 +508,9 @@ test('every number on the strip is one of the view\'s numbers, rounded from the 
 
   // The bar's segments are the split's own values, not a second calculation.
   const bar = renderOutlookWhy(view).match(/flex-grow:([0-9.]+)/g).map((m) => m.slice('flex-grow:'.length));
-  assert.deepEqual(bar, ['86.4', '11.1825', '0']);
+  assert.deepEqual(bar, ['86.4', '11.1825'], 'the benchmark part is zero and draws no segment');
+  assert.match(text(renderOutlookWhy(view)), /Benchmark for route \(C\) does not change by 2028.* 0\.0$/,
+    'but its legend row is still there, saying so');
 });
 
 test('rounding is half up on the decimal, with thousands separators, and never prints a negative zero', () => {

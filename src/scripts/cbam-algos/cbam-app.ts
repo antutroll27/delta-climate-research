@@ -37,6 +37,7 @@ import {
   type Line, type Totals, type YearThreshold,
 } from '../cbam-lines.ts';
 import { ROUTE_GLOSSARY } from '../cbam-route-glossary.ts';
+import { outlook, outlookPriceSlots, renderOutlook, type Outlook } from '../cbam-outlook.ts';
 
 const PACK_URL = '/cbam/estimator-pack.json';
 
@@ -1845,6 +1846,7 @@ export function initCbam(): void {
   const add = $<HTMLButtonElement>('cbAdd'), csvBtn = $<HTMLButtonElement>('cbCsv');
   const docBtn = $<HTMLButtonElement>('cbDoc'), printEl = $('cbPrint');
   const outWrap = $('cbOutWrap');
+  const outlookEl = $('cbOutlook');
   if (!cn || !country || !route || !mass || !date || !out || !status) return;
 
   /**
@@ -2203,10 +2205,16 @@ export function initCbam(): void {
     ref: ref?.value ?? '',
   });
 
-  function run(): void {
+  /**
+   * The single-line preview. Returns the line it priced, or null when it showed an instruction
+   * instead of an estimate — which is how run() below knows whether there is a shipment for the
+   * three-year strip to be about. A refused estimate still returns its line: the strip then shows
+   * the engine's reason in each year, which is the honest picture of that line.
+   */
+  function runPreview(): EstimatorInput | null {
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value || !date!.value) {
       out!.innerHTML = '<p class="cb-idle">Choose a good, origin, route, mass and import date to see the provisional exposure.</p>';
-      return;
+      return null;
     }
     // REFUSE AN IMPOSSIBLE MASS RATHER THAN PRICING IT. `min="0"` on the input is
     // inert here — there is no form and no submit, so constraint validation never
@@ -2242,7 +2250,7 @@ export function initCbam(): void {
     // so that editing the .astro cannot silently disarm it.
     if (!nonNegativeDecimal(mass!.value)) {
       out!.innerHTML = '<p class="cb-idle">Net mass must be a number of tonnes, zero or greater.</p>';
-      return;
+      return null;
     }
     // The verified panel is read through the SAME parse the added line uses (readVerified's own
     // doc), and its refusals render in the SAME idle-prompt shape as the mass refusal above —
@@ -2253,15 +2261,18 @@ export function initCbam(): void {
     const v = readVerified();
     if ('error' in v) {
       out!.innerHTML = `<p class="cb-idle">${esc(v.error)}</p>`;
-      return;
+      return null;
     }
+    // ONE object, priced here and handed to the strip, so the three-year view is about exactly
+    // the line this card shows and cannot be built from a second reading of the form.
+    const input: EstimatorInput = {
+      cn: cn!.value, country: country!.value, route: route!.value,
+      massT: mass!.value, date: date!.value,
+      emissionsScope: (scope?.value as 'direct' | 'direct_and_indirect') ?? 'direct_and_indirect',
+      verified: verifiedInputOf(v.ok),
+    };
     try {
-      const e = decorateSnapshot(estimateFromPack(pack, {
-        cn: cn!.value, country: country!.value, route: route!.value,
-        massT: mass!.value, date: date!.value,
-        emissionsScope: (scope?.value as 'direct' | 'direct_and_indirect') ?? 'direct_and_indirect',
-        verified: verifiedInputOf(v.ok),
-      }), snapshot);
+      const e = decorateSnapshot(estimateFromPack(pack, input), snapshot);
       // The threshold statement needs only the good and the mass, so it survives a
       // selector the estimate itself cannot price — a refused line still gets told
       // whether it is even in scope for CBAM this year. It renders ABOVE the
@@ -2300,13 +2311,76 @@ export function initCbam(): void {
       // both previous times. The card passes the same predicate over its own estimate.
       out!.innerHTML = t + renderResult(e)
         + renderAttestation({ tier: e.stamp.tier, verifiedRef: v.ok.verifiedRef }, hasFigure(e));
+      return input;
     } catch (err) {
       // A DomainError is the engine refusing, and it names what is missing. Show it
       // rather than a generic failure — the reason is the useful part.
       out!.innerHTML = `<div class="cb-res cb-unavail">
         <div class="cb-tag unavail">No estimate</div>
         <p class="cb-reason">${esc((err as Error).message)}</p></div>`;
+      return null;
     }
+  }
+
+  /**
+   * The three-year strip's state. `outlookView` is what is on screen; `assumedPriceText` is what
+   * the visitor has typed in the strip's price box.
+   *
+   * THE PRICE LIVES HERE AND NOWHERE ELSE. It is a variable in this closure: never written to
+   * localStorage, sessionStorage, a cookie or the URL, never put in the CSV or the printable
+   * document (neither reads this variable, and the strip is not on screen in multi-line mode,
+   * where both are built), never sent anywhere. The page promises that what is entered stays in
+   * the browser; for this number it does not even outlive the page. cbam-lines.spec.ts asserts
+   * the storage and network halves of that in a browser.
+   */
+  let outlookView: Outlook | null = null;
+  let assumedPriceText = '';
+
+  /**
+   * Draw the strip for a line, or clear it.
+   *
+   * IT WRITES ITS OWN CONTAINER AND NOTHING ELSE. #cbOutlook sits after #cbOut with
+   * aria-live="off": the result card above is already announced, and three more years plus a
+   * table re-announced on every keystroke would bury the one figure the visitor asked for. It
+   * reads no form field — the line arrives as the argument — so it cannot join the ordering
+   * problems the good, origin and route controls have had with each other.
+   *
+   * THE WHOLE STRIP IS REBUILT, so what the visitor did to it has to be carried across: whether
+   * "Show the working" is open, and whether the caret was in the price box (the mass field
+   * re-renders on a 250 ms debounce, long enough to have tabbed into the box meanwhile).
+   */
+  function paintOutlook(line: EstimatorInput | null): void {
+    if (!outlookEl) return;
+    outlookView = line && pack ? outlook(pack, line) : null;
+    if (!outlookView) {
+      outlookEl.innerHTML = '';
+      return;
+    }
+    const open = outlookEl.querySelector('details')?.open ?? false;
+    const inPriceBox = document.activeElement instanceof HTMLElement
+      && document.activeElement.id === 'cbOlPrice';
+    outlookEl.innerHTML = renderOutlook(outlookView, assumedPriceText, open);
+    if (inPriceBox) outlookEl.querySelector<HTMLInputElement>('#cbOlPrice')?.focus();
+  }
+
+  /**
+   * The visitor typed in the price box. Refill the three slots the price changes and leave the
+   * box itself alone — replacing it would drop the caret in the middle of a number.
+   */
+  function onOutlookInput(ev: Event): void {
+    const box = ev.target;
+    if (!(box instanceof HTMLInputElement) || box.id !== 'cbOlPrice' || !outlookEl || !outlookView) return;
+    assumedPriceText = box.value;
+    const slots = outlookPriceSlots(outlookView, assumedPriceText);
+    for (const [name, html] of Object.entries(slots)) {
+      const slot = outlookEl.querySelector(`[data-ol="${name}"]`);
+      if (slot) slot.innerHTML = html;
+    }
+  }
+
+  /** The preview and, beneath it, the same shipment in each covered year. */
+  function run(): void {
+    paintOutlook(runPreview());
   }
 
   /** One line's estimate, decorated with the real pack snapshot via the single shared
@@ -2536,6 +2610,10 @@ export function initCbam(): void {
       run();
       return;
     }
+    // The three-year strip is about ONE previewed line. With lines in the document there is no
+    // such line on screen, and a strip left over from the last preview would sit under a
+    // document total it has nothing to do with.
+    paintOutlook(null);
     const pairs = safeEstimates(lines);
     lastPairs = pairs;
     const ok = pairs.filter((p) => p.e !== null);
@@ -2933,4 +3011,5 @@ export function initCbam(): void {
   docBtn?.addEventListener('click', onDoc);
   out.addEventListener('click', onOutClick);
   out.addEventListener('change', onOutClick);
+  outlookEl?.addEventListener('input', onOutlookInput);
 }

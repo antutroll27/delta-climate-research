@@ -1183,3 +1183,249 @@ test.describe('multi-line CBAM estimate — accessibility', () => {
     expect(results.violations).toEqual([]);
   });
 });
+
+// ── the three-year strip ─────────────────────────────────────────────────────
+// #cbOutlook sits under #cbOut and is drawn by run() for the ONE line being previewed
+// (cbam-outlook.ts does the arithmetic and the markup; cbam-outlook.test.mjs pins both against
+// the pack). What only a browser can show is the wiring: that run() hands the strip the line it
+// priced, that renderAll() clears it in multi-line mode, that the price box keeps its caret, and
+// that the number typed there goes nowhere. All of that lives in closures inside initCbam().
+//
+// 100 t of welded tube from India on route (C): 329.8275 / 376.755 / 427.41 certificates,
+// derived by hand in the unit test from the pack's rows.
+const TUBE_LINE: LineInput = { cn: '73063077', country: 'IN', route: '(C)', mass: '100', date: '2026-03-15' };
+
+test.describe('CBAM estimate — the three-year strip', () => {
+  test('the previewed line is shown in 2026, 2027 and 2028, with the cause of the rise', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, TUBE_LINE);
+    const strip = page.locator('#cbOutlook .cb-ol');
+    await expect(strip).toBeVisible();
+    await expect(strip.locator('.cb-card-label')).toHaveText('The same shipment, 2026 to 2028');
+    await expect(strip.locator('.cb-tag')).toHaveText('Law as published · 18 Aug 2026');
+
+    const cards = strip.locator('.cb-ol-yr');
+    await expect(cards).toHaveCount(3);
+    await expect(cards.nth(0)).toContainText('2026');
+    await expect(cards.nth(0).locator('.cb-ol-n')).toHaveText('329.8');
+    await expect(cards.nth(0)).toContainText('€24,855.80');
+    await expect(cards.nth(0)).toContainText('price published, €75.36');
+    await expect(cards.nth(1).locator('.cb-ol-n')).toHaveText('376.8');
+    await expect(cards.nth(1)).toContainText('+14.2% on 2026');
+    await expect(cards.nth(2).locator('.cb-ol-n')).toHaveText('427.4');
+    await expect(cards.nth(2)).toContainText('+29.6% on 2026');
+    for (const i of [1, 2]) {
+      await expect(cards.nth(i)).toContainText('none published');
+      await expect(cards.nth(i)).toContainText('as at 18 Aug 2026');
+      await expect(cards.nth(i)).not.toContainText('€');
+    }
+
+    // THE STRIP AND THE CARD ABOVE IT ARE ONE LINE. The 2026 card is the result card's own
+    // figure (329.828 there, to three places), from the same engine call's input.
+    await expect(page.locator('#cbOut .cb-n')).toHaveText('329.828');
+    await expect(page.locator('#cbOut .cb-cost')).toHaveText('€24,855.80');
+
+    await expect(strip.locator('.cb-ol-h')).toHaveText('Why it rises by 97.6 certificates by 2028');
+    const legend = strip.locator('.cb-ol-legend li');
+    await expect(legend).toHaveCount(3);
+    await expect(legend.nth(0)).toContainText('Mark-up on default values rises from 10% to 30%');
+    await expect(legend.nth(0)).toContainText('With verified emissions it no longer applies.');
+    await expect(legend.nth(0).locator('b')).toHaveText('+86.4');
+    await expect(legend.nth(1)).toContainText('Free allocation retained falls from 97.5% to 90%');
+    await expect(legend.nth(1).locator('b')).toHaveText('+11.2');
+    await expect(legend.nth(2)).toContainText('Benchmark for route (C) does not change by 2028');
+    await expect(legend.nth(2).locator('b')).toHaveText('0.0');
+    await expect(strip.locator('.cb-ol-stack')).toHaveAttribute('aria-label',
+      'Mark-up 86.4, Free allocation retained 11.2, Benchmark 0.0');
+
+    // The pack's own sentence about the price, once, and no forecast anywhere.
+    await expect(strip).toContainText('From 2027 the Commission sets a weekly certificate price');
+    await expect(strip).not.toContainText(/quarterly|will pay|pay less|\byet\b/i);
+  });
+
+  test('the same three counts whichever of the three years the import date is in', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, TUBE_LINE);
+    const counts = page.locator('#cbOutlook .cb-ol-n');
+    for (const date of ['2027-03-15', '2028-03-15', '2026-03-15']) {
+      await page.fill('#cbDate', date);
+      await page.dispatchEvent('#cbDate', 'change');
+      await expect(page.locator('#cbOut')).toContainText(`imports in ${date.slice(0, 4)}-Q1`);
+      await expect(counts).toHaveText(['329.8', '376.8', '427.4']);
+    }
+  });
+
+  test('"Show the working" opens from the keyboard and holds the engine\'s figures', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, TUBE_LINE);
+    const strip = page.locator('#cbOutlook .cb-ol');
+    const summary = strip.locator('summary');
+    await expect(strip.locator('table')).toBeHidden();
+    await summary.focus();
+    await page.keyboard.press('Enter');
+    await expect(strip.locator('table')).toBeVisible();
+    const rows = strip.locator('tbody tr');
+    await expect(rows).toHaveCount(4);
+    await expect(rows.nth(0)).toContainText('Emissions counted');
+    await expect(rows.nth(0).locator('td')).toHaveText([/^475\.2\s*mark-up 10%$/, /^518\.4\s*mark-up 20%$/, /^561\.6\s*mark-up 30%$/]);
+    await expect(rows.nth(1).locator('td')).toHaveText([/^−145\.373\s*1\.491 × 97\.5%$/, /^−141\.645\s*1\.491 × 95%$/, /^−134\.19\s*1\.491 × 90%$/]);
+    await expect(rows.nth(2).locator('td')).toHaveText(['329.828', '376.755', '427.41']);
+    await expect(rows.nth(3).locator('td')).toHaveText([/^€24,855\.80\s*published €75\.36$/, /^—\s*none published$/, /^—\s*none published$/]);
+
+    // It stays open when the line changes under it: the strip is rebuilt, the choice is kept.
+    await page.fill('#cbMass', '200');
+    await expect(rows.nth(2).locator('td')).toHaveText(['659.655', '753.51', '854.82']);
+    await expect(strip.locator('details')).toHaveAttribute('open', '');
+  });
+
+  test('a price typed in the box fills 2027 and 2028 only, keeps the caret, and goes nowhere', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, TUBE_LINE);
+    const strip = page.locator('#cbOutlook .cb-ol');
+    const cards = strip.locator('.cb-ol-yr');
+    const box = page.locator('#cbOlPrice');
+    await expect(cards).toHaveCount(3);
+    await expect(page.getByLabel('Your own price assumption, € per certificate')).toBeVisible();
+
+    // From here on, nothing may leave the page. The pack is already loaded, so any request at
+    // all during typing is one too many.
+    const requests: string[] = [];
+    page.on('request', (r) => requests.push(r.url()));
+
+    await box.focus();
+    await page.keyboard.type('80');
+    // 376.755 × 80 and 427.41 × 80.
+    await expect(cards.nth(1)).toContainText('€30,140.40');
+    await expect(cards.nth(1)).toContainText('at your assumed €80 · not a published price');
+    await expect(cards.nth(2)).toContainText('€34,192.80');
+    await expect(cards.nth(2)).toContainText('at your assumed €80 · not a published price');
+    // A PUBLISHED PRICE IS NEVER REPLACED: 2026 still shows the Commission's.
+    await expect(cards.nth(0)).toContainText('€24,855.80');
+    await expect(cards.nth(0)).toContainText('price published, €75.36');
+    await expect(cards.nth(0)).not.toContainText('assumed');
+    // The caret never left the box, so a second keystroke lands in it.
+    await expect(box).toBeFocused();
+    await page.keyboard.type('.5');
+    await expect(box).toHaveValue('80.5');
+    await expect(cards.nth(1)).toContainText('€30,328.78');   // 376.755 × 80.5 = 30,328.7775
+    await expect(cards.nth(1)).toContainText('at your assumed €80.50');
+    // The result card above is not the strip's to touch.
+    await expect(page.locator('#cbOut')).not.toContainText('assumed');
+    await expect(page.locator('#cbOut .cb-cost')).toHaveText('€24,855.80');
+
+    // It survives the strip being rebuilt by another field, as the same typed text.
+    await page.fill('#cbMass', '200');
+    await expect(cards.nth(0).locator('.cb-ol-n')).toHaveText('659.7');
+    await expect(page.locator('#cbOlPrice')).toHaveValue('80.5');
+    await expect(cards.nth(1)).toContainText('€60,657.56');   // 753.51 × 80.5 = 60,657.555
+
+    // NOT STORED, NOT SENT. The page promises that what is entered stays in the browser.
+    expect(requests).toEqual([]);
+    const stored = await page.evaluate(() => JSON.stringify({
+      local: { ...localStorage }, session: { ...sessionStorage }, cookie: document.cookie, url: location.href,
+    }));
+    expect(stored).not.toContain('80.5');
+
+    // Cleared, the years go back to saying what is true of them.
+    await page.fill('#cbOlPrice', '');
+    await expect(cards.nth(1)).toContainText('none published');
+    await expect(cards.nth(1)).not.toContainText('€');
+  });
+
+  test('the strip is about one previewed line: absent when idle, past the corpus, and in a document', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await expect(page.locator('#cbOutlook')).toBeEmpty();
+    await setLine(page, TUBE_LINE);
+    await expect(page.locator('#cbOutlook .cb-ol')).toBeVisible();
+
+    // 2029: no rules at all. The form's own refusal stands and the strip does not contradict it.
+    await page.fill('#cbDate', '2029-03-15');
+    await page.dispatchEvent('#cbDate', 'change');
+    await expect(page.locator('#cbRoute')).toBeDisabled();
+    await expect(page.locator('#cbOutlook')).toBeEmpty();
+
+    // A line in the document: the panel shows totals, and the strip is not about totals.
+    await addLine(page, TUBE_LINE);
+    await expect(page.locator('#cbOutlook')).toBeEmpty();
+    // And the price typed before is in neither export: the CSV is built from the lines alone.
+    await page.locator('[data-remove]').first().click();
+    await expect(page.locator('.cb-line')).toHaveCount(0);
+    await expect(page.locator('#cbOutlook .cb-ol')).toBeVisible();
+
+    // A mass the engine refuses shows an instruction, not an estimate, and so no strip.
+    await page.fill('#cbMass', '');
+    await expect(page.locator('#cbOutlook')).toBeEmpty();
+  });
+
+  test('a route with no default value shows the engine\'s reason in each year, and no split', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { ...TUBE_LINE, route: '(D)' });
+    await expect(page.locator('#cbOut')).toContainText('No estimate');
+    const cards = page.locator('#cbOutlook .cb-ol-yr');
+    await expect(cards).toHaveCount(3);
+    for (const i of [0, 1, 2]) {
+      await expect(cards.nth(i)).toContainText('No estimate');
+      await expect(cards.nth(i)).toContainText('The Commission publishes no applicable direct default value');
+      await expect(cards.nth(i).locator('.cb-ol-n')).toHaveCount(0);
+    }
+    await expect(page.locator('#cbOutlook .cb-ol-stack')).toHaveCount(0);
+    await expect(page.locator('#cbOutlook .cb-ol-work')).toBeHidden();
+    await expect(page.locator('#cbOlPrice')).toBeHidden();
+  });
+
+  test('verified figures: the count still rises, and no mark-up is named', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, TUBE_LINE);
+    await page.selectOption('#cbTier', 'actual-verified');
+    await page.fill('#cbSeeDirect', '2.0');
+    await page.check('#cbAttest');
+    const strip = page.locator('#cbOutlook .cb-ol');
+    // 200 − 145.3725 / 141.645 / 134.19
+    await expect(strip.locator('.cb-ol-n')).toHaveText(['54.6', '58.4', '65.8']);
+    await expect(strip.locator('.cb-ol-legend li')).toHaveCount(2);
+    await expect(strip).not.toContainText(/mark-up/i);
+    await expect(strip.locator('.cb-ol-h')).toHaveText('Why it rises by 11.2 certificates by 2028');
+  });
+
+  test('a good whose benchmark steps down in 2028 shows the step as its own part', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { cn: '72052100', country: 'IN', route: '(F)', mass: '100', date: '2026-03-15' });
+    const legend = page.locator('#cbOutlook .cb-ol-legend li');
+    await expect(page.locator('#cbOutlook .cb-ol-n')).toHaveText(['137.1', '166.1', '213.4']);
+    await expect(legend.nth(2)).toContainText('Benchmark for route (F) falls in 2028 (1.46 → 1.298)');
+    await expect(legend.nth(2).locator('b')).toHaveText('+14.6');
+    await expect(page.locator('#cbOutlook .cb-ol-stack > span')).toHaveCount(3);
+  });
+
+  test('at 320 px the page does not scroll sideways, and the working table scrolls inside its own box', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, TUBE_LINE);
+    const strip = page.locator('#cbOutlook .cb-ol');
+    await strip.locator('summary').click();
+    await page.fill('#cbOlPrice', '80');
+    await expect(strip.locator('table')).toBeVisible();
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBe(0);
+    // One card per row at this width, each inside the strip.
+    const boxes = await strip.locator('.cb-ol-yr').evaluateAll((els) =>
+      els.map((el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top }; }));
+    expect(new Set(boxes.map((b) => b.top)).size).toBe(3);
+    for (const b of boxes) { expect(b.left).toBeGreaterThanOrEqual(0); expect(b.right).toBeLessThanOrEqual(320); }
+    // The table's scroll box is reachable from the keyboard.
+    await expect(strip.locator('.cb-ol-scroll')).toHaveAttribute('tabindex', '0');
+  });
+
+  test('axe: the strip, with the working open and a price typed, has no automated WCAG violations', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { cn: '72052100', country: 'IN', route: '(F)', mass: '100', date: '2026-03-15' });
+    await page.locator('#cbOutlook summary').click();
+    await page.fill('#cbOlPrice', '80');
+    await expect(page.locator('#cbOutlook .cb-ol-yr').nth(1)).toContainText('your assumed');
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
+});
