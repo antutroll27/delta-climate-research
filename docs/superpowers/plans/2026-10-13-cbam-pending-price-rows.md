@@ -149,6 +149,29 @@ two sentences beginning "This tool prices 2026 imports" are replaced. Three opti
 owner. The one implemented is marked in the page source as awaiting approval. The banner cannot
 read the pack, so it states no date; the dated statement is the pack row's own locator.
 
+**The options.** Each replaces the sentences from "This tool prices 2026 imports" to "labelled
+what-if". The date is the pack's own and is checked by a test.
+
+- **A (implemented, awaiting approval).** "This tool counts certificates for 2026, 2027 and 2028
+  imports, and shows a cost only where the Commission has published a certificate price. For 2026
+  the price is set per quarter. From 2027 it is set weekly: none published as at 18 August 2026,
+  so a 2027 or 2028 import shows certificates and no cost. No final figure exists for any of these
+  years — the cross-sectoral correction factor is unpublished — so any number below is a labelled
+  what-if."
+- **B (shorter).** "This tool counts certificates for 2026, 2027 and 2028 imports. A cost appears
+  only for the 2026 quarters the Commission has priced. For 2027 and 2028 the price is weekly,
+  with none published as at 18 August 2026, so those imports show certificates and no cost. The
+  cross-sectoral correction factor is unpublished for all three years, so any number below is a
+  labelled what-if."
+- **C (closest to the spec's draft).** "This tool counts certificates for 2026, 2027 and 2028
+  imports, and shows a cost only for the quarters the Commission has priced. From 2027 the
+  certificate price is published weekly; none published as at 18 August 2026. For every year
+  shown, no final figure exists — the cross-sectoral correction factor is unpublished — so any
+  number below is a labelled what-if."
+
+A is recommended: it is the only one that says in so many words what a 2027 or 2028 import
+returns, which is the sentence the old banner got wrong.
+
 ### Task B5. Unit tests
 
 `tests/unit/cbam-render.test.mjs`:
