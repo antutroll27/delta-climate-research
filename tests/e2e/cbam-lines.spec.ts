@@ -1324,6 +1324,9 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(cards).toHaveCount(3);
     await expect(page.getByLabel('Your own price assumption, € per certificate')).toBeVisible();
 
+    // The graphs are a separate chunk, fetched when the strip first appears. Wait for them, so
+    // that fetch is not what the request log below catches or misses.
+    await expect(page.locator('#cbGraphs .cg-board')).toBeVisible();
     // From here on, nothing may leave the page. The pack is already loaded, so any request at
     // all during typing is one too many.
     const requests: string[] = [];
@@ -1356,12 +1359,17 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(page.locator('#cbOlPrice')).toHaveValue('80.5');
     await expect(cards.nth(1)).toContainText('€60,657.56');   // 753.51 × 80.5 = 60,657.555
 
+    // The graphs' own price box is held to the same promise: a second price, typed there.
+    await page.fill('#cgSecond', '123.75');
+    await expect(page.locator('[data-cg-card="cost"] .cg-t')).toContainText('€80.50 to €123.75');
+
     // NOT STORED, NOT SENT. The page promises that what is entered stays in the browser.
     expect(requests).toEqual([]);
     const stored = await page.evaluate(() => JSON.stringify({
       local: { ...localStorage }, session: { ...sessionStorage }, cookie: document.cookie, url: location.href,
     }));
     expect(stored).not.toContain('80.5');
+    expect(stored).not.toContain('123.75');
 
     // Cleared, the years go back to saying what is true of them.
     await page.fill('#cbOlPrice', '');
@@ -1466,5 +1474,163 @@ test.describe('CBAM estimate — the three-year strip', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
       .analyze();
     expect(results.violations).toEqual([]);
+  });
+});
+
+// ── the graphs ───────────────────────────────────────────────────────────────
+// #cbGraphs sits under the strip and draws the same previewed line (cbam-graphs.ts builds the
+// model, the sentences and the SVG; cbam-graphs.test.mjs pins all three against the pack). What
+// a browser adds: that the lazily loaded chunk arrives and paints the line on screen, that the
+// strip's price box drives the cost card, the year switch, the table toggles, the tooltip on
+// keyboard focus, and what a printer gets.
+//
+// KEPT CHEAP ON PURPOSE. Three tests, three page loads. The states test checks text the pure
+// module produced, so it runs in Chromium only; Firefox and WebKit run the two that can differ
+// by engine (focus, layout, print).
+test.describe('CBAM estimate — the graphs', () => {
+  test('the previewed line is drawn: five cards, one price control, exact values on focus', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await expect(page.locator('#cbGraphs')).toBeEmpty();
+    await setLine(page, TUBE_LINE);
+    const g = page.locator('#cbGraphs');
+    await expect(g.locator('.cg-card')).toHaveCount(5);
+    await expect(g.locator('.cg-t')).toHaveText([
+      'The same 100 t needs 29.6% more certificates in 2028 than in 2026.',
+      'of the rise to 2028 is the mark-up on default values. It no longer applies with verified data.',
+      'On default values the mark-up adds 129.6 certificates in 2028. It no longer applies with verified data.',
+      'In 2028, certificates cover 76 of every 100 tonnes of emissions counted. Free allocation covers the other 24.',
+      'No certificate price is published for 2027 and 2028. Type your own price above to see a cost.',
+    ]);
+    await expect(g.locator('.cg-big')).toHaveText('88.5%');
+
+    // The graphs and the strip are one line: the same three counts, to the last digit.
+    const steps = g.locator('[data-cg-card="steps"] .cg-m');
+    expect(await steps.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.v))).toEqual(['329.8275', '376.755', '427.41']);
+    await expect(page.locator('#cbOutlook .cb-ol-n')).toHaveText(['329.8', '376.8', '427.4']);
+
+    // NOTHING ROUNDED on the two reworked cards: square marks and flat ends only.
+    for (const id of ['steps', 'cost']) {
+      await expect(g.locator(`[data-cg-card="${id}"] svg circle`)).toHaveCount(0);
+      expect(await g.locator(`[data-cg-card="${id}"] svg [rx]`).evaluateAll((els) => els.filter((e) => Number(e.getAttribute('rx')) > 1).length)).toBe(0);
+    }
+
+    // The exact figure, from the keyboard.
+    await steps.nth(1).focus();
+    await expect(g.locator('.cg-tip')).toHaveClass(/on/);
+    await expect(g.locator('.cg-tip')).toContainText('2027: 376.755 certificates');
+    await expect(g.locator('.cg-tip')).toContainText('certificate price: none published, as at 18 Aug 2026');
+
+    // A table behind every card.
+    const tableBtn = g.locator('[data-cg-card="markup"] .cg-tbl-btn');
+    await expect(g.locator('#cgTbl-markup')).toBeHidden();
+    await tableBtn.focus();
+    await page.keyboard.press('Enter');
+    await expect(g.locator('#cgTbl-markup')).toBeVisible();
+    await expect(g.locator('#cgTbl-markup tbody tr').nth(2)).toHaveText(/2028\s*30%\s*427\.41\s*297\.81\s*\+129\.6/);
+
+    // The year switch changes the waffle and its sentence together.
+    await g.locator('[data-cg-year="0"]').click();
+    await expect(g.locator('[data-cg-card="charged"] .cg-t')).toHaveText(
+      'In 2026, certificates cover 69 of every 100 tonnes of emissions counted. Free allocation covers the other 31.');
+    await expect(g.locator('[data-cg="charged-mark"]')).toHaveAttribute('data-charged', '69');
+
+    // ONE PRICE CONTROL. The cost card starts empty; the strip's box fills it; a second price
+    // here makes a range. The published 2026 mark never moves.
+    const cost = g.locator('[data-cg-card="cost"]');
+    await expect(cost.locator('[data-xlo]')).toHaveCount(0);
+    await expect(cost.locator('[data-cg="published"]')).toHaveCount(2);
+    await page.fill('#cbOlPrice', '80');
+    await expect(cost.locator('.cg-t')).toHaveText('At your own €80 a certificate, 2028 comes to €34,193. That price is yours: no 2027 or 2028 price is published.');
+    await expect(cost.locator('[data-xlo]')).toHaveCount(3);
+    await page.fill('#cgSecond', '60');
+    await expect(cost.locator('.cg-t')).toContainText('At your own €60 to €80 a certificate, 2028 comes to €25,645 to €34,193.');
+    await expect(page.locator('#cgSecond')).toBeFocused();
+    expect(await cost.locator('[data-cg="published"]').first().getAttribute('data-v')).toBe('24855.80');
+    // A change elsewhere on the form redraws the graphs and keeps both prices and the open table.
+    await page.fill('#cbMass', '200');
+    await expect(g.locator('.cg-t').first()).toHaveText('The same 200 t needs 29.6% more certificates in 2028 than in 2026.');
+    await expect(page.locator('#cgSecond')).toHaveValue('60');
+    await expect(cost.locator('.cg-t')).toContainText('At your own €60 to €80');
+    await expect(g.locator('#cgTbl-markup')).toBeVisible();
+    // Cleared, the cost card goes back to saying what is true.
+    await page.fill('#cbOlPrice', '');
+    await page.fill('#cgSecond', '');
+    await expect(cost.locator('.cg-t')).toHaveText('No certificate price is published for 2027 and 2028. Type your own price above to see a cost.');
+  });
+
+  test('states: refused, verified, floored, past the corpus, and a document with lines', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'engine-independent; covered in Chromium');
+    await page.goto('/cbam/cbam-calculator/');
+    const g = page.locator('#cbGraphs');
+
+    // A route with no default value: one sentence, no chart.
+    await setLine(page, { ...TUBE_LINE, route: '(D)' });
+    await expect(g.locator('.cg-none')).toHaveText('Nothing to draw: this line has no estimate in any year. The reason is in the cards above.');
+    await expect(g.locator('svg')).toHaveCount(0);
+
+    // Verified figures: the mark-up cards say that none is applied, and draw no capsule.
+    await setLine(page, TUBE_LINE);
+    await page.selectOption('#cbTier', 'actual-verified');
+    await page.fill('#cbSeeDirect', '2.0');
+    await page.check('#cbAttest');
+    await expect(g.locator('[data-cg-card="markup"] .cg-t')).toHaveText('No mark-up is applied to this line: the figures are your own verified ones.');
+    await expect(g.locator('[data-cg-card="share"] .cg-t')).toHaveText('of the rise to 2028 is mark-up. These are your verified figures, so none is applied.');
+    await expect(g.locator('.cg-big')).toHaveText('0.0%');
+    await expect(g.locator('[data-cg-card="markup"] svg rect[rx]')).toHaveCount(0);
+    await expect(g.locator('[data-cg-card="steps"] .cg-t')).toHaveText('The same 100 t needs 20.5% more certificates in 2028 than in 2026.');
+
+    // Free allocation above the emissions counted: no split, no certificates, and the cards say so.
+    await page.fill('#cbSeeDirect', '1.0');
+    await expect(g.locator('[data-cg-card="share"] .cg-t')).toHaveText('The change to 2028 is not divided into causes for this line.');
+    await expect(g.locator('.cg-big')).toHaveText('—');
+    await expect(g.locator('[data-cg-card="charged"] .cg-t')).toHaveText('In 2028, free allocation covers all of the emissions counted. No certificates are due.');
+    await expect(g.locator('[data-cg-card="steps"] .cg-t')).toHaveText('The same 100 t needs the same certificates in 2028 as in 2026.');
+
+    // 2029: nothing is computed, so nothing is drawn.
+    await page.selectOption('#cbTier', 'default+markup');
+    await page.fill('#cbDate', '2029-03-15');
+    await page.dispatchEvent('#cbDate', 'change');
+    await expect(g).toBeEmpty();
+
+    // A document with lines shows totals; the graphs are about one previewed line and step aside.
+    await addLine(page, TUBE_LINE);
+    await expect(g).toBeEmpty();
+    await page.locator('[data-remove]').first().click();
+    await expect(g.locator('.cg-card')).toHaveCount(5);
+  });
+
+  test('320 px, axe, and paper: no sideways scroll, no violation, and a printer gets the tables', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { cn: '72052100', country: 'IN', route: '(F)', mass: '100', date: '2026-03-15' });
+    const g = page.locator('#cbGraphs');
+    await expect(g.locator('.cg-card')).toHaveCount(5);
+    await page.fill('#cbOlPrice', '60');
+    await page.fill('#cgSecond', '100');
+    await g.locator('[data-cg-card="cost"] .cg-tbl-btn').click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+    // Every plot fits inside its card.
+    const fits = await g.locator('.cg-plot svg').evaluateAll((els) => els.every((el) => {
+      const r = el.getBoundingClientRect(), c = el.closest('.cg-card')!.getBoundingClientRect();
+      return r.left >= c.left - 0.5 && r.right <= c.right + 0.5;
+    }));
+    expect(fits).toBe(true);
+
+    const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag22aa']).analyze();
+    expect(results.violations).toEqual([]);
+
+    // ON PAPER: each card's sentence and table, in black on white; no plot, no control.
+    await page.emulateMedia({ media: 'print' });
+    await expect(g.locator('.cg-plot').first()).toBeHidden();
+    await expect(g.locator('#cgSecond')).toBeHidden();
+    await expect(g.locator('.cg-tbl-btn').first()).toBeHidden();
+    for (const id of ['steps', 'share', 'markup', 'charged', 'cost']) await expect(g.locator(`#cgTbl-${id}`)).toBeVisible();
+    await expect(g.locator('.cg-t').first()).toBeVisible();
+    const paper = await g.locator('.cg-card').first().evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { bg: cs.backgroundColor, ink: getComputedStyle(el.querySelector('.cg-t')!).color };
+    });
+    expect(paper).toEqual({ bg: 'rgb(255, 255, 255)', ink: 'rgb(0, 0, 0)' });
+    await page.emulateMedia({ media: 'screen' });
   });
 });

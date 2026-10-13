@@ -202,6 +202,10 @@ import Footer from '../../components/layout/Footer.astro';
                three more years and a table after every keystroke would bury it. The strip is
                ordinary content, reachable by heading and by Tab. -->
           <div id="cbOutlook" aria-live="off"></div>
+          <!-- The graphs (cbam-graphs.ts), drawn under the strip for the same previewed line and
+               cleared with it. Not announced, for the reason the strip is not: every card's
+               sentence, table and marks are ordinary content, reachable by heading and by Tab. -->
+          <div id="cbGraphs" aria-live="off"></div>
           <p class="cb-source" id="cbProv"></p>
         </section>
       </div>
@@ -641,6 +645,152 @@ import Footer from '../../components/layout/Footer.astro';
   @media (max-width: 560px) {
     .cb-out .cb-ol-years { grid-template-columns: 1fr; }
     .cb-out .cb-ol th, .cb-out .cb-ol td { padding: 0.5rem 0.25rem; }
+  }
+
+  /* ── The graphs (cbam-graphs.ts → #cbGraphs) ─────────────────────────────────────────────
+     Five cards under the strip. DEPTH COMES FROM TONE, not from gloss: a quiet gradient, one
+     inset hairline, and a faint halo behind the two marks that carry one. No highlights, no
+     blurred shapes standing in for data. The two paper cards use the site's paper tone and
+     the paper steps of the chart colours.
+     Every colour a chart uses is one of the --cg-* tokens below, set per card tone, so a
+     plot never names a colour of its own. */
+  .cb-out #cbGraphs { min-width: 0; max-width: 100%; container-type: inline-size; }
+  .cb-out #cbGraphs:not(:empty) { margin-top: 1.6rem; }
+  .cb-out .cg-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.9rem; }
+  .cb-out .cg-h {
+    font-family: var(--font-mono); font-size: 0.69rem; font-weight: 400; text-transform: uppercase;
+    letter-spacing: 0.16em; color: var(--color-ink-muted);
+  }
+  .cb-out .cg-sub { font-family: var(--font-data); font-size: 0.68rem; color: var(--color-ink-faint); }
+  .cb-out .cg-none {
+    margin-top: 0.9rem; border-radius: 10px; padding: 1.15rem 1.25rem; background: var(--color-instrument);
+    font-family: var(--font-data); font-size: 0.75rem; line-height: 1.7; color: var(--color-ink-faint);
+  }
+  .cb-out .cg-board { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 0.9rem; }
+  @container (min-width: 560px) {
+    .cb-out .cg-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cb-out .cg-steps { grid-column: span 2; }
+  }
+  .cb-out .cg-card {
+    --cg-ink: var(--color-paper); --cg-muted: #a3b5b7; --cg-faint: #8499a0;
+    --cg-hair: rgb(140 200 208 / 0.16); --cg-well: rgb(255 255 255 / 0.045);
+    --cg-accent: var(--color-cyan); --cg-warm: var(--color-bronze);
+    --cg-neutral: #55727a; --cg-neutral-2: #33484e; --cg-surface: #0d2226;
+    --cg-markup: var(--color-chart-markup); --cg-allocation: var(--color-chart-allocation);
+    position: relative; min-width: 0; display: flex; flex-direction: column;
+    border-radius: 28px; padding: 1.4rem 1.4rem 1.1rem; color: var(--cg-ink);
+    background: linear-gradient(160deg, #0d2b2e, #0b1d21 55%, #0a171b);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), inset 0 0 0 1px rgb(111 202 214 / 0.06);
+  }
+  .cb-out .cg-card[data-paper] {
+    --cg-ink: #0b1416; --cg-muted: #3f5559; --cg-faint: #566b70;
+    --cg-hair: rgb(11 44 46 / 0.14); --cg-well: rgb(11 44 46 / 0.05);
+    --cg-accent: #0f7f8f; --cg-warm: #8a6426;
+    --cg-neutral: #8fa3a8; --cg-neutral-2: #c9d3d6; --cg-surface: var(--color-paper);
+    --cg-markup: var(--color-chart-markup-paper); --cg-allocation: var(--color-chart-allocation-paper);
+    background: linear-gradient(165deg, var(--color-paper-bright), #e6e9ec);
+    box-shadow: inset 0 1px 0 #fff;
+  }
+  .cb-out .cg-q {
+    font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--cg-faint);
+  }
+  .cb-out .cg-t {
+    margin-top: 0.5rem; font-size: 1.02rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.35;
+    max-width: 36ch; text-wrap: balance; color: var(--cg-ink);
+  }
+  .cb-out .cg-t b { font-weight: 800; }
+  .cb-out .cg-plot { margin: 1rem 0 0; flex: 1; display: flex; align-items: center; min-width: 0; }
+  .cb-out .cg-plot svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+  .cb-out .cg-plot text { font-family: var(--font-data); fill: var(--cg-muted); font-variant-numeric: tabular-nums; }
+  .cb-out .cg-plot .cg-num { fill: var(--cg-ink); font-weight: 600; }
+  .cb-out .cg-plot .cg-lab { font-family: var(--font-mono); letter-spacing: 0.14em; fill: var(--cg-faint); }
+  .cb-out .cg-plot .cg-faint { fill: var(--cg-faint); }
+  .cb-out .cg-plot .cg-hair { stroke: var(--cg-hair); stroke-width: 1; fill: none; }
+  .cb-out .cg-plot .cg-halo { filter: blur(16px); opacity: 0.5; }
+  .cb-out .cg-m { outline: none; }
+  .cb-out .cg-m:focus-visible { outline: 2px solid var(--cg-accent); outline-offset: 3px; }
+  .cb-out .cg-cell { transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
+
+  .cb-out .cg-share { align-items: center; text-align: center; }
+  .cb-out .cg-share .cg-q { align-self: flex-start; }
+  .cb-out .cg-share .cg-plot { justify-content: center; width: 100%; }
+  .cb-out .cg-big {
+    position: relative; margin-top: -4rem; font-size: clamp(3rem, 6vw, 4.2rem); font-weight: 300;
+    letter-spacing: -0.04em; line-height: 1; color: var(--cg-ink);
+  }
+  .cb-out .cg-big small { font-size: 0.45em; font-weight: 300; margin-left: 0.05em; }
+  .cb-out .cg-share .cg-t { margin: 1rem auto 0; font-weight: 500; font-size: 0.95rem; max-width: 30ch; }
+  .cb-out .cg-share .cg-foot { align-self: stretch; text-align: left; }
+
+  .cb-out .cg-foot { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; margin-top: 0.7rem; }
+  .cb-out .cg-cap { font-family: var(--font-data); font-size: 0.66rem; line-height: 1.6; color: var(--cg-faint); }
+  .cb-out .cg-tbl-btn, .cb-out .cg-mini button {
+    flex: none; cursor: pointer; min-height: 2.25rem; border: 1px solid var(--cg-hair); border-radius: 999px;
+    background: transparent; color: var(--cg-muted);
+  }
+  .cb-out .cg-tbl-btn {
+    padding: 0.4rem 0.8rem; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .cb-out .cg-tbl-btn[aria-expanded="true"], .cb-out .cg-mini button[aria-pressed="true"] {
+    background: var(--cg-ink); border-color: var(--cg-ink); color: var(--cg-surface);
+  }
+  .cb-out .cg-mini { display: flex; gap: 0.3rem; margin-top: 0.9rem; }
+  .cb-out .cg-mini button { padding: 0.35rem 0.8rem; font-family: var(--font-data); font-size: 0.72rem; }
+  .cb-out .cg-tbl-btn:focus-visible, .cb-out .cg-mini button:focus-visible, .cb-out .cg-second input:focus-visible,
+  .cb-out .cg-tbl:focus-visible {
+    outline: 2px solid var(--cg-accent); outline-offset: 2px;
+  }
+  .cb-out .cg-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; margin-top: 0.9rem; font-size: 0.76rem; color: var(--cg-muted); }
+  .cb-out .cg-legend span { display: inline-flex; align-items: center; gap: 0.45rem; }
+  .cb-out .cg-legend b { font-family: var(--font-data); font-weight: 600; color: var(--cg-ink); font-variant-numeric: tabular-nums; }
+  .cb-out .cg-legend svg { flex: none; }
+  .cb-out .cg-second { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.6rem; margin-top: 0.9rem; font-size: 0.78rem; color: var(--cg-muted); }
+  .cb-out .cg-second label { color: var(--cg-ink); }
+  .cb-out .cg-second input {
+    width: 6rem; border: 0; border-radius: 10px; padding: 0.45rem 0.6rem; outline: none; color-scheme: dark;
+    background: var(--color-well); color: var(--color-paper);
+    font-family: var(--font-data); font-size: 0.86rem; font-weight: 600;
+  }
+  .cb-out .cg-second span { flex: 1 1 100%; font-size: 0.7rem; color: var(--cg-faint); }
+  .cb-out .cg-tbl { margin-top: 0.8rem; overflow-x: auto; border-top: 1px solid var(--cg-hair); }
+  .cb-out .cg-tbl.cg-closed { display: none; }
+  .cb-out .cg-tbl table {
+    width: 100%; min-width: 17rem; border-collapse: collapse;
+    font-family: var(--font-data); font-size: 0.72rem; font-variant-numeric: tabular-nums; color: var(--cg-ink);
+  }
+  .cb-out .cg-tbl th, .cb-out .cg-tbl td {
+    padding: 0.45rem 0.5rem; text-align: right; font-weight: 400; white-space: nowrap; border-bottom: 1px solid var(--cg-hair);
+  }
+  .cb-out .cg-tbl th:first-child, .cb-out .cg-tbl td:first-child { text-align: left; }
+  .cb-out .cg-tbl thead th { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cg-faint); }
+  .cb-out .cg-tbl caption { caption-side: bottom; text-align: left; padding: 0.5rem 0.5rem 0; font-size: 0.64rem; color: var(--cg-faint); }
+  .cb-out .cg-tip {
+    position: fixed; z-index: 60; left: 0; top: 0; pointer-events: none; max-width: 17rem; white-space: pre-line;
+    padding: 0.5rem 0.7rem; border-radius: 10px; background: rgb(6 14 16 / 0.96);
+    box-shadow: inset 0 0 0 1px rgb(111 202 214 / 0.25);
+    font-family: var(--font-data); font-size: 0.7rem; line-height: 1.5; color: var(--color-paper);
+    opacity: 0; transform: translateY(4px);
+    transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .cb-out .cg-tip.on { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .cb-out .cg-cell, .cb-out .cg-tip { transition: none; } }
+  @media (max-width: 520px) { .cb-out .cg-card { padding: 1.15rem 1.05rem 1rem; border-radius: 22px; } }
+  /* ON PAPER THE GRAPHS BECOME THEIR TABLES. A plot drawn for a dark screen does not survive a
+     printer, and its numbers are all in the table beside it, so a printed page carries each
+     card's sentence, caption and table in black on white, and none of the plots or controls. */
+  @media print {
+    .cb-out .cg-card, .cb-out .cg-card[data-paper] {
+      --cg-ink: #000; --cg-muted: #000; --cg-faint: #333; --cg-hair: #999;
+      background: #fff; box-shadow: none; border: 1px solid #999; border-radius: 0; break-inside: avoid;
+    }
+    .cb-out .cg-big { margin-top: 0; font-size: 20pt; }
+    .cb-out .cg-plot, .cb-out .cg-mini, .cb-out .cg-second, .cb-out .cg-legend,
+    .cb-out .cg-tbl-btn, .cb-out .cg-tip, .cb-out .cg-sub { display: none !important; }
+    .cb-out .cg-tbl, .cb-out .cg-tbl.cg-closed { display: block !important; }
+    .cb-out .cg-h { color: #000; }
+    .cb-out .cg-board { display: block; }
+    .cb-out .cg-card + .cg-card { margin-top: 8pt; }
   }
 </style>
 

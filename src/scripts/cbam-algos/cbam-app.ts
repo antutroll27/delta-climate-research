@@ -38,6 +38,7 @@ import {
 } from '../cbam-lines.ts';
 import { ROUTE_GLOSSARY } from '../cbam-route-glossary.ts';
 import { outlook, outlookPriceSlots, renderOutlook, type Outlook } from '../cbam-outlook.ts';
+import type { GraphsMount } from '../cbam-graphs-dom.ts';
 
 const PACK_URL = '/cbam/estimator-pack.json';
 
@@ -1847,6 +1848,7 @@ export function initCbam(): void {
   const docBtn = $<HTMLButtonElement>('cbDoc'), printEl = $('cbPrint');
   const outWrap = $('cbOutWrap');
   const outlookEl = $('cbOutlook');
+  const graphsEl = $('cbGraphs');
   if (!cn || !country || !route || !mass || !date || !out || !status) return;
 
   /**
@@ -2385,6 +2387,36 @@ export function initCbam(): void {
   }
 
   /**
+   * The graphs under the strip: the same line, drawn.
+   *
+   * LOADED ON DEMAND. cbam-graphs.ts and its wiring are a separate chunk, fetched the first time
+   * a line has an outlook to draw. A visitor who never completes a line never downloads them.
+   *
+   * THEY FOLLOW THE STRIP, NEVER LEAD IT. They are drawn from `outlookView`, the object the strip
+   * has just been drawn from, so the two cannot describe different lines; and they are cleared
+   * wherever the strip is. `graphsWanted` is what should be on screen NOW: the import is async,
+   * so by the time it resolves the form may have moved on, and what gets painted is the latest
+   * line, not the one that started the download.
+   */
+  let graphs: GraphsMount | null = null;
+  let graphsLoading: Promise<void> | null = null;
+  let graphsWanted: EstimatorInput | null = null;
+  function paintGraphs(line: EstimatorInput | null): void {
+    if (!graphsEl) return;
+    graphsWanted = line && pack && outlookView ? line : null;
+    if (graphs) {
+      if (graphsWanted && pack) graphs.paint(pack, graphsWanted, outlookView, assumedPriceText);
+      else graphs.clear();
+      return;
+    }
+    if (!graphsWanted) return;
+    graphsLoading ??= import('../cbam-graphs-dom.ts').then((mod) => { graphs = mod.mountGraphs(graphsEl); });
+    void graphsLoading.then(() => {
+      if (graphs && graphsWanted && pack && outlookView) graphs.paint(pack, graphsWanted, outlookView, assumedPriceText);
+    }).catch(() => { graphsLoading = null; });
+  }
+
+  /**
    * The visitor typed in the price box. Refill the three slots the price changes and leave the
    * box itself alone — replacing it would drop the caret in the middle of a number.
    */
@@ -2397,11 +2429,16 @@ export function initCbam(): void {
       const slot = outlookEl.querySelector(`[data-ol="${name}"]`);
       if (slot) slot.innerHTML = html;
     }
+    // ONE PRICE, TWO PLACES. The cost graph draws this same number; it has no first-price box of
+    // its own, so the two cannot disagree.
+    graphs?.price(assumedPriceText);
   }
 
   /** The preview and, beneath it, the same shipment in each covered year. */
   function run(): void {
-    paintOutlook(runPreview());
+    const line = runPreview();
+    paintOutlook(line);
+    paintGraphs(line);
   }
 
   /** One line's estimate, decorated with the real pack snapshot via the single shared
@@ -2635,6 +2672,7 @@ export function initCbam(): void {
     // such line on screen, and a strip left over from the last preview would sit under a
     // document total it has nothing to do with.
     paintOutlook(null);
+    paintGraphs(null);
     const pairs = safeEstimates(lines);
     lastPairs = pairs;
     const ok = pairs.filter((p) => p.e !== null);
