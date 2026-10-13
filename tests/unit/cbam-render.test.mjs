@@ -159,13 +159,15 @@ const BANNER_71 =
   '<div class="cb-banner" role="note"> '
   + 'Prototype estimator · Commission default values or your own verified figures · '
   + 'decision-support, not a declaration. Computed in your browser from the published rules, '
-  + 'and never sent anywhere. This tool prices 2026 imports, and shows a cost only for the '
-  + '2026 quarters the Commission has priced. No certificate price is published for any later '
-  + 'year, so a 2027 or 2028 import shows no figure even though its goods, routes and '
-  + 'benchmarks are published. For a 2026 import no final figure exists either — the '
-  + 'cross-sectoral correction factor is unpublished — so any number below is a labelled '
-  + 'what-if. This is not a filing, not validated by the EU CBAM Registry, and not a statement '
-  + 'of monetary liability. '
+  // WORDING AWAITING THE OWNER'S APPROVAL (drafted 2026-10-13): from 'This tool counts' to
+  // 'labelled what-if'. When the approved wording lands, change it here in the same commit.
+  + 'and never sent anywhere. This tool counts certificates for 2026, 2027 and 2028 imports, '
+  + 'and shows a cost only where the Commission has published a certificate price. For 2026 '
+  + 'the price is set per quarter. From 2027 it is set weekly: none published as at '
+  + '18 August 2026, so a 2027 or 2028 import shows certificates and no cost. No final figure '
+  + 'exists for any of these years — the cross-sectoral correction factor is unpublished — so '
+  + 'any number below is a labelled what-if. This is not a filing, not validated by the EU '
+  + 'CBAM Registry, and not a statement of monetary liability. '
   + '</div>';
 
 /* ── §8 checklist: the engine still produces the SaaS's figures ─────────────── */
@@ -695,14 +697,33 @@ test('NON-NEGOTIABLE 1 — the banner names both tiers, and concedes everything 
   assert.ok(prose.includes('cross-sectoral correction factor is unpublished'),
     'the banner must still say the CSCF is unpublished — that is what makes every figure a what-if');
 
-  // The year ceiling, named on its own for the same reason the concessions above are. MEASURED
-  // against the shipped pack: `prices` carries 2026 Q1–Q4 and nothing else, so a 2027 or 2028
-  // line refuses with NO_CERTIFICATE_PRICE while its defaults (reportingYear 2027 and 2028) and
-  // benchmarks resolve fine. 'For a 2026 import' alone read as an EXAMPLE year, implying the
-  // others priced differently rather than not at all, and the page said this nowhere else.
-  assert.ok(prose.includes('No certificate price is published for any later year'),
-    'the banner must state the year ceiling — 2027 and 2028 do not price at all, and a visitor '
-    + 'can learn that nowhere else on the page');
+  // What the tool does for each year, named on its own for the same reason the concessions above
+  // are. MEASURED against the shipped pack: `prices` carries a row for every quarter of 2026,
+  // 2027 and 2028; only 2026 Q1 and Q2 hold a value. So a 2027 or 2028 line returns a
+  // certificate count and a null cost. The banner used to say such a line "shows no figure",
+  // which was true while those years had no price row and is false now.
+  assert.ok(prose.includes('a 2027 or 2028 import shows certificates and no cost'),
+    'the banner must say what a 2027 or 2028 import returns');
+  assert.ok(!prose.includes('shows no figure'),
+    'the banner must not keep the claim that a 2027 or 2028 import shows no figure');
+  // From 2027 the price is weekly (IR (EU) 2025/2548 Art 5). The banner may not let a reader
+  // expect a quarterly price for those years, and may not forecast one.
+  assert.ok(prose.includes('From 2027 it is set weekly: none published as at'),
+    'the banner must say the price is weekly from 2027 and that none is published, with a date');
+  assert.doesNotMatch(prose.slice(prose.indexOf('cb-banner'), prose.indexOf('cb-grid')),
+    /will pay|pay less|forecast|expected price|not yet/i,
+    'the banner states what is published; it forecasts nothing');
+
+  // THE DATE IS THE PACK'S, not the day somebody edited the banner. The banner is markup and
+  // cannot read the pack, so the date is typed into it, and this is what stops it going stale:
+  // a regenerated pack with a new generatedAt fails here until the banner is brought along.
+  const packDate = new Date(JSON.parse(readFileSync(fileURLToPath(
+    new URL('../../public/cbam/estimator-pack.manifest.json', import.meta.url)), 'utf8')).generatedAt);
+  const asAt = new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+  }).format(packDate);
+  assert.ok(prose.includes(`none published as at ${asAt},`),
+    `the banner's "as at" date must be the pack's own date (${asAt})`);
 
   // EXACT pins, for the reason the constants' doc comment gives: every phrase assertion above
   // survives a paraphrase that keeps the phrase and appends a contradicting reassurance to the
