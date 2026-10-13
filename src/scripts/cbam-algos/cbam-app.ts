@@ -31,7 +31,7 @@ import {
 import { loadEstimatorPack, type PackIntegrity } from './estimator/load-pack.ts';
 import type { LoadedEstimatorPack } from './estimator/pack-v2.ts';
 import type { CertificateEstimate, DataTier } from './cbam/certificate-estimate.ts';
-import { quarterOf } from './cbam/resolve-fa.ts';
+import { parseRegulatoryDate } from './cbam/input.ts';
 import {
   csvRows, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
   type Line, type Totals, type YearThreshold,
@@ -53,7 +53,7 @@ const PACK_URL = '/cbam/estimator-pack.json';
 const PACK_INTEGRITY: PackIntegrity = {
   schemaVersion: 1,
   algorithm: 'sha256',
-  packSha256: 'fc56043b76d22dba984f55e783f8d9de6bc1df04a7f0513116898fda3646889d',
+  packSha256: '6df306913b42c2e788eeec6fbff42c15bb059a849d1b1a9ffa8f9e985ffc5db3',
   generatedAt: '2026-08-18T00:00:00.000Z',
 };
 
@@ -600,9 +600,27 @@ function renderWaterfall(e: Extract<CertificateEstimate, { terms: unknown }>, fi
       ${indirect}
       <div class="cb-row cb-net"><span>= Chargeable</span><b>${num(fig.netTco2e)} tCO₂e</b></div>
       <div class="cb-row"><span>CBAM factor ${esc(String(e.terms.cbamFactorYear))}</span><b>${esc(e.terms.cbamFactor)}</b></div>
-      <div class="cb-row"><span>Certificate price ${esc(e.priceQuarter)}</span><b>${
-        e.priceEur ? eur(e.priceEur) : 'not published'}${e.priceStatus === 'pending' ? ' (pending)' : ''}</b></div>
+      ${renderPriceRow(e)}
     </div>`;
+}
+
+/**
+ * The certificate-price row of the breakdown.
+ *
+ * "imports in <quarter>", NEVER "<quarter> price", AND NEVER "(pending)". The quarter is the
+ * engine's lookup key: the import date's quarter. Only 2026 has a price per quarter. From 2027
+ * the Commission sets the price weekly and it applies to the certificates sold that week
+ * (IR (EU) 2025/2548 Arts 5 and 8), so "Certificate price 2027-Q1 · not published (pending)"
+ * described a figure that will never be published, and "(pending)" promised it. This row used to
+ * read exactly that, and nobody saw it because every 2027 date refused before reaching here.
+ *
+ * ONE WORDING FOR EVERY PENDING ROW, with no year test: "none published" is true of 2026-Q3 and
+ * of 2027-Q1 alike, and stays true the day the corpus changes. What differs between the two
+ * regimes is said by the pack, in the price row's own sourceLocator, not decided here.
+ */
+export function renderPriceRow(e: { priceQuarter: string; priceEur: string | null }): string {
+  return `<div class="cb-row"><span>Certificate price · imports in ${esc(e.priceQuarter)}</span><b>${
+    e.priceEur ? eur(e.priceEur) : 'none published'}</b></div>`;
 }
 
 /**
@@ -1436,28 +1454,40 @@ export function noRouteReason(pack: EstimatorPack, year: number, cn: string): st
  *
  * ASKS THE ENGINE'S OWN QUESTION. resolveCertificatePrice (cbam/resolve-fa.ts) throws
  * REGULATION_NOT_FOUND only when NO row matches the quarter; a row with status 'pending' returns
- * { status: 'pending' } and pricing continues — which is why 2026 Q3 and Q4 still produce
- * certificates, with the euro figure withheld and a note naming the quarter. So the test here is
+ * { status: 'pending' } and pricing continues, with the euro figure withheld. So the test here is
  * row EXISTENCE. Two other predicates were drafted and measurement killed both: 'is the price
- * published' (would warn on 2026 Q3/Q4, which work) and 'is the year >= 2027' (hardcodes today's
- * corpus and would keep warning after the Commission publishes 2027 prices — the exact class of
- * false claim this warning exists to prevent).
+ * published' (would warn on a pending quarter, which still counts certificates) and 'is the year
+ * >= 2027' (hardcodes one day's corpus). The second has now been proved wrong in practice: 2027
+ * and 2028 gained pending price rows, and this function went quiet for them without being edited.
  *
- * Silent on an unreadable date: quarterOf throws for '', 'not-a-date' and '2027-1-15', and
- * asserting anything about a certificate price for a date nobody can read would state something
- * we do not know. The date field has its own handling for that.
+ * ON TODAY'S PACK IT SAYS NOTHING, FOR ANY DATE. 2026, 2027 and 2028 all carry a row for every
+ * quarter, and no other year is covered. It is kept because it is the guard for a pack with a
+ * covered year and no price row, the state that made every 2027 date refuse; the unit suite runs
+ * it against the shipped pack with the 2027-28 rows taken out.
  *
- * Naming what IS published is not decoration. The Commission has published the goods, the
- * production routes and the free-allocation benchmarks for 2027 and 2028; only the quarterly
- * price is missing. "2027 is not covered" would be false.
+ * IT SPEAKS ONLY FOR A YEAR THE DEFAULT VALUES COVER. Its sentence says the goods, routes and
+ * benchmarks are published. That is true of a covered year and false of any other: with the
+ * 2027-28 rows in place, a bare row-existence test would say it of 2029, where the corpus holds
+ * no default value at all. The route control already answers that year ("no rules published for
+ * 2029"), by this same reportingYear test.
+ *
+ * PARSED BY THE ENGINE'S OWN PARSER. parseRegulatoryDate is what estimateFromPack and quarterOf
+ * both call, so the year and quarter here are the ones the engine will look up. Silent on a date
+ * it rejects ('', 'not-a-date', '2027-1-15'): asserting anything about a price for a date nobody
+ * can read would state something we do not know, and the date field has its own handling.
+ *
+ * "FOR IMPORTS IN <quarter>", not "the <quarter> price": the quarter is a lookup key, and from
+ * 2027 the Commission sets the price weekly, so no per-quarter figure exists to be missing.
  */
 export function priceNoteFor(pack: EstimatorPack, date: string): string | null {
-  let quarter: string;
-  try { quarter = quarterOf(date); } catch { return null; }
-  if (pack.prices.some((row) => row.quarter === quarter)) return null;
-  const pretty = quarter.replace('-', ' ');
-  return `No certificate price is published for ${pretty}, so no figure can be produced for `
-    + 'this date. The goods, routes and benchmarks are published — only the price is missing.';
+  const parsed = parseRegulatoryDate(date);
+  if (!parsed.ok) return null;
+  if (pack.prices.some((row) => row.quarter === parsed.quarter)) return null;
+  if (!pack.defaultValues.some((row) => row.reportingYear === parsed.year)) return null;
+  const pretty = parsed.quarter.replace('-', ' ');
+  return `No certificate price is in this data for imports in ${pretty}, so no figure can be `
+    + `produced for this date. The goods, routes and benchmarks for ${parsed.year} are published `
+    + '— only the price is missing.';
 }
 
 /**
@@ -1769,6 +1799,12 @@ export function inputFor(l: Line, verified: EstimatorInput['verified']): Estimat
  *     `certificate-price/` and 10,752 on `benchmark/`, every one of them 'actual-verified'.
  *     A hand-built unreadable date refuses on `date/` before any of this is reached, and is
  *     'actual-verified' too — <input type="date"> cannot emit month 13 in any case.
+ *
+ * AND THEN IT LEFT THE SHIPPED CORPUS ALTOGETHER. The paragraph below describes the pack while
+ * 2027 and 2028 had no price row. They now carry pending rows, so a verified line at those dates
+ * returns a count and no refusal, and no line the form can build refuses while stamped mixed. The
+ * mechanism is unchanged and returns the day a covered year ships without a price row;
+ * cbam-render.test.mjs keeps it under test on the pack with those rows removed.
  *
  * IT IS NOW A 2027-ONLY FACT, AND THAT IS A CHANGE THIS COMMENT USED TO DENY. On the v1 corpus
  * six `benchmark/` refusals reached the mixed tier — grey clinker and grey hydraulic cements
@@ -2127,9 +2163,11 @@ export function initCbam(): void {
    * year. The refusal onAdd renders is accurate; it arrives after the work. This is a funnel
    * problem, not a missing disclosure, so the sentence has to land at the control that causes it.
    *
-   * IT BLOCKS NOTHING. 2027 and 2028 publish goods, routes and benchmarks — only the quarterly
-   * certificate price is missing — so syncRoutes still populates and #cbAdd stays live. Disabling
-   * a control the corpus actually covers would state something false about the corpus.
+   * IT BLOCKS NOTHING. A year this note speaks for publishes goods, routes and benchmarks and
+   * lacks only a price row, so syncRoutes still populates and #cbAdd stays live. Disabling a
+   * control the corpus actually covers would state something false about the corpus. (When this
+   * was written that year was 2027; 2027 and 2028 now carry pending price rows, count
+   * certificates, and get no note at all.)
    *
    * SILENT WITHOUT A PACK. `pack` is what holds the price rows, so before it resolves there is no
    * question to ask; writing '' rather than returning early also clears a note left over from a
