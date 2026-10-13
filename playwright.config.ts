@@ -46,8 +46,26 @@ export default defineConfig({
      record. On the quicker runners, where setup takes 3-5, this fires first and
      the run ends with a summary and its artifact.
      Neither the job limit nor any test timeout is changed here; raising the first
-     is what would make this hold on every runner, and it is a separate decision. */
-  globalTimeout: process.env.CI ? 33 * 60_000 : undefined,
+     is what would make this hold on every runner, and it is a separate decision.
+
+     2026-10-14: THAT DECISION, TAKEN. 33 became 40, with the job limit raised from 40 to 50
+     in verify.yml in the same change. From the durations.json of the last two full runs:
+       · 12 Oct (run 38309541448): 195 tests, 23.7 min;
+       · 13 Oct (run 38448354814): 197 tests, 28.7 min, with no retry and no new slow test.
+         The same suite, 21% slower on a slower runner; the job took 34.6 min in all.
+     So a healthy run had 4.3 min under the 33-minute stop on an ordinary day, and the
+     slowest healthy run on record (32.5) had half a minute. The CBAM three-year strip adds
+     10 browser tests in two engines, about 0.7 min at the measured 1.8 s and 2.4 s medians
+     for that file, and more CBAM tests follow it.
+     THE ARITHMETIC NOW: the runner ends a 50-minute job about 48.8 min after its first log
+     line; setup and the static checks have taken 3.1-6.2; that leaves 42.6 on the slowest
+     setup. 40 stops the suite 2.6 min before that, which is time to print the summary, write
+     durations.json and upload. Against 40, the slowest healthy run on record plus the new
+     tests (32.5 + 0.7 = 33.2) has 6.8 min, about 20%: one runner-speed swing of the size
+     seen between 12 and 13 October. It is a stop for an overrun, not a budget to grow into:
+     four tests account for 9 of the 28.7 minutes (see the slowest-test list in the pull
+     request that made this change), and that is where time is to be found. */
+  globalTimeout: process.env.CI ? 40 * 60_000 : undefined,
   use: {
     baseURL: 'http://127.0.0.1:4322',
     trace: 'on-first-retry',

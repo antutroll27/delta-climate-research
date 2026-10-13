@@ -1243,7 +1243,11 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(strip).not.toContainText(/quarterly|will pay|pay less|\byet\b/i);
   });
 
-  test('the same three counts whichever of the three years the import date is in', async ({ page }) => {
+  test('the same three counts whichever of the three years the import date is in', async ({ page, browserName }) => {
+    // CHROMIUM ONLY, like the states test below: this is the module's arithmetic reaching the
+    // page, which no browser engine can disagree about. Firefox and WebKit run the strip tests
+    // that depend on the engine: layout, focus, <details>, storage and axe.
+    test.skip(browserName !== 'chromium', 'engine-independent; covered in Chromium');
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, TUBE_LINE);
     const counts = page.locator('#cbOutlook .cb-ol-n');
@@ -1357,8 +1361,14 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(page.locator('#cbOutlook')).toBeEmpty();
   });
 
-  test('a route with no default value shows the engine\'s reason in each year, and no split', async ({ page }) => {
+  test('states: a refused route, verified figures, and a benchmark that steps down', async ({ page, browserName }) => {
+    // ONE PAGE LOAD FOR THREE STATES, in Chromium only. Each needs only a different line in the
+    // same form, the 37 MB pack is fetched once, and what is asserted is text the pure module
+    // produced (cbam-outlook.test.mjs pins every one of these states against the pack).
+    test.skip(browserName !== 'chromium', 'engine-independent; covered in Chromium');
     await page.goto('/cbam/cbam-calculator/');
+
+    // 1. A route with no default value: the engine's reason in each year, and no split.
     await setLine(page, { ...TUBE_LINE, route: '(D)' });
     await expect(page.locator('#cbOut')).toContainText('No estimate');
     const cards = page.locator('#cbOutlook .cb-ol-yr');
@@ -1371,10 +1381,16 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(page.locator('#cbOutlook .cb-ol-stack')).toHaveCount(0);
     await expect(page.locator('#cbOutlook .cb-ol-work')).toBeHidden();
     await expect(page.locator('#cbOlPrice')).toBeHidden();
-  });
 
-  test('verified figures: the count still rises, and no mark-up is named', async ({ page }) => {
-    await page.goto('/cbam/cbam-calculator/');
+    // 2. A good whose benchmark steps down in 2028 shows the step as its own part.
+    await setLine(page, { cn: '72052100', country: 'IN', route: '(F)', mass: '100', date: '2026-03-15' });
+    const legend = page.locator('#cbOutlook .cb-ol-legend li');
+    await expect(page.locator('#cbOutlook .cb-ol-n')).toHaveText(['137.1', '166.1', '213.4']);
+    await expect(legend.nth(2)).toContainText('Benchmark for route (F) falls in 2028 (1.46 → 1.298)');
+    await expect(legend.nth(2).locator('b')).toHaveText('+14.6');
+    await expect(page.locator('#cbOutlook .cb-ol-stack > span')).toHaveCount(3);
+
+    // 3. Verified figures: the count still rises, and no mark-up is named.
     await setLine(page, TUBE_LINE);
     await page.selectOption('#cbTier', 'actual-verified');
     await page.fill('#cbSeeDirect', '2.0');
@@ -1385,16 +1401,6 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(strip.locator('.cb-ol-legend li')).toHaveCount(2);
     await expect(strip).not.toContainText(/mark-up/i);
     await expect(strip.locator('.cb-ol-h')).toHaveText('Why it rises by 11.2 certificates by 2028');
-  });
-
-  test('a good whose benchmark steps down in 2028 shows the step as its own part', async ({ page }) => {
-    await page.goto('/cbam/cbam-calculator/');
-    await setLine(page, { cn: '72052100', country: 'IN', route: '(F)', mass: '100', date: '2026-03-15' });
-    const legend = page.locator('#cbOutlook .cb-ol-legend li');
-    await expect(page.locator('#cbOutlook .cb-ol-n')).toHaveText(['137.1', '166.1', '213.4']);
-    await expect(legend.nth(2)).toContainText('Benchmark for route (F) falls in 2028 (1.46 → 1.298)');
-    await expect(legend.nth(2).locator('b')).toHaveText('+14.6');
-    await expect(page.locator('#cbOutlook .cb-ol-stack > span')).toHaveCount(3);
   });
 
   test('at 320 px the page does not scroll sideways, and the working table scrolls inside its own box', async ({ page }) => {
