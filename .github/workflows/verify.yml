@@ -32,7 +32,16 @@ jobs:
     # overrun on a runner with quick setup ends as a failure with a summary instead of a
     # cancellation with nothing. Measured: the runner ends the job 38.8-39.0 min after its first
     # log line, and setup plus the static checks take 3.1-6.2 of that.
-    timeout-minutes: 40
+    # 2026-10-14: 40 -> 50, with Playwright's `globalTimeout` going 33 -> 40 in the same change.
+    # Measured on run 38448354814 (13 Oct): the job took 34.6 min, of which the browser
+    # contracts were 28.7 (197 tests, no retries); the day before, the same suite took 23.7.
+    # That left 4.3 min under the 33-minute stop and about 4 under this limit, before the CBAM
+    # tests that this change and the next add. A 50-minute job is ended at about 48.8; less
+    # 6.2 for the slowest setup leaves 42.6, so the 40-minute stop in playwright.config.ts
+    # fires first with 2.6 min to print its summary and upload. The arithmetic is spelt out
+    # there. This is still a ceiling, and it costs nothing unless a run is slow: a job is
+    # billed for the minutes it uses, about 35 for a full pull-request run today.
+    timeout-minutes: 50
 
     steps:
       - name: Check out repository

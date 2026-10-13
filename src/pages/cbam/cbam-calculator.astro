@@ -196,6 +196,12 @@ import Footer from '../../components/layout/Footer.astro';
                  work exists to close. build-contracts.test.mjs now pins them together. -->
             <p class="cb-idle">Choose a good, origin, route, mass and import date to see the provisional exposure.</p>
           </div>
+          <!-- The three-year strip (cbam-outlook.ts), drawn under the preview of ONE line and
+               cleared in multi-line mode. aria-live="off" ON PURPOSE, inside a polite region:
+               the result card above is what a screen-reader user is told about, and re-reading
+               three more years and a table after every keystroke would bury it. The strip is
+               ordinary content, reachable by heading and by Tab. -->
+          <div id="cbOutlook" aria-live="off"></div>
           <p class="cb-source" id="cbProv"></p>
         </section>
       </div>
@@ -483,6 +489,158 @@ import Footer from '../../components/layout/Footer.astro';
   .cb-out .cb-notes { margin: 0.7rem 0 0; padding-left: 1.1rem; }
   .cb-out .cb-notes li {
     margin-bottom: 0.4rem; font-size: 0.78rem; line-height: 1.65; color: var(--color-ink-muted);
+  }
+
+  /* ── The three-year strip (cbam-outlook.ts → #cbOutlook) ─────────────────────────────────
+     Runtime-injected like everything above, so it lives in this global block. It reuses the
+     card, card-head, card-label and tag rules as they are; only what is new to the strip is
+     styled here. No animation: nothing on it moves. */
+  .cb-out #cbOutlook:not(:empty) { margin-top: 1.1rem; }
+  /* MEASURED, NOT ASSUMED: without this the page scrolled sideways by 82px at 390px. The results
+     section is a grid item, and a grid item's automatic minimum width is its content's — here the
+     working table's — so the table's own scroll container never got the chance to scroll. */
+  .cb-out { min-width: 0; }
+  .cb-out #cbOutlook, .cb-out .cb-ol-scroll { min-width: 0; max-width: 100%; }
+  /* A card's label and its tag do not fit on one line at phone width, and the tag is nowrap.
+     EVERY card, not only the strip: measured at 320px, the result card's own tag ("What-if ·
+     CSCF for 2026 unpublished", 227px) already ran 41px off the page before the strip existed. */
+  .cb-out .cb-card-head { flex-wrap: wrap; }
+  .cb-out .cb-ol-sr {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+
+  .cb-out .cb-ol-years {
+    list-style: none; margin: 1.1rem 0 0; padding: 0;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 10px;
+  }
+  .cb-out .cb-ol-yr {
+    min-width: 0; border-radius: 16px; padding: 0.9rem 1rem; background: var(--color-well);
+  }
+  .cb-out .cb-ol-y {
+    font-family: var(--font-mono); font-size: 0.66rem; font-weight: 600;
+    letter-spacing: 0.14em; color: var(--color-ink-muted);
+  }
+  .cb-out .cb-ol-n {
+    margin: 0.35rem 0 0.05rem; font-family: var(--font-data); font-weight: 600;
+    font-size: 1.45rem; line-height: 1.2; color: var(--color-paper);
+    font-variant-numeric: tabular-nums;
+  }
+  .cb-out .cb-ol-d {
+    font-family: var(--font-data); font-size: 0.72rem; color: var(--color-bronze);
+    font-variant-numeric: tabular-nums;
+  }
+  .cb-out .cb-ol-d.cb-ol-zero { color: var(--color-ink-faint); }
+  .cb-out .cb-ol-p {
+    margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--color-hairline);
+    font-family: var(--font-data); font-size: 0.68rem; line-height: 1.5; color: var(--color-ink-faint);
+  }
+  .cb-out .cb-ol-p > span { display: block; }
+  /* "none published" is set in the weight of a figure on purpose: where a cost would stand, the
+     absence of a price is the fact, and it must not read as small print. */
+  .cb-out .cb-ol-e {
+    font-size: 0.8rem; font-weight: 600; color: var(--color-paper);
+    font-variant-numeric: tabular-nums;
+  }
+  /* A cost at the visitor's own price takes the caution tint, never the paper white of a figure
+     the Commission's price produced. */
+  .cb-out .cb-ol-e.cb-ol-mine { color: color-mix(in srgb, var(--color-bronze) 55%, var(--color-paper)); }
+  .cb-out .cb-ol-none {
+    margin-top: 0.45rem; font-family: var(--font-mono); font-size: 0.6rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; color: #e5a34d;
+  }
+  .cb-out .cb-ol-reason {
+    margin: 0.5rem 0 0; font-size: 0.74rem; line-height: 1.6; color: var(--color-ink-muted);
+  }
+
+  .cb-out .cb-ol-why:not(:empty) { margin-top: 1.2rem; }
+  .cb-out .cb-ol-h {
+    margin: 0 0 0.55rem; font-family: var(--font-mono); font-size: 0.69rem; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-ink-muted);
+  }
+  /* The gap separates neighbouring segments without leaning on their hues; the legend beneath
+     carries each amount in figures, so nothing is told by colour alone. */
+  .cb-out .cb-ol-stack {
+    display: flex; gap: 2px; height: 14px; border-radius: 8px; overflow: hidden;
+    background: var(--color-well);
+  }
+  .cb-out .cb-ol-stack > span { flex: 0 0 0; min-width: 0; }
+  .cb-out .cb-ol-s1 { background: var(--color-bronze); }
+  .cb-out .cb-ol-s2 { background: var(--color-cyan); }
+  .cb-out .cb-ol-s3 { background: color-mix(in srgb, var(--color-cyan-muted) 55%, var(--color-well)); }
+  .cb-out .cb-ol-legend { list-style: none; margin: 0.7rem 0 0; padding: 0; display: grid; gap: 0.45rem; }
+  .cb-out .cb-ol-legend li {
+    display: grid; grid-template-columns: 12px 1fr auto; gap: 0.6rem; align-items: baseline;
+    font-size: 0.84rem; line-height: 1.45; color: var(--color-paper);
+  }
+  .cb-out .cb-ol-sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; transform: translateY(1px); }
+  .cb-out .cb-ol-legend b {
+    font-family: var(--font-data); font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .cb-out .cb-ol-legend small { display: block; font-size: 0.74rem; color: var(--color-ink-faint); }
+  .cb-out .cb-ol-nosplit {
+    margin: 0; font-size: 0.8rem; line-height: 1.7; color: var(--color-ink-muted); max-width: 60ch;
+  }
+
+  .cb-out .cb-ol-work { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--color-hairline); }
+  .cb-out .cb-ol-work summary {
+    width: fit-content; cursor: pointer; list-style: none;
+    padding: 6px 12px; border: 1px solid var(--color-hairline); border-radius: 20px;
+    font-size: 0.8rem; font-weight: 500; color: var(--color-cyan);
+  }
+  .cb-out .cb-ol-work summary::-webkit-details-marker { display: none; }
+  .cb-out .cb-ol-work summary::before { content: "+ "; }
+  .cb-out .cb-ol-work[open] summary::before { content: "– "; }
+  .cb-out .cb-ol-scroll { overflow-x: auto; }
+  .cb-out .cb-ol-work summary:focus-visible,
+  .cb-out .cb-ol-scroll:focus-visible,
+  .cb-out .cb-ol-px:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; }
+  .cb-out .cb-ol table {
+    width: 100%; min-width: 25rem; margin-top: 1rem; border-collapse: collapse;
+    font-family: var(--font-data); font-size: 0.8rem; color: var(--color-paper);
+    font-variant-numeric: tabular-nums;
+  }
+  .cb-out .cb-ol th, .cb-out .cb-ol td {
+    padding: 0.55rem 0.4rem; text-align: right; font-weight: 400; vertical-align: top;
+    border-bottom: 1px solid var(--color-hairline);
+  }
+  .cb-out .cb-ol tbody th { text-align: left; font-family: var(--font-sans, inherit); font-size: 0.84rem; }
+  .cb-out .cb-ol thead th {
+    font-family: var(--font-mono); font-size: 0.66rem; font-weight: 600;
+    letter-spacing: 0.14em; color: var(--color-ink-muted);
+  }
+  .cb-out .cb-ol tr.cb-ol-tot th, .cb-out .cb-ol tr.cb-ol-tot td { font-weight: 600; font-size: 0.9rem; }
+  .cb-out .cb-ol tbody tr:last-child th, .cb-out .cb-ol tbody tr:last-child td { border-bottom: 0; }
+  .cb-out .cb-ol td small, .cb-out .cb-ol th small {
+    display: block; font-family: var(--font-sans, inherit); font-size: 0.7rem; font-weight: 400;
+    color: var(--color-ink-faint);
+  }
+  .cb-out .cb-ol td small .cb-ol-np { font-weight: 600; color: var(--color-paper); }
+
+  .cb-out .cb-ol-price {
+    display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
+    margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--color-hairline);
+    font-size: 0.84rem; color: var(--color-ink-muted);
+  }
+  .cb-out .cb-ol-price label { color: var(--color-paper); }
+  /* The calculator's field, restated: .cb-field is a scoped rule and cannot reach a control
+     drawn at runtime. Same fill, radius, face and focus ring. */
+  .cb-out .cb-ol-px {
+    width: 6.5rem; border: 0; border-radius: 10px; padding: 0.5rem 0.65rem; outline: none;
+    background: var(--color-well); color: var(--color-paper); color-scheme: dark;
+    font-family: var(--font-data); font-size: 0.9rem; font-weight: 600;
+  }
+  .cb-out .cb-ol-px::placeholder { color: var(--color-ink-faint); font-weight: 400; }
+  .cb-out .cb-ol-price p { flex: 1 1 100%; margin: 0; font-size: 0.78rem; line-height: 1.6; max-width: 60ch; }
+  .cb-out .cb-ol-note {
+    margin: 0.6rem 0 0; font-family: var(--font-data); font-size: 0.72rem; line-height: 1.6;
+    color: var(--color-ink-faint);
+  }
+  .cb-out .cb-ol-notes:not(:empty) { margin-top: 1rem; }
+  @media (max-width: 560px) {
+    .cb-out .cb-ol-years { grid-template-columns: 1fr; }
+    .cb-out .cb-ol th, .cb-out .cb-ol td { padding: 0.5rem 0.25rem; }
   }
 </style>
 
