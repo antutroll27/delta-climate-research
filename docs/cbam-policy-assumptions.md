@@ -996,9 +996,10 @@ was priced with route (B)'s electricity and over-charged. **On Algerian cement c
 €165.79 per 100 t**, with the exported CSV naming route (A) beside route (B)'s figure — an audit
 artefact naming one route and pricing another."
 
-**If wrong.** Over-charge of up to €165.79 per 100 t on affected lines. Only 30 estimates change
-end-to-end today because the pack prices 2026 quarters only; 60 further corrections are real but
-latent.
+**If wrong.** Over-charge of up to €165.79 per 100 t on affected lines. When this was measured only 30
+estimates changed end-to-end, because the pack priced 2026 quarters only and the other 60 corrections
+sat behind a refusal. The pack now carries pending price rows for 2027 and 2028, so those 60 reach a
+certificate count as well (not re-measured).
 
 **Evidence.** Inferred, with the corpus measured directly.
 
@@ -1355,18 +1356,24 @@ is a warning in a different repository's file.
 
 ---
 
-### F1 · The certificate price is a quarterly figure, and an unpublished quarter yields no cost rather than a zero
+### F1 · For 2026 the certificate price is a quarterly figure, from 2027 a weekly one, and an unpublished price yields no cost rather than a zero
 
-**Claim.** CBAM certificate prices are published per quarter, in arrears. Where the quarter an import
-falls in has no published price, the tool shows the certificate count but **no euro figure at all**.
+**Claim.** For 2026, CBAM certificate prices are published per quarter, in arrears, and apply by the
+quarter of import. From 1 January 2027 the Commission sets the price every calendar week, and it
+applies to the certificates sold in that week (IR (EU) 2025/2548 Arts 1, 5 and 8). Where no price is
+published for an import, the tool shows the certificate count but **no euro figure at all**.
 
 **Citation.** EC "Price of CBAM certificates" page. Legal status recorded as **guidance**, not
 enacted.
 
 **Behaviour.** Q1 2026 **€75.36** (published 7 Apr 2026) and Q2 2026 **€75.28** (published 6 Jul 2026)
-are published; Q3 and Q4 2026 are pending. **The pack prices 2026 quarters only** — every 2027 and
-2028 import refuses on the price. The code's sweep: **7,680 of 17,484 estimates** refuse on the
-certificate price, every one of them 2027 or 2028.
+are published; Q3 and Q4 2026 are pending in the pack. **For 2027 and 2028 the pack carries eight
+pending rows with no value**, one per quarter of import. They are not quarterly prices awaiting
+publication: the quarter is the engine's lookup key, and each row's own locator says the price is
+weekly from 2027 and that none is published as at the date the price page was read. A 2027 or 2028
+import therefore returns a certificate count and no cost. (Until those rows were added every such
+import refused on the price: 7,680 of 17,484 estimates in the code's sweep at the time.) A quarter
+with no row at all, 2029 onward, still refuses.
 
 **Alternative.** Not documented as a regulatory reading. The *presentation* alternative is documented
 at length — an earlier version reported a missing price as a missing benchmark, "sending the reader to
@@ -1545,8 +1552,8 @@ customers who file short and face a penalty they will attribute to us.*
 
 *The refusal-shaped assumptions — A3, A4, A11, A12, A15, B3, C1, C2, D6, D7, D14, G1, G2 — carry no
 financial exposure if wrong. Their cost is coverage: **183 of 574 offered goods**, 181 of them iron and
-steel, currently return no figure at all, and **7,680 of 17,484** estimates refuse on a missing 2027/28
-certificate price.*
+steel, currently return no figure at all. A 2027 or 2028 import returns a certificate count with no cost,
+because no certificate price is published for those years.*
 
 ---
 

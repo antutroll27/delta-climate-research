@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   buildPrintDocument, decorateSnapshot, inputFor, nextRoute, noRouteReason, parseVerifiedFields,
-  priceNoteFor, renderAttestation, renderDraftThreshold, renderLineCard, renderResult,
+  priceNoteFor, renderAttestation, renderDraftThreshold, renderLineCard, renderPriceRow, renderResult,
   renderThreshold, renderTotals, renderYearThreshold, stampedTierOf, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
@@ -159,13 +159,14 @@ const BANNER_71 =
   '<div class="cb-banner" role="note"> '
   + 'Prototype estimator · Commission default values or your own verified figures · '
   + 'decision-support, not a declaration. Computed in your browser from the published rules, '
-  + 'and never sent anywhere. This tool prices 2026 imports, and shows a cost only for the '
-  + '2026 quarters the Commission has priced. No certificate price is published for any later '
-  + 'year, so a 2027 or 2028 import shows no figure even though its goods, routes and '
-  + 'benchmarks are published. For a 2026 import no final figure exists either — the '
-  + 'cross-sectoral correction factor is unpublished — so any number below is a labelled '
-  + 'what-if. This is not a filing, not validated by the EU CBAM Registry, and not a statement '
-  + 'of monetary liability. '
+  // Wording approved 2026-10-14: from 'This tool counts' to 'labelled what-if'.
+  + 'and never sent anywhere. This tool counts certificates for 2026, 2027 and 2028 imports, '
+  + 'and shows a cost only where the Commission has published a certificate price. For 2026 '
+  + 'the price is set per quarter. From 2027 it is set weekly: none published as at '
+  + '18 August 2026, so a 2027 or 2028 import shows certificates and no cost. No final figure '
+  + 'exists for any of these years — the cross-sectoral correction factor is unpublished — so '
+  + 'any number below is a labelled what-if. This is not a filing, not validated by the EU '
+  + 'CBAM Registry, and not a statement of monetary liability. '
   + '</div>';
 
 /* ── §8 checklist: the engine still produces the SaaS's figures ─────────────── */
@@ -695,14 +696,33 @@ test('NON-NEGOTIABLE 1 — the banner names both tiers, and concedes everything 
   assert.ok(prose.includes('cross-sectoral correction factor is unpublished'),
     'the banner must still say the CSCF is unpublished — that is what makes every figure a what-if');
 
-  // The year ceiling, named on its own for the same reason the concessions above are. MEASURED
-  // against the shipped pack: `prices` carries 2026 Q1–Q4 and nothing else, so a 2027 or 2028
-  // line refuses with NO_CERTIFICATE_PRICE while its defaults (reportingYear 2027 and 2028) and
-  // benchmarks resolve fine. 'For a 2026 import' alone read as an EXAMPLE year, implying the
-  // others priced differently rather than not at all, and the page said this nowhere else.
-  assert.ok(prose.includes('No certificate price is published for any later year'),
-    'the banner must state the year ceiling — 2027 and 2028 do not price at all, and a visitor '
-    + 'can learn that nowhere else on the page');
+  // What the tool does for each year, named on its own for the same reason the concessions above
+  // are. MEASURED against the shipped pack: `prices` carries a row for every quarter of 2026,
+  // 2027 and 2028; only 2026 Q1 and Q2 hold a value. So a 2027 or 2028 line returns a
+  // certificate count and a null cost. The banner used to say such a line "shows no figure",
+  // which was true while those years had no price row and is false now.
+  assert.ok(prose.includes('a 2027 or 2028 import shows certificates and no cost'),
+    'the banner must say what a 2027 or 2028 import returns');
+  assert.ok(!prose.includes('shows no figure'),
+    'the banner must not keep the claim that a 2027 or 2028 import shows no figure');
+  // From 2027 the price is weekly (IR (EU) 2025/2548 Art 5). The banner may not let a reader
+  // expect a quarterly price for those years, and may not forecast one.
+  assert.ok(prose.includes('From 2027 it is set weekly: none published as at'),
+    'the banner must say the price is weekly from 2027 and that none is published, with a date');
+  assert.doesNotMatch(prose.slice(prose.indexOf('cb-banner'), prose.indexOf('cb-grid')),
+    /will pay|pay less|forecast|expected price|not yet/i,
+    'the banner states what is published; it forecasts nothing');
+
+  // THE DATE IS THE PACK'S, not the day somebody edited the banner. The banner is markup and
+  // cannot read the pack, so the date is typed into it, and this is what stops it going stale:
+  // a regenerated pack with a new generatedAt fails here until the banner is brought along.
+  const packDate = new Date(JSON.parse(readFileSync(fileURLToPath(
+    new URL('../../public/cbam/estimator-pack.manifest.json', import.meta.url)), 'utf8')).generatedAt);
+  const asAt = new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+  }).format(packDate);
+  assert.ok(prose.includes(`none published as at ${asAt},`),
+    `the banner's "as at" date must be the pack's own date (${asAt})`);
 
   // EXACT pins, for the reason the constants' doc comment gives: every phrase assertion above
   // survives a paraphrase that keeps the phrase and appends a contradicting reassurance to the
@@ -1790,6 +1810,42 @@ const comparisonOf = (l) => {
 };
 
 /**
+ * THE SHIPPED PACK WITH THE 2027-28 PRICE ROWS TAKEN OUT — the corpus as it stood while every
+ * 2027 date refused on the price.
+ *
+ * Several tests below are about ONE shape: a refusal raised inside estimateCertificates AFTER
+ * the electricity default has been substituted, so the line is stamped mixed and carries no
+ * figure. A quarter with no price row is the only refusal that produces it (the tier test
+ * asserts that structurally), and a 2027 date used to be such a quarter. 2027 and 2028 now carry
+ * pending price rows and return a certificate count, so no line a user can build refuses that
+ * way on the shipped pack. The defect those tests guard is in how a refused mixed card is
+ * WORDED, and it returns the day a covered year ships without a price row, so they keep their
+ * assertions unchanged and run against exactly that corpus. Nothing else in the pack is altered,
+ * and the guard test below proves the difference is the eight rows and nothing more.
+ */
+const WEEKLY_PRICE_ROW = /^202[78]-Q[1-4]$/;
+const packNoWeeklyRows = {
+  ...pack, prices: pack.prices.filter((row) => !WEEKLY_PRICE_ROW.test(row.quarter)),
+};
+const estOfNoRows = (l) => estimateFromPack(packNoWeeklyRows, inputFor(l, verifiedInputOf(l)));
+const comparisonOfNoRows = (l) => {
+  const d = estimateFromPack(packNoWeeklyRows, inputFor(l, undefined));
+  return d.status === 'unavailable' ? null : d;
+};
+
+test('the rows-removed fixture differs from the shipped pack by the eight 2027-28 price rows only', () => {
+  // Otherwise "the rows removed" could come to mean "nothing removed" the day the quarter keys
+  // change shape, and every test leaning on this fixture would be running on the shipped corpus
+  // without saying so.
+  assert.equal(pack.prices.length - packNoWeeklyRows.prices.length, 8);
+  assert.deepEqual(packNoWeeklyRows.prices.map((row) => row.quarter),
+    ['2026-Q1', '2026-Q2', '2026-Q3', '2026-Q4']);
+  for (const key of Object.keys(pack)) {
+    if (key !== 'prices') assert.equal(packNoWeeklyRows[key], pack[key], `${key} must be the shipped object`);
+  }
+});
+
+/**
  * The MIXED tier's worked line — the one vline cannot be.
  *
  * Cement from DZ at `direct_and_indirect` scope, attesting a direct figure and no indirect one.
@@ -1823,6 +1879,8 @@ const mline = (over = {}) => ({
  * and — measured over the whole corpus — there is now NO (good, route, year) that both publishes
  * an indirect default and lacks a column-B benchmark. So that shape no longer exists, and the
  * only refusal that still reaches the mixed tier is the missing certificate price at 2027+.
+ * (And since the pack gained pending price rows for 2027 and 2028, that one is reached only on
+ * the pack with those rows removed: see packNoWeeklyRows.)
  * The tier test below asserts that unreachability structurally rather than leaving it implied.
  *
  * Shared by the tier test and the attestation tests below rather than copied into each: this file
@@ -2203,17 +2261,23 @@ test('a verified-path refusal carries the tier the engine ATTEMPTED to price at 
   // only on `certificate-price/` — which is the fact this test is about; the space simply stopped
   // containing 161,328 selectors the form should never have offered.
 
-  // A. THE CERTIFICATE PRICE. The pack prices 2026 quarters only and <input type="date"> takes
-  //    2027, so this is the refusal an ordinary user meets first.
+  // A. THE CERTIFICATE PRICE. A quarter with no price row at all. When this was written every
+  //    2027 date was one, and it was the refusal an ordinary user met first. 2027 and 2028 now
+  //    carry pending rows, so it is run on the pack without them (see packNoWeeklyRows); the
+  //    counts in the comment above were measured on that corpus.
   assert.equal(estOf(mline()).status, 'cscf_pending',
     'sanity: the same line prices at a 2026 date, so the date is the only thing that moved');
   const noPrice = mline({ date: '2027-03-15' });
-  const ePrice = estOf(noPrice);
-  assert.equal(ePrice.status, 'unavailable', 'sanity: no published price for a 2027 quarter');
+  assert.equal(estOf(noPrice).status, 'cscf_pending',
+    'on the SHIPPED pack the same 2027 line now counts certificates — the pending row is why');
+  assert.equal(estOf(noPrice).stamp.tier, 'verified-direct+default-indirect',
+    'and it is still the mixed tier there, now with a figure for the mixed note to be about');
+  const ePrice = estOfNoRows(noPrice);
+  assert.equal(ePrice.status, 'unavailable', 'sanity: no price row for a 2027 quarter');
   assert.equal(ePrice.selector, 'certificate-price/2027-Q1',
     'and the PRICE is what is missing — the good, its default and its benchmark all resolved, '
     + 'which is exactly why the electricity substitution had already happened');
-  assert.equal(stampedTierOf(noPrice, estOf), 'verified-direct+default-indirect',
+  assert.equal(stampedTierOf(noPrice, estOfNoRows), 'verified-direct+default-indirect',
     'the line must record the tier it was priced AT, not a tier that describes the refusal');
 
   // B. THE SECOND NAMESPACE HAS GONE, AND ITS ABSENCE IS ASSERTED RATHER THAN ASSUMED.
@@ -2254,18 +2318,19 @@ test('a verified-path refusal carries the tier the engine ATTEMPTED to price at 
   //    same selector as A — only the fallback does not run, because this line's scope never asks
   //    for electricity. If the namespace decided the tier, this would come back mixed too.
   const directOnly = mline({ date: '2027-03-15', scope: 'direct' });
-  const eDirect = estOf(directOnly);
+  const eDirect = estOfNoRows(directOnly);
   assert.equal(eDirect.selector, ePrice.selector,
     'sanity: byte-identical refusal to A — the only difference is whether electricity was priced');
-  assert.equal(stampedTierOf(directOnly, estOf), 'actual-verified',
+  assert.equal(stampedTierOf(directOnly, estOfNoRows), 'actual-verified',
     'no substitution, no mixed tier: the tier tracks the fallback, never the refusal');
 
   // D. AND THE EXPORT STILL SURVIVES. csvRows throws when a line's tier disagrees with its
   //    estimate's stamp, which is the failure a wrong tier here would cause — one bad line
   //    killing the whole file, one render after the line was added.
-  const drafted = { ...noPrice, tier: stampedTierOf(noPrice, estOf) };
+  const drafted = { ...noPrice, tier: stampedTierOf(noPrice, estOfNoRows) };
+  assert.equal(estOfNoRows(drafted).status, 'unavailable', 'sanity: D exports a REFUSED line');
   assert.doesNotThrow(
-    () => csvRows([drafted], [estOf(drafted)], new Map([['M1', 'deadbeef']]), 'snap', pack),
+    () => csvRows([drafted], [estOfNoRows(drafted)], new Map([['M1', 'deadbeef']]), 'snap', packNoWeeklyRows),
     'a refused MIXED line must export as a row, not blow the whole file up');
 });
 
@@ -2350,11 +2415,12 @@ test('renderLineCard: a MIXED line gets its attestation AND its delta, and the d
 
 test('renderAttestation: a REFUSED mixed line drops the electricity clause — the card has no such component', () => {
   const l = refusedMline({ verifiedRef: 'BV-2026-0142' });
-  const e = estOf(l);
+  const e = estOfNoRows(l);
   // Sanity, and it is the whole premise: a refusal raised AFTER the electricity substitution, and
   // therefore the MIXED tier on a card carrying no figure whatsoever. (This premise used to be
   // reached at a 2026 date through a benchmark refusal; see refusedMline's note for why the only
-  // shape that still reaches it is the unpublished 2027 certificate price.)
+  // shape that still reaches it is a quarter with no price row, and packNoWeeklyRows' for why
+  // that now means the pack with the 2027-28 rows taken out.)
   assert.equal(e.status, 'unavailable', 'sanity: the engine refuses this line');
   assert.equal(e.selector, 'certificate-price/2027-Q1',
     'sanity: refused on the PRICE, after the good, its default and its benchmark all resolved — '
@@ -2362,7 +2428,7 @@ test('renderAttestation: a REFUSED mixed line drops the electricity clause — t
   assert.equal(e.stamp.tier, 'verified-direct+default-indirect',
     'sanity: the refusal still carries the mixed tier — that is the defect this test is about');
 
-  const html = renderLineCard(l, e, 0, comparisonOf(l));
+  const html = renderLineCard(l, e, 0, comparisonOfNoRows(l));
   assert.doesNotMatch(html, /class="cb-fig"/, 'sanity: no figure block, so nothing to substitute into');
 
   assert.ok(html.includes(`<p class="cb-sub cb-attested">${REFUSED_MIXED_NOTE} Ref: BV-2026-0142</p>`),
@@ -2581,7 +2647,8 @@ test('a REFUSED mixed line drops the residual-indirect note — no figure, no pr
   // vendored engine's own output still making the claim. This test therefore pins the vendored
   // engine's behaviour as it reaches the DOM — the surface a user meets.
   const refused = rline({ date: '2027-03-15' });
-  const e = estOf(refused);
+  // On the pack without the 2027-28 price rows: see packNoWeeklyRows.
+  const e = estOfNoRows(refused);
 
   // Three guards against a vacuous pass, each of which would make "no note" true for the wrong
   // reason. Without them a corpus that started pricing 2027, or a tier that stopped surviving the
@@ -2595,7 +2662,7 @@ test('a REFUSED mixed line drops the residual-indirect note — no figure, no pr
 
   assert.ok(!e.stamp.notes.includes(RESIDUAL_INDIRECT_NOTE),
     'the engine must not claim the provenance of an electricity figure this card does not show');
-  const html = renderLineCard(refused, e, 0, comparisonOf(refused));
+  const html = renderLineCard(refused, e, 0, comparisonOfNoRows(refused));
   const escaped = RESIDUAL_INDIRECT_NOTE
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -3213,17 +3280,17 @@ test('net mass is gated: no negative bill, no NaN euros, no hex tonnage', () => 
 
 /* ── a refusal names the table that is actually empty ───────────────────────── */
 
-test('a 2027 date refuses on the PRICE, and says so', () => {
-  // pack.prices holds four rows, all 2026, while defaultFactors runs through 2028 and cscf to
-  // 2030 — so every 2027 and 2028 date refuses, and refuses on the PRICE. It used to answer
-  // "The published rules do not give a free-allocation benchmark…" beside a selector reading
-  // certificate-price/2027-Q1, sending the reader to hunt a benchmark that is present.
+test('a quarter with NO price row refuses on the PRICE, and says so', () => {
+  // The refusal used to answer "The published rules do not give a free-allocation benchmark…"
+  // beside a selector reading certificate-price/2027-Q1, sending the reader to hunt a benchmark
+  // that is present. Every 2027 and 2028 date hit it, because pack.prices held four rows, all
+  // 2026. Those years now carry pending rows (next test), so the wording is exercised where it
+  // still applies: on the pack with those rows taken out.
   //
-  // Only 2027 onward reaches this. A 2026 quarter with no price published yet (Q3 and Q4 are
-  // status 'pending', priceEur null) is NOT a refusal — the engine prices the emissions, notes
-  // the missing price and carries costEur as null. The 2027 quarters have no row at all, so
-  // the lookup fails closed instead. That is why the defect was invisible across 2026.
-  const e = estimateFromPack(pack, {
+  // A row with status 'pending' and no value is NOT a refusal — the engine counts the
+  // certificates, notes the missing price and carries costEur as null. Only a quarter with no
+  // row at all fails closed.
+  const e = estimateFromPack(packNoWeeklyRows, {
     cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2027-03-15',
     emissionsScope: 'direct_and_indirect',
   });
@@ -3231,6 +3298,46 @@ test('a 2027 date refuses on the PRICE, and says so', () => {
   assert.match(e.selector, /^certificate-price\//);
   assert.match(e.reason, /certificate price/i);
   assert.doesNotMatch(e.reason, /free-allocation benchmark/i);
+});
+
+test('a 2027 or 2028 date counts certificates, with no price and no cost', () => {
+  // The shipped pack. The eight 2027-28 rows are pending and hold no value, so the line is a
+  // certificate count and nothing in euros: not a refusal, and not a cost built on a price
+  // nobody published.
+  for (const [date, quarter] of [['2027-03-15', '2027-Q1'], ['2028-12-31', '2028-Q4']]) {
+    const e = estimateFromPack(pack, {
+      cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date,
+      emissionsScope: 'direct_and_indirect',
+    });
+    assert.equal(e.status, 'cscf_pending', date);
+    assert.equal(e.priceQuarter, quarter, date);
+    assert.equal(e.priceStatus, 'pending', date);
+    assert.equal(e.priceEur, null, date);
+    assert.equal(e.scenario.costEur, null, date);
+    assert.ok(Number(e.scenario.certificates) > 0, `${date}: a count must be shown`);
+
+    // NOTHING A PERSON READS MAY CALL IT A QUARTERLY PRICE. From 2027 the Commission sets the
+    // price weekly (IR (EU) 2025/2548 Art 5); "the 2027-Q1 certificate price" names a figure that
+    // will never be published. The quarter may appear only as the period the import falls in.
+    const html = renderResult(e);
+    assert.ok(html.includes(`<span>Certificate price · imports in ${quarter}</span><b>none published</b>`),
+      `${date}: the price row must read "imports in ${quarter}" and "none published"`);
+    assert.ok(html.includes(
+      `The Commission has not published a certificate price for imports in ${quarter}, so no cost is shown.`),
+      `${date}: the engine's note, whole`);
+    assert.doesNotMatch(html, /Q[1-4] certificate price|Certificate price 20\d\d-Q|quarterly|\(pending\)/i,
+      `${date}: no wording that presents a quarterly price for this year`);
+    assert.doesNotMatch(html, /€/, `${date}: no euro figure of any kind`);
+  }
+});
+
+test('the price row: a published price shows it; an unpublished one says "none published", never "pending"', () => {
+  assert.equal(renderPriceRow({ priceQuarter: '2026-Q1', priceEur: '75.36' }),
+    '<div class="cb-row"><span>Certificate price · imports in 2026-Q1</span><b>€75.36</b></div>');
+  assert.equal(renderPriceRow({ priceQuarter: '2026-Q3', priceEur: null }),
+    '<div class="cb-row"><span>Certificate price · imports in 2026-Q3</span><b>none published</b></div>');
+  assert.equal(renderPriceRow({ priceQuarter: '2027-Q1', priceEur: null }),
+    '<div class="cb-row"><span>Certificate price · imports in 2027-Q1</span><b>none published</b></div>');
 });
 
 test('…and a good whose benchmark really is missing still says BENCHMARK', () => {
@@ -3336,24 +3443,70 @@ test('…and a UTC timestamp still prices, which is why that guard is isInteger 
 
 test('the date note fires only where the corpus carries no price row at all', () => {
   // The predicate must ask what resolveCertificatePrice asks: is there a ROW for this quarter.
-  // Not "is it published" — 2026 Q3 and Q4 rows are status:'pending' and those dates still
-  // produce certificates, so a published-only test would warn on ordinary near-future dates.
-  // Not "is the year >= 2027" — that hardcodes today's corpus and would keep warning after the
-  // Commission publishes 2027 prices, becoming the false claim this exists to prevent.
-  assert.equal(priceNoteFor(pack, '2026-03-15'), null);
-  assert.equal(priceNoteFor(pack, '2026-08-15'), null);   // Q3: row is pending, still prices
-  assert.equal(priceNoteFor(pack, '2026-12-31'), null);   // Q4: same
-  assert.match(priceNoteFor(pack, '2027-01-01'), /2027 Q1/);
-  assert.match(priceNoteFor(pack, '2028-12-31'), /2028 Q4/);
+  // Not "is it published" — a pending row still counts certificates, so a published-only test
+  // would warn on dates that work. Not "is the year >= 2027" — that hardcodes one day's corpus.
+  //
+  // THE SECOND OF THOSE IS NOW PROVED RATHER THAN ARGUED. 2027 and 2028 gained pending price
+  // rows, and on the shipped pack the note is silent for them: a year test would still be
+  // warning, falsely, on lines that now return a count.
+  for (const date of ['2026-03-15', '2026-08-15', '2026-12-31', '2027-01-01', '2027-03-15',
+    '2028-02-29', '2028-12-31']) {
+    assert.equal(priceNoteFor(pack, date), null, `shipped pack, ${date}: a row exists, so no note`);
+  }
+  // The pack without those rows is the corpus the note was written for, and there it speaks.
+  assert.equal(priceNoteFor(packNoWeeklyRows, '2026-08-15'), null);
+  assert.match(priceNoteFor(packNoWeeklyRows, '2027-01-01'), /2027 Q1/);
+  assert.match(priceNoteFor(packNoWeeklyRows, '2028-12-31'), /2028 Q4/);
+});
+
+test('the date note is silent for a year the default values do not cover', () => {
+  // ITS SENTENCE SAYS THE GOODS, ROUTES AND BENCHMARKS ARE PUBLISHED. That is true of a year
+  // with default values and false of any other. With the 2027-28 rows in place, row existence
+  // alone would leave 2029 as the first quarter with no row and say exactly that of it — over
+  // a route control reading "no rules published for 2029".
+  assert.ok(!pack.defaultValues.some((row) => row.reportingYear === 2029),
+    'sanity: the corpus holds no default value for 2029');
+  assert.ok(!pack.prices.some((row) => row.quarter.startsWith('2029')),
+    'sanity: and no price row either, so only the coverage test can be what silences it');
+  for (const date of ['2029-01-01', '2029-06-15', '2030-12-31', '2025-12-31', '0001-01-01']) {
+    assert.equal(priceNoteFor(pack, date), null, `shipped pack, ${date}`);
+    assert.equal(priceNoteFor(packNoWeeklyRows, date), null, `rows removed, ${date}`);
+  }
+  // Both boundaries of the covered span, on the corpus where the note can speak at all.
+  assert.equal(priceNoteFor(packNoWeeklyRows, '2026-12-31'), null, '2026 has its rows');
+  assert.match(priceNoteFor(packNoWeeklyRows, '2027-01-01'), /2027 Q1/, 'first uncovered-by-price day');
+  assert.match(priceNoteFor(packNoWeeklyRows, '2028-12-31'), /2028 Q4/, 'last covered day');
+  assert.equal(priceNoteFor(packNoWeeklyRows, '2029-01-01'), null, 'first day past the default values');
+});
+
+test('the date note agrees with the engine on which dates are a missing-price refusal', () => {
+  // A GATE THAT PARSES DIFFERENTLY FROM ITS CONSUMER IS WORSE THAN NONE. The note is non-null
+  // exactly when the engine, given a good it can otherwise price, refuses on certificate-price/.
+  // Checked on both corpora across every boundary the change touches, and on dates only one of
+  // the two parsers might accept.
+  const line = { cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', emissionsScope: 'direct' };
+  const dates = ['2025-12-31', '2026-01-01', '2026-12-31', '2027-01-01', '2027-03-31', '2027-04-01',
+    '2027-12-31', '2028-01-01', '2028-02-29', '2028-12-31', '2029-01-01', '2027-02-29', '2027-13-01',
+    '2027-1-15', '', 'not-a-date', '2027-03-15T00:00:00.000Z', '2027-03-15T25'];
+  for (const [name, corpus] of [['shipped', pack], ['rows removed', packNoWeeklyRows]]) {
+    for (const date of dates) {
+      const e = estimateFromPack(corpus, { ...line, date });
+      const priceRefusal = e.status === 'unavailable' && /^certificate-price\//.test(e.selector ?? '');
+      assert.equal(priceNoteFor(corpus, date) !== null, priceRefusal,
+        `${name}, ${JSON.stringify(date)}: note and engine disagree (engine: ${e.status} ${e.selector ?? ''})`);
+    }
+  }
 });
 
 test('the date note says what IS published, not that the year is unsupported', () => {
-  // The Commission HAS published the goods, routes and benchmarks for 2027/28. Saying "2027 is
-  // not covered" would be false, and false refusals are the defect class this calculator has
-  // spent weeks removing. Asserted as a property so a reword cannot quietly drop it.
-  const note = priceNoteFor(pack, '2027-03-15');
-  assert.match(note, /goods, routes and benchmarks are published/i);
-  assert.doesNotMatch(note, /not covered|unsupported|not supported/i);
+  // On the corpus where it speaks. The goods, routes and benchmarks for that year ARE published;
+  // "2027 is not covered" would be false, and false refusals are the defect class this
+  // calculator has spent weeks removing. Pinned whole so a reword cannot quietly drop a clause.
+  const note = priceNoteFor(packNoWeeklyRows, '2027-03-15');
+  assert.equal(note, 'No certificate price is in this data for imports in 2027 Q1, so no figure '
+    + 'can be produced for this date. The goods, routes and benchmarks for 2027 are published — '
+    + 'only the price is missing.');
+  assert.doesNotMatch(note, /not covered|unsupported|not supported|quarterly|Q1 price/i);
 });
 
 test('an unreadable date produces no price note — that is a different problem', () => {

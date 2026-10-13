@@ -47,16 +47,23 @@ import Footer from '../../components/layout/Footer.astro';
       <p class="cb-eyebrow">Provisional · defaults or your verified figures · in-browser</p>
 
       <!-- NON-NEGOTIABLE §7.1 — ships with the calculator, always, in markup. -->
+      <!-- WORDING APPROVED 2026-10-14. The three sentences from "This tool counts
+           certificates" to "labelled what-if" replace the ones that said a 2027 or 2028 import
+           returns nothing, which stopped being true when the pack gained pending price rows
+           for those years. The alternatives that were considered are in
+           docs/superpowers/plans/2026-10-13-cbam-pending-price-rows.md.
+           The date is the pack's own (estimator-pack.manifest.json, generatedAt) and
+           cbam-render.test.mjs fails if the two disagree. -->
       <div class="cb-banner" role="note">
         Prototype estimator · Commission default values or your own verified figures · decision-support, not a
         declaration. Computed in your browser from the published rules, and never sent
-        anywhere. This tool prices 2026 imports, and shows a cost only for the 2026 quarters
-        the Commission has priced. No certificate price is published for any later year, so a
-        2027 or 2028 import shows no figure even though its goods, routes and benchmarks are
-        published. For a 2026 import no final figure exists either — the cross-sectoral
-        correction factor is unpublished — so any number below is a labelled what-if. This is
-        not a filing, not validated by the EU CBAM Registry, and not a statement of monetary
-        liability.
+        anywhere. This tool counts certificates for 2026, 2027 and 2028 imports, and shows a
+        cost only where the Commission has published a certificate price. For 2026 the price is
+        set per quarter. From 2027 it is set weekly: none published as at 18 August 2026, so a
+        2027 or 2028 import shows certificates and no cost. No final figure exists for any of
+        these years — the cross-sectoral correction factor is unpublished — so any number below
+        is a labelled what-if. This is not a filing, not validated by the EU CBAM Registry, and
+        not a statement of monetary liability.
       </div>
 
       <div class="cb-grid">

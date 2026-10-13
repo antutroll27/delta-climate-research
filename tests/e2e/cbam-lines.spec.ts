@@ -542,10 +542,12 @@ test.describe('multi-line CBAM estimate — the single-line threshold statement'
     await page.fill('#cbDate', '2027-03-15');
     await expect(page.locator('.cb-thresh')).toContainText('No published rule');
     await expect(page.locator('.cb-thresh')).toContainText('2027');
-    // ADDED TO the refusal, never instead of it — and the refusal is exactly why the silence
-    // mattered: it volunteers that the good and its benchmark are fine, so the only sentence on
-    // screen that could have explained the missing de minimis verdict said nothing was wrong.
-    await expect(page.locator('#cbOut')).toContainText('only the price is missing');
+    // ADDED TO the estimate, never instead of it. (The estimate here used to be a price refusal
+    // volunteering that the good and its benchmark were fine. With pending price rows for 2027
+    // it is a certificate count with no cost, and the no-rule card matters more, not less: a
+    // count is now on screen with nothing else to say the de minimis verdict is missing.)
+    await expect(page.locator('#cbOut')).toContainText('Certificate price · imports in 2027-Q1');
+    await expect(page.locator('#cbOut .cb-fig')).toBeVisible();
 
     // THE BOUNDARY, and the reason this fix is not simply "always show a card". Hydrogen is
     // outside the 50 t exemption (Reg (EU) 2025/2083), so an "indeterminate" card would imply an
@@ -559,34 +561,64 @@ test.describe('multi-line CBAM estimate — the single-line threshold statement'
   });
 });
 
-test.describe('multi-line CBAM estimate — an import year the corpus does not cover', () => {
-  test('a 2027 date warns at the field, before any other input, and blocks nothing', async ({ page }) => {
-    // The defect this closes was a FUNNEL, not a missing disclosure. At 2027 every control worked
-    // — the good was offered, routes populated, mass and date accepted input — so the user built
-    // the whole line, clicked Add, and only then learned the year can never be priced. The
-    // refusal was always accurate; it just arrived after all the work.
+test.describe('multi-line CBAM estimate — an import year the corpus does not cover, or covers without a price', () => {
+  test('a 2027 or 2028 date no longer warns at the field: the corpus has a price row for it', async ({ page }) => {
+    // WHAT THIS USED TO ASSERT, and why it changed. At 2027 every control worked and the line
+    // then refused on the certificate price, so a note at the date field said so before the user
+    // built anything. The pack now carries pending price rows for 2027 and 2028: those dates
+    // count certificates, and a warning that "no figure can be produced" would be false.
+    //
+    // The note is still wired (it would speak for a covered year with no price row, which is the
+    // corpus cbam-render.test.mjs runs it against). syncDateNote is a closure inside initCbam(),
+    // so its silence on the shipped pack can only be observed here.
     await page.goto('/cbam/cbam-calculator/');
-    await page.fill('#cbDate', '2027-03-15');
-    // fill() dispatches only `input`; #cbDate's handler listens on `change`, as this file's own
-    // setLine helper does for #cbCn for the same reason.
-    await page.dispatchEvent('#cbDate', 'change');
-    // No other field has been touched — that is the whole point.
-    await expect(page.locator('#cbDateNote')).toContainText('2027 Q1');
-    await expect(page.locator('#cbDateNote')).toContainText('goods, routes and benchmarks are published');
-
-    // And it clears when the date returns to a quarter the corpus can price.
-    await page.fill('#cbDate', '2026-03-15');
+    for (const date of ['2027-03-15', '2028-12-31']) {
+      await page.fill('#cbDate', date);
+      // fill() dispatches only `input`; #cbDate's handler listens on `change`, as this file's own
+      // setLine helper does for #cbCn for the same reason.
+      await page.dispatchEvent('#cbDate', 'change');
+      await expect(page.locator('#cbDateNote')).toHaveText('');
+    }
+    // And silent past the corpus too, where its sentence ("goods, routes and benchmarks are
+    // published") would be false: the route control is what speaks for 2029.
+    await page.fill('#cbDate', '2029-03-15');
     await page.dispatchEvent('#cbDate', 'change');
     await expect(page.locator('#cbDateNote')).toHaveText('');
   });
 
-  test('2027 warns but does not block — the route control stays usable', async ({ page }) => {
+  test('a 2027 and a 2028 line show certificates, "none published" for the price, and no euro figure', async ({ page }) => {
+    // THE CHANGE ITSELF, on the page. The same Algerian clinker line that prices at 75.865
+    // certificates / €5,717.19 in 2026 Q1. In 2027 and 2028 the count is computable (default
+    // value, benchmark and free-allocation factor are all published) and the cost is not.
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { ...GOOD_LINE, mass: '100' });
+    await expect(page.locator('#cbOut')).toContainText('€5,717.19');
+
+    for (const [date, quarter] of [['2027-03-15', '2027-Q1'], ['2028-11-30', '2028-Q4']]) {
+      await page.fill('#cbDate', date);
+      await page.dispatchEvent('#cbDate', 'change');
+      await expect(page.locator('#cbRoute')).toBeEnabled();
+      const out = page.locator('#cbOut');
+      await expect(out.locator('.cb-fig')).toBeVisible();
+      await expect(out).toContainText(`Certificate price · imports in ${quarter}`);
+      await expect(out).toContainText('none published');
+      await expect(out).toContainText(
+        `The Commission has not published a certificate price for imports in ${quarter}, so no cost is shown.`);
+      // No cost, and no refusal either.
+      await expect(out).not.toContainText('€');
+      await expect(out).not.toContainText('No estimate');
+      // From 2027 the certificate price is weekly. Nothing on the card may present a quarterly
+      // price for these years, or promise one with "pending".
+      await expect(out).not.toContainText(/quarterly|\(pending\)|Q[1-4] certificate price/i);
+    }
+  });
+
+  test('2027 does not block — the route control stays usable, and 2029 still does', async ({ page }) => {
     // Asserted with a good SELECTED, because #cbRoute is disabled on a bare page until a CN is
-    // chosen — that initial state has nothing to do with the year, and asserting it alongside
-    // "before any other input" tested the wrong thing at the wrong moment.
+    // chosen — that initial state has nothing to do with the year.
     //
     // 2029 disables this control because no rules exist at all. 2027 has published goods, routes
-    // and benchmarks and lacks only a price, so blocking it would assert something false.
+    // and benchmarks, so blocking it would assert something false.
     await page.goto('/cbam/cbam-calculator/');
     await page.fill('#cbCn', '2523100090');
     await page.dispatchEvent('#cbCn', 'change');
@@ -594,8 +626,13 @@ test.describe('multi-line CBAM estimate — an import year the corpus does not c
     await page.dispatchEvent('#cbDate', 'change');
     await expect(page.locator('#cbCountry option[value="DZ"]')).toBeAttached();
     await page.selectOption('#cbCountry', 'DZ');
-    await expect(page.locator('#cbDateNote')).toContainText('2027 Q1');
+    await expect(page.locator('#cbDateNote')).toHaveText('');
     await expect(page.locator('#cbRoute')).toBeEnabled();
+
+    await page.fill('#cbDate', '2029-03-15');
+    await page.dispatchEvent('#cbDate', 'change');
+    await expect(page.locator('#cbRoute')).toBeDisabled();
+    await expect(page.locator('#cbDateNote')).toHaveText('');
   });
 
   test('a 2026 quarter with an unpublished price does NOT warn — it prices', async ({ page }) => {
@@ -635,11 +672,13 @@ test.describe('multi-line CBAM estimate — an import year the corpus does not c
     await expect(page.locator('#cbRoute')).toBeEnabled();
 
     // 2027 and 2028 ARE covered — the route list must survive, and the panel must still reach the
-    // engine's own honest refusal about the certificate price. Asserted first so a fix that
-    // simply refused every year but 2026 would fail here rather than look like a pass.
+    // engine: a certificate count with no price published (it was a price refusal until the pack
+    // gained pending rows for those years). Asserted first so a fix that simply refused every
+    // year but 2026 would fail here rather than look like a pass.
     await page.fill('#cbDate', '2027-06-15');
     await expect(page.locator('#cbRoute')).toBeEnabled();
-    await expect(page.locator('#cbOut')).toContainText('only the price is missing');
+    await expect(page.locator('#cbOut')).toContainText('Certificate price · imports in 2027-Q2');
+    await expect(page.locator('#cbOut')).toContainText('none published');
 
     // 2029: outside the corpus. The old copy blamed the pairing.
     await page.fill('#cbDate', '2029-06-15');

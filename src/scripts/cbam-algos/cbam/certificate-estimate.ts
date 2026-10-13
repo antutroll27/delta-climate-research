@@ -522,6 +522,11 @@ const FAILURE_MESSAGES: Record<EstimateFailureCode, string> = {
   // NO_CERTIFICATE_PRICE, and all 150,516 of the former fail the verified path on
   // NO_CERTIFICATE_PRICE too. Saying the estimate "does not depend on this default" is true on
   // every date, and is the part the user can act on.
+  //
+  // THE CORPUS CHANGED UNDER THE PARAGRAPH ABOVE; the conclusion stands. 2027 and 2028 now carry
+  // pending price rows, so at 2027-02-15 an attested line counts certificates and shows no cost
+  // instead of refusing, and the first quarter with no row is 2029-Q1. "Will price" is still
+  // false on both: no cost in 2027-28, a refusal from 2029.
   NO_DIRECT_DEFAULT:
     'The Commission publishes no applicable direct default value for this good, origin, '
     + 'production route or year, so no estimate is shown. The free-allocation benchmark for this '
@@ -646,7 +651,10 @@ export function estimateCertificates(
       // the Commission does not list printed that sentence over a card showing no figure — and as
       // its SOLE note, the two standing disclosures further down being priced-only already.
       // Reproduced on MO (Macao, unlisted) clinker 25231000 route (B) at 2027-03-15, which refuses
-      // on certificate-price/2027-Q1 because the pack prices 2026 quarters only. Swept over the
+      // on certificate-price/2027-Q1 because the pack prices 2026 quarters only. (That was the
+      // corpus when this was measured. 2027 and 2028 have since gained pending price rows, so
+      // that date now counts certificates; the reasoning holds for any refusal raised here.)
+      // Swept over the
       // shipped pack — every (CN, route) pair it prices, two residual origins against two listed
       // controls, three dates, both emission scopes, all three of the defaults, mixed and verified
       // paths — 704 of 44,136 estimates carried it into a refusal (668 on certificate-price/, 36
@@ -686,7 +694,12 @@ export function estimateCertificates(
       )
     }
     if (price.status === 'pending') {
-      notes.push(`The Commission has not published the ${quarter} certificate price, so no cost is shown.`)
+      // "a certificate price for imports in <quarter>", never "the <quarter> certificate price".
+      // The quarter is this engine's lookup key. Only 2026 has a price per quarter; from 2027
+      // the Commission sets it weekly (IR (EU) 2025/2548 Art 5), so naming "the 2027-Q1
+      // certificate price" would describe a figure that will never be published. This wording
+      // is true of a pending row in either regime, with no year test.
+      notes.push(`The Commission has not published a certificate price for imports in ${quarter}, so no cost is shown.`)
     }
     if (adjustment.status === 'cscf_pending') {
       notes.push(`The cross-sectoral correction factor for ${adjustment.year} is unpublished, so no final figure exists for this import.`)
@@ -768,7 +781,9 @@ export function estimateCertificates(
       // offers, one origin each (the origin moves the emissions figure, never which table is
       // consulted), at four dates in each of 2026, 2027 and 2028. Of 17,484 estimates: 7,680
       // refused on certificate-price/, every one of them 2027 or 2028, because the pack prices
-      // 2026 quarters only; 5,964 refused on benchmark/, which this wording already named
+      // 2026 quarters only (as measured then: 2027 and 2028 now carry pending price rows and
+      // count certificates, so certificate-price/ is reached only from 2029, and only by an
+      // attested line); 5,964 refused on benchmark/, which this wording already named
       // correctly; 3,840 priced. The other four namespaces produced nothing. cbam-factor/ and
       // cscf/ both cover 2026-2028, and a date outside those years has no default factor
       // either, so estimateFromPack refuses with its own default/ before this engine is
