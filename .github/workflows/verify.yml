@@ -41,6 +41,11 @@ jobs:
     # fires first with 2.6 min to print its summary and upload. The arithmetic is spelt out
     # there. This is still a ceiling, and it costs nothing unless a run is slow: a job is
     # billed for the minutes it uses, about 35 for a full pull-request run today.
+    # Corrected later the same day: the 6.2 was out of date. Run 38464957721 spent 7.8 min
+    # outside the browser tests (job 38.65 min, browser tests 30.8) and would have been cancelled
+    # under the old 40. On 7.8, a 40-minute stop left 1.0 min to report, so the stop is now 38:
+    # 48.8 - 7.8 - 38 = 3.0. A full pull-request run has cost 25 to 39 billed minutes this week,
+    # depending on the runner (24.5 and 38.65 for two runs started six minutes apart).
     timeout-minutes: 50
 
     steps:
