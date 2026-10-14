@@ -27,7 +27,7 @@ import {
   type EstimatorInput, type EstimatorPack,
 } from './cbam-algos/estimator/estimate-from-pack.ts';
 import {
-  assumedCost, formatDecimal, formatPackDate, parseAssumedPrice, splitBetween,
+  assumedCost, benchmarkScope, formatDecimal, formatPackDate, parseAssumedPrice, splitBetween,
   type Outlook, type OutlookFigureYear, type OutlookSplit,
 } from './cbam-outlook.ts';
 
@@ -75,6 +75,8 @@ export interface GraphsModel {
   causes: (OutlookSplit | null)[];
   /** What the emissions part is: the mark-up on default values, on the electricity default, or none. */
   emissionsCause: OutlookSplit['emissionsCause'];
+  /** "for route (C)", or "for this good" when its benchmark has no route: the strip's own words. */
+  benchmarkScope: string;
 }
 
 /** Why there is nothing to draw, for the one sentence shown in the cards' place. */
@@ -156,6 +158,7 @@ export function graphsModel(
     causes,
     emissionsCause: tier === 'default+markup' ? 'markup-default'
       : tier === 'verified-direct+default-indirect' ? 'markup-electricity' : 'none',
+    benchmarkScope: benchmarkScope(F[0]),
   };
 }
 
@@ -505,7 +508,7 @@ export function sentenceCascade(m: GraphsModel): string {
   if (!sp) return `The change to ${last.year} is not divided into causes for this line.`;
   const largest = CAUSES.map((c) => ({ ...c, part: new D(causePart(sp, c.key)) }))
     .reduce((a, b) => (b.part.greaterThan(a.part) ? b : a));
-  const flat = new D(sp.benchmarkPart).isZero() ? ' The benchmark does not change for this good.' : '';
+  const flat = new D(sp.benchmarkPart).isZero() ? ` The benchmark does not change ${m.benchmarkScope}.` : '';
   return `Of the <b>${n1Honest(sp.rise)}</b> extra certificates by ${last.year}, <b>${n1Honest(largest.part.toFixed())}</b> come from ${causeWords(m, largest.key)}.${flat}`;
 }
 
@@ -640,11 +643,13 @@ export function plotPhase(phase: PhaseModel, w: number): Plot {
 
 /**
  * WHEN THE ORIGINS ARE NOT DRAWN. A ranked row of stems says "these differ, and the differences
- * matter". Two cases make that false, and both are said in words instead:
- *   · the whole range is under a tenth of the highest figure (ORIGINS_FLAT_SHARE);
- *   · half or more of the origins carry exactly the same figure (ORIGINS_SAME_SHARE). Aluminous
- *     cement is the case in point: 95 of its 101 origins are at 153.4 certificates, and the six
- *     others, from 143.5 to 182.0, would make a 21% "spread" out of what is one value.
+ * matter". That is false only when the whole range, over ALL the origins, is under a tenth of the
+ * highest figure (ORIGINS_FLAT_SHARE); then the origins are said in words, as "little difference".
+ *
+ * WHEN HALF OR MORE SHARE ONE FIGURE (ORIGINS_SAME_SHARE), the sentence says so, and "the others"
+ * are only the origins OFF that figure, with their own lowest and highest. That says nothing about
+ * how much the origin matters: aluminous cement has 95 of 101 origins at 153.4, and the six others
+ * run from 143.5 to 182.0, a 21% spread, so it is drawn, with the shared figure marked.
  */
 export const ORIGINS_FLAT_SHARE = '0.1';
 export const ORIGINS_SAME_SHARE = '0.5';
@@ -657,6 +662,8 @@ export interface OriginsModel {
   kind: 'chart' | 'flat' | 'few';
   /** The figure most origins share, and how many share it (exact equality). */
   mode: { certificates: string; count: number };
+  /** Half or more, but not all, carry the mode: the sentence names it and the chart marks it. */
+  shared: boolean;
 }
 
 const regionNames = typeof Intl !== 'undefined' && 'DisplayNames' in Intl
@@ -665,29 +672,42 @@ const originName = (c: string): string => (c === 'OTHER' ? 'other origins' : (re
 
 /**
  * The visitor's good and route on DEFAULT VALUES for every origin the pack publishes one for.
- * One engine call per origin, so the page computes it after the other cards are drawn. Null when
- * the line has no route offered for its year.
+ * One engine call per origin, so the page computes it after the other cards are drawn, a few
+ * origins at a time (originCountries, originRow, originsFrom); originsModel is all three at
+ * once. Null when the line has no route offered for its year.
  */
 export function originsModel(pack: EstimatorPack, input: EstimatorInput): OriginsModel | null {
+  const rows = originCountries(pack, input).map((c) => originRow(pack, input, c)).filter((r): r is OriginRow => r !== null);
+  return originsFrom(input, rows);
+}
+
+type OriginRow = OriginsModel['rows'][number];
+/** The countries to try: the pack's published sheets and OTHER; none when the year cannot be read. */
+export const originCountries = (pack: EstimatorPack, input: EstimatorInput): string[] =>
+  (Number.isInteger(Number(input.date.slice(0, 4))) ? [...pack.publishedOriginSheets, 'OTHER'] : []);
+
+/** One origin's default-value count for the line, or null when it does not offer the route. */
+export function originRow(pack: EstimatorPack, input: EstimatorInput, country: string): OriginRow | null {
+  if (!routesFor(pack, input.cn, country, Number(input.date.slice(0, 4))).includes(input.route)) return null;
+  const e = estimateFromPack(pack, { ...input, country, verified: undefined });
+  if (e.status === 'unavailable') return null;
+  return { country, name: originName(country), certificates: (e.status === 'cscf_pending' ? e.scenario : e.figure).certificates };
+}
+
+/** The model from the computed rows, in any order. */
+export function originsFrom(input: EstimatorInput, computed: OriginRow[]): OriginsModel | null {
+  if (!computed.length) return null;
   const year = Number(input.date.slice(0, 4));
-  if (!Number.isInteger(year)) return null;
-  const rows: OriginsModel['rows'] = [];
-  for (const country of [...pack.publishedOriginSheets, 'OTHER']) {
-    if (!routesFor(pack, input.cn, country, year).includes(input.route)) continue;
-    const e = estimateFromPack(pack, { ...input, country, verified: undefined });
-    if (e.status === 'unavailable') continue;
-    rows.push({ country, name: originName(country), certificates: (e.status === 'cscf_pending' ? e.scenario : e.figure).certificates });
-  }
-  if (!rows.length) return null;
+  const rows = [...computed];
   rows.sort((a, b) => new D(a.certificates).cmp(b.certificates) || a.name.localeCompare(b.name));
   const min = new D(rows[0].certificates), max = new D(rows[rows.length - 1].certificates);
   const counts = new Map<string, number>();
   for (const r of rows) counts.set(new D(r.certificates).toFixed(), (counts.get(new D(r.certificates).toFixed()) ?? 0) + 1);
   const [modeValue, modeCount] = [...counts].reduce((a, b) => (b[1] > a[1] ? b : a));
-  const flat = max.isZero() || max.minus(min).div(max).lessThan(ORIGINS_FLAT_SHARE)
-    || new D(modeCount).div(rows.length).greaterThanOrEqualTo(ORIGINS_SAME_SHARE);
+  const flat = max.isZero() || max.minus(min).div(max).lessThan(ORIGINS_FLAT_SHARE);
   const kind = rows.length < 3 ? 'few' : flat ? 'flat' : 'chart';
-  return { year, rows, ownCountry: input.country, usesVerified: !!input.verified, kind, mode: { certificates: modeValue, count: modeCount } };
+  const shared = modeCount < rows.length && new D(modeCount).div(rows.length).greaterThanOrEqualTo(ORIGINS_SAME_SHARE);
+  return { year, rows, ownCountry: input.country, usesVerified: !!input.verified, kind, mode: { certificates: modeValue, count: modeCount }, shared };
 }
 
 /** Decided from the rows: the extremes by exact comparison, the visitor's origin by its own row. */
@@ -698,22 +718,38 @@ export function sentenceOrigins(o: OriginsModel): string {
       ? `On default values only one origin is published for this good and route: ${esc(first.name)}, ${n1(first.certificates)} certificates in ${o.year}.`
       : `On default values only ${o.rows.length} origins are published for this good and route: ${o.rows.map((r) => `${esc(r.name)} ${n1(r.certificates)}`).join(', ')} certificates in ${o.year}.`;
   }
+  const own = o.rows.find((r) => r.country === o.ownCountry);
+  const ownText = own ? ` ${esc(own.name)} is at ${n1(own.certificates)}.` : '';
+  if (o.kind === 'flat' && o.mode.count === o.rows.length) {
+    return `On default values the origin makes no difference for this good: all ${o.rows.length} origins carry the same figure, ${n1(first.certificates)} certificates in ${o.year}.`;
+  }
+  if (o.shared) {
+    const b = (t: string): string => (o.kind === 'chart' ? `<b>${t}</b>` : t);
+    const sharedText = `${b(`${o.mode.count} of ${o.rows.length}`)} origins carry the same figure${o.kind === 'chart' ? ' for this good' : ''}, ${n1(o.mode.certificates)} certificates in ${o.year}; ${othersText(o, b)}.`;
+    return o.kind === 'flat'
+      ? `On default values the origin makes little difference for this good: ${sharedText}`
+      : `On default values, ${sharedText}${ownText}`;
+  }
   if (o.kind === 'flat') {
-    if (o.mode.count === o.rows.length) {
-      return `On default values the origin makes no difference for this good: all ${o.rows.length} origins carry the same figure, ${n1(first.certificates)} certificates in ${o.year}.`;
-    }
-    if (o.mode.count * 2 >= o.rows.length) {
-      return `On default values the origin makes little difference for this good: ${o.mode.count} of ${o.rows.length} origins carry the same figure, ${n1(o.mode.certificates)} certificates in ${o.year}; the others run from ${n1(first.certificates)} (${esc(first.name)}) to ${n1(last.certificates)} (${esc(last.name)}).`;
-    }
     return `On default values the origin makes little difference for this good: ${o.rows.length} origins run from ${n1(first.certificates)} (${esc(first.name)}) to ${n1(last.certificates)} (${esc(last.name)}) certificates in ${o.year}.`;
   }
-  const own = o.rows.find((r) => r.country === o.ownCountry);
-  return `On default values, ${o.year} certificates for this good run from <b>${n1(first.certificates)}</b> (${esc(first.name)}) to <b>${n1(last.certificates)}</b> (${esc(last.name)}).${own ? ` ${esc(own.name)} is at ${n1(own.certificates)}.` : ''}`;
+  return `On default values, ${o.year} certificates for this good run from <b>${n1(first.certificates)}</b> (${esc(first.name)}) to <b>${n1(last.certificates)}</b> (${esc(last.name)}).${ownText}`;
+}
+
+/** The origins OFF the shared figure, with their own lowest and highest. Rows are sorted. */
+const offShared = (o: OriginsModel): OriginsModel['rows'] => o.rows.filter((r) => !new D(r.certificates).equals(o.mode.certificates));
+function othersText(o: OriginsModel, b: (t: string) => string): string {
+  const others = offShared(o), lo = others[0], hi = others[others.length - 1];
+  if (others.length === 1) return `the other, ${esc(lo.name)}, is at ${b(n1(lo.certificates))}`;
+  if (new D(lo.certificates).equals(hi.certificates)) return `the other ${others.length} are at ${b(n1(lo.certificates))}`;
+  return `the other ${others.length} run from ${b(n1(lo.certificates))} (${esc(lo.name)}) to ${b(n1(hi.certificates))} (${esc(hi.name)})`;
 }
 
 export function plotOrigins(o: OriginsModel, w: number, ownCountry: string): Plot {
   if (o.kind !== 'chart') return { h: 0, svg: '', alt: 'Not drawn: the origins barely differ, or too few are published.' };
-  const O = o.rows, lo = O[0], hi = O[O.length - 1], me = O.find((r) => r.country === ownCountry);
+  const O = o.rows, me = O.find((r) => r.country === ownCountry);
+  // With a shared figure, the labelled extremes are those of the others, as the sentence says.
+  const named = o.shared ? offShared(o) : O, lo = named[0], hi = named[named.length - 1];
   const h = 260, top = 50, base = 216, L = 6, R = 6, step = (w - L - R) / O.length;
   const sy = scaleFromZero(Number(hi.certificates) * 1.02, base - top);
   const yOf = (v: string): number => base - sy(Number(v));
@@ -727,6 +763,16 @@ export function plotOrigins(o: OriginsModel, w: number, ownCountry: string): Plo
       <circle cx="${x}" cy="${y}" r="${rad}" fill="${is ? 'var(--cg-accent)' : 'var(--cg-ink)'}" ${is ? 'stroke="var(--cg-surface)" stroke-width="2"' : ''} data-cy="${y.toFixed(3)}"/>
       <rect x="${x - Math.max(step, 6) / 2}" y="${top - 6}" width="${Math.max(step, 6)}" height="${base - top + 6}" fill="transparent"/>`, `data-country="${esc(r.country)}"`);
   });
+  if (o.shared) {
+    // The shared figure, marked once across its run of stems (a sorted run is contiguous).
+    const i0 = O.findIndex((r) => new D(r.certificates).equals(o.mode.certificates)), i1 = i0 + o.mode.count - 1;
+    const x0 = L + step * i0, x1 = L + step * (i1 + 1), y = yOf(o.mode.certificates);
+    // Below the band, clear of the extremes' labels (which sit above their dots); above it only
+    // when the band is too near the baseline. A surface halo keeps it legible over the stems.
+    const ly = y + 22 < base - 4 ? y + 22 : y - 12;
+    s += `<g data-shared="${o.mode.count}" aria-hidden="true"><rect x="${x0}" y="${y - 6}" width="${x1 - x0}" height="12" fill="var(--cg-accent)" opacity="0.14"/>
+      <text class="cg-num" x="${(x0 + x1) / 2}" y="${ly}" text-anchor="middle" font-size="11" paint-order="stroke" stroke="var(--cg-surface)" stroke-width="4" stroke-linejoin="round">${o.mode.count} origins at ${n1(o.mode.certificates)}</text></g>`;
+  }
   for (const r of new Set([lo, hi, ...(me ? [me] : [])])) {
     const i = O.indexOf(r), x = L + step * i + step / 2, y = yOf(r.certificates), right = x > w * 0.7, left = x < w * 0.3;
     const anchor = right ? 'end' : left ? 'start' : 'middle', dx = right ? 6 : left ? -4 : 0, up = r === lo && r !== me ? 30 : 16;
@@ -734,7 +780,7 @@ export function plotOrigins(o: OriginsModel, w: number, ownCountry: string): Plo
     s += `<text class="cg-num" x="${x + dx}" y="${y - up}" text-anchor="${anchor}" font-size="11">${n1(r.certificates)} <tspan class="cg-faint" font-weight="400">${esc(r.name)}</tspan></text>`;
   }
   s += `<text class="cg-lab" x="${L}" y="${base + 20}" font-size="10">Lowest default</text><text class="cg-lab" x="${w - R}" y="${base + 20}" text-anchor="end" font-size="10">Highest default</text>`;
-  return { h, svg: s, alt: `${O.length} origins ranked by certificates on default values, from ${n1(lo.certificates)} to ${n1(hi.certificates)}.` };
+  return { h, svg: s, alt: `${O.length} origins ranked by certificates on default values, from ${n1(O[0].certificates)} to ${n1(O[O.length - 1].certificates)}${o.shared ? `; ${o.mode.count} of them at ${n1(o.mode.certificates)}` : ''}.` };
 }
 
 /** The origins card's body, drawn when the origins have been computed. */

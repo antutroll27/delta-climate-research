@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Decimal from 'decimal.js';
 
 import {
-  graphsModel, originsModel, phaseModel, plotCascade, plotOrigins, plotPhase, renderGraphs,
+  graphsModel, originCountries, originRow, originsFrom, originsModel, phaseModel, plotCascade, plotOrigins, plotPhase, renderGraphs,
   sentenceCascade, sentenceOrigins, sentencePhase, ORIGINS_FLAT_SHARE, ORIGINS_SAME_SHARE,
 } from '../../src/scripts/cbam-graphs.ts';
 import { outlook, splitBetween } from '../../src/scripts/cbam-outlook.ts';
@@ -70,7 +70,11 @@ test('SWEEP, why it rises: the sentence names the largest cause, says when the b
       const parts = { markup: new D(truth.moreEmissions), factor: new D(truth.factorPart), benchmark: new D(truth.benchmarkPart) };
       const largest = Object.entries(parts).sort((a, b) => b[1].cmp(a[1]))[0][0];
       if (!CAUSE_WORDS[largest].test(s)) wrong.push(`${where}: largest cause is ${largest}, sentence "${s}"`);
-      const saysBenchFlat = /The benchmark does not change for this good\./.test(s);
+      // The strip's words: the benchmark is per route, so "for route (C)"; "for this good" only without one.
+      const bm = first.benchmarks.length === 1 ? first.benchmarks[0] : null;
+      const scope = bm && bm.route ? `for route ${bm.route}` : 'for this good';
+      if (/The benchmark does not change/.test(s) && !s.includes(`The benchmark does not change ${scope}.`)) wrong.push(`${where}: benchmark scope should be "${scope}": "${s}"`);
+      const saysBenchFlat = /The benchmark does not change/.test(s);
       if (parts.benchmark.isZero()) benchZero += 1; else benchNonZero += 1;
       if (saysBenchFlat !== parts.benchmark.isZero()) wrong.push(`${where}: benchmark part ${parts.benchmark}, sentence "${s}"`);
       // The legend draws no category that contributes nothing.
@@ -89,13 +93,13 @@ test('SWEEP, why it rises: the sentence names the largest cause, says when the b
 test('why it rises, worked: welded tube and iron powder', () => {
   // Tube: 86.4 of 97.5825 is mark-up, 11.1825 the share retained, the benchmark does not move.
   assert.equal(text(sentenceCascade(modelOf(line()))),
-    'Of the 97.6 extra certificates by 2028, 86.4 come from the mark-up on default values. The benchmark does not change for this good.');
+    'Of the 97.6 extra certificates by 2028, 86.4 come from the mark-up on default values. The benchmark does not change for route (C).');
   // Iron powder (F): 50.8 mark-up, 10.95 share retained, 14.58 the 2028 benchmark step.
   assert.equal(text(sentenceCascade(modelOf(line({ cn: '72052100', route: '(F)' })))),
     'Of the 76.3 extra certificates by 2028, 50.8 come from the mark-up on default values.');
   // Verified figures: no mark-up, so the share retained leads.
   assert.equal(text(sentenceCascade(modelOf(line({ verified: { directTco2ePerT: '2.0' } })))),
-    'Of the 11.2 extra certificates by 2028, 11.2 come from the smaller share of free allocation retained. The benchmark does not change for this good.');
+    'Of the 11.2 extra certificates by 2028, 11.2 come from the smaller share of free allocation retained. The benchmark does not change for route (C).');
   // A floored line is not divided.
   assert.equal(text(sentenceCascade(modelOf(line({ verified: { directTco2ePerT: '1.0' } })))),
     'The count does not change between 2026 and 2028: free allocation covers all of the emissions counted.');
@@ -142,29 +146,58 @@ test('the phase-out sentence is decided from the schedule, whatever the schedule
 
 /* ── origins ───────────────────────────────────────────────────────────────── */
 
-test('SWEEP, origins: the rule for showing the chart, and every name and figure in the sentence, follow the figures', () => {
-  // Every fifth good and route: the origins card makes one engine call per origin, so a full
-  // census here would take minutes. The fifth is enough to reach every kind of answer.
-  let checked = 0; const kinds = { chart: 0, flat: 0, few: 0 }; const wrong = [];
-  goodsAndRoutes().forEach(([cn, route], index) => {
-    if (index % 5 !== 0) return;
+test('SWEEP, origins: on EVERY good and route, the chart rule and every claim in the sentence follow the figures', () => {
+  // Every claim is checked, not only which rule fired: who "the others" are and their range, the
+  // shared figure and its count, and whether "little difference" is true of ALL the origins.
+  let checked = 0, sharedSaid = 0, littleSaid = 0; const kinds = { chart: 0, flat: 0, few: 0 }; const wrong = [];
+  const one = (v) => new D(v).toDecimalPlaces(1, Decimal.ROUND_HALF_UP);
+  const num = (t) => new D(t.replace(/,/g, ''));
+  for (const [cn, route] of goodsAndRoutes()) {
     const input = line({ cn, route });
     const o = originsModel(pack, input);
-    if (!o) return;
+    if (!o) continue;
     checked += 1;
+    const where = `${cn}/${route}`;
     const values = o.rows.map((r) => new D(r.certificates));
     const min = D.min(...values), max = D.max(...values);
     const counts = {}; for (const v of values) counts[v.toFixed()] = (counts[v.toFixed()] ?? 0) + 1;
     const modal = Math.max(...Object.values(counts));
-    const kind = o.rows.length < 3 ? 'few'
-      : max.isZero() || max.minus(min).div(max).lessThan(ORIGINS_FLAT_SHARE) || new D(modal).div(o.rows.length).greaterThanOrEqualTo(ORIGINS_SAME_SHARE) ? 'flat' : 'chart';
-    if (kind === 'flat' && o.mode.count !== modal) wrong.push(`${cn}/${route}: modal count ${o.mode.count} ≠ ${modal}`);
+    const littleTrue = max.isZero() || max.minus(min).div(max).lessThan(ORIGINS_FLAT_SHARE);
+    const kind = o.rows.length < 3 ? 'few' : littleTrue ? 'flat' : 'chart';
     kinds[kind] += 1;
-    const where = `${cn}/${route}`;
     if (o.kind !== kind) wrong.push(`${where}: model says ${o.kind}, figures say ${kind}`);
     const s = text(sentenceOrigins(o));
     if (!/default values/.test(s)) wrong.push(`${where}: the sentence does not say these are default values`);
-    if (kind !== 'few' && o.mode.count === o.rows.length) {
+    if (/little difference|no difference/.test(s)) {
+      littleSaid += 1;
+      if (!littleTrue) wrong.push(`${where}: says little difference over a ${max.minus(min).div(max).times(100).toFixed(0)}% spread: "${s}"`);
+    }
+    const sh = s.match(/(\d+) of (\d+) origins carry the same figure(?: for this good)?, ([\d,.]+) certificates/);
+    if (sh) {
+      sharedSaid += 1;
+      const [, k, n, v] = sh;
+      const exact = o.rows.filter((r) => one(r.certificates).equals(num(v)) && new D(r.certificates).equals(o.mode.certificates));
+      if (Number(n) !== o.rows.length) wrong.push(`${where}: says ${n} origins, there are ${o.rows.length}`);
+      if (Number(k) !== modal || exact.length !== modal) wrong.push(`${where}: says ${k} share ${v}; the most sharing one figure is ${modal}`);
+      if (modal * 2 < o.rows.length) wrong.push(`${where}: a shared figure named for under half the origins`);
+      const others = o.rows.filter((r) => !new D(r.certificates).equals(o.mode.certificates));
+      const om = s.match(/the other (\d+) run from ([\d,.]+) \(([^)]+)\) to ([\d,.]+) \(([^)]+)\)/)
+        ?? s.match(/the other (\d+) are at ([\d,.]+)/) ?? s.match(/the other, ([^,]+), is at ([\d,.]+)/);
+      if (!om) { wrong.push(`${where}: names a shared figure but not the others: "${s}"`); continue; }
+      const oLo = D.min(...others.map((r) => new D(r.certificates))), oHi = D.max(...others.map((r) => new D(r.certificates)));
+      const inOthers = (name, v) => others.some((r) => r.name === name && new D(r.certificates).equals(v));
+      if (om[0].startsWith('the other,')) {
+        if (others.length !== 1 || !inOthers(om[1], oLo) || !one(oLo).equals(num(om[2]))) wrong.push(`${where}: the one other is wrong: "${s}"`);
+      } else {
+        if (Number(om[1]) !== others.length) wrong.push(`${where}: says ${om[1]} others, there are ${others.length}`);
+        if (!one(oLo).equals(num(om[2]))) wrong.push(`${where}: others' lowest is ${oLo}, says ${om[2]}`);
+        if (om[3] && (!inOthers(om[3], oLo) || !inOthers(om[5], oHi) || !one(oHi).equals(num(om[4])))) wrong.push(`${where}: others' range wrong: "${s}"`);
+        if (!om[3] && !oLo.equals(oHi)) wrong.push(`${where}: says the others share one figure; they run ${oLo} to ${oHi}`);
+      }
+      if (kind === 'chart' && !plotOrigins(o, 600, 'IN').svg.includes(`data-shared="${modal}"`)) wrong.push(`${where}: shared figure not marked on the chart`);
+    } else if (kind !== 'few' && modal * 2 >= o.rows.length && modal < o.rows.length) {
+      wrong.push(`${where}: ${modal} of ${o.rows.length} share one figure and the sentence does not say so`);
+    } else if (kind !== 'few' && modal === o.rows.length) {
       if (!/all \d+ origins carry the same figure/.test(s)) wrong.push(`${where}: all origins equal, sentence "${s}"`);
     } else if (kind !== 'few') {
       const lowest = o.rows.filter((r) => new D(r.certificates).equals(min)).map((r) => r.name);
@@ -173,31 +206,59 @@ test('SWEEP, origins: the rule for showing the chart, and every name and figure 
       if (!highest.some((n) => s.includes(n))) wrong.push(`${where}: highest is ${highest.join('/')}, sentence "${s}"`);
     }
     const own = o.rows.find((r) => r.country === 'IN');
-    if (own && kind === 'chart' && !s.includes('India')) wrong.push(`${where}: India is in the list and not named`);
-    // Each row is the engine's own default-value count for that origin.
-    const spot = o.rows[Math.floor(o.rows.length / 2)];
-    const e = estimateFromPack(pack, { ...input, country: spot.country });
-    if (e.scenario.certificates !== spot.certificates) wrong.push(`${where}: ${spot.country} ${spot.certificates} ≠ engine ${e.scenario.certificates}`);
-  });
-  assert.ok(checked > 200, `only ${checked} goods checked`);
-  assert.ok(kinds.chart > 20 && kinds.flat > 5, `the sweep must reach every kind: ${JSON.stringify(kinds)}`);
-  // "few" (one or two origins) does not occur among India's goods; the sentence is unit-tested below.
+    if (own && kind === 'chart' && !s.includes(`India is at ${new Intl.NumberFormat('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(one(own.certificates).toNumber())}`)) wrong.push(`${where}: India's own figure not stated: "${s}"`);
+  }
+  assert.ok(checked > 400, `only ${checked} goods checked`);
+  assert.ok(kinds.chart > 100 && kinds.flat > 5 && sharedSaid > 5, `the sweep must reach every kind: ${JSON.stringify(kinds)}, shared ${sharedSaid}`);
+  console.log(`origins sweep: ${checked} goods and routes, ${JSON.stringify(kinds)}, shared figure named ${sharedSaid}, "little/no difference" said ${littleSaid}`);
   assert.equal(wrong.length, 0, `${wrong.length} contradictions, e.g.\n${wrong.slice(0, 6).join('\n')}`);
 });
 
-test('origins, worked: welded tube spreads widely; aluminous cement barely differs and is said so, not drawn', () => {
+test('origins, audit reproductions: "the others" are only the origins off the shared figure, and "little difference" is said only when it is true', () => {
+  // (a) 72026000: 34 of 49 share 149.8; Angola is one of them, so it is not one of "the others".
+  const fm = originsModel(pack, line({ cn: '72026000', route: 'default' }));
+  const offShared = fm.rows.filter((r) => !new D(r.certificates).equals(fm.mode.certificates));
+  assert.equal(offShared.length, 15);
+  const s = text(sentenceOrigins(fm));
+  assert.doesNotMatch(s, /little difference/, 'from 149.8 to 443.5 is not little');
+  assert.doesNotMatch(s, /Angola/, 'Angola carries the shared figure');
+  assert.match(s, /34 of 49 origins carry the same figure for this good, 149\.8 certificates in 2026; the other 15 run from 208\.5 \([^)]+\) to 443\.5 \(Indonesia\)\./);
+  assert.equal(fm.kind, 'chart', 'a wide spread is drawn');
+  const fmSvg = plotOrigins(fm, 600, 'IN').svg;
+  assert.match(fmSvg, /data-shared="34"/, 'with the shared figure marked');
+  // The chart names the same extremes as the sentence: the others', not an origin on the shared figure.
+  assert.match(fmSvg, /208\.5 <tspan[^>]*>[^<]+<\/tspan>/);
+  assert.doesNotMatch(fmSvg, /<tspan[^>]*>Angola<\/tspan>/);
+  // (b) hydrogen: 79 of 96 share 694.0, the others reach 0.0 and 2,434.2.
+  const h2 = originsModel(pack, line({ cn: '28041000', route: 'default' }));
+  const s2 = text(sentenceOrigins(h2));
+  assert.doesNotMatch(s2, /little difference/);
+  assert.match(s2, /79 of 96 origins carry the same figure for this good, 694\.0 certificates in 2026; the other 17 run from 0\.0 \(Mali\) to 2,434\.2 \(United States\)\./);
+  assert.equal(h2.kind, 'chart');
+});
+
+test('origins, worked: welded tube spreads widely; aluminous cement mostly shares one figure, drawn with that figure marked', () => {
   const tube = originsModel(pack, line());
   assert.equal(tube.kind, 'chart');
   assert.equal(tube.rows.length, 27);
   assert.equal(text(sentenceOrigins(tube)),
     'On default values, 2026 certificates for this good run from 13.0 (United States) to 762.1 (Indonesia). India is at 329.8.');
   const cement = originsModel(pack, line({ cn: '25233000', route: 'default' }));
-  assert.equal(cement.kind, 'flat');
-  assert.equal(text(sentenceOrigins(cement)), 'On default values the origin makes little difference for this good: 95 of 101 origins carry the same figure, 153.4 certificates in 2026; the others run from 143.5 (United States) to 182.0 (India).');
+  // 143.5 to 182.0 is a 21% spread: not "little difference", so it is drawn, the 95 marked.
+  assert.equal(cement.kind, 'chart');
+  assert.equal(text(sentenceOrigins(cement)), 'On default values, 95 of 101 origins carry the same figure for this good, 153.4 certificates in 2026; the other 6 run from 143.5 (United States) to 182.0 (India). India is at 182.0.');
+  assert.match(plotOrigins(cement, 600, 'IN').svg, /data-shared="95"/);
   // One or two origins: listed, never ranked.
   const few = { ...tube, kind: 'few', rows: tube.rows.slice(0, 2) };
   assert.match(text(sentenceOrigins(few)), /^On default values only 2 origins are published for this good and route: United States 13\.0, Canada [0-9.]+ certificates in 2026\.$/);
-  assert.doesNotMatch(plotOrigins(cement, 600, 'IN').svg, /class="cg-m"/, 'a flat spread is not drawn as if it mattered');
+  // A spread under a tenth of the highest IS little difference: said in words, not drawn.
+  const flat = { ...cement, kind: 'flat', rows: cement.rows.map((r) => ({ ...r, certificates: new D(r.certificates).equals(cement.mode.certificates) ? r.certificates : '150' })) };
+  assert.equal(text(sentenceOrigins(flat)), 'On default values the origin makes little difference for this good: 95 of 101 origins carry the same figure, 153.4 certificates in 2026; the other 6 are at 150.0.');
+  assert.doesNotMatch(plotOrigins(flat, 600, 'IN').svg, /class="cg-m"/, 'a flat spread is not drawn as if it mattered');
+  // The page computes the rows a few at a time and in any order; the model is the same.
+  const sliced = originCountries(pack, line()).reverse().map((c) => originRow(pack, line(), c)).filter(Boolean);
+  assert.deepEqual(originsFrom(line(), sliced), tube);
+  assert.equal(originsModel(pack, line({ date: 'not-a-date' })), null);
   // A verified line still compares default values, and says so.
   const verified = originsModel(pack, line({ verified: { directTco2ePerT: '2.0' } }));
   assert.equal(verified.usesVerified, true);

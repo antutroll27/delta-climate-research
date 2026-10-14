@@ -12,13 +12,15 @@
 import type { EstimatorInput, EstimatorPack } from './cbam-algos/estimator/estimate-from-pack.ts';
 import { parseAssumedPrice, type Outlook } from './cbam-outlook.ts';
 import {
-  chargedCells, chargedLegend, chargedTip, costParts, graphsModel, originsModel, originsParts, phaseModel,
+  chargedCells, chargedLegend, chargedTip, costParts, graphsModel, originCountries, originRow, originsFrom, originsParts, phaseModel,
   renderGraphs, secondNote, secondUsable, type OriginsModel,
   sentenceCharged,
   type GraphsModel, type GraphsRefusal, type GraphsState,
 } from './cbam-graphs.ts';
 
 type Widths = Parameters<typeof renderGraphs>[2];
+/** How long one slice of the origins computation may run before it yields. */
+const ORIGINS_SLICE_MS = 12;
 const CARDS = ['steps', 'cascade', 'share', 'markup', 'charged', 'cost', 'phase', 'origins'] as const;
 
 export interface GraphsMount {
@@ -68,21 +70,28 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
       if (index < 0) continue;
       return () => {
         const again = el.querySelectorAll<HTMLElement | SVGElement>(selector)[index];
-        if (again) again.focus({ preventScroll: true });
+        if (!again) return;
+        again.focus({ preventScroll: true });
+        // A redraw during the scroll that brought a focused mark into view can cancel that scroll
+        // (WebKit), leaving the mark outside the window: finish the job, without moving otherwise.
+        const r = again.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > window.innerHeight) again.scrollIntoView({ block: 'nearest' });
       };
     }
     return () => {};
   }
 
   /**
-   * THE ORIGINS, COMPUTED LAST AND REMEMBERED. One engine call per origin: about 175 ms for the
-   * slowest good measured (aluminous cement, 101 origins) on a desktop. So the card is drawn
-   * empty with the rest, the computation waits for an idle moment, and its result is kept per
+   * THE ORIGINS, COMPUTED LAST AND REMEMBERED. One engine call per origin: about 175 ms in all
+   * for the slowest good measured (aluminous cement, 101 origins) on a desktop. So the card is
+   * drawn empty with the rest, the computation runs in idle slices of ORIGINS_SLICE_MS each, so no
+   * task holds the page for long, and its result is kept per
    * good, route, year and scope, which is everything it depends on. A newer line cancels an
    * older computation by its token.
    */
   let packNow: EstimatorPack | null = null;
   let lineNow: EstimatorInput | null = null;
+  let paintedLine = '';
   const originsCache = new Map<string, OriginsModel | null>();
   let originsToken = 0;
   const originsKey = (l: EstimatorInput): string => [l.cn, l.route, l.date.slice(0, 4), l.emissionsScope ?? '', l.country, l.verified ? 'v' : 'd'].join('|');
@@ -100,14 +109,26 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     const key = originsKey(lineNow);
     if (originsCache.has(key)) { fillOrigins(originsCache.get(key) ?? null); return; }
     const token = ++originsToken, pack = packNow, line = lineNow;
-    const run = (): void => {
-      if (token !== originsToken) return;
-      const o = originsModel(pack, line);
-      originsCache.set(key, o);
-      if (token === originsToken) fillOrigins(o);
-    };
+    // ponytail: a time budget per slice, not a fixed count, so a slow device still yields often.
+    // One engine call is about 1-2 ms, so a slice stays well under the 50 ms long-task line.
+    const countries = originCountries(pack, line);
+    const rows: NonNullable<ReturnType<typeof originRow>>[] = [];
+    let next = 0;
     const idle = (window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
-    if (idle) idle(run, { timeout: 600 }); else window.setTimeout(run, 50);
+    const later = (): void => { if (idle) idle(slice, { timeout: 600 }); else window.setTimeout(slice, 40); };
+    function slice(): void {
+      if (token !== originsToken) return;
+      const until = performance.now() + ORIGINS_SLICE_MS;
+      while (next < countries.length && performance.now() < until) {
+        const r = originRow(pack, line, countries[next++]);
+        if (r) rows.push(r);
+      }
+      if (next < countries.length) { later(); return; }
+      const o = originsFrom(line, rows);
+      originsCache.set(key, o);
+      fillOrigins(o);
+    }
+    later();
   }
 
   function draw(): void {
@@ -226,10 +247,24 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
   el.addEventListener('pointerleave', () => { if (focused) placeForFocus(); else hideTip(); });
   el.addEventListener('focusin', (ev) => {
     focused = ev.target instanceof Element ? ev.target.closest('.cg-m') : null;
-    // Placed now, after the next frame, and once more when a smooth scroll has had time to end:
-    // WebKit can finish moving the page after the last scroll event has been delivered.
-    if (focused) { placeForFocus(); requestAnimationFrame(placeForFocus); window.setTimeout(placeForFocus, 320); }
+    // Placed now, then every frame until the mark has stood still for ten frames (at most 1.5 s):
+    // WebKit can finish a smooth scroll after the last scroll event, and later than any fixed delay
+    // when the page is busy (the origins card computing in timer slices, with no idle callback).
+    if (focused) { placeForFocus(); settleTip(); }
   });
+  let settleRun = 0;
+  function settleTip(): void {
+    const run = ++settleRun, end = performance.now() + 1500;
+    let last = '', still = 0;
+    const tick = (): void => {
+      if (run !== settleRun || !focused) return;
+      placeForFocus();
+      const r = focused.getBoundingClientRect(), at = `${r.left},${r.top}`;
+      still = at === last ? still + 1 : 0; last = at;
+      if (still < 10 && performance.now() < end) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
   el.addEventListener('focusout', () => { focused = null; hideTip(); });
   window.addEventListener('scroll', placeForFocus, { passive: true, capture: true });
   window.addEventListener('resize', placeForFocus, { passive: true });
@@ -244,6 +279,15 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
 
   return {
     paint(pack, line, view, priceText) {
+      // THE SAME LINE AGAIN (a debounced recalculation after typing the value already there) is
+      // not redrawn: replacing every card would move a keyboard user's focus and cancel the
+      // scroll bringing it into view. Only the price can differ, and it has its own small redraw.
+      const key = JSON.stringify(line);
+      if (pack === packNow && key === paintedLine && model !== null) {
+        if (priceText !== state.priceText) { state.priceText = priceText; redrawCost(); }
+        return;
+      }
+      paintedLine = key;
       state.priceText = priceText;
       packNow = pack; lineNow = line;
       model = graphsModel(pack, line, view);
@@ -256,6 +300,6 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
       state.priceText = priceText;
       redrawCost();
     },
-    clear() { model = null; draw(); },
+    clear() { model = null; paintedLine = ''; draw(); },
   };
 }

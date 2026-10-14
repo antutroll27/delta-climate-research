@@ -514,6 +514,12 @@ export function renderOutlookYears(view: Outlook, assumed: string | null): strin
 const benchmarkOf = (y: OutlookFigureYear): { value: string; route: string } | null =>
   y.benchmarks.length === 1 ? y.benchmarks[0] : null;
 
+/** Which benchmark a sentence speaks of: "for route (C)", or "for this good" when it has none. */
+export function benchmarkScope(y: OutlookFigureYear): string {
+  const bm = benchmarkOf(y);
+  return bm && bm.route ? `for route ${esc(bm.route)}` : 'for this good';
+}
+
 /** "Why it rises": the bar and its legend, or the sentence said in their place. */
 export function renderOutlookWhy(view: Outlook): string {
   const s = view.split;
@@ -587,7 +593,7 @@ export function renderOutlookWhy(view: Outlook): string {
 
   const bmFirst = benchmarkOf(first);
   const bmLast = benchmarkOf(last);
-  const scope = bmFirst && bmFirst.route ? `for route ${esc(bmFirst.route)}` : 'for this good';
+  const scope = benchmarkScope(first);
   // The year the benchmark first differs from the year before it, read off the cards themselves.
   const changedIn = figures.find((y, i) => i > 0 && benchmarkOf(y)?.value !== benchmarkOf(figures[i - 1])?.value);
   let benchTitle: string;

@@ -1536,6 +1536,15 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(g.locator('.cg-none')).toHaveCount(0);
   });
 
+  test('origins where most share one figure: the others are only those off it, and the shared figure is marked', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { ...TUBE_LINE, cn: '28041000', route: 'default' });
+    const card = page.locator('#cbGraphs [data-cg-card="origins"]');
+    await expect(card.locator('.cg-t')).toHaveText(/^On default values, 79 of 96 origins carry the same figure for this good, 694\.0 certificates in 2026; the other 17 run from 0\.0 \(Mali\) to 2,434\.2 \(United States\)\. India is at [\d,.]+\.$/);
+    await expect(card.locator('[data-shared="79"]')).toContainText('79 origins at 694.0');
+    await expect(card.locator('.cg-m')).toHaveCount(96);
+  });
+
   test('the previewed line is drawn: five cards, one price control, exact values on focus', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await expect(page.locator('#cbGraphs')).toBeEmpty();
@@ -1544,7 +1553,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(g.locator('.cg-card')).toHaveCount(8);
     await expect(g.locator('.cg-t')).toHaveText([
       'The same 100 t needs 29.6% more certificates in 2028 than in 2026.',
-      'Of the 97.6 extra certificates by 2028, 86.4 come from the mark-up on default values. The benchmark does not change for this good.',
+      'Of the 97.6 extra certificates by 2028, 86.4 come from the mark-up on default values. The benchmark does not change for route (C).',
       'of the rise to 2028 is the mark-up on default values. It no longer applies with verified data.',
       'On default values the mark-up adds 129.6 certificates in 2028. It no longer applies with verified data.',
       'In 2028, certificates cover 76 of every 100 tonnes of emissions counted. Free allocation covers the other 24.',
@@ -1662,7 +1671,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(g.locator('[data-cg-card="markup"] svg rect[rx]')).toHaveCount(0);
     await expect(g.locator('[data-cg-card="steps"] .cg-t')).toHaveText('The same 100 t needs 20.5% more certificates in 2028 than in 2026.');
     await expect(g.locator('[data-cg-card="cascade"] .cg-t')).toHaveText(
-      'Of the 11.2 extra certificates by 2028, 11.2 come from the smaller share of free allocation retained. The benchmark does not change for this good.');
+      'Of the 11.2 extra certificates by 2028, 11.2 come from the smaller share of free allocation retained. The benchmark does not change for route (C).');
     await expect(g.locator('[data-cg-card="cascade"] .cg-legend')).not.toContainText(/mark-up/i);
     await expect(g.locator('[data-cg-card="origins"] .cg-cap')).toContainText('your line uses verified figures, which replace these');
 
