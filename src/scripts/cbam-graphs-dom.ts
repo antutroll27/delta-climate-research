@@ -10,15 +10,16 @@
  * which is the strip's own box and is passed in). Neither is stored, exported or sent.
  */
 import type { EstimatorInput, EstimatorPack } from './cbam-algos/estimator/estimate-from-pack.ts';
-import type { Outlook } from './cbam-outlook.ts';
+import { parseAssumedPrice, type Outlook } from './cbam-outlook.ts';
 import {
-  chargedCells, chargedLegend, chargedTip, costParts, graphsModel, renderGraphs, secondNote, secondUsable,
+  chargedCells, chargedLegend, chargedTip, costParts, graphsModel, originsModel, originsParts, phaseModel,
+  renderGraphs, secondNote, secondUsable, type OriginsModel,
   sentenceCharged,
   type GraphsModel, type GraphsRefusal, type GraphsState,
 } from './cbam-graphs.ts';
 
 type Widths = Parameters<typeof renderGraphs>[2];
-const CARDS = ['steps', 'share', 'markup', 'charged', 'cost'] as const;
+const CARDS = ['steps', 'cascade', 'share', 'markup', 'charged', 'cost', 'phase', 'origins'] as const;
 
 export interface GraphsMount {
   /** Draw the graphs for a line and its outlook, or clear them when there is no outlook. */
@@ -40,13 +41,13 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     const pad = w < 420 ? 34 : 44;
     const full = Math.max(220, Math.floor(w - pad));
     const half = w >= 560 ? Math.max(200, Math.floor((w - 14) / 2 - pad)) : full;
-    return { steps: full, share: half, markup: half, charged: half, cost: half };
+    return { steps: full, cascade: full, share: half, markup: half, charged: half, cost: half, phase: full, origins: full };
   }
   function measured(): Widths | null {
     const out: Partial<Widths> = {};
     for (const id of CARDS) {
       const plot = el.querySelector<HTMLElement>(`[data-cg-card="${id}"] [data-cg="plot"]`);
-      if (!plot) return null;
+      if (!plot) { out[id] = widths ? widths[id] : 600; continue; }
       out[id] = Math.max(200, Math.floor(plot.clientWidth));
     }
     return out as Widths;
@@ -73,18 +74,56 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     return () => {};
   }
 
+  /**
+   * THE ORIGINS, COMPUTED LAST AND REMEMBERED. One engine call per origin: about 175 ms for the
+   * slowest good measured (aluminous cement, 101 origins) on a desktop. So the card is drawn
+   * empty with the rest, the computation waits for an idle moment, and its result is kept per
+   * good, route, year and scope, which is everything it depends on. A newer line cancels an
+   * older computation by its token.
+   */
+  let packNow: EstimatorPack | null = null;
+  let lineNow: EstimatorInput | null = null;
+  const originsCache = new Map<string, OriginsModel | null>();
+  let originsToken = 0;
+  const originsKey = (l: EstimatorInput): string => [l.cn, l.route, l.date.slice(0, 4), l.emissionsScope ?? '', l.country, l.verified ? 'v' : 'd'].join('|');
+  function fillOrigins(o: OriginsModel | null): void {
+    if (!widths) return;
+    const parts = originsParts(o, widths.origins);
+    const title = part('origins', 'title'), plot = part('origins', 'plot'), tbl = part('origins', 'table'), cap = part('origins', 'cap');
+    if (title) title.innerHTML = parts.title;
+    if (plot) plot.innerHTML = parts.plot;
+    if (tbl) tbl.innerHTML = parts.table;
+    if (cap) cap.textContent = parts.cap;
+  }
+  function scheduleOrigins(): void {
+    if (!packNow || !lineNow || model === null || typeof model === 'string') return;
+    const key = originsKey(lineNow);
+    if (originsCache.has(key)) { fillOrigins(originsCache.get(key) ?? null); return; }
+    const token = ++originsToken, pack = packNow, line = lineNow;
+    const run = (): void => {
+      if (token !== originsToken) return;
+      const o = originsModel(pack, line);
+      originsCache.set(key, o);
+      if (token === originsToken) fillOrigins(o);
+    };
+    const idle = (window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+    if (idle) idle(run, { timeout: 600 }); else window.setTimeout(run, 50);
+  }
+
   function draw(): void {
     if (model === null) { el.innerHTML = ''; widths = null; return; }
     const restoreFocus = rememberFocus();
     widths = estimate();
-    el.innerHTML = renderGraphs(model, state, widths);
+    const phase = packNow && typeof model !== 'string' ? phaseModel(packNow, model) : undefined;
+    el.innerHTML = renderGraphs(model, state, widths, phase);
     const real = measured();
     if (real && CARDS.some((id) => Math.abs(real[id] - widths![id]) > 1)) {
       widths = real;
-      el.innerHTML = renderGraphs(model, state, widths);
+      el.innerHTML = renderGraphs(model, state, widths, phase);
     }
     paintedAt = el.clientWidth;
     restoreFocus();
+    scheduleOrigins();
   }
 
   const card = (id: string): HTMLElement | null => el.querySelector<HTMLElement>(`[data-cg-card="${id}"]`);
@@ -139,6 +178,13 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     const yearBtn = t?.closest<HTMLButtonElement>('[data-cg-year]');
     if (yearBtn) showYear(Number(yearBtn.dataset.cgYear));
   });
+  // THE BOX SHOWS THE PRICE USED. When the visitor leaves it, a price rounded to the cent is
+  // written back, so "0.005" becomes "0.01", the figure every cost on the page was worked out at.
+  el.addEventListener('change', (ev) => {
+    if (!(ev.target instanceof HTMLInputElement) || ev.target.id !== 'cgSecond') return;
+    const used = parseAssumedPrice(ev.target.value);
+    if (used !== null && used !== ev.target.value) { ev.target.value = used; state.secondText = used; redrawCost(); }
+  });
   el.addEventListener('input', (ev) => {
     if (ev.target instanceof HTMLInputElement && ev.target.id === 'cgSecond') {
       state.secondText = ev.target.value;
@@ -180,7 +226,9 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
   el.addEventListener('pointerleave', () => { if (focused) placeForFocus(); else hideTip(); });
   el.addEventListener('focusin', (ev) => {
     focused = ev.target instanceof Element ? ev.target.closest('.cg-m') : null;
-    if (focused) { placeForFocus(); requestAnimationFrame(placeForFocus); }
+    // Placed now, after the next frame, and once more when a smooth scroll has had time to end:
+    // WebKit can finish moving the page after the last scroll event has been delivered.
+    if (focused) { placeForFocus(); requestAnimationFrame(placeForFocus); window.setTimeout(placeForFocus, 320); }
   });
   el.addEventListener('focusout', () => { focused = null; hideTip(); });
   window.addEventListener('scroll', placeForFocus, { passive: true, capture: true });
@@ -197,6 +245,7 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
   return {
     paint(pack, line, view, priceText) {
       state.priceText = priceText;
+      packNow = pack; lineNow = line;
       model = graphsModel(pack, line, view);
       // A new line has its own years; the waffle goes back to the last of them.
       if (model !== null && typeof model !== 'string' && state.chargedYear !== null

@@ -78,6 +78,19 @@ test('the chart colours on the dark cards pass every check', () => {
   assert.deepEqual(check(DARK, DARK_SURFACES, [0.48, 0.67]), []);
 });
 
+test('the third cause colour passes every check beside the other two, on every dark card surface', () => {
+  // Three colours, all pairs: the benchmark's green against the bronze and the cyan.
+  const three = [...DARK, token('color-chart-benchmark')];
+  const problems = [];
+  for (const surface of [...DARK_SURFACES, '#0b2c2e']) {
+    for (const p of check([three[0], three[2]], [surface], [0.48, 0.67])) problems.push(p);
+    for (const p of check([three[1], three[2]], [surface], [0.48, 0.67])) problems.push(p);
+  }
+  assert.deepEqual(problems, []);
+  // And it is not the violet the design preview used, which is off brand.
+  assert.notEqual(token('color-chart-benchmark'), '#8b7ce6');
+});
+
 test('the chart colours on the paper cards pass every check', () => {
   assert.deepEqual(check(PAPER, PAPER_SURFACES, [0.43, 0.77]), []);
 });
@@ -98,6 +111,7 @@ test('the check bites: the brand colours themselves, and a near-twin pair, are r
 test('the calculator page draws the graphs in these tokens and names no chart colour of its own', () => {
   const page = readFileSync(fileURLToPath(new URL('../../src/pages/cbam/cbam-calculator.astro', import.meta.url)), 'utf8');
   assert.match(page, /--cg-markup: var\(--color-chart-markup\); --cg-allocation: var\(--color-chart-allocation\);/);
+  assert.match(page, /--cg-benchmark: var\(--color-chart-benchmark\);/);
   assert.match(page, /--cg-markup: var\(--color-chart-markup-paper\); --cg-allocation: var\(--color-chart-allocation-paper\);/);
   const graphs = readFileSync(fileURLToPath(new URL('../../src/scripts/cbam-graphs.ts', import.meta.url)), 'utf8');
   assert.deepEqual(graphs.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [], [], 'cbam-graphs.ts must use the --cg-* tokens only');

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Decimal from 'decimal.js';
 
 import {
-  assumedRange, chargedCells, chargedKind, chargedLegend, costParts, graphsModel, pctHonest, secondNote,
+  assumedRange, chargedCells, chargedKind, chargedLegend, costParts, graphsModel, pctHonest, phaseModel, secondNote,
   secondUsable, tableCharged, plotCharged, plotCost, plotMarkup, plotShare,
   plotSteps, renderGraphs, scaleFromZero, sentenceCharged, sentenceCost, sentenceMarkup,
   sentenceShare, sentenceSteps,
@@ -32,7 +32,7 @@ const line = (over = {}) => ({
 });
 const modelOf = (input) => graphsModel(pack, input, outlook(pack, input));
 const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-const WIDTHS = { steps: 600, share: 280, markup: 280, charged: 280, cost: 280 };
+const WIDTHS = { steps: 600, cascade: 600, share: 280, markup: 280, charged: 280, cost: 280, phase: 600, origins: 600 };
 const STATE = () => ({ chargedYear: null, priceText: '', secondText: '', open: {} });
 const TUBE = modelOf(line());
 
@@ -348,21 +348,23 @@ test('the second price box does nothing, and says why, until the first price exi
 
 /* ── the section ───────────────────────────────────────────────────────────── */
 
-test('the section: five cards, each with a sentence, a table and a text alternative', () => {
-  const html = renderGraphs(TUBE, STATE(), WIDTHS);
-  assert.deepEqual([...html.matchAll(/data-cg-card="(\w+)"/g)].map((m) => m[1]), ['steps', 'share', 'markup', 'charged', 'cost']);
-  assert.equal((html.match(/<svg[^>]*role="group" aria-label="[^"]+"/g) ?? []).length, 5, 'every plot has a text alternative');
-  assert.equal((html.match(/class="cg-tbl cg-closed"/g) ?? []).length, 5, 'every card has a table, closed to begin with');
-  assert.equal((html.match(/<h4 class="cg-t"/g) ?? []).length, 5);
-  // 3 years + the arc + 3 capsules + the waffle + the shipment's one published cost.
-  assert.equal((html.match(/class="cg-m" tabindex="0" role="img" aria-label="[^"]+"/g) ?? []).length, 9, 'every mark is focusable and named');
+test('the section: eight cards, each with a sentence, a table and a text alternative', () => {
+  const html = renderGraphs(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE));
+  assert.deepEqual([...html.matchAll(/data-cg-card="(\w+)"/g)].map((m) => m[1]),
+    ['steps', 'cascade', 'share', 'markup', 'charged', 'cost', 'phase', 'origins']);
+  // Seven plots drawn at once; the origins card's plot is filled after the others (see the DOM module).
+  assert.equal((html.match(/<svg[^>]*role="group" aria-label="[^"]+"/g) ?? []).length, 7, 'every plot has a text alternative');
+  assert.equal((html.match(/class="cg-tbl cg-closed"/g) ?? []).length, 8, 'every card has a table, closed to begin with');
+  assert.equal((html.match(/<h4 class="cg-t"/g) ?? []).length, 8);
+  // 3 years + 3 cascade columns + the arc + 3 capsules + the waffle + the published cost + 9 phase years.
+  assert.equal((html.match(/class="cg-m" tabindex="0" role="img" aria-label="[^"]+"/g) ?? []).length, 21, 'every mark is focusable and named');
   const t = text(html);
   assert.match(t, /88\.5 % of the rise to 2028 is the mark-up on default values/);
   assert.match(t, /A real verified figure can be higher or lower than that base\./);
   assert.match(t, /Your price is your assumption, not a forecast\. It stays on this page\./);
   assert.match(t, /Certificate price for imports in 2027-Q1 and 2028-Q1: none published · as at 14 Oct 2026\./);
-  // The cards that were not approved are not here.
-  assert.doesNotMatch(t, /origin matter|free allocation go|2034|Why does it rise/i);
+  // No certificate count is drawn after 2028 anywhere in the section.
+  assert.doesNotMatch(t, /\b20(29|3\d)\b[^.]{0,40}\d[\d,.]* certificates/);
   // Words this page never uses about a price or a saving. "not a forecast" is the one permitted use.
   assert.doesNotMatch(t, /will pay|pay less|you will|expected price|predict|quarterly|\byet\b|\+0\b(?!\.)/i);
   assert.deepEqual(t.match(/forecast/gi), ['forecast']);

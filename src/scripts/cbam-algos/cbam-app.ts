@@ -37,7 +37,7 @@ import {
   type Line, type Totals, type YearThreshold,
 } from '../cbam-lines.ts';
 import { ROUTE_GLOSSARY } from '../cbam-route-glossary.ts';
-import { outlook, outlookPriceSlots, renderOutlook, type Outlook } from '../cbam-outlook.ts';
+import { outlook, outlookPriceSlots, parseAssumedPrice, renderOutlook, type Outlook } from '../cbam-outlook.ts';
 import type { GraphsMount } from '../cbam-graphs-dom.ts';
 
 const PACK_URL = '/cbam/estimator-pack.json';
@@ -1452,6 +1452,23 @@ export function noRouteReason(pack: EstimatorPack, year: number, cn: string): st
 }
 
 /**
+ * The address to retry the graphs' script at, read out of the browser's error, or 'foreign' if
+ * the address it names is not this site's own built script, or null if it names none.
+ *
+ * ONLY THIS SITE'S OWN SCRIPTS ARE EVER IMPORTED. A retry imports whatever this returns, so it
+ * accepts an address only on the page's own origin and under /_astro/, where the build puts its
+ * chunks. Anything else is not followed: the page offers a reload instead.
+ */
+export function graphsRetryUrl(message: string, origin: string): string | 'foreign' | null {
+  const m = /https?:\/\/[^\s'")]+?\.js\b/.exec(message);
+  if (!m) return null;
+  let url: URL;
+  try { url = new URL(m[0]); } catch { return 'foreign'; }
+  if (url.origin !== origin || !url.pathname.startsWith('/_astro/') || url.search || url.hash) return 'foreign';
+  return `${url.origin}${url.pathname}`;
+}
+
+/**
  * The sentence to show beside the import date, or null when there is nothing to say.
  *
  * ASKS THE ENGINE'S OWN QUESTION. resolveCertificatePrice (cbam/resolve-fa.ts) throws
@@ -2415,19 +2432,27 @@ export function initCbam(): void {
    */
   function importGraphs(): Promise<typeof import('../cbam-graphs-dom.ts')> {
     graphsAttempts += 1;
+    if (graphsReloadOnly) return Promise.reject(new Error('reload required'));
     if (graphsAttempts > 1 && graphsChunkUrl) {
       return import(/* @vite-ignore */ `${graphsChunkUrl}?retry=${graphsAttempts}`);
     }
     return import('../cbam-graphs-dom.ts');
   }
+  let graphsReloadOnly = false;
   function graphsFailed(err: unknown): void {
     graphsLoading = null;
-    const url = /https?:\/\/[^\s'")]+\.js/.exec(err instanceof Error ? err.message : String(err));
-    if (url) graphsChunkUrl = url[0];
+    const found = graphsRetryUrl(err instanceof Error ? err.message : String(err), window.location.origin);
+    if (found === 'foreign') graphsReloadOnly = true;
+    else if (found) graphsChunkUrl = found;
     if (!graphsEl || !graphsWanted) return;
     // ONE PLAIN SENTENCE AND A WAY BACK, in place of an empty space that says nothing. The
-    // figures above are complete without the graphs, and the sentence says so.
-    graphsEl.innerHTML = `<p class="cg-none" role="status">The graphs could not be loaded. The figures above are complete without them.
+    // figures above are complete without the graphs, and the sentence says so. If the address in
+    // the error is not this site's own script, nothing is imported from it: the way back is a
+    // reload of the page.
+    graphsEl.innerHTML = graphsReloadOnly
+      ? `<p class="cg-none" role="status">The graphs could not be loaded. The figures above are complete without them.
+      <button type="button" class="cg-retry" data-cg="reload">Reload the page</button></p>`
+      : `<p class="cg-none" role="status">The graphs could not be loaded. The figures above are complete without them.
       <button type="button" class="cg-retry" data-cg="retry">Try again</button></p>`;
   }
   function paintGraphs(line: EstimatorInput | null): void {
@@ -2450,6 +2475,7 @@ export function initCbam(): void {
   }
   graphsEl?.addEventListener('click', (ev) => {
     if (ev.target instanceof Element && ev.target.closest('[data-cg="retry"]')) paintGraphs(graphsWanted);
+    if (ev.target instanceof Element && ev.target.closest('[data-cg="reload"]')) window.location.reload();
   });
 
   /**
@@ -3107,4 +3133,11 @@ export function initCbam(): void {
   out.addEventListener('click', onOutClick);
   out.addEventListener('change', onOutClick);
   outlookEl?.addEventListener('input', onOutlookInput);
+  // THE BOX SHOWS THE PRICE USED: on leaving it, a price rounded to the cent is written back.
+  outlookEl?.addEventListener('change', (ev) => {
+    const box = ev.target;
+    if (!(box instanceof HTMLInputElement) || box.id !== 'cbOlPrice') return;
+    const used = parseAssumedPrice(box.value);
+    if (used !== null && used !== box.value) { box.value = used; onOutlookInput(ev); }
+  });
 }

@@ -273,33 +273,39 @@ function splitOf(years: OutlookYear[]): { split: OutlookSplit | null; withheld: 
   if (years.some((y) => y.kind === 'figure' && y.tier !== first.tier)) {
     return { split: null, withheld: 'tier-changes' };
   }
+  const between = splitBetween(first, last);
+  if (between === null) return { split: null, withheld: 'floor' };
+  return { withheld: null, split: between };
+}
+
+/**
+ * The split of the change between ANY two years of one line, by the rule above: the one place
+ * it is computed. The strip asks it for the first and last year; the "why does it rise?" graph
+ * asks it for the first and each later year. Null when the parts would not sum to the change
+ * exactly (a floored count), when the first year retains no free allocation, or when a part
+ * would be negative.
+ */
+export function splitBetween(first: OutlookFigureYear, last: OutlookFigureYear): OutlookSplit | null {
   const rise = new D(last.certificates).minus(first.certificates);
   const moreEmissions = new D(last.embeddedTco2e).minus(first.embeddedTco2e);
   const lessAllocation = new D(first.allocationTco2e).minus(last.allocationTco2e);
   const factorFirst = new D(first.factor);
   // The identity. Exact equality on exact decimals: no tolerance, because a tolerance is how a
   // floored line would slip through looking almost right.
-  if (!rise.equals(moreEmissions.plus(lessAllocation)) || factorFirst.isZero()) {
-    return { split: null, withheld: 'floor' };
-  }
+  if (!rise.equals(moreEmissions.plus(lessAllocation)) || factorFirst.isZero()) return null;
   const factorPart = new D(first.allocationTco2e)
     .times(factorFirst.minus(last.factor)).dividedBy(factorFirst);
   const benchmarkPart = lessAllocation.minus(factorPart);
-  if (moreEmissions.isNegative() || factorPart.isNegative() || benchmarkPart.isNegative()) {
-    return { split: null, withheld: 'floor' };
-  }
+  if (moreEmissions.isNegative() || factorPart.isNegative() || benchmarkPart.isNegative()) return null;
   return {
-    withheld: null,
-    split: {
-      firstYear: first.year,
-      lastYear: last.year,
-      rise: rise.toFixed(),
-      moreEmissions: moreEmissions.toFixed(),
-      lessAllocation: lessAllocation.toFixed(),
-      factorPart: factorPart.toFixed(),
-      benchmarkPart: benchmarkPart.toFixed(),
-      emissionsCause: emissionsCauseOf(first.tier),
-    },
+    firstYear: first.year,
+    lastYear: last.year,
+    rise: rise.toFixed(),
+    moreEmissions: moreEmissions.toFixed(),
+    lessAllocation: lessAllocation.toFixed(),
+    factorPart: factorPart.toFixed(),
+    benchmarkPart: benchmarkPart.toFixed(),
+    emissionsCause: emissionsCauseOf(first.tier),
   };
 }
 
