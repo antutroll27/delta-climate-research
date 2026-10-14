@@ -124,6 +124,25 @@
   --color-instrument: #10181c;   /* card fill  — 1.13:1 on base */
   --color-well: #1a262c;         /* field fill — 1.16:1 on card */
 
+  /* CHART COLOURS (CBAM graphs). Two causes, two hues, in a fixed order: the mark-up, then free
+     allocation. They are deeper steps of the brand's bronze and cyan, because the brand colours
+     themselves fail as chart fills: both sit under the chroma floor (0.083 and 0.089 against
+     0.10) and the cyan is too light for a dark surface (L 0.787 against a 0.48-0.67 band).
+     CHECKED 2026-10-14, all pairs, against the surfaces they are drawn on:
+       dark  (#10181c and #0b2c2e): lightness band pass, chroma >= 0.10 pass, colour-vision
+             separation 17.1 (worst: protan; tritan 21.6), normal-vision separation 20.9,
+             contrast with the surface >= 3:1 pass;
+       paper (#ecedf0): band pass, chroma pass, separation 17.3 (protan; tritan 20.3),
+             normal vision 20.4, contrast >= 3:1 pass.
+     Separation is delta-E in OKLab x100; the targets are 8 under simulated colour-vision
+     deficiency and 15 with full colour vision. tests/unit/cbam-chart-colours.test.mjs reads
+     these four values from this file and fails if one is changed to a colour that does not
+     pass. Identity is never by colour alone: each also has its own label, shape or position. */
+  --color-chart-markup: #bd8a2e;
+  --color-chart-allocation: #22a2b5;
+  --color-chart-markup-paper: #a06f10;
+  --color-chart-allocation-paper: #008aa0;
+
   /* fluid type scale (each = the exact existing clamp it replaces — pixel-identical) */
   --text-hero: clamp(2.5rem, 7vw, 6rem);
   --text-section: clamp(2.6rem, 5.5vw, 4.5rem);

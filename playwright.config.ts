@@ -64,8 +64,20 @@ export default defineConfig({
      tests (32.5 + 0.7 = 33.2) has 6.8 min, about 20%: one runner-speed swing of the size
      seen between 12 and 13 October. It is a stop for an overrun, not a budget to grow into:
      four tests account for 9 of the 28.7 minutes (see the slowest-test list in the pull
-     request that made this change), and that is where time is to be found. */
-  globalTimeout: process.env.CI ? 40 * 60_000 : undefined,
+     request that made this change), and that is where time is to be found.
+
+     2026-10-14, LATER THE SAME DAY: 40 BECAME 38, because the 6.2 above was out of date
+     within hours. Three runs on the new limits:
+       · 38459464137: 213 tests, 26.8 min of browser tests, job 32.3 min (5.5 outside them);
+       · 38464957721: 215 tests, 30.8 min, job 38.65 min, so 7.8 min outside them. That run
+         would have been cancelled under the old 40-minute job;
+       · 38465533485: 221 tests, 19.8 min, job 24.5 min (4.7 outside them).
+     Setup plus the static checks is therefore up to 7.8, not 6.2, and it moves with the
+     runner just as the suite does (19.8 against 30.8 for nearly the same tests, started six
+     minutes apart). Redone on 7.8: 48.8 - 7.8 = 41.0 for the browser tests. A stop at 40
+     left 1.0 min to print and upload; 38 leaves 3.0. Against 38, the slowest healthy suite
+     on record (32.5) has 5.5 min, about 17%. */
+  globalTimeout: process.env.CI ? 38 * 60_000 : undefined,
   use: {
     baseURL: 'http://127.0.0.1:4322',
     trace: 'on-first-retry',
