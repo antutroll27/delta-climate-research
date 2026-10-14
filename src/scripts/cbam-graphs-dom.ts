@@ -12,7 +12,8 @@
 import type { EstimatorInput, EstimatorPack } from './cbam-algos/estimator/estimate-from-pack.ts';
 import type { Outlook } from './cbam-outlook.ts';
 import {
-  chargedCells, chargedLegend, chargedTip, costParts, graphsModel, renderGraphs, sentenceCharged,
+  chargedCells, chargedLegend, chargedTip, costParts, graphsModel, renderGraphs, secondNote, secondUsable,
+  sentenceCharged,
   type GraphsModel, type GraphsRefusal, type GraphsState,
 } from './cbam-graphs.ts';
 
@@ -51,10 +52,30 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     return out as Widths;
   }
 
+  /**
+   * Where the keyboard is, in terms that survive a rebuild: the nth mark, the nth button, or the
+   * second price box. The section is redrawn whole whenever the line changes, and a redraw that
+   * dropped focus sent a keyboard user back to the top of the page (and hid the tooltip they
+   * had just opened). Returns a function that puts focus back on the same control.
+   */
+  function rememberFocus(): () => void {
+    const active = document.activeElement;
+    if (!(active instanceof Element) || !el.contains(active)) return () => {};
+    for (const selector of ['.cg-m', 'button', 'input', '.cg-tbl']) {
+      const all = [...el.querySelectorAll(selector)];
+      const index = all.indexOf(active);
+      if (index < 0) continue;
+      return () => {
+        const again = el.querySelectorAll<HTMLElement | SVGElement>(selector)[index];
+        if (again) again.focus({ preventScroll: true });
+      };
+    }
+    return () => {};
+  }
+
   function draw(): void {
     if (model === null) { el.innerHTML = ''; widths = null; return; }
-    // Keep the caret if it is in the second price box: the section is rebuilt around it.
-    const inSecond = document.activeElement instanceof HTMLElement && document.activeElement.id === 'cgSecond';
+    const restoreFocus = rememberFocus();
     widths = estimate();
     el.innerHTML = renderGraphs(model, state, widths);
     const real = measured();
@@ -63,7 +84,7 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
       el.innerHTML = renderGraphs(model, state, widths);
     }
     paintedAt = el.clientWidth;
-    if (inSecond) el.querySelector<HTMLInputElement>('#cgSecond')?.focus();
+    restoreFocus();
   }
 
   const card = (id: string): HTMLElement | null => el.querySelector<HTMLElement>(`[data-cg-card="${id}"]`);
@@ -77,6 +98,11 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     if (title) title.innerHTML = parts.title;
     if (plot) plot.innerHTML = parts.plot;
     if (tbl) tbl.innerHTML = parts.table;
+    // The second box follows the first: usable once the strip's price exists, and saying why not
+    // until then. Its own text is left alone, so nothing typed is lost.
+    const second = el.querySelector<HTMLInputElement>('#cgSecond'), note = part('cost', 'second-note');
+    if (second) second.disabled = !secondUsable(state);
+    if (note) note.textContent = secondNote(state);
   }
 
   /** A year switch on the waffle: change opacity only, then the words around the grid. */
@@ -120,28 +146,45 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     }
   });
 
-  /* The tooltip: the exact figure for a mark, on hover and on keyboard focus. */
+  /* The tooltip: the exact figure for a mark, on hover and on keyboard focus.
+   *
+   * IT IS position:fixed, SO IT MUST BE PLACED AFTER THE PAGE HAS FINISHED MOVING. Focusing a mark
+   * with the keyboard scrolls it into view, and that scroll lands after the focus event. Placed
+   * once, on the event, the tooltip stayed where the mark had been and three of fifteen ended up
+   * outside the window. So a focused mark's tooltip is re-placed on every scroll and resize while
+   * it is showing, and it is held inside the window on both axes whatever the mark's position. */
   const tipEl = (): HTMLElement | null => el.querySelector<HTMLElement>('[data-cg="tip"]');
+  let focused: Element | null = null;
   function showTip(markEl: Element, x: number, y: number): void {
     const tip = tipEl();
     if (!tip || !(markEl instanceof SVGElement)) return;
     tip.textContent = markEl.dataset.tip ?? '';
     tip.classList.add('on');
     const r = tip.getBoundingClientRect();
-    tip.style.left = `${Math.max(8, Math.min(window.innerWidth - r.width - 8, x + 14))}px`;
-    tip.style.top = `${y - r.height - 14 < 8 ? y + 18 : y - r.height - 14}px`;
+    const left = Math.max(8, Math.min(window.innerWidth - r.width - 8, x + 14));
+    const above = y - r.height - 14;
+    const top = Math.max(8, Math.min(window.innerHeight - r.height - 8, above < 8 ? y + 18 : above));
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
   }
   const hideTip = (): void => { tipEl()?.classList.remove('on'); };
+  const placeForFocus = (): void => {
+    if (!focused || !focused.isConnected) return;
+    const r = focused.getBoundingClientRect();
+    showTip(focused, r.left + r.width / 2, r.top + 20);
+  };
   el.addEventListener('pointermove', (ev) => {
     const m = ev.target instanceof Element ? ev.target.closest('.cg-m') : null;
-    if (m) showTip(m, ev.clientX, ev.clientY); else hideTip();
+    if (m) showTip(m, ev.clientX, ev.clientY); else if (!focused) hideTip(); else placeForFocus();
   });
-  el.addEventListener('pointerleave', hideTip);
+  el.addEventListener('pointerleave', () => { if (focused) placeForFocus(); else hideTip(); });
   el.addEventListener('focusin', (ev) => {
-    const m = ev.target instanceof Element ? ev.target.closest('.cg-m') : null;
-    if (m) { const r = m.getBoundingClientRect(); showTip(m, r.left + r.width / 2, r.top + 20); }
+    focused = ev.target instanceof Element ? ev.target.closest('.cg-m') : null;
+    if (focused) { placeForFocus(); requestAnimationFrame(placeForFocus); }
   });
-  el.addEventListener('focusout', hideTip);
+  el.addEventListener('focusout', () => { focused = null; hideTip(); });
+  window.addEventListener('scroll', placeForFocus, { passive: true, capture: true });
+  window.addEventListener('resize', placeForFocus, { passive: true });
 
   // The plots are drawn at the pixel width of their cards, so a change of width redraws them.
   let timer = 0;

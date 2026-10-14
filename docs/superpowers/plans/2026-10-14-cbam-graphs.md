@@ -84,3 +84,28 @@ years, as figures), the graphs (the same three years, drawn).
   there is nothing for glass to blur.
 - The preview's three paper cards were the arc, the waffle and the phase-out line. Here the arc
   and the waffle are paper.
+
+## After the pre-merge audit (2026-10-14)
+
+An independent audit found two sentences that could be false, and five smaller faults. All were
+fixed on this branch before merge.
+
+1. **The charged card's title was chosen from the rounded cell count.** A share under half a per
+   cent rounded to no cell and was told "no certificates are due". The kind of year (none, all,
+   some) is now decided from the certificate count and the emissions counted, exactly. A share
+   that rounds to no cell says "under 1 of every 100" with the share; one that rounds to a full
+   grid says "almost all". The legend and the table never print a real share as 0.0% or 100.0%.
+2. **The cost card spoke of years where it meant the shipment's quarter**, and drew other
+   quarters' published prices as "for this shipment". It now names the quarter each year's date
+   falls in, and draws a published cost only where that quarter has one. The strip had the same
+   looseness in its year cards ("2026 · none published" for a November shipment) and now names
+   the quarter too.
+3. The second price box is disabled, and says why, until the first price exists.
+4. A typed price is rounded once to the cent and used as shown; under one cent is refused. This
+   is in the outlook module, so the strip and the graphs agree.
+5. If the graphs' script cannot be loaded, one sentence says so with a retry; the next
+   calculation retries too, at a new address, because Chromium remembers a failed import.
+6. A focused mark's tooltip is re-placed when the page scrolls and is held inside the window.
+   Keyboard focus is kept across a redraw of the section.
+7. The mass is printed as a number; large percentages carry separators; a real amount is never
+   printed as "0.0" or "+0"; the empty-cell ring on the paper cards is 3.5:1 or better.

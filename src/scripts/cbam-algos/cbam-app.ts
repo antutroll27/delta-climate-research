@@ -2401,6 +2401,35 @@ export function initCbam(): void {
   let graphs: GraphsMount | null = null;
   let graphsLoading: Promise<void> | null = null;
   let graphsWanted: EstimatorInput | null = null;
+  let graphsAttempts = 0;
+  let graphsChunkUrl: string | null = null;
+
+  /**
+   * Fetch the graphs chunk. A FAILED DYNAMIC IMPORT IS REMEMBERED BY THE BROWSER: Chromium keeps
+   * the failure for that URL for the life of the page, so importing the same specifier again
+   * fails at once without touching the network (measured: after the chunk was unblocked, the
+   * next calculation still drew nothing). A retry therefore has to ask for a different URL. The
+   * failed URL is read out of the error the browser raised, and the retry appends a query to it.
+   * Where the error names no URL (WebKit), the plain import is tried again, which that engine
+   * does re-fetch.
+   */
+  function importGraphs(): Promise<typeof import('../cbam-graphs-dom.ts')> {
+    graphsAttempts += 1;
+    if (graphsAttempts > 1 && graphsChunkUrl) {
+      return import(/* @vite-ignore */ `${graphsChunkUrl}?retry=${graphsAttempts}`);
+    }
+    return import('../cbam-graphs-dom.ts');
+  }
+  function graphsFailed(err: unknown): void {
+    graphsLoading = null;
+    const url = /https?:\/\/[^\s'")]+\.js/.exec(err instanceof Error ? err.message : String(err));
+    if (url) graphsChunkUrl = url[0];
+    if (!graphsEl || !graphsWanted) return;
+    // ONE PLAIN SENTENCE AND A WAY BACK, in place of an empty space that says nothing. The
+    // figures above are complete without the graphs, and the sentence says so.
+    graphsEl.innerHTML = `<p class="cg-none" role="status">The graphs could not be loaded. The figures above are complete without them.
+      <button type="button" class="cg-retry" data-cg="retry">Try again</button></p>`;
+  }
   function paintGraphs(line: EstimatorInput | null): void {
     if (!graphsEl) return;
     graphsWanted = line && pack && outlookView ? line : null;
@@ -2409,12 +2438,19 @@ export function initCbam(): void {
       else graphs.clear();
       return;
     }
-    if (!graphsWanted) return;
-    graphsLoading ??= import('../cbam-graphs-dom.ts').then((mod) => { graphs = mod.mountGraphs(graphsEl); });
+    if (!graphsWanted) { graphsEl.innerHTML = ''; return; }
+    // Every calculation tries again after a failure: `graphsLoading` is cleared when one fails.
+    graphsLoading ??= importGraphs().then((mod) => {
+      graphsEl.innerHTML = '';
+      graphs = mod.mountGraphs(graphsEl);
+    });
     void graphsLoading.then(() => {
       if (graphs && graphsWanted && pack && outlookView) graphs.paint(pack, graphsWanted, outlookView, assumedPriceText);
-    }).catch(() => { graphsLoading = null; });
+    }).catch(graphsFailed);
   }
+  graphsEl?.addEventListener('click', (ev) => {
+    if (ev.target instanceof Element && ev.target.closest('[data-cg="retry"]')) paintGraphs(graphsWanted);
+  });
 
   /**
    * The visitor typed in the price box. Refill the three slots the price changes and leave the

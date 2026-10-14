@@ -136,10 +136,17 @@ export interface Outlook {
 
 /** The reporting years the pack's default values cover, ascending. */
 export function outlookYears(pack: EstimatorPack): number[] {
+  // Remembered per array of default values: 76,000 rows are walked once, not on every keystroke.
+  // Keyed on the array itself, so a pack with different rows gets its own answer.
+  const known = yearsByRows.get(pack.defaultValues);
+  if (known) return [...known];
   const years = new Set<number>();
   for (const row of pack.defaultValues) years.add(row.reportingYear);
-  return [...years].sort((a, b) => a - b);
+  const sorted = [...years].sort((a, b) => a - b);
+  yearsByRows.set(pack.defaultValues, sorted);
+  return [...sorted];
 }
+const yearsByRows = new WeakMap<object, number[]>();
 
 /**
  * The same month and day in another year, or null for a date the engine would not read.
@@ -343,14 +350,21 @@ export function outlook(pack: EstimatorPack, input: EstimatorInput): Outlook | n
  *
  * READ WITH THE ENGINE'S OWN NUMBER PARSER (nonNegativeDecimal), so the box accepts exactly what
  * the mass and verified-figure fields accept and refuses what they refuse ('0x10', '1_000', a
- * bare point). Zero is not an assumption anyone means, and a zero price would print "€0.00"
- * under a year for which no price is published — a figure that looks like a finding. So it has
- * to be greater than zero.
+ * bare point).
+ *
+ * ROUNDED ONCE, HERE, TO THE CENT, and that rounded price is the one used everywhere after. It
+ * used to be shown rounded and used unrounded: 80.555 printed "at your assumed €80.56" beside a
+ * cost worked out at 80.555, and 0.004 printed "€0.00" beside a cost above zero. A price is
+ * money, and money on this page has two decimal places. Anything that rounds to less than one
+ * cent is refused: a price of nothing would print "€0.00" under a year for which no price is
+ * published, a figure that looks like a finding.
  */
 export function parseAssumedPrice(text: string): string | null {
   const parsed = nonNegativeDecimal(text);
-  if (!parsed || parsed.isZero() || !parsed.isFinite()) return null;
-  return parsed.toFixed();
+  if (!parsed || !parsed.isFinite()) return null;
+  const cents = new D(parsed.toFixed()).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+  if (cents.lessThan('0.01')) return null;
+  return cents.toFixed();
 }
 
 /**
@@ -439,7 +453,10 @@ function renderYearCost(y: OutlookFigureYear, view: Outlook, assumed: string | n
     return `<span class="cb-ol-e cb-ol-mine">${euros(assumedCost(y.certificates, assumed))}</span>
       <span class="cb-ol-s">at your assumed ${price(assumed)} · not a published price</span>`;
   }
-  return `<span class="cb-ol-s">Certificate price</span>
+  // ABOUT THIS YEAR'S OWN QUARTER. "2026 · none published" was false for a November shipment:
+  // two other 2026 quarters have a published price. The quarter is the engine's lookup key for
+  // this date, named the way the result card above names it ("imports in <quarter>").
+  return `<span class="cb-ol-s">Certificate price · imports in ${esc(y.price.quarter)}</span>
       <span class="cb-ol-e">none published</span>
       <span class="cb-ol-s">as at ${esc(formatPackDate(view.packDate))}</span>`;
 }
@@ -457,8 +474,9 @@ export function renderOutlookYears(view: Outlook, assumed: string | null): strin
     }
     const delta = y.year === firstYear
       ? '<div class="cb-ol-d cb-ol-zero">certificates</div>'
-      : `<div class="cb-ol-d${y.riseOnFirstPct === null ? ' cb-ol-zero' : ''}"><span class="cb-ol-sr">certificates, </span>${
-        y.riseOnFirstPct === null ? 'certificates' : `${signedPct(y.riseOnFirstPct)} on ${firstYear}`}</div>`;
+      : y.riseOnFirstPct === null
+        ? '<div class="cb-ol-d cb-ol-zero">certificates</div>'
+        : `<div class="cb-ol-d"><span class="cb-ol-sr">certificates, </span>${signedPct(y.riseOnFirstPct)} on ${firstYear}</div>`;
     return `<li class="cb-ol-yr">
         <div class="cb-ol-y">${y.year}</div>
         <div class="cb-ol-n">${count1(y.certificates)}</div>
@@ -627,11 +645,11 @@ export function renderOutlookRows(view: Outlook, assumed: string | null): string
 /** The sentence under the price box. */
 export function renderOutlookPriceNote(view: Outlook, priceText: string): string {
   const years = unpricedYears(view);
-  const fills = `Fills the cost for ${yearList(years)}, where no price is published.`;
+  const fills = `Fills the cost for ${yearList(years)}, where no price is published for the import's quarter.`;
   const mine = 'It is your own assumption: not a forecast and not a published price. '
     + 'It stays on this page and is not saved, exported or sent.';
   if (priceText.trim() !== '' && parseAssumedPrice(priceText) === null) {
-    return `Enter a price in euros greater than zero. ${mine}`;
+    return `Enter a price of at least €0.01. ${mine}`;
   }
   return `${fills} ${mine}`;
 }

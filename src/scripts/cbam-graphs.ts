@@ -40,9 +40,11 @@ export interface GraphYear {
   certificates: string;
   embeddedTco2e: string;
   allocationTco2e: string;
-  /** The engine's cost, where a price is published for the entered date's quarter. */
+  /** The engine's cost, where a price is published for THIS year's date's quarter. Null otherwise. */
   costEur: string | null;
   priceEur: string | null;
+  /** The quarter this year's date falls in: the engine's price lookup key, e.g. '2026-Q4'. */
+  priceQuarter: string;
   /** The mark-up on whichever default this line rests on; null when no default is used. */
   markupPct: string | null;
   /** The same line with the default's base value entered as verified: the engine's own count. */
@@ -63,8 +65,6 @@ export interface GraphsModel {
   /** True when any part of the line rests on a default value, so a mark-up is applied. */
   usesDefault: boolean;
   split: { rise: string; markup: string; factor: string; benchmark: string; markupSharePct: string } | null;
-  /** Each published price row, as the engine prices this line in that quarter. */
-  published: { quarter: string; priceEur: string; costEur: string }[];
 }
 
 /** Why there is nothing to draw, for the one sentence shown in the cards' place. */
@@ -97,12 +97,6 @@ function certificatesAtBase(pack: EstimatorPack, input: EstimatorInput, y: Outlo
   return (e.status === 'cscf_pending' ? e.scenario : e.figure).certificates;
 }
 
-/** The first day of a quarter's middle month plus fourteen: a date inside 'YYYY-Qn'. */
-function dateInQuarter(quarter: string): string | null {
-  const m = /^(\d{4})-Q([1-4])$/.exec(quarter);
-  return m ? `${m[1]}-${String((Number(m[2]) - 1) * 3 + 2).padStart(2, '0')}-15` : null;
-}
-
 /**
  * The model the cards draw, or the reason there is none. Null when there is no outlook at all
  * (an idle form, an unreadable date, a year the data does not cover): then nothing is shown.
@@ -125,6 +119,7 @@ export function graphsModel(
       allocationTco2e: y.allocationTco2e,
       costEur: y.costEur,
       priceEur: y.price.priceEur,
+      priceQuarter: y.price.quarter,
       markupPct: y.directMarkupPct ?? y.indirectMarkupPct,
       certificatesAtBase: base,
       markupAdds: new D(y.certificates).minus(base).toFixed(),
@@ -135,16 +130,6 @@ export function graphsModel(
   });
 
   const s = view.split;
-  const published: GraphsModel['published'] = [];
-  for (const row of pack.prices) {
-    if (row.status !== 'published' || row.priceEur === null) continue;
-    const date = dateInQuarter(row.quarter);
-    if (!date) continue;
-    const e = estimateFromPack(pack, { ...input, date });
-    if (e.status === 'unavailable') continue;
-    const cost = (e.status === 'cscf_pending' ? e.scenario : e.figure).costEur;
-    if (cost !== null) published.push({ quarter: row.quarter, priceEur: row.priceEur, costEur: cost });
-  }
   return {
     massT: input.massT,
     packDate: view.packDate,
@@ -155,7 +140,6 @@ export function graphsModel(
       rise: s.rise, markup: s.moreEmissions, factor: s.factorPart, benchmark: s.benchmarkPart,
       markupSharePct: new D(s.moreEmissions).dividedBy(s.rise).times(100).toFixed(6),
     } : null,
-    published,
   };
 }
 
@@ -170,8 +154,30 @@ const eur = (v: string): string => `€${formatDecimal(v, 2, true)}`;
 const eur0 = (v: string): string => `€${formatDecimal(v, 0, true)}`;
 const price = (v: string): string => `€${formatDecimal(v, 2, new D(v).decimalPlaces() > 0)}`;
 const pct1 = (v: string): string => `${formatDecimal(v, 1, true)}%`;
-const yearList = (years: number[]): string =>
-  (years.length <= 1 ? years.join('') : `${years.slice(0, -1).join(', ')} or ${years[years.length - 1]}`);
+const listOf = (items: string[], last: 'or' | 'and'): string =>
+  (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} ${last} ${items[items.length - 1]}`);
+/**
+ * A percentage to one decimal that never rounds a real amount away: something above zero that
+ * would print as "0.0%" prints as "under 0.1%", and something short of the whole that would
+ * print as "100.0%" prints as "over 99.9%". Exactly zero and exactly one hundred print as such.
+ */
+export function pctHonest(v: string): string {
+  const d = new D(v), shown = d.toDecimalPlaces(1, Decimal.ROUND_HALF_UP);
+  if (!d.isZero() && shown.isZero()) return 'under 0.1%';
+  if (!d.equals(100) && shown.equals(100)) return 'over 99.9%';
+  return pct1(v);
+}
+/** A count to one decimal, with the same rule: a real amount is never printed as "0.0". */
+const n1Honest = (v: string): string => {
+  const d = new D(v);
+  return !d.isZero() && d.abs().toDecimalPlaces(1, Decimal.ROUND_HALF_UP).isZero() ? 'under 0.1' : n1(v);
+};
+/** A signed table figure: "+12.3", and a plain "0" for nothing, never "+0". */
+const plus = (v: string): string => (new D(v).isZero() ? '0' : `${new D(v).isNegative() ? '' : '+'}${n3(v)}`);
+/** The mass as a number, through the same formatter as every other figure ("1e2" is 100). */
+const massText = (massT: string): string => {
+  try { return `${formatDecimal(new D(massT).toFixed(), 3, false)} t`; } catch { return `${esc(massT)} t`; }
+};
 /** 100 cells for a share: whole cells, half up on the decimal, held inside 0 to 100. */
 export function chargedCells(chargedPct: string): number {
   const n = new D(chargedPct).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
@@ -188,7 +194,7 @@ export function sentenceSteps(m: GraphsModel): string {
   const first = m.years[0];
   const last = m.years[m.years.length - 1];
   const diff = new D(last.certificates).minus(first.certificates);
-  const mass = `${esc(m.massT)} t`;
+  const mass = massText(m.massT);
   if (diff.isZero()) return `The same ${mass} needs <b>the same</b> certificates in ${last.year} as in ${first.year}.`;
   const word = diff.isNegative() ? 'fewer' : 'more';
   if (last.riseOnFirstPct === null) {
@@ -198,7 +204,7 @@ export function sentenceSteps(m: GraphsModel): string {
   const shown = new D(last.riseOnFirstPct).abs().toDecimalPlaces(1, Decimal.ROUND_HALF_UP);
   // A change too small to show at one decimal place is said in certificates, not as "0.0%".
   if (shown.isZero()) return `The same ${mass} needs <b>${n3(diff.abs().toFixed())} ${word}</b> certificates in ${last.year} than in ${first.year}.`;
-  return `The same ${mass} needs <b>${shown.toFixed(1)}% ${word}</b> certificates in ${last.year} than in ${first.year}.`;
+  return `The same ${mass} needs <b>${formatDecimal(shown.toFixed(), 1, true)}% ${word}</b> certificates in ${last.year} than in ${first.year}.`;
 }
 
 export function sentenceShare(m: GraphsModel): string {
@@ -214,31 +220,66 @@ export function sentenceMarkup(m: GraphsModel): string {
   const last = m.years[m.years.length - 1];
   if (!m.usesDefault) return 'No mark-up is applied to this line: the figures are your own verified ones.';
   if (new D(last.markupAdds).isZero()) return `The mark-up adds <b>no</b> certificates to this line in ${last.year}.`;
-  return `On default values the mark-up adds <b>${n1(last.markupAdds)}</b> certificates in ${last.year}. It no longer applies with verified data.`;
+  return `On default values the mark-up adds <b>${n1Honest(last.markupAdds)}</b> certificates in ${last.year}. It no longer applies with verified data.`;
+}
+
+/**
+ * What kind of year this is, DECIDED FROM THE TRUE FIGURES and from nothing rounded.
+ *
+ * The grid rounds a share to whole cells, and a sentence chosen from the cells said "no
+ * certificates are due" of a line that owed 0.546 of one: 0.4% of the emissions rounds to no
+ * cell. So "none" means the certificate count is exactly zero, and "all" means exactly the
+ * whole of the emissions counted. Everything between is "some", however the cells round.
+ */
+export function chargedKind(y: GraphYear): 'no-emissions' | 'none' | 'all' | 'some' {
+  const certificates = new D(y.certificates), embedded = new D(y.embeddedTco2e);
+  if (embedded.isZero() || y.chargedPct === null) return 'no-emissions';
+  if (certificates.isZero()) return 'none';
+  if (certificates.equals(embedded)) return 'all';
+  return 'some';
 }
 
 export function sentenceCharged(m: GraphsModel, yearIndex: number): string {
   const y = m.years[Math.max(0, Math.min(m.years.length - 1, yearIndex))];
-  if (y.chargedPct === null) return `No emissions are counted on this line in ${y.year}.`;
+  const kind = chargedKind(y);
+  if (kind === 'no-emissions' || y.chargedPct === null) return `No emissions are counted on this line in ${y.year}.`;
+  if (kind === 'none') return `In ${y.year}, free allocation covers <b>all</b> of the emissions counted. No certificates are due.`;
+  if (kind === 'all') return `In ${y.year}, certificates cover <b>all</b> of the emissions counted.`;
   const k = chargedCells(y.chargedPct);
-  if (k === 0) return `In ${y.year}, free allocation covers <b>all</b> of the emissions counted. No certificates are due.`;
-  if (k === 100) return `In ${y.year}, certificates cover <b>all</b> of the emissions counted.`;
+  // Certificates are due but round to no cell, or free allocation applies but rounds to none:
+  // the grid cannot show it, so the sentence says it, with the share itself.
+  if (k === 0) return `In ${y.year}, certificates cover <b>under 1 of every 100</b> tonnes of emissions counted (${pctHonest(y.chargedPct)}). Free allocation covers the rest.`;
+  if (k === 100) return `In ${y.year}, certificates cover <b>almost all</b> of the emissions counted (${pctHonest(y.chargedPct)}). Free allocation covers the rest.`;
   return `In ${y.year}, certificates cover <b>${k} of every 100</b> tonnes of emissions counted. Free allocation covers the other ${100 - k}.`;
 }
 
-/** The visitor's prices, in order, with unusable entries dropped. Zero, one or two of them. */
+/**
+ * The visitor's prices, in order. Zero, one or two of them.
+ *
+ * THE SECOND PRICE DOES NOTHING WITHOUT THE FIRST. The first is the strip's own box, and the
+ * strip draws only that one. A second price on its own would put costs on this card that the
+ * strip above does not show, and the two would be describing different assumptions.
+ */
 export function assumedRange(priceText: string, secondText: string): string[] {
-  const out = [parseAssumedPrice(priceText), parseAssumedPrice(secondText)].filter((p): p is string => p !== null);
-  return out.sort((a, b) => new D(a).cmp(b)).filter((p, i, all) => i === 0 || !new D(p).equals(all[i - 1]));
+  const first = parseAssumedPrice(priceText);
+  if (first === null) return [];
+  const second = parseAssumedPrice(secondText);
+  if (second === null || new D(second).equals(first)) return [first];
+  return [first, second].sort((a, b) => new D(a).cmp(b));
 }
+
+/** The quarters, one per year, for which no price is published for this shipment's date. */
+const unpricedQuarters = (m: GraphsModel): string[] => m.years.filter((y) => y.costEur === null).map((y) => y.priceQuarter);
 
 export function sentenceCost(m: GraphsModel, prices: string[]): string {
   const last = m.years[m.years.length - 1];
-  const unpriced = m.years.filter((y) => y.costEur === null).map((y) => y.year);
-  const none = unpriced.length ? `no ${yearList(unpriced)} price is published` : 'every year here has a published price';
+  const unpriced = unpricedQuarters(m);
+  // ABOUT THE SHIPMENT'S OWN QUARTER, never "for 2026": a November shipment has no published
+  // price while two other 2026 quarters do, and "none is published for 2026" would be false.
+  const none = unpriced.length ? `no price is published for imports in ${listOf(unpriced, 'or')}` : 'every year here has a published price';
   if (prices.length === 0) {
     return unpriced.length
-      ? `No certificate price is published for ${yearList(unpriced).replace(' or ', ' and ')}. Type your own price above to see a cost.`
+      ? `No certificate price is published for imports in ${listOf(unpriced, 'or')}. Type your own price above to see a cost.`
       : 'A certificate price is published for every year shown.';
   }
   if (prices.length === 1) {
@@ -283,7 +324,7 @@ export function plotSteps(m: GraphsModel, w: number): Plot {
   Y.forEach((y, i) => {
     const cx = col * i + col / 2, yy = yOf(y.certificates);
     const tip = `${y.year}: ${n3(y.certificates)} certificates\n${y.costEur !== null && y.priceEur !== null
-      ? `${eur(y.costEur)} at the published ${price(y.priceEur)}` : `certificate price: none published, ${asAt}`}`;
+      ? `${eur(y.costEur)} at the published ${price(y.priceEur)} for imports in ${y.priceQuarter}` : `no price published for imports in ${y.priceQuarter}, ${asAt}`}`;
     s += mark(tip, y.certificates, `<rect x="${cx - col / 2}" y="${top - 30}" width="${col}" height="${base - top + 30}" fill="transparent" data-h="${(base - yy).toFixed(3)}"/>`);
     s += `<text class="cg-num" x="${cx}" y="${yy - 13}" text-anchor="middle" font-size="${w < 360 ? 16 : 19}">${n1(y.certificates)}</text>`;
     if (y.stepRise !== null && !new D(y.stepRise).isZero()) {
@@ -299,7 +340,7 @@ export function plotSteps(m: GraphsModel, w: number): Plot {
     } else {
       s += `<rect x="${cx - cw / 2 + 0.5}" y="${cy + 0.5}" width="${cw - 1}" height="39" rx="1" fill="none" stroke="var(--cg-faint)" stroke-width="1" stroke-dasharray="3 4"/>
         <text class="cg-num" x="${cx}" y="${cy + 17}" text-anchor="middle" font-size="${narrow ? 9.5 : 11}">none published</text>
-        <text class="cg-faint" x="${cx}" y="${cy + 31}" text-anchor="middle" font-size="9.5">${narrow ? formatPackDate(m.packDate) : asAt}</text>`;
+        <text class="cg-faint" x="${cx}" y="${cy + 31}" text-anchor="middle" font-size="9.5">${narrow ? '' : 'for '}${y.priceQuarter} imports</text>`;
     }
   });
   return { h, svg: s, alt: `Certificates: ${Y.map((y) => `${y.year} ${n1(y.certificates)}`).join(', ')}.` };
@@ -351,7 +392,7 @@ export function plotMarkup(m: GraphsModel, w: number, uid: string): Plot {
     s += `<text class="cg-num" x="${cx}" y="${y1 - (adds ? 9 : 13)}" text-anchor="middle" font-size="12.5">${n1(y.certificates)}</text>`;
     if (adds) {
       s += `<text class="cg-faint" x="${cx + cw / 2 + 7}" y="${y0 + 4}" font-size="10.5">${n1(y.certificatesAtBase)}</text>`;
-      s += `<text class="cg-num" x="${cx - cw / 2 - 7}" y="${(y0 + y1) / 2 + 4}" text-anchor="end" font-size="11">+${n1(y.markupAdds)}</text>`;
+      s += `<text class="cg-num" x="${cx - cw / 2 - 7}" y="${(y0 + y1) / 2 + 4}" text-anchor="end" font-size="11">${new D(y.markupAdds).toDecimalPlaces(1, Decimal.ROUND_HALF_UP).isZero() ? 'under 0.1' : `+${n1(y.markupAdds)}`}</text>`;
     }
     s += `<text class="cg-lab" x="${cx}" y="${base + 24}" text-anchor="middle" font-size="11">${y.year}</text>
       <text class="cg-faint" x="${cx}" y="${base + 40}" text-anchor="middle" font-size="9.5">${y.markupPct !== null ? `mark-up ${esc(y.markupPct)}%` : 'no mark-up'}</text>`;
@@ -377,14 +418,14 @@ export function plotCharged(m: GraphsModel, w: number, yearIndex: number): Plot 
 }
 export const chargedTip = (y: GraphYear): string => (y.chargedPct === null
   ? `${y.year}: no emissions counted`
-  : `${y.year}: certificates ${pct1(y.chargedPct)} of emissions counted\nfree allocation covers the rest`);
+  : `${y.year}: certificates ${pctHonest(y.chargedPct)} of emissions counted (${n3(y.certificates)} certificates)\nfree allocation covers the rest`);
 
 /** Cost at the visitor's own price: one row per year on a shared euro scale. Square marks only. */
 export function plotCost(m: GraphsModel, w: number, prices: string[]): Plot {
   const Y = m.years, asAt = `as at ${formatPackDate(m.packDate)}`;
   const narrow = w < 300, rowH = 74, L = narrow ? 46 : 98, R = 10, top = 14, h = top + rowH * Y.length + 8;
   const lo = prices[0] ?? null, hi = prices.length > 1 ? prices[1] : null;
-  const values = [...m.published.map((p) => Number(p.costEur)), ...Y.flatMap((y) => prices.map((p) => Number(assumedCost(y.certificates, p))))];
+  const values = [...Y.filter((y) => y.costEur !== null).map((y) => Number(y.costEur)), ...Y.flatMap((y) => prices.map((p) => Number(assumedCost(y.certificates, p))))];
   const sx0 = scaleFromZero(Math.max(1, ...values) * 1.16, w - L - R);
   const sx = (v: string): number => L + sx0(Number(v));
   let s = '';
@@ -393,10 +434,18 @@ export function plotCost(m: GraphsModel, w: number, prices: string[]): Plot {
     s += `<text class="cg-lab" x="0" y="${cy + 4}" font-size="11">${y.year}</text>
       ${narrow ? '' : `<text class="cg-faint" x="0" y="${cy + 20}" font-size="9">${open ? 'none published' : 'published price'}</text>`}
       <line class="cg-hair" x1="${L}" x2="${w - R}" y1="${cy + 0.5}" y2="${cy + 0.5}"/>`;
+    // THE PUBLISHED PRICE FOR THIS YEAR'S OWN QUARTER, and no other. A price published for
+    // another quarter is not this shipment's cost and is not drawn as one.
+    if (y.costEur !== null && y.priceEur !== null) {
+      const px = sx(y.costEur);
+      s += mark(`Imports in ${y.priceQuarter}: published ${price(y.priceEur)}\n${eur(y.costEur)} for this shipment`, y.costEur,
+        `<rect x="${px - 1.5}" y="${cy - 10}" width="3" height="20" fill="var(--cg-ink)" data-x="${px.toFixed(3)}"/><rect x="${px - 9}" y="${cy - 14}" width="18" height="28" fill="transparent"/>`, 'data-cg="published"');
+      if (lo === null) s += `<text class="cg-num" x="${px - 8}" y="${cy - 13}" text-anchor="end" font-size="11">${eur0(y.costEur)}</text>`;
+    }
     if (lo === null) return;
     const cLo = assumedCost(y.certificates, lo), cHi = hi === null ? cLo : assumedCost(y.certificates, hi);
     const xLo = sx(cLo), xHi = sx(cHi);
-    const tip = `${y.year}: your ${price(lo)}${hi === null ? '' : ` to ${price(hi)}`}\n${eur(cLo)}${hi === null ? '' : ` to ${eur(cHi)}`}\nyour assumption, not a published price${open ? `\ncertificate price: none published, ${asAt}` : ''}`;
+    const tip = `${y.year}: your ${price(lo)}${hi === null ? '' : ` to ${price(hi)}`}\n${eur(cLo)}${hi === null ? '' : ` to ${eur(cHi)}`}\nyour assumption, not a published price${open ? `\nno price published for imports in ${y.priceQuarter}, ${asAt}` : ''}`;
     s += mark(tip, hi === null ? cLo : `${cLo}|${cHi}`, `
       <rect x="${hi === null ? xLo - 1.5 : xLo}" y="${cy - (hi === null ? 9 : 5)}" width="${hi === null ? 3 : Math.max(2, xHi - xLo)}" height="${hi === null ? 18 : 10}" fill="var(--cg-markup)" fill-opacity="${open && hi !== null ? 0 : hi === null ? 1 : 0.3}" stroke="var(--cg-markup)" stroke-width="1.5" ${open ? 'stroke-dasharray="3 4"' : ''} data-xlo="${xLo.toFixed(3)}" data-xhi="${xHi.toFixed(3)}"/>
       <rect x="${L}" y="${cy - rowH / 2}" width="${w - L - R}" height="${rowH}" fill="transparent"/>`);
@@ -407,18 +456,7 @@ export function plotCost(m: GraphsModel, w: number, prices: string[]): Plot {
         <text class="cg-num" x="${xLo}" y="${cy + 22}" font-size="11">${eur0(cLo)}</text>`;
     }
   });
-  // The published prices: flat ticks on the first year's track, on the same euro scale.
-  const cy0 = top + rowH / 2;
-  m.published.forEach((p) => {
-    const cx = sx(p.costEur);
-    s += mark(`${p.quarter.replace('-', ' ')}: published ${price(p.priceEur)}\n${eur(p.costEur)} for this shipment`, p.costEur,
-      `<rect x="${cx - 1.5}" y="${cy0 - 10}" width="3" height="20" fill="var(--cg-ink)" data-x="${cx.toFixed(3)}"/><rect x="${cx - 9}" y="${cy0 - 14}" width="18" height="28" fill="transparent"/>`, 'data-cg="published"');
-  });
-  if (m.published.length && lo === null) {
-    const p = m.published[0];
-    s += `<text class="cg-num" x="${sx(p.costEur) - 8}" y="${cy0 - 13}" text-anchor="end" font-size="11">${eur0(p.costEur)}</text>`;
-  }
-  return { h, svg: s, alt: prices.length ? `Cost at your own price for each year.` : 'Published costs only; no price of your own is entered.' };
+  return { h, svg: s, alt: prices.length ? 'Cost at your own price for each year.' : 'Published cost where one applies; no price of your own is entered.' };
 }
 
 /* ── tables ────────────────────────────────────────────────────────────────── */
@@ -431,10 +469,17 @@ const table = (t: Table): string => `<table>
 
 export function tableCost(m: GraphsModel, prices: string[]): Table {
   return {
-    head: ['Year', ...prices.map((p) => `At your ${price(p)}`), 'Published'],
-    rows: m.years.map((y, i) => [y.year, ...prices.map((p) => eur(assumedCost(y.certificates, p))),
-      y.costEur !== null ? (i === 0 && m.published.length ? m.published.map((p) => `${p.quarter.slice(5)} ${eur(p.costEur)}`).join(' · ') : eur(y.costEur)) : 'none published']),
+    head: ['Year', 'Imports in', ...prices.map((p) => `At your ${price(p)}`), 'Published'],
+    rows: m.years.map((y) => [y.year, y.priceQuarter, ...prices.map((p) => eur(assumedCost(y.certificates, p))),
+      y.costEur !== null && y.priceEur !== null ? `${eur(y.costEur)} at ${price(y.priceEur)}` : 'none published']),
   };
+}
+
+/** The charged card's table: its last column uses the same honest percentage as the legend. */
+export function tableCharged(m: GraphsModel): Table {
+  return { head: ['Year', 'Emissions counted', 'Free allocation', 'Certificates', 'Charged'],
+    rows: m.years.map((y) => [y.year, n3(y.embeddedTco2e), n3(y.allocationTco2e), n3(y.certificates), y.chargedPct === null ? '—' : pctHonest(y.chargedPct)]),
+    caption: 'tCO₂e and certificates.' };
 }
 
 /* ── the section ───────────────────────────────────────────────────────────── */
@@ -471,6 +516,15 @@ const legendDot = (kind: 'fill' | 'ring'): string => (kind === 'fill'
   ? '<svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="var(--cg-accent)"/></svg>'
   : '<svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="3.8" fill="none" stroke="var(--cg-neutral)" stroke-width="1.5"/></svg>');
 
+/**
+ * The second price box is usable only once the first price exists. Until then it is disabled
+ * and says why, so it can never draw a cost the strip above does not show.
+ */
+export const secondUsable = (state: GraphsState): boolean => parseAssumedPrice(state.priceText) !== null;
+export const secondNote = (state: GraphsState): string => (secondUsable(state)
+  ? '€ per certificate. Your first price is the box above.'
+  : 'Type your first price in the box above. This one then makes a range.');
+
 /** The cost card's changing parts, for the page to refill while a price is being typed. */
 export function costParts(m: GraphsModel, w: number, state: GraphsState): { title: string; plot: string; table: string } {
   const prices = assumedRange(state.priceText, state.secondText);
@@ -481,8 +535,8 @@ export function costParts(m: GraphsModel, w: number, state: GraphsState): { titl
 export function chargedLegend(m: GraphsModel, yearIndex: number): string {
   const y = m.years[yearIndex];
   const charged = y.chargedPct === null ? null : new D(y.chargedPct);
-  return `<span>${legendDot('fill')}Certificates to surrender <b>${charged ? pct1(charged.toFixed()) : '—'}</b></span>
-    <span>${legendDot('ring')}Free allocation <b>${charged ? pct1(D.max(0, new D(100).minus(charged)).toFixed()) : '—'}</b></span>`;
+  return `<span>${legendDot('fill')}Certificates to surrender <b>${charged ? pctHonest(charged.toFixed()) : '—'}</b></span>
+    <span>${legendDot('ring')}Free allocation <b>${charged ? pctHonest(D.max(0, new D(100).minus(charged)).toFixed()) : '—'}</b></span>`;
 }
 
 /**
@@ -503,15 +557,15 @@ export function renderGraphs(
   const yi = state.chargedYear === null ? Y.length - 1 : Math.max(0, Math.min(Y.length - 1, state.chargedYear));
   const asAt = `as at ${formatPackDate(m.packDate)}`;
   const cost = costParts(m, widths.cost, state);
-  const unpriced = Y.filter((y) => y.costEur === null).map((y) => y.year);
+  const unpriced = unpricedQuarters(m);
 
   const steps = cardShell('steps', {
     q: 'Certificates, year by year', title: sentenceSteps(m), plot: wrap(widths.steps, plotSteps(m, widths.steps)),
     cap: `Law as published · ${asAt}. A cost appears only where a certificate price is published.`,
     open: !!state.open.steps,
     tbl: table({ head: ['Year', 'Certificates', `Change on ${Y[0].year}`, 'Cost'],
-      rows: Y.map((y) => [y.year, n3(y.certificates), y.riseOnFirstPct === null ? '—' : `${new D(y.riseOnFirstPct).isNegative() ? '' : '+'}${pct1(y.riseOnFirstPct)}`,
-        y.costEur !== null ? eur(y.costEur) : `none published · ${asAt}`]) }),
+      rows: Y.map((y) => [y.year, n3(y.certificates), y.riseOnFirstPct === null ? '—' : new D(y.riseOnFirstPct).isZero() ? '0%' : `${new D(y.riseOnFirstPct).isNegative() ? '' : '+'}${pct1(y.riseOnFirstPct)}`,
+        y.costEur !== null ? eur(y.costEur) : `none published for imports in ${y.priceQuarter}`]) }),
   });
 
   const share = cardShell('share', {
@@ -521,7 +575,7 @@ export function renderGraphs(
     cap: m.split ? `${n1(m.split.markup)} of ${n1(m.split.rise)} certificates. The rest is free allocation.` : 'The counts above stand.',
     open: !!state.open.share,
     tbl: table(m.split ? { head: ['Cause', 'Certificates'],
-      rows: [['Mark-up', `+${n3(m.split.markup)}`], ['Less free allocation retained', `+${n3(m.split.factor)}`], ['Lower benchmark', `+${n3(m.split.benchmark)}`], ['Total rise', `+${n3(m.split.rise)}`]] }
+      rows: [['Mark-up', plus(m.split.markup)], ['Less free allocation retained', plus(m.split.factor)], ['Lower benchmark', plus(m.split.benchmark)], ['Total rise', plus(m.split.rise)]] }
       : { head: ['Cause', 'Certificates'], rows: [['Not divided for this line', '—']] }),
   });
 
@@ -532,7 +586,7 @@ export function renderGraphs(
       : 'The ring is the count from your verified figures.',
     open: !!state.open.markup,
     tbl: table({ head: ['Year', 'Mark-up', 'As priced', 'Base as verified', 'Mark-up adds'],
-      rows: Y.map((y) => [y.year, y.markupPct !== null ? `${esc(y.markupPct)}%` : 'none', n3(y.certificates), n3(y.certificatesAtBase), `+${n3(y.markupAdds)}`]) }),
+      rows: Y.map((y) => [y.year, y.markupPct !== null ? `${esc(y.markupPct)}%` : 'none', n3(y.certificates), n3(y.certificatesAtBase), plus(y.markupAdds)]) }),
   });
 
   const charged = cardShell('charged', {
@@ -542,20 +596,19 @@ export function renderGraphs(
       <div class="cg-legend" data-cg="legend">${chargedLegend(m, yi)}</div>`,
     cap: 'One cell = 1% of the emissions counted for this shipment, rounded to whole cells.',
     open: !!state.open.charged,
-    tbl: table({ head: ['Year', 'Emissions counted', 'Free allocation', 'Certificates', 'Charged'],
-      rows: Y.map((y) => [y.year, n3(y.embeddedTco2e), n3(y.allocationTco2e), n3(y.certificates), y.chargedPct === null ? '—' : pct1(y.chargedPct)]), caption: 'tCO₂e and certificates.' }),
+    tbl: table(tableCharged(m)),
   });
 
   const costCard = cardShell('cost', {
     q: 'What would it cost at my own price?', title: cost.title, plot: cost.plot,
     extra: `<div class="cg-second"><label for="cgSecond">A second price, to see a range</label>
-        <input id="cgSecond" type="number" min="0" step="any" inputmode="decimal" autocomplete="off" value="${esc(state.secondText)}" />
-        <span>€ per certificate. Your first price is the box above.</span></div>
+        <input id="cgSecond" type="number" min="0" step="any" inputmode="decimal" autocomplete="off" aria-describedby="cgSecondNote" value="${esc(state.secondText)}"${secondUsable(state) ? '' : ' disabled'} />
+        <span id="cgSecondNote" data-cg="second-note">${secondNote(state)}</span></div>
       <div class="cg-legend">
-        <span><svg width="12" height="12" aria-hidden="true"><rect x="4.5" y="1" width="3" height="10" fill="var(--cg-ink)"/></svg>Published price</span>
+        <span><svg width="12" height="12" aria-hidden="true"><rect x="4.5" y="1" width="3" height="10" fill="var(--cg-ink)"/></svg>Published price for this import's quarter</span>
         <span><svg width="16" height="12" aria-hidden="true"><path d="M1 6h14" stroke="var(--cg-markup)" stroke-width="2"/></svg>Your own price</span>
         <span><svg width="16" height="12" aria-hidden="true"><path d="M1 6h14" stroke="var(--cg-markup)" stroke-width="2" stroke-dasharray="3 3"/></svg>Yours, where none is published</span></div>`,
-    cap: `Your price is your assumption, not a forecast. It stays on this page.${unpriced.length ? ` Certificate price for ${yearList(unpriced).replace(' or ', ' and ')}: none published · ${asAt}.` : ''}`,
+    cap: `Your price is your assumption, not a forecast. It stays on this page.${unpriced.length ? ` Certificate price for imports in ${listOf(unpriced, 'and')}: none published · ${asAt}.` : ''}`,
     open: !!state.open.cost, tbl: cost.table,
   });
   return `<section class="cg" aria-label="Graphs">${head}<div class="cg-board">${steps}${share}${markup}${charged}${costCard}</div><div class="cg-tip" data-cg="tip" aria-hidden="true"></div></section>`;
