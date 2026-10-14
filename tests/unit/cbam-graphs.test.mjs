@@ -360,7 +360,7 @@ test('the section: five cards, each with a sentence, a table and a text alternat
   assert.match(t, /88\.5 % of the rise to 2028 is the mark-up on default values/);
   assert.match(t, /A real verified figure can be higher or lower than that base\./);
   assert.match(t, /Your price is your assumption, not a forecast\. It stays on this page\./);
-  assert.match(t, /Certificate price for imports in 2027-Q1 and 2028-Q1: none published · as at 18 Aug 2026\./);
+  assert.match(t, /Certificate price for imports in 2027-Q1 and 2028-Q1: none published · as at 14 Oct 2026\./);
   // The cards that were not approved are not here.
   assert.doesNotMatch(t, /origin matter|free allocation go|2034|Why does it rise/i);
   // Words this page never uses about a price or a saving. "not a forecast" is the one permitted use.
@@ -491,22 +491,26 @@ test('AUDIT 1, swept: sentence, cells, legend and table agree in kind with the c
 });
 
 test('AUDIT 2: a shipment in a quarter with no published price is told so about ITS quarter, and is shown no other quarter\'s cost', () => {
-  for (const date of ['2026-11-30', '2027-07-01']) {
+  for (const date of ['2026-11-30', '2027-10-01']) {
     const m = modelOf(line({ date }));
-    const q = date === '2026-11-30' ? 'Q4' : 'Q3';
     const html = renderGraphs(m, STATE(), WIDTHS), t = text(html);
-    // Published 2026 prices exist (Q1 and Q2), so nothing may say that none is published for 2026.
+    // Published 2026 prices exist (Q1 to Q3), so nothing may say that none is published for 2026.
     assert.doesNotMatch(t, /published for 2026, 2027 and 2028|no 2026, 2027 or 2028 price|for 2026, 2027 and 2028: none/, date);
-    assert.match(t, new RegExp(`No certificate price is published for imports in 2026-${q}, 2027-${q} or 2028-${q}\\. Type your own price above to see a cost\\.`), date);
-    assert.match(t, new RegExp(`Certificate price for imports in 2026-${q}, 2027-${q} and 2028-${q}: none published · as at 18 Aug 2026\\.`), date);
+    assert.match(t, /No certificate price is published for imports in 2026-Q4, 2027-Q4 or 2028-Q4\. Type your own price above to see a cost\./, date);
+    assert.match(t, /Certificate price for imports in 2026-Q4, 2027-Q4 and 2028-Q4: none published · as at 14 Oct 2026\./, date);
     // No published price applies to this shipment, so no published cost is drawn or tabled for it.
     assert.doesNotMatch(html, /data-cg="published"/, `${date}: another quarter's price is not this shipment's cost`);
-    assert.doesNotMatch(t, /24,855\.80|24,829\.41|75\.36|75\.28|published €/, date);
+    assert.doesNotMatch(t, /24,855\.80|24,829\.41|75\.36|75\.28|82\.32|published €/, date);
     assert.doesNotMatch(html, /€[0-9,.]+ for this shipment/, date);
-    assert.equal((t.match(/none published/g) ?? []).length >= 3, true, date);
     const priced = text(renderGraphs(m, { ...STATE(), priceText: '80' }, WIDTHS));
-    assert.match(priced, new RegExp(`That price is yours: no price is published for imports in 2026-${q}, 2027-${q} or 2028-${q}\\.`), date);
+    assert.match(priced, /That price is yours: no price is published for imports in 2026-Q4, 2027-Q4 or 2028-Q4\./, date);
   }
+  // A third-quarter shipment: its own 2026 quarter now has a published price, EUR 82.32.
+  const q3 = modelOf(line({ date: '2027-07-01' }));
+  const q3html = renderGraphs(q3, STATE(), WIDTHS);
+  assert.match(text(q3html), /No certificate price is published for imports in 2027-Q3 or 2028-Q3\./);
+  assert.equal((q3html.match(/data-cg="published"/g) ?? []).length, 1);
+  assert.match(q3html, /data-tip="Imports in 2026-Q3: published €82\.32\n€27,151\.40 for this shipment"/);
   // A first-quarter shipment: its own quarter's published cost, and only that one.
   const q1 = renderGraphs(TUBE, STATE(), WIDTHS);
   assert.equal((q1.match(/data-cg="published"/g) ?? []).length, 1, 'one published mark: the shipment\'s own quarter');

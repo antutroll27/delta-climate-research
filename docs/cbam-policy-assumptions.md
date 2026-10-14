@@ -1366,8 +1366,9 @@ published for an import, the tool shows the certificate count but **no euro figu
 **Citation.** EC "Price of CBAM certificates" page. Legal status recorded as **guidance**, not
 enacted.
 
-**Behaviour.** Q1 2026 **€75.36** (published 7 Apr 2026) and Q2 2026 **€75.28** (published 6 Jul 2026)
-are published; Q3 and Q4 2026 are pending in the pack. **For 2027 and 2028 the pack carries eight
+**Behaviour.** Q1 2026 **€75.36** (published 7 Apr 2026), Q2 2026 **€75.28** (published 6 Jul 2026)
+and Q3 2026 **€82.32** (published 5 Oct 2026, read from the Commission's page on 14 Oct 2026)
+are published; Q4 2026 is pending in the pack. **For 2027 and 2028 the pack carries eight
 pending rows with no value**, one per quarter of import. They are not quarterly prices awaiting
 publication: the quarter is the engine's lookup key, and each row's own locator says the price is
 weekly from 2027 and that none is published as at the date the price page was read. A 2027 or 2028

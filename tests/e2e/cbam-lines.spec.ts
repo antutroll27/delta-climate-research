@@ -636,12 +636,12 @@ test.describe('multi-line CBAM estimate — an import year the corpus does not c
   });
 
   test('a 2026 quarter with an unpublished price does NOT warn — it prices', async ({ page }) => {
-    // 2026 Q3's price row is status:'pending', and a pending row still prices: the line yields
+    // 2026 Q4's price row is status:'pending', and a pending row still prices: the line yields
     // certificates with the euro figure withheld and a per-line note naming the quarter. Warning
     // here would be a false claim on an ordinary near-future date, which is the exact failure
     // the row-existence predicate was chosen to avoid.
     await page.goto('/cbam/cbam-calculator/');
-    await page.fill('#cbDate', '2026-08-15');
+    await page.fill('#cbDate', '2026-11-15');
     await page.dispatchEvent('#cbDate', 'change');
     await expect(page.locator('#cbDateNote')).toHaveText('');
   });
@@ -1250,7 +1250,7 @@ test.describe('CBAM estimate — the three-year strip', () => {
     for (const i of [1, 2]) {
       await expect(cards.nth(i)).toContainText(`Certificate price · imports in ${2026 + i}-Q1`);
       await expect(cards.nth(i)).toContainText('none published');
-      await expect(cards.nth(i)).toContainText('as at 18 Aug 2026');
+      await expect(cards.nth(i)).toContainText('as at 14 Oct 2026');
       await expect(cards.nth(i)).not.toContainText('€');
     }
 
@@ -1566,7 +1566,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await steps.nth(1).focus();
     await expect(g.locator('.cg-tip')).toHaveClass(/on/);
     await expect(g.locator('.cg-tip')).toContainText('2027: 376.755 certificates');
-    await expect(g.locator('.cg-tip')).toContainText('no price published for imports in 2027-Q1, as at 18 Aug 2026');
+    await expect(g.locator('.cg-tip')).toContainText('no price published for imports in 2027-Q1, as at 14 Oct 2026');
 
     // EVERY MARK'S FIGURE LANDS INSIDE THE WINDOW when reached from the keyboard. Focus scrolls
     // the page after the event, and a tooltip placed on the event alone was left behind.
@@ -1672,18 +1672,27 @@ test.describe('CBAM estimate — the graphs', () => {
     const costCard = g.locator('[data-cg-card="cost"]');
     await expect(costCard.locator('.cg-t')).toHaveText(
       'No certificate price is published for imports in 2026-Q4, 2027-Q4 or 2028-Q4. Type your own price above to see a cost.');
-    await expect(costCard.locator('.cg-cap')).toContainText('Certificate price for imports in 2026-Q4, 2027-Q4 and 2028-Q4: none published · as at 18 Aug 2026.');
+    await expect(costCard.locator('.cg-cap')).toContainText('Certificate price for imports in 2026-Q4, 2027-Q4 and 2028-Q4: none published · as at 14 Oct 2026.');
     await expect(costCard.locator('[data-cg="published"]')).toHaveCount(0);
     await expect(costCard).not.toContainText(/75\.36|75\.28|24,855|24,829/);
     await expect(g.locator('[data-cg-card="steps"]')).not.toContainText('€');
     // The strip (already live) had the same looseness: "2026 · none published". It now names the quarter.
     await expect(page.locator('#cbOutlook .cb-ol-yr').first()).toContainText('Certificate price · imports in 2026-Q4');
     await expect(page.locator('#cbOutlook')).not.toContainText(/75\.36|24,855/);
-    await page.fill('#cbDate', '2027-07-01');
+    // 2026-Q3 has a published price (EUR 82.32, 5 October 2026): a July 2027 shipment's 2026
+    // year is priced at it, and at nothing else, in the result card, the strip and the chart.
+    await page.fill('#cbDate', '2026-08-15');
     await page.dispatchEvent('#cbDate', 'change');
+    await expect(page.locator('#cbOut')).toContainText('Certificate price · imports in 2026-Q3');
+    await expect(page.locator('#cbOut')).toContainText('€82.32');
+    await expect(page.locator('#cbOut .cb-cost')).toHaveText('€27,151.40');
+    await expect(page.locator('#cbOutlook .cb-ol-yr').first()).toContainText('€27,151.40');
+    await expect(page.locator('#cbOutlook .cb-ol-yr').first()).toContainText('price published, €82.32');
     await expect(costCard.locator('.cg-t')).toHaveText(
-      'No certificate price is published for imports in 2026-Q3, 2027-Q3 or 2028-Q3. Type your own price above to see a cost.');
-    await expect(costCard.locator('[data-cg="published"]')).toHaveCount(0);
+      'No certificate price is published for imports in 2027-Q3 or 2028-Q3. Type your own price above to see a cost.');
+    await expect(costCard.locator('[data-cg="published"]')).toHaveCount(1);
+    await expect(costCard.locator('[data-cg="published"]')).toHaveAttribute('data-v', '27151.40');
+    await expect(page.locator('#cbGraphs')).not.toContainText(/75\.36|75\.28|24,855/);
 
     // 2029: nothing is computed, so nothing is drawn.
     await page.fill('#cbDate', '2029-03-15');

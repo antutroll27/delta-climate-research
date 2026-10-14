@@ -122,8 +122,15 @@ export type SplitWithheld = 'refused' | 'floor' | 'tier-changes';
 
 export interface Outlook {
   years: OutlookYear[];
-  /** pack.generatedAt — the date every "as at" and "law as published" on the strip uses. */
+  /** pack.generatedAt — the date the strip's "law as published" tag uses. */
   packDate: string;
+  /**
+   * The day the certificate-price source was last read, from the pack: the `retrievedAt` of the
+   * source the year's price rows cite. Every "none published · as at" on the strip uses this,
+   * because that is the claim it dates. It is not the pack's own date: the pack is cut from the
+   * default-values workbook, and a price can be read again (as Q3 2026 was) without that moving.
+   */
+  priceAsAt: string;
   split: OutlookSplit | null;
   splitWithheld: SplitWithheld | null;
   /** The first year in which the pack's retained share is zero, if it holds one. */
@@ -336,11 +343,23 @@ export function outlook(pack: EstimatorPack, input: EstimatorInput): Outlook | n
   return {
     years,
     packDate: pack.generatedAt,
+    priceAsAt: priceSourceDate(pack, years) ?? pack.generatedAt,
     split,
     splitWithheld: withheld,
     allocationEndsYear: zeroFactor ?? null,
     benchmarkPeriods: [...periods.values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]),
   };
+}
+
+/** The `retrievedAt` of the source the years' price rows cite, or null if none can be found. */
+function priceSourceDate(pack: EstimatorPack, years: OutlookYear[]): string | null {
+  for (const y of years) {
+    if (y.kind !== 'figure') continue;
+    const row = pack.prices.find((r) => r.quarter === y.price.quarter);
+    const source = row ? pack.sources.find((s) => s.id === row.sourceId) : undefined;
+    if (source?.retrievedAt) return source.retrievedAt;
+  }
+  return null;
 }
 
 /* ── the visitor's own price ───────────────────────────────────────────────── */
@@ -458,7 +477,7 @@ function renderYearCost(y: OutlookFigureYear, view: Outlook, assumed: string | n
   // this date, named the way the result card above names it ("imports in <quarter>").
   return `<span class="cb-ol-s">Certificate price · imports in ${esc(y.price.quarter)}</span>
       <span class="cb-ol-e">none published</span>
-      <span class="cb-ol-s">as at ${esc(formatPackDate(view.packDate))}</span>`;
+      <span class="cb-ol-s">as at ${esc(formatPackDate(view.priceAsAt))}</span>`;
 }
 
 /** The year cards. */
