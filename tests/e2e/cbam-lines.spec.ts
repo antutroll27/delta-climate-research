@@ -1531,9 +1531,50 @@ test.describe('CBAM estimate — the graphs', () => {
     // Reachable again: the next calculation loads it without being asked.
     blocked = false;
     await page.fill('#cbMass', '200');
-    await expect(g.locator('.cg-card')).toHaveCount(5);
+    await expect(g.locator('.cg-card')).toHaveCount(8);
     await expect(g.locator('.cg-t').first()).toHaveText('The same 200 t needs 29.6% more certificates in 2028 than in 2026.');
     await expect(g.locator('.cg-none')).toHaveCount(0);
+  });
+
+  test('origins where most share one figure: the others are only those off it, and the shared figure is marked', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { ...TUBE_LINE, cn: '28041000', route: 'default' });
+    const card = page.locator('#cbGraphs [data-cg-card="origins"]');
+    await expect(card.locator('.cg-t')).toHaveText(/^On default values, 79 of 96 origins carry the same figure for this good, 694\.0 certificates in 2026; the other 17 run from 0\.0 \(Mali\) to 2,434\.2 \(United States\)\. India is at [\d,.]+\.$/);
+    await expect(card.locator('[data-shared="79"]')).toContainText('79 origins at 694.0');
+    await expect(card.locator('.cg-m')).toHaveCount(96);
+  });
+
+  test('origins follow the mass: 100 t then 250 t, the card and its table are recomputed, never the old figures', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, TUBE_LINE);
+    const card = page.locator('#cbGraphs [data-cg-card="origins"]');
+    await expect(card.locator('.cg-t')).toHaveText('On default values, 2026 certificates for this good run from 13.0 (United States) to 762.1 (Indonesia). India is at 329.8.');
+    await page.fill('#cbMass', '250');
+    await expect(page.locator('#cbOutlook .cb-ol-n').first()).toHaveText('824.6');
+    await expect(card.locator('.cg-t')).toHaveText('On default values, 2026 certificates for this good run from 32.6 (United States) to 1,905.3 (Indonesia). India is at 824.6.');
+    await expect(card.locator('[data-country="IN"]')).toHaveAttribute('data-v', '824.56875');
+    await expect(card.locator('table')).toContainText('824.569');
+    // And back: the 100 t figures return, from the cache or not, but never the 250 t ones.
+    await page.fill('#cbMass', '100');
+    await expect(card.locator('.cg-t')).toHaveText(/India is at 329\.8\.$/);
+  });
+
+  test('origins: going back to a remembered line while another is still computing keeps the remembered one', async ({ page }) => {
+    // Aluminous cement has 101 origins, so 250 t is still computing when the line returns to the
+    // remembered 100 t. The 250 t result must not land on the card afterwards.
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { ...TUBE_LINE, cn: '25233000', route: 'default' });
+    const card = page.locator('#cbGraphs [data-cg-card="origins"]');
+    await expect(card.locator('.cg-t')).toHaveText(/India is at 182\.0\.$/);
+    const strip = page.locator('#cbOutlook .cb-ol-n').first();
+    await expect(strip).toHaveText('182.0');
+    await page.fill('#cbMass', '250');
+    await expect(strip).toHaveText('455.0');
+    await page.fill('#cbMass', '100');
+    await expect(card.locator('.cg-t')).toHaveText(/India is at 182\.0\.$/);
+    await page.waitForTimeout(1500);
+    await expect(card.locator('.cg-t')).toHaveText(/India is at 182\.0\.$/);
   });
 
   test('the previewed line is drawn: five cards, one price control, exact values on focus', async ({ page }) => {
@@ -1541,14 +1582,27 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(page.locator('#cbGraphs')).toBeEmpty();
     await setLine(page, TUBE_LINE);
     const g = page.locator('#cbGraphs');
-    await expect(g.locator('.cg-card')).toHaveCount(5);
+    await expect(g.locator('.cg-card')).toHaveCount(8);
     await expect(g.locator('.cg-t')).toHaveText([
       'The same 100 t needs 29.6% more certificates in 2028 than in 2026.',
+      'Of the 97.6 extra certificates by 2028, 86.4 come from the mark-up on default values. The benchmark does not change for route (C).',
       'of the rise to 2028 is the mark-up on default values. It no longer applies with verified data.',
       'On default values the mark-up adds 129.6 certificates in 2028. It no longer applies with verified data.',
       'In 2028, certificates cover 76 of every 100 tonnes of emissions counted. Free allocation covers the other 24.',
       'No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price above to see a cost.',
+      'Free allocation retained falls to zero in 2034. The steepest single step is 2030.',
+      // Filled after the other cards, in idle time: one engine call per origin.
+      'On default values, 2026 certificates for this good run from 13.0 (United States) to 762.1 (Indonesia). India is at 329.8.',
     ]);
+    // The cascade draws no legend entry for a cause that contributes nothing.
+    await expect(g.locator('[data-cg-card="cascade"] .cg-legend')).not.toContainText('benchmark');
+    // The phase-out: three solid years, six legislated, and no certificate count after 2028.
+    await expect(g.locator('[data-cg-card="phase"] [data-computable="true"]')).toHaveCount(3);
+    await expect(g.locator('[data-cg-card="phase"] [data-computable="false"]')).toHaveCount(6);
+    await expect(g.locator('[data-cg-card="phase"]')).not.toContainText(/\d certificates/);
+    // The origins: the visitor's own is highlighted and the figures are named as default values.
+    await expect(g.locator('[data-cg-card="origins"] [data-country="IN"]')).toHaveAttribute('data-v', '329.8275');
+    await expect(g.locator('[data-cg-card="origins"] .cg-cap')).toContainText("The Commission's default values for each origin");
     await expect(g.locator('.cg-big')).toHaveText('88.5%');
 
     // The graphs and the strip are one line: the same three counts, to the last digit.
@@ -1600,6 +1654,9 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(cost.locator('.cg-t')).toContainText('At your own €80.56 a certificate, 2028 comes to €34,432.');
     await expect(page.locator('#cbOutlook .cb-ol-yr').nth(2)).toContainText('€34,432.15');
     await expect(page.locator('#cbOutlook .cb-ol-yr').nth(2)).toContainText('at your assumed €80.56');
+    // The box shows the price used: on leaving it, the rounded price is written back.
+    await page.locator('#cbOlPrice').press('Tab');
+    await expect(page.locator('#cbOlPrice')).toHaveValue('80.56');
     await page.fill('#cbOlPrice', '80');
     await expect(cost.locator('.cg-t')).toHaveText('At your own €80 a certificate, 2028 comes to €34,193. That price is yours: no price is published for imports in 2027-Q1 or 2028-Q1.');
     await expect(page.locator('#cgSecond')).toBeEnabled();
@@ -1645,6 +1702,10 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(g.locator('.cg-big')).toHaveText('0.0%');
     await expect(g.locator('[data-cg-card="markup"] svg rect[rx]')).toHaveCount(0);
     await expect(g.locator('[data-cg-card="steps"] .cg-t')).toHaveText('The same 100 t needs 20.5% more certificates in 2028 than in 2026.');
+    await expect(g.locator('[data-cg-card="cascade"] .cg-t')).toHaveText(
+      'Of the 11.2 extra certificates by 2028, 11.2 come from the smaller share of free allocation retained. The benchmark does not change for route (C).');
+    await expect(g.locator('[data-cg-card="cascade"] .cg-legend')).not.toContainText(/mark-up/i);
+    await expect(g.locator('[data-cg-card="origins"] .cg-cap')).toContainText('your line uses verified figures, which replace these');
 
     // Free allocation above the emissions counted: no split, no certificates, and the cards say so.
     await page.fill('#cbSeeDirect', '1.0');
@@ -1652,6 +1713,8 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(g.locator('.cg-big')).toHaveText('—');
     await expect(g.locator('[data-cg-card="charged"] .cg-t')).toHaveText('In 2028, free allocation covers all of the emissions counted. No certificates are due.');
     await expect(g.locator('[data-cg-card="steps"] .cg-t')).toHaveText('The same 100 t needs the same certificates in 2028 as in 2026.');
+    await expect(g.locator('[data-cg-card="cascade"] .cg-t')).toHaveText(
+      'The count does not change between 2026 and 2028: free allocation covers all of the emissions counted.');
 
     // AUDIT 1, on the page. Certificates are due (0.546 of one) but are under half a per cent of
     // the emissions counted, so no cell fills. The title must not say that none are due.
@@ -1703,7 +1766,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await addLine(page, TUBE_LINE);
     await expect(g).toBeEmpty();
     await page.locator('[data-remove]').first().click();
-    await expect(g.locator('.cg-card')).toHaveCount(5);
+    await expect(g.locator('.cg-card')).toHaveCount(8);
   });
 
   test('320 px, axe, and paper: no sideways scroll, no violation, and a printer gets the tables', async ({ page }) => {
@@ -1711,7 +1774,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, { cn: '72052100', country: 'IN', route: '(F)', mass: '100', date: '2026-03-15' });
     const g = page.locator('#cbGraphs');
-    await expect(g.locator('.cg-card')).toHaveCount(5);
+    await expect(g.locator('.cg-card')).toHaveCount(8);
     await page.fill('#cbOlPrice', '60');
     await page.fill('#cgSecond', '100');
     await g.locator('[data-cg-card="cost"] .cg-tbl-btn').click();

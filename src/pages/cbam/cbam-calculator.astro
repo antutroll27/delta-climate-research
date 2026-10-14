@@ -678,7 +678,7 @@ import Footer from '../../components/layout/Footer.astro';
   .cb-out .cg-board { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 0.9rem; }
   @container (min-width: 560px) {
     .cb-out .cg-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .cb-out .cg-steps { grid-column: span 2; }
+    .cb-out .cg-steps, .cb-out .cg-cascade, .cb-out .cg-phase, .cb-out .cg-origins { grid-column: span 2; }
   }
   .cb-out .cg-card {
     --cg-ink: var(--color-paper); --cg-muted: #a3b5b7; --cg-faint: #8499a0;
@@ -686,6 +686,7 @@ import Footer from '../../components/layout/Footer.astro';
     --cg-accent: var(--color-cyan); --cg-warm: var(--color-bronze);
     --cg-neutral: #55727a; --cg-neutral-2: #33484e; --cg-surface: #0d2226;
     --cg-markup: var(--color-chart-markup); --cg-allocation: var(--color-chart-allocation);
+    --cg-benchmark: var(--color-chart-benchmark);
     position: relative; min-width: 0; display: flex; flex-direction: column;
     border-radius: 28px; padding: 1.4rem 1.4rem 1.1rem; color: var(--cg-ink);
     background: linear-gradient(160deg, #0d2b2e, #0b1d21 55%, #0a171b);
@@ -720,6 +721,9 @@ import Footer from '../../components/layout/Footer.astro';
   .cb-out .cg-m { outline: none; }
   .cb-out .cg-m:focus-visible { outline: 2px solid var(--cg-accent); outline-offset: 3px; }
   .cb-out .cg-cell { transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
+  /* The cascade's dots rise into place once: opacity and a short lift, nothing else. */
+  .cb-out .cg-dot { animation: cg-dot-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  @keyframes cg-dot-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
   .cb-out .cg-share { align-items: center; text-align: center; }
   .cb-out .cg-share .cg-q { align-self: flex-start; }
@@ -783,7 +787,7 @@ import Footer from '../../components/layout/Footer.astro';
     transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .cb-out .cg-tip.on { opacity: 1; transform: none; }
-  @media (prefers-reduced-motion: reduce) { .cb-out .cg-cell, .cb-out .cg-tip { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .cb-out .cg-cell, .cb-out .cg-tip { transition: none; } .cb-out .cg-dot { animation: none; } }
   @media (max-width: 520px) { .cb-out .cg-card { padding: 1.15rem 1.05rem 1rem; border-radius: 22px; } }
   /* ON PAPER THE GRAPHS BECOME THEIR TABLES. A plot drawn for a dark screen does not survive a
      printer, and its numbers are all in the table beside it, so a printed page carries each

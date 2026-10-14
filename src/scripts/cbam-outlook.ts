@@ -273,33 +273,39 @@ function splitOf(years: OutlookYear[]): { split: OutlookSplit | null; withheld: 
   if (years.some((y) => y.kind === 'figure' && y.tier !== first.tier)) {
     return { split: null, withheld: 'tier-changes' };
   }
+  const between = splitBetween(first, last);
+  if (between === null) return { split: null, withheld: 'floor' };
+  return { withheld: null, split: between };
+}
+
+/**
+ * The split of the change between ANY two years of one line, by the rule above: the one place
+ * it is computed. The strip asks it for the first and last year; the "why does it rise?" graph
+ * asks it for the first and each later year. Null when the parts would not sum to the change
+ * exactly (a floored count), when the first year retains no free allocation, or when a part
+ * would be negative.
+ */
+export function splitBetween(first: OutlookFigureYear, last: OutlookFigureYear): OutlookSplit | null {
   const rise = new D(last.certificates).minus(first.certificates);
   const moreEmissions = new D(last.embeddedTco2e).minus(first.embeddedTco2e);
   const lessAllocation = new D(first.allocationTco2e).minus(last.allocationTco2e);
   const factorFirst = new D(first.factor);
   // The identity. Exact equality on exact decimals: no tolerance, because a tolerance is how a
   // floored line would slip through looking almost right.
-  if (!rise.equals(moreEmissions.plus(lessAllocation)) || factorFirst.isZero()) {
-    return { split: null, withheld: 'floor' };
-  }
+  if (!rise.equals(moreEmissions.plus(lessAllocation)) || factorFirst.isZero()) return null;
   const factorPart = new D(first.allocationTco2e)
     .times(factorFirst.minus(last.factor)).dividedBy(factorFirst);
   const benchmarkPart = lessAllocation.minus(factorPart);
-  if (moreEmissions.isNegative() || factorPart.isNegative() || benchmarkPart.isNegative()) {
-    return { split: null, withheld: 'floor' };
-  }
+  if (moreEmissions.isNegative() || factorPart.isNegative() || benchmarkPart.isNegative()) return null;
   return {
-    withheld: null,
-    split: {
-      firstYear: first.year,
-      lastYear: last.year,
-      rise: rise.toFixed(),
-      moreEmissions: moreEmissions.toFixed(),
-      lessAllocation: lessAllocation.toFixed(),
-      factorPart: factorPart.toFixed(),
-      benchmarkPart: benchmarkPart.toFixed(),
-      emissionsCause: emissionsCauseOf(first.tier),
-    },
+    firstYear: first.year,
+    lastYear: last.year,
+    rise: rise.toFixed(),
+    moreEmissions: moreEmissions.toFixed(),
+    lessAllocation: lessAllocation.toFixed(),
+    factorPart: factorPart.toFixed(),
+    benchmarkPart: benchmarkPart.toFixed(),
+    emissionsCause: emissionsCauseOf(first.tier),
   };
 }
 
@@ -508,6 +514,12 @@ export function renderOutlookYears(view: Outlook, assumed: string | null): strin
 const benchmarkOf = (y: OutlookFigureYear): { value: string; route: string } | null =>
   y.benchmarks.length === 1 ? y.benchmarks[0] : null;
 
+/** Which benchmark a sentence speaks of: "for route (C)", or "for this good" when it has none. */
+export function benchmarkScope(y: OutlookFigureYear): string {
+  const bm = benchmarkOf(y);
+  return bm && bm.route ? `for route ${esc(bm.route)}` : 'for this good';
+}
+
 /** "Why it rises": the bar and its legend, or the sentence said in their place. */
 export function renderOutlookWhy(view: Outlook): string {
   const s = view.split;
@@ -581,7 +593,7 @@ export function renderOutlookWhy(view: Outlook): string {
 
   const bmFirst = benchmarkOf(first);
   const bmLast = benchmarkOf(last);
-  const scope = bmFirst && bmFirst.route ? `for route ${esc(bmFirst.route)}` : 'for this good';
+  const scope = benchmarkScope(first);
   // The year the benchmark first differs from the year before it, read off the cards themselves.
   const changedIn = figures.find((y, i) => i > 0 && benchmarkOf(y)?.value !== benchmarkOf(figures[i - 1])?.value);
   let benchTitle: string;

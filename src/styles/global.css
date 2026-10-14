@@ -139,6 +139,15 @@
      these four values from this file and fails if one is changed to a colour that does not
      pass. Identity is never by colour alone: each also has its own label, shape or position. */
   --color-chart-markup: #bd8a2e;
+  /* THE THIRD CAUSE, the benchmark, drawn only on the dark "why does it rise?" card. A forest
+     green: the room left between the bronze and the cyan is green or magenta, magenta reads as a
+     warm red on this site, and the violet tried in the design preview is off brand. CHECKED
+     2026-10-14 as a three-colour set with the two above, all pairs, against every dark card
+     surface (#10181c, #0d2b2e, #0b2c2e, #0a171b): band, chroma and 3:1 contrast pass;
+     separation 9.3 under simulated colour-vision deficiency (worst: against the bronze) and
+     16.3 with full colour vision. It has no paper step: no paper card draws it. Its dots are
+     also a different shape (a ring) from the other two causes. */
+  --color-chart-benchmark: #357f49;
   --color-chart-allocation: #22a2b5;
   --color-chart-markup-paper: #a06f10;
   --color-chart-allocation-paper: #008aa0;
