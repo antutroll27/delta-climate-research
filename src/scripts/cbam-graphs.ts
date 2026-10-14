@@ -61,6 +61,8 @@ export interface GraphYear {
 export interface GraphsModel {
   massT: string;
   packDate: string;
+  /** The day the price source was last read; what every "none published · as at" is dated by. */
+  priceAsAt: string;
   years: GraphYear[];
   /** True when any part of the line rests on a default value, so a mark-up is applied. */
   usesDefault: boolean;
@@ -133,6 +135,7 @@ export function graphsModel(
   return {
     massT: input.massT,
     packDate: view.packDate,
+    priceAsAt: view.priceAsAt,
     years,
     usesDefault: F.some((y) => y.directMarkupPct !== null || y.indirectMarkupPct !== null),
     // A rise of zero has no shares to speak of, so it is treated like a withheld split.
@@ -306,7 +309,7 @@ const wrap = (w: number, p: Plot): string =>
 
 /** Certificates by year: one thin stepped line. Square corners and flat ends only. */
 export function plotSteps(m: GraphsModel, w: number): Plot {
-  const Y = m.years, asAt = `as at ${formatPackDate(m.packDate)}`;
+  const Y = m.years, asAt = `as at ${formatPackDate(m.priceAsAt)}`;
   const h = 292, top = 40, base = 206, col = w / Y.length;
   const sy = scaleFromZero(Math.max(...Y.map((y) => Number(y.certificates))) * 1.02, base - top);
   const yOf = (v: string): number => base - sy(Number(v));
@@ -422,7 +425,7 @@ export const chargedTip = (y: GraphYear): string => (y.chargedPct === null
 
 /** Cost at the visitor's own price: one row per year on a shared euro scale. Square marks only. */
 export function plotCost(m: GraphsModel, w: number, prices: string[]): Plot {
-  const Y = m.years, asAt = `as at ${formatPackDate(m.packDate)}`;
+  const Y = m.years, asAt = `as at ${formatPackDate(m.priceAsAt)}`;
   const narrow = w < 300, rowH = 74, L = narrow ? 46 : 98, R = 10, top = 14, h = top + rowH * Y.length + 8;
   const lo = prices[0] ?? null, hi = prices.length > 1 ? prices[1] : null;
   const values = [...Y.filter((y) => y.costEur !== null).map((y) => Number(y.costEur)), ...Y.flatMap((y) => prices.map((p) => Number(assumedCost(y.certificates, p))))];
@@ -555,13 +558,13 @@ export function renderGraphs(
   }
   const m = model, Y = m.years;
   const yi = state.chargedYear === null ? Y.length - 1 : Math.max(0, Math.min(Y.length - 1, state.chargedYear));
-  const asAt = `as at ${formatPackDate(m.packDate)}`;
+  const asAt = `as at ${formatPackDate(m.priceAsAt)}`;
   const cost = costParts(m, widths.cost, state);
   const unpriced = unpricedQuarters(m);
 
   const steps = cardShell('steps', {
     q: 'Certificates, year by year', title: sentenceSteps(m), plot: wrap(widths.steps, plotSteps(m, widths.steps)),
-    cap: `Law as published · ${asAt}. A cost appears only where a certificate price is published.`,
+    cap: `Law as published · ${formatPackDate(m.packDate)}. A cost appears only where a certificate price is published.`,
     open: !!state.open.steps,
     tbl: table({ head: ['Year', 'Certificates', `Change on ${Y[0].year}`, 'Cost'],
       rows: Y.map((y) => [y.year, n3(y.certificates), y.riseOnFirstPct === null ? '—' : new D(y.riseOnFirstPct).isZero() ? '0%' : `${new D(y.riseOnFirstPct).isNegative() ? '' : '+'}${pct1(y.riseOnFirstPct)}`,

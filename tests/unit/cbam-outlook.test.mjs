@@ -410,8 +410,8 @@ test('a typed price fills only the years with no published price, and never repl
   const view = outlook(pack, line());
   const none = text(renderOutlook(view));
   assert.match(none, /2026 329\.8 certificates €24,855\.80 price published, €75\.36/);
-  assert.match(none, /2027 376\.8 certificates, \+14\.2% on 2026 Certificate price · imports in 2027-Q1 none published as at 18 Aug 2026/);
-  assert.match(none, /2028 427\.4 certificates, \+29\.6% on 2026 Certificate price · imports in 2028-Q1 none published as at 18 Aug 2026/);
+  assert.match(none, /2027 376\.8 certificates, \+14\.2% on 2026 Certificate price · imports in 2027-Q1 none published as at 14 Oct 2026/);
+  assert.match(none, /2028 427\.4 certificates, \+29\.6% on 2026 Certificate price · imports in 2028-Q1 none published as at 14 Oct 2026/);
 
   const filled = text(renderOutlook(view, '80'));
   assert.match(filled, /2026 329\.8 certificates €24,855\.80 price published, €75\.36/,
@@ -453,18 +453,34 @@ test('the slots refilled while the visitor types are exactly what a full render 
 });
 
 test('when the entered date falls in a 2026 quarter with no published price, 2026 is fillable too', () => {
-  const view = outlook(pack, line({ date: '2026-08-15' }));
+  // 2026-Q4: published in the first week of January 2027. (This was Q3 until the Q3 price was
+  // published on 5 October 2026; see the next test.)
+  const view = outlook(pack, line({ date: '2026-11-15' }));
   assert.deepEqual(unpricedYears(view), [2026, 2027, 2028]);
   const t = text(renderOutlook(view));
-  assert.match(t, /2026 329\.8 certificates Certificate price · imports in 2026-Q3 none published as at 18 Aug 2026/);
+  assert.match(t, /2026 329\.8 certificates Certificate price · imports in 2026-Q4 none published as at 14 Oct 2026/);
   assert.match(t, /Fills the cost for 2026, 2027 and 2028, where no price is published for the import's quarter\./);
-  // AUDIT 2, in the strip: an August shipment's 2026 card is about ITS quarter. "2026: none
-  // published" was false while two other 2026 quarters have a price.
-  assert.match(t, /2026 329\.8 certificates Certificate price · imports in 2026-Q3 none published/);
-  assert.match(t, /2027 376\.8 certificates, \+14\.2% on 2026 Certificate price · imports in 2027-Q3 none published/);
+  // AUDIT 2, in the strip: a November shipment's 2026 card is about ITS quarter. "2026: none
+  // published" was false while three other 2026 quarters have a price.
+  assert.match(t, /2027 376\.8 certificates, \+14\.2% on 2026 Certificate price · imports in 2027-Q4 none published/);
   // Each pending row's own locator, once: the 2026 row's and the weekly-price sentence.
-  assert.match(t, /Certificate price, 2026: EC certificate price table, 2026-Q3 \(not yet published\)\./);
+  assert.match(t, /Certificate price, 2026: EC certificate price table, 2026-Q4 \(not yet published\)\./);
   assert.match(t, /Certificate price, 2027 and 2028: From 2027 the Commission sets a weekly certificate price/);
+});
+
+test('a 2026-Q3 import is priced at the published Q3 price, EUR 82.32, and at no other quarter\'s', () => {
+  // Read from the Commission's page on 2026-10-14: Q3 2026, published 5 October 2026, EUR 82.32.
+  // 329.8275 certificates × 82.32 = 27,151.40 (27,151.39980 half up).
+  const view = outlook(pack, line({ date: '2026-08-15' }));
+  const y = view.years[0];
+  assert.equal(y.price.quarter, '2026-Q3');
+  assert.equal(y.price.status, 'published');
+  assert.equal(y.price.priceEur, '82.32');
+  assert.equal(y.costEur, '27151.40');
+  assert.deepEqual(unpricedYears(view), [2027, 2028]);
+  const t = text(renderOutlook(view));
+  assert.match(t, /2026 329\.8 certificates €27,151\.40 price published, €82\.32/);
+  assert.doesNotMatch(t, /75\.36|75\.28|24,855/, 'not at the Q1 or Q2 price');
 });
 
 /* ── the words ─────────────────────────────────────────────────────────────── */

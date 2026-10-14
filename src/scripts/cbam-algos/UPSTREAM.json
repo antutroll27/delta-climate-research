@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
   "upstreamRepository": "GeoCBAM/CBM",
-  "upstreamCommit": "3c46b3538a62b6f8c28a60d1c3e65e7d6eaa32df",
-  "packSha256": "6df306913b42c2e788eeec6fbff42c15bb059a849d1b1a9ffa8f9e985ffc5db3",
-  "packManifestSha256": "64888413d5dc2f5f45ff91c2fab9032dc29d321b565338b0b459583c78c1a307",
+  "upstreamCommit": "7e0d4d7189bdd1481c8076ccc4d8deb4ba4c31aa",
+  "packSha256": "cc1d817bf5c86ed78f383b1bee245200f3ae1bba1184997c678ba9e6ef62100e",
+  "packManifestSha256": "ed3cd4046448e29ad4ecc45ed114a3ecb47f15c47350323e70535054424f7e00",
   "files": {
     "cbam/certificate-estimate.ts": "b218a2a30eeeb4beb1432af0a6b6f16db326a3271f20d7c2effc4f73e1c74cbc",
     "cbam/input.ts": "cf89c5921d1a3d545163a48a25d526f35f00b4d01588def253e38908303e8f65",

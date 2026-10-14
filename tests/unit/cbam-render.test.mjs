@@ -163,7 +163,7 @@ const BANNER_71 =
   + 'and never sent anywhere. This tool counts certificates for 2026, 2027 and 2028 imports, '
   + 'and shows a cost only where the Commission has published a certificate price. For 2026 '
   + 'the price is set per quarter. From 2027 it is set weekly: none published as at '
-  + '18 August 2026, so a 2027 or 2028 import shows certificates and no cost. No final figure '
+  + '14 October 2026, so a 2027 or 2028 import shows certificates and no cost. No final figure '
   + 'exists for any of these years — the cross-sectoral correction factor is unpublished — so '
   + 'any number below is a labelled what-if. This is not a filing, not validated by the EU '
   + 'CBAM Registry, and not a statement of monetary liability. '
@@ -713,11 +713,15 @@ test('NON-NEGOTIABLE 1 — the banner names both tiers, and concedes everything 
     /will pay|pay less|forecast|expected price|not yet/i,
     'the banner states what is published; it forecasts nothing');
 
-  // THE DATE IS THE PACK'S, not the day somebody edited the banner. The banner is markup and
-  // cannot read the pack, so the date is typed into it, and this is what stops it going stale:
-  // a regenerated pack with a new generatedAt fails here until the banner is brought along.
-  const packDate = new Date(JSON.parse(readFileSync(fileURLToPath(
-    new URL('../../public/cbam/estimator-pack.manifest.json', import.meta.url)), 'utf8')).generatedAt);
+  // THE DATE IS THE PACK'S, not the day somebody edited the banner: the day the source of the
+  // pack's 2027 price rows was last read, which is the date those rows give for "none published".
+  // The banner is markup and cannot read the pack, so the date is typed into it, and this is what
+  // stops it going stale when the price page is read again.
+  const weeklyRow = pack.prices.find((row) => row.quarter === '2027-Q1');
+  const priceSource = pack.sources.find((source) => source.id === weeklyRow.sourceId);
+  assert.ok(weeklyRow.sourceLocator.endsWith(priceSource.retrievedAt.slice(0, 10)),
+    'sanity: the row dates its "none published" by its source');
+  const packDate = new Date(priceSource.retrievedAt);
   const asAt = new Intl.DateTimeFormat('en-GB', {
     day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
   }).format(packDate);
