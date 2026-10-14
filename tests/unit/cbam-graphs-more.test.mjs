@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Decimal from 'decimal.js';
 
 import {
-  graphsModel, originCountries, originRow, originsFrom, originsModel, phaseModel, plotCascade, plotOrigins, plotPhase, renderGraphs,
+  graphsModel, originCountries, originRow, originsFrom, originsKey, originsModel, phaseModel, plotCascade, plotOrigins, plotPhase, renderGraphs,
   sentenceCascade, sentenceOrigins, sentencePhase, ORIGINS_FLAT_SHARE, ORIGINS_SAME_SHARE,
 } from '../../src/scripts/cbam-graphs.ts';
 import { outlook, splitBetween } from '../../src/scripts/cbam-outlook.ts';
@@ -263,6 +263,36 @@ test('origins, worked: welded tube spreads widely; aluminous cement mostly share
   const verified = originsModel(pack, line({ verified: { directTco2ePerT: '2.0' } }));
   assert.equal(verified.usesVerified, true);
   assert.deepEqual(verified.rows.map((r) => r.certificates), tube.rows.map((r) => r.certificates), 'the comparison is of default values');
+});
+
+test('the origins key changes with EVERY input the computation reads, the mass first', () => {
+  const base = line({ verified: { directTco2ePerT: '2.0', indirectTco2ePerT: '0.5' } });
+  const changes = {
+    cn: '72052100', country: 'CN', route: '(F)', massT: '250', date: '2027-03-15', emissionsScope: 'direct',
+    verified: { directTco2ePerT: '2.1', indirectTco2ePerT: '0.5' },
+  };
+  // Every field of the input is covered: a field added later fails here until it is listed.
+  assert.deepEqual(Object.keys(changes).sort(), Object.keys(base).sort());
+  for (const [field, value] of Object.entries(changes)) {
+    assert.notEqual(originsKey({ ...base, [field]: value }), originsKey(base), `${field} must change the key`);
+  }
+  assert.notEqual(originsKey({ ...base, verified: { ...base.verified, indirectTco2ePerT: '0.6' } }), originsKey(base), 'a nested verified figure');
+  assert.notEqual(originsKey({ ...base, verified: undefined }), originsKey(base), 'verified or not');
+  assert.equal(originsKey({ ...base }), originsKey(base), 'the same line is the same key');
+  // And the figures the key guards do depend on the mass.
+  assert.notDeepEqual(originsModel(pack, line({ massT: '250' })).rows, originsModel(pack, line()).rows);
+});
+
+test('origins: the others when the shared figure is the HIGHEST, and when there is only one other', () => {
+  const tube = originsModel(pack, line());
+  const rows = (vals) => vals.map((v, i) => ({ country: `X${i}`, name: `Origin ${String.fromCharCode(65 + i)}`, certificates: v }));
+  const top = originsFrom(line(), rows(['50', '80', '200', '200', '200', '200', '200']).map((r, i) => ({ ...r, country: i === 1 ? 'IN' : r.country })));
+  assert.equal(top.kind, 'chart'); assert.equal(top.shared, true);
+  assert.equal(text(sentenceOrigins(top)), 'On default values, 5 of 7 origins carry the same figure for this good, 200.0 certificates in 2026; the other 2 run from 50.0 (Origin A) to 80.0 (Origin B). Origin B is at 80.0.');
+  assert.match(plotOrigins(top, 600, 'IN').svg, /data-shared="5"/);
+  const one = originsFrom(line(), rows(['100', '300', '300', '300']));
+  assert.equal(text(sentenceOrigins(one)), 'On default values, 3 of 4 origins carry the same figure for this good, 300.0 certificates in 2026; the other, Origin A, is at 100.0.');
+  assert.ok(tube);
 });
 
 /* ── the section ───────────────────────────────────────────────────────────── */

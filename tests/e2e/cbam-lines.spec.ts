@@ -1545,6 +1545,38 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(card.locator('.cg-m')).toHaveCount(96);
   });
 
+  test('origins follow the mass: 100 t then 250 t, the card and its table are recomputed, never the old figures', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, TUBE_LINE);
+    const card = page.locator('#cbGraphs [data-cg-card="origins"]');
+    await expect(card.locator('.cg-t')).toHaveText('On default values, 2026 certificates for this good run from 13.0 (United States) to 762.1 (Indonesia). India is at 329.8.');
+    await page.fill('#cbMass', '250');
+    await expect(page.locator('#cbOutlook .cb-ol-n').first()).toHaveText('824.6');
+    await expect(card.locator('.cg-t')).toHaveText('On default values, 2026 certificates for this good run from 32.6 (United States) to 1,905.3 (Indonesia). India is at 824.6.');
+    await expect(card.locator('[data-country="IN"]')).toHaveAttribute('data-v', '824.56875');
+    await expect(card.locator('table')).toContainText('824.569');
+    // And back: the 100 t figures return, from the cache or not, but never the 250 t ones.
+    await page.fill('#cbMass', '100');
+    await expect(card.locator('.cg-t')).toHaveText(/India is at 329\.8\.$/);
+  });
+
+  test('origins: going back to a remembered line while another is still computing keeps the remembered one', async ({ page }) => {
+    // Aluminous cement has 101 origins, so 250 t is still computing when the line returns to the
+    // remembered 100 t. The 250 t result must not land on the card afterwards.
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { ...TUBE_LINE, cn: '25233000', route: 'default' });
+    const card = page.locator('#cbGraphs [data-cg-card="origins"]');
+    await expect(card.locator('.cg-t')).toHaveText(/India is at 182\.0\.$/);
+    const strip = page.locator('#cbOutlook .cb-ol-n').first();
+    await expect(strip).toHaveText('182.0');
+    await page.fill('#cbMass', '250');
+    await expect(strip).toHaveText('455.0');
+    await page.fill('#cbMass', '100');
+    await expect(card.locator('.cg-t')).toHaveText(/India is at 182\.0\.$/);
+    await page.waitForTimeout(1500);
+    await expect(card.locator('.cg-t')).toHaveText(/India is at 182\.0\.$/);
+  });
+
   test('the previewed line is drawn: five cards, one price control, exact values on focus', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await expect(page.locator('#cbGraphs')).toBeEmpty();

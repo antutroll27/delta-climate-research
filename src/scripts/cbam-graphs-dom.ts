@@ -12,7 +12,7 @@
 import type { EstimatorInput, EstimatorPack } from './cbam-algos/estimator/estimate-from-pack.ts';
 import { parseAssumedPrice, type Outlook } from './cbam-outlook.ts';
 import {
-  chargedCells, chargedLegend, chargedTip, costParts, graphsModel, originCountries, originRow, originsFrom, originsParts, phaseModel,
+  chargedCells, chargedLegend, chargedTip, costParts, graphsModel, originCountries, originRow, originsFrom, originsKey, originsParts, phaseModel,
   renderGraphs, secondNote, secondUsable, type OriginsModel,
   sentenceCharged,
   type GraphsModel, type GraphsRefusal, type GraphsState,
@@ -85,16 +85,16 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
    * THE ORIGINS, COMPUTED LAST AND REMEMBERED. One engine call per origin: about 175 ms in all
    * for the slowest good measured (aluminous cement, 101 origins) on a desktop. So the card is
    * drawn empty with the rest, the computation runs in idle slices of ORIGINS_SLICE_MS each, so no
-   * task holds the page for long, and its result is kept per
-   * good, route, year and scope, which is everything it depends on. A newer line cancels an
-   * older computation by its token.
+   * task holds the page for long, and its result is kept per pack object and per WHOLE line
+   * (originsKey: every field, the mass included). Every newer line, cached or not, takes a new
+   * token, so an older computation still running can never fill the card afterwards.
    */
   let packNow: EstimatorPack | null = null;
   let lineNow: EstimatorInput | null = null;
   let paintedLine = '';
-  const originsCache = new Map<string, OriginsModel | null>();
+  // Per pack object, then per whole input (originsKey): a new pack starts an empty cache.
+  const originsCache = new WeakMap<EstimatorPack, Map<string, OriginsModel | null>>();
   let originsToken = 0;
-  const originsKey = (l: EstimatorInput): string => [l.cn, l.route, l.date.slice(0, 4), l.emissionsScope ?? '', l.country, l.verified ? 'v' : 'd'].join('|');
   function fillOrigins(o: OriginsModel | null): void {
     if (!widths) return;
     const parts = originsParts(o, widths.origins);
@@ -106,9 +106,14 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
   }
   function scheduleOrigins(): void {
     if (!packNow || !lineNow || model === null || typeof model === 'string') return;
-    const key = originsKey(lineNow);
-    if (originsCache.has(key)) { fillOrigins(originsCache.get(key) ?? null); return; }
     const token = ++originsToken, pack = packNow, line = lineNow;
+    const key = originsKey(line);
+    let cache = originsCache.get(pack);
+    if (!cache) { cache = new Map(); originsCache.set(pack, cache); }
+    if (cache.has(key)) { fillOrigins(cache.get(key) ?? null); return; }
+    // ponytail: cleared wholesale past 50 lines (each mass typed is a line); LRU if that ever bites.
+    if (cache.size >= 50) cache.clear();
+    const store = cache;
     // ponytail: a time budget per slice, not a fixed count, so a slow device still yields often.
     // One engine call is about 1-2 ms, so a slice stays well under the 50 ms long-task line.
     const countries = originCountries(pack, line);
@@ -125,7 +130,7 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
       }
       if (next < countries.length) { later(); return; }
       const o = originsFrom(line, rows);
-      originsCache.set(key, o);
+      store.set(key, o);
       fillOrigins(o);
     }
     later();
@@ -282,7 +287,8 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
       // THE SAME LINE AGAIN (a debounced recalculation after typing the value already there) is
       // not redrawn: replacing every card would move a keyboard user's focus and cancel the
       // scroll bringing it into view. Only the price can differ, and it has its own small redraw.
-      const key = JSON.stringify(line);
+      // Keyed like the origins: the pack by identity and the WHOLE line, every field.
+      const key = originsKey(line);
       if (pack === packNow && key === paintedLine && model !== null) {
         if (priceText !== state.priceText) { state.priceText = priceText; redrawCost(); }
         return;

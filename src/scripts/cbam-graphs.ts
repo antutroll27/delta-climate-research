@@ -681,6 +681,14 @@ export function originsModel(pack: EstimatorPack, input: EstimatorInput): Origin
   return originsFrom(input, rows);
 }
 
+/**
+ * WHAT A COMPUTED ORIGINS CARD MAY BE REUSED FOR: the whole input it was computed from, every
+ * field, not a list of the fields thought to matter (a list once left out the mass, and the card
+ * kept 100 t figures for a 250 t line). The pack is the other input; the caller keys on it by
+ * identity. Fields in another order only miss the cache, which is safe.
+ */
+export const originsKey = (input: EstimatorInput): string => JSON.stringify(input);
+
 type OriginRow = OriginsModel['rows'][number];
 /** The countries to try: the pack's published sheets and OTHER; none when the year cannot be read. */
 export const originCountries = (pack: EstimatorPack, input: EstimatorInput): string[] =>
