@@ -97,7 +97,7 @@ export default defineConfig({
        and reported timeouts, which reads as a slow machine.
 
        The name says the tier now, so the gap cannot be re-opened by accident. */
-    { name: 'chromium-tier0', use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium-tier0', testIgnore: ['**/._*', '**/obos-v2-*.spec.ts', '**/obos-v1-unchanged.spec.ts'], use: { ...devices['Desktop Chrome'] } },
 
     /* THE RELIEF PATH, on a real GPU. `--use-angle=metal` gets Apple Silicon's
        Metal backend instead of SwiftShader, which lifts render-quality.ts to tier 2
@@ -118,6 +118,14 @@ export default defineConfig({
           args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'],
         },
       },
+    }]),
+    /* THE v1-UNCHANGED PROOF (OBOS v2 spec §8.3). Local only: its baseline is on
+       /Volumes/OBOSLab and was recorded on the untouched 7eb32e8 tree. */
+    ...(process.env.CI ? [] : [{
+      name: 'chromium-v1-baseline',
+      testMatch: '**/obos-v1-unchanged.spec.ts',
+      snapshotPathTemplate: '/Volumes/OBOSLab/obos-v2/shots/v1-baseline/png/{arg}{ext}',
+      use: { ...devices['Desktop Chrome'] },
     }]),
     {
       name: 'firefox-cbam',
