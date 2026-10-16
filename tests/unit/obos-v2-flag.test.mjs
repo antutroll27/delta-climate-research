@@ -16,7 +16,7 @@ test('the query wins, storage only answers when there is none', () => {
 
 /* The inline script is a string; run it against a fake document and store and
    check it agrees with resolveUiFlag on every case (one rule, two spellings). */
-function runPrepaint(search, stored, { throwOnStore = false } = {}) {
+function runPrepaint(search, stored, { throwOnStore = false, hasTemplate = true } = {}) {
   const attrs = new Map();
   const store = new Map(stored == null ? [] : [[UI_FLAG_KEY, stored]]);
   const listeners = [];
@@ -28,11 +28,18 @@ function runPrepaint(search, stored, { throwOnStore = false } = {}) {
   const document = {
     documentElement: { setAttribute: (k, v) => attrs.set(k, v), removeAttribute: (k) => attrs.delete(k) },
     addEventListener: (ev, fn) => listeners.push([ev, fn]),
+    getElementById: (id) => (id === V2_TREE_ID && hasTemplate ? {} : null),
   };
   const window = {};
   new Function('document', 'window', 'location', 'localStorage', 'URLSearchParams', UI_PREPAINT_JS)(
     document, window, { search }, ls, URLSearchParams);
-  return { ui: attrs.get('data-ui') ?? 'v1', stored: store.get(UI_FLAG_KEY) ?? null, listeners };
+  return {
+    get ui() { return attrs.get('data-ui') ?? 'v1'; },
+    stored: store.get(UI_FLAG_KEY) ?? null,
+    listeners,
+    /* the soft-navigation hook: set what the NEW page has, then fire astro:after-swap */
+    swapTo: (nextHasTemplate) => { hasTemplate = nextHasTemplate; for (const [, fn] of listeners) fn(); },
+  };
 }
 
 test('the prepaint script implements resolveUiFlag exactly', () => {
@@ -53,6 +60,15 @@ test('a blocked store still honours an explicit query and otherwise means v1', (
 test('the prepaint re-applies on astro:after-swap, bound once per window', () => {
   const { listeners } = runPrepaint('', null);
   assert.deepEqual(listeners.map(([ev]) => ev), ['astro:after-swap']);
+});
+
+test('a soft navigation to a page with no v2 tree drops data-ui (S0 audit F4)', () => {
+  const r = runPrepaint('?ui=v2', null);
+  assert.equal(r.ui, 'v2');
+  r.swapTo(false); /* e.g. /heat-map/compare or /team after a ClientRouter navigation */
+  assert.equal(r.ui, 'v1', 'data-ui="v2" leaked onto a page that has no v2 tree');
+  r.swapTo(true); /* back to an area page: the flag, still in storage, applies again */
+  assert.equal(r.ui, 'v2');
 });
 
 test('prefs: stored choice wins, defaults follow pointer and width (spec §1.5)', () => {

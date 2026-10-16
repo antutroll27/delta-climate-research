@@ -61,7 +61,9 @@ export function resolvePrefs(
 
 const J = (v: string): string => JSON.stringify(v);
 
-/** Runs in <head>-order before the v1 tree. Query wins; storage answers only without one. */
+/** Runs in <head>-order before the v1 tree. Query wins; storage answers only without one.
+ *  On a soft navigation the new body is already in place (its inline scripts have not run), so the
+ *  template is findable: a page without a v2 tree (compare, team) must not keep data-ui="v2". */
 export const UI_PREPAINT_JS = `(function(){
 var d=document.documentElement,K=${J(UI_FLAG_KEY)};
 function apply(){
@@ -72,7 +74,7 @@ try{if(q==='v2')localStorage.setItem(K,'v2');else if(q==='v1')localStorage.remov
 if(v==='v2')d.setAttribute(${J(UI_ATTR)},'v2');else d.removeAttribute(${J(UI_ATTR)});
 }
 apply();
-if(!window.__obosUiBound){window.__obosUiBound=1;document.addEventListener('astro:after-swap',apply);}
+if(!window.__obosUiBound){window.__obosUiBound=1;document.addEventListener('astro:after-swap',function(){if(document.getElementById(${J(V2_TREE_ID)}))apply();else d.removeAttribute(${J(UI_ATTR)});});}
 })();`;
 
 /** Runs after the template. Flag on: clone, apply prefs to the clone's root, replace v1. Flag off: drop the template. */
