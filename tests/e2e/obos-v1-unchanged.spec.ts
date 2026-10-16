@@ -74,9 +74,11 @@ async function open(page: Page, path: string): Promise<void> {
   }
   await page.addStyleTag({ content: '#mlmap canvas, canvas.maplibregl-canvas, [data-compare-root] canvas { visibility: hidden !important; }' });
   await page.waitForTimeout(3000);
-  /* `.livedot.on{animation:hmPulse}` out-ranks the reduced-motion `.livedot{animation:none}`, so
-     the dot pulses under reduced motion and its opacity is a function of wall time. Freeze every
-     running animation at t=0 (does not touch the CSS, so a lost @keyframes would still show). */
+  /* v1's `.livedot.on{animation:hmPulse}` used to out-rank the reduced-motion `.livedot{animation:none}`,
+     so the dot pulsed under reduced motion and its opacity was a function of wall time. Freeze every
+     running animation at t=0 so any animation that still runs is deterministic. Freezing at t=0 HIDES a
+     lost @keyframes (hmPulse's 0% frame equals the un-animated opacity), so snapshot() also records
+     the running animations' names and the full keyframes inventory: those lines catch it (S0 audit F3). */
   await freezeAnimations(page);
 }
 
@@ -99,7 +101,26 @@ async function snapshot(page: Page): Promise<string[]> {
         + props.map((p) => cs.getPropertyValue(p)).join('|');
     });
   }, [...PROPS]);
-  return lines.filter((l) => !VOLATILE.some((id) => l.includes(`#${id}.`)));
+  /* A frozen animation cannot reveal a lost @keyframes in pixels or computed style, so record both:
+     (1) every running animation, by name and target (a rule that stopped animating, or a name that
+         no longer resolves, changes this line);
+     (2) every @keyframes rule in every stylesheet, with its stops (a deleted or edited keyframe changes it). */
+  const anims = await page.evaluate(() => document.getAnimations()
+    .map((a) => `${(a as CSSAnimation).animationName ?? '?'}@${(a.effect as KeyframeEffect | null)?.target?.id || (a.effect as KeyframeEffect | null)?.target?.className || '?'}`)
+    .sort().join(','));
+  const keyframes = await page.evaluate(() => {
+    const out: string[] = [];
+    const walk = (rules: CSSRuleList): void => {
+      for (const r of Array.from(rules)) {
+        if (r instanceof CSSKeyframesRule) out.push(`${r.name}[${Array.from(r.cssRules).map((k) => k.cssText).join(';')}]`);
+        else if ('cssRules' in r) walk((r as CSSGroupingRule).cssRules);
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) { try { walk(sheet.cssRules); } catch { /* cross-origin sheet */ } }
+    return out.sort().join(' ');
+  });
+  return [...lines, `animations|${anims}`, `keyframes|${keyframes}`]
+    .filter((l) => !VOLATILE.some((id) => l.includes(`#${id}.`)));
 }
 
 type View = { name: string; path: string; mobile: boolean; clay: boolean };
