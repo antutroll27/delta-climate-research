@@ -127,6 +127,24 @@ export default defineConfig({
       snapshotPathTemplate: '/Volumes/OBOSLab/obos-v2/shots/v1-baseline/png/{arg}{ext}',
       use: { ...devices['Desktop Chrome'] },
     }]),
+    /* OBOS v2 (spec §9.2). The flag comes from storage, so every v2 spec opens
+       the v2 tree with no query. SwiftShader = tier 0 = Plates: no backdrop-filter in CI. */
+    {
+      name: 'chromium-v2',
+      testMatch: '**/obos-v2-*.spec.ts',
+      testIgnore: ['**/obos-v2-glass.spec.ts'],
+      grep: /@v2/,
+      use: { ...devices['Desktop Chrome'], storageState: 'tests/e2e/fixtures/ui-v2.storage.json' },
+    },
+    ...(process.env.CI ? [] : [{
+      name: 'chromium-v2-relief',
+      testMatch: ['**/obos-v2-glass.spec.ts', '**/obos-v2-boot.spec.ts'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'tests/e2e/fixtures/ui-v2.storage.json',
+        launchOptions: { args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] },
+      },
+    }]),
     {
       name: 'firefox-cbam',
       testMatch: '**/cbam-lines.spec.ts',
