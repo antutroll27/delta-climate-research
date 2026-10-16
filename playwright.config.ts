@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { PW_ORIGIN, PW_PORT, V2_STORAGE_STATE } from './tests/e2e/fixtures/ui-v2-state';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -79,7 +80,7 @@ export default defineConfig({
      on record (32.5) has 5.5 min, about 17%. */
   globalTimeout: process.env.CI ? 38 * 60_000 : undefined,
   use: {
-    baseURL: 'http://127.0.0.1:4322',
+    baseURL: PW_ORIGIN,
     trace: 'on-first-retry',
   },
   projects: [
@@ -137,14 +138,14 @@ export default defineConfig({
       testMatch: '**/obos-v2-*.spec.ts',
       testIgnore: ['**/obos-v2-glass.spec.ts'],
       grep: /@v2/,
-      use: { ...devices['Desktop Chrome'], storageState: 'tests/e2e/fixtures/ui-v2.storage.json' },
+      use: { ...devices['Desktop Chrome'], storageState: V2_STORAGE_STATE },
     },
     ...(process.env.CI ? [] : [{
       name: 'chromium-v2-relief',
       testMatch: ['**/obos-v2-glass.spec.ts', '**/obos-v2-boot.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
-        storageState: 'tests/e2e/fixtures/ui-v2.storage.json',
+        storageState: V2_STORAGE_STATE,
         launchOptions: { args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] },
       },
     }]),
@@ -200,8 +201,8 @@ export default defineConfig({
        requests per run at an endpoint whose terms cap the entire application at
        20 a second. A spec's own page.route still intercepts first, so
        heat-map-live-freshness.spec.ts goes on driving age with its own payloads. */
-    command: 'node scripts/preview-with-api.mjs --port 4322 --canned',
-    url: 'http://127.0.0.1:4322',
+    command: `node scripts/preview-with-api.mjs --port ${PW_PORT} --canned`,
+    url: PW_ORIGIN,
     reuseExistingServer: false,
     timeout: 120_000,
   },

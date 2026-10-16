@@ -3,6 +3,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PW_ORIGIN } from './fixtures/ui-v2-state';
 
 /* THE v1-UNCHANGED PROOF (spec §8.3). Recorded ONCE on the untouched worktree
    (7eb32e8) with V1_BASELINE=record, then compared at every slice gate with the
@@ -134,8 +135,8 @@ const VIEWS: readonly View[] = [
 async function capture(browser: Browser, v: View): Promise<{ lines: string[]; png: Buffer }> {
   /* browser.newContext() does not inherit the project's `use`, so baseURL is passed here. */
   const ctx = await browser.newContext(v.mobile
-    ? { baseURL: 'http://127.0.0.1:4322', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 }
-    : { baseURL: 'http://127.0.0.1:4322', viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    ? { baseURL: PW_ORIGIN, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 }
+    : { baseURL: PW_ORIGIN, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   await open(page, v.path);
   if (v.clay) {
