@@ -77,6 +77,19 @@ test.describe('live reading freshness', () => {
   // runner needs room for that (see runtime-performance.spec.ts).
   test.setTimeout(180_000);
 
+  /* `.livedot.on{animation:hmPulse}` (0,2,0) used to out-rank the reduced-motion `.livedot{animation:none}`
+     (0,1,0), so the live dot pulsed for people who asked for no motion (OBOS v2 S0 audit F7). */
+  for (const [motion, want] of [['no-preference', 'hmPulse'], ['reduce', 'none']] as const) {
+    test(`the live dot's animation is ${want} under prefers-reduced-motion: ${motion}`, async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: motion });
+      await stubMet(page, 0);
+      await page.goto('/heat-map/in/kolkata/ballygunge/');
+      await expect(page.locator(dial)).toHaveAttribute('data-age', 'fresh', { timeout: 60_000 });
+      await expect(page.locator('#livedot')).toHaveClass(/\bon\b/);
+      expect(await page.locator('#livedot').evaluate((e) => getComputedStyle(e).animationName)).toBe(want);
+    });
+  }
+
   test('a fresh reading is shown as fresh, and the dot may say live', async ({ page }) => {
     await stubMet(page, 0);
     await page.goto('/heat-map/in/kolkata/ballygunge/');
