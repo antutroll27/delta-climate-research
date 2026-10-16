@@ -1,0 +1,134 @@
+/* src/styles/obos-v2/atoms.css — OBOS v2 spec §2.2, §2.6. Ported from the preview system.css :112–201 (type atoms, chips, stats, disclosures, symbol rows, interval/floor, ramp, dbar);
+   every selector is under html[data-ui="v2"] .obos-v2 and --ink is --ink-1. NO HEX HERE (tokens.css owns them). */
+
+/* ── base (the preview's reset, scoped; the root already sets font and colour in tokens.css) ── */
+html[data-ui="v2"] .obos-v2 :is(*, *::before, *::after) { box-sizing: border-box; }
+html[data-ui="v2"] .obos-v2, html[data-ui="v2"] .obos-v2 button, html[data-ui="v2"] .obos-v2 input { font-family: var(--sans); }
+:where(html[data-ui="v2"] .obos-v2) :where(button, input) { font: inherit; color: inherit; }
+html[data-ui="v2"] .obos-v2 :focus-visible { outline: 2px solid var(--focus-accent); outline-offset: 3px; border-radius: 8px; }
+html[data-ui="v2"] .obos-v2 :is(h1, h2, h3, p, dl, dd, ul, ol) { margin: 0; }
+html[data-ui="v2"] .obos-v2 :is(ul, ol) { padding: 0; list-style: none; }
+
+/* ───────────────────────────── type atoms ───────────────────────────── */
+html[data-ui="v2"] .obos-v2 .micro { font-variant-numeric: tabular-nums; font-size: var(--micro-size); letter-spacing: var(--micro-ls); font-weight: var(--micro-weight);
+  text-transform: uppercase; color: var(--ink-3); line-height: 1.35; }
+html[data-ui="v2"] .obos-v2 .foot { font-size: 11px; letter-spacing: 0.01em; font-weight: 400; color: var(--ink-3); line-height: 1.55; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .num { font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+html[data-ui="v2"] .obos-v2 .name { font-size: 14.5px; font-weight: 500; line-height: 1.3; letter-spacing: -0.01em; margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 .name-xl { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+html[data-ui="v2"] .obos-v2 .name-xl span,
+html[data-ui="v2"] .obos-v2 .name-xl .thin { font-weight: 200; }
+html[data-ui="v2"] .obos-v2 .hero { font-weight: 400; letter-spacing: -0.035em; line-height: 1; font-size: 46px; margin: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .hero .u { font-weight: 300; color: var(--unit); font-size: 0.46em; letter-spacing: -0.01em; margin-left: 0.08em; }
+html[data-ui="v2"] .obos-v2 .hero.thin { font-weight: 200; }
+html[data-ui="v2"] .obos-v2 .hero.md { font-size: 34px; }
+html[data-ui="v2"] .obos-v2 .hero + .lede { margin-top: 11px; }
+html[data-ui="v2"] .obos-v2 .lede { font-size: 13px; color: var(--ink-2); margin-top: 6px; max-width: 36ch; line-height: 1.45; }
+html[data-ui="v2"] .obos-v2 .body-s { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+/* chips, pills, segmented */
+html[data-ui="v2"] .obos-v2 .chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 99px; background: var(--well);
+  font-size: 11px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .chip.ink { background: var(--ink-1); color: var(--on-ink); }
+html[data-ui="v2"] .obos-v2 .chip.line { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+html[data-ui="v2"] .obos-v2 .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+html[data-ui="v2"] .obos-v2 .pill { border: 0; height: 24px; white-space: nowrap; padding: 0 9px; border-radius: 99px; background: var(--well); font-size: 11.5px; font-weight: 500;
+  color: var(--ink-2); cursor: pointer; transition: background-color .3s var(--ease), color .3s var(--ease); }
+html[data-ui="v2"] .obos-v2 .pill:hover { background: var(--well-2); }
+html[data-ui="v2"] .obos-v2 .pill[aria-pressed="true"] { background: var(--ink-1); color: var(--on-ink); }
+html[data-ui="v2"] .obos-v2 .seg { display: flex; gap: 2px; padding: 2px; background: var(--well); border-radius: 13px; }
+html[data-ui="v2"] .obos-v2 .seg button { border: 0; background: transparent; padding: 5px 9px; border-radius: 11px; font-size: 11.5px; font-weight: 500; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .seg button[aria-pressed="true"] { background: var(--ink-1); color: var(--on-ink); }
+/* ── provenance badge: SOLID dot = measured/observed; OUTLINED dashed ring = modelled/estimated */
+html[data-ui="v2"] .obos-v2 .kind { display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 1px 7px 1px 5px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-2); white-space: nowrap; line-height: 1.6; }
+html[data-ui="v2"] .obos-v2 .kind::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+html[data-ui="v2"] .obos-v2 .kind.measured::before { background: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .kind.modelled::before { background: transparent; border: 1.25px dashed var(--ink-1); box-sizing: border-box; }
+html[data-ui="v2"] .obos-v2 .kind.stale { opacity: .55; }
+/* stats grid */
+html[data-ui="v2"] .obos-v2 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 12px 0 0; }
+html[data-ui="v2"] .obos-v2 .stats dd { margin: 3px 0 0; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .stats dd small { font-size: 12px; font-weight: 400; color: var(--ink-3); margin-left: 4px; letter-spacing: 0; }
+/* key/value method list */
+html[data-ui="v2"] .obos-v2 .method li { display: grid; grid-template-columns: 76px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 .method li:last-child { border-bottom: 0; }
+html[data-ui="v2"] .obos-v2 .method li .foot { color: var(--ink-1); }
+/* disclosures */
+html[data-ui="v2"] .obos-v2 details.disc { border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 details.disc summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; font-size: 13px; font-weight: 500; }
+html[data-ui="v2"] .obos-v2 details.disc summary::-webkit-details-marker { display: none; }
+html[data-ui="v2"] .obos-v2 details.disc summary .chev,
+html[data-ui="v2"] .obos-v2 .chev { width: 24px; height: 24px; border-radius: 50%; background: var(--well); display: grid; place-items: center; transition: transform .5s var(--ease); flex: none; }
+html[data-ui="v2"] .obos-v2 details.disc[open] summary .chev { transform: rotate(90deg); }
+html[data-ui="v2"] .obos-v2 details.disc .body { padding-bottom: 12px; }
+/* ── the symbol-row (the Node-spec row): a 52 px tile + bold-lead text */
+html[data-ui="v2"] .obos-v2 .sym-list > li,
+html[data-ui="v2"] .obos-v2 .sym-row { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 .sym-list > li:first-child { border-top: 0; }
+html[data-ui="v2"] .obos-v2 .sym-tile { width: 52px; height: 52px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in oklch, var(--ink-1) 7%, transparent); }
+html[data-ui="v2"] .obos-v2 .sym-tile.sm { width: 36px; height: 36px; border-radius: 10px; }
+html[data-ui="v2"] .obos-v2 .sym-hd { font-size: 13.5px; font-weight: 500; line-height: 1.28; }
+html[data-ui="v2"] .obos-v2 .sym-hd b { font-weight: 700; }
+html[data-ui="v2"] .obos-v2 .sym-sub { font-size: 11.5px; font-weight: 300; color: var(--ink-2); margin-top: 2px; line-height: 1.38; }
+/* to-scale bars (Node-spec budget bars) */
+html[data-ui="v2"] .obos-v2 .bar-scale { display: block; height: 8px; margin-top: 6px; border-radius: 99px; background: var(--ink-1); transform-origin: left center; }
+html[data-ui="v2"] .obos-v2 .bar-scale.outlined { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-1); background-image: repeating-linear-gradient(135deg, var(--ink-3) 0 2px, transparent 2px 5px); }
+html[data-ui="v2"] .obos-v2 .bar-track { display: block; height: 8px; border-radius: 99px; background: var(--well-2); position: relative; overflow: hidden; }
+/* interval with its floor: the floor is printed BESIDE the headline, never under a fold */
+html[data-ui="v2"] .obos-v2 .interval { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+html[data-ui="v2"] .obos-v2 .floor { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--ink-1); padding: 2px 8px; border-radius: 99px; box-shadow: inset 0 0 0 1.5px var(--ink-1); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .floor b { font-weight: 700; }
+html[data-ui="v2"] .obos-v2 .estimate-note { font-size: 11px; color: var(--ink-2); font-weight: 500; }
+/* the heat ramp bar (only temperature may use it) */
+html[data-ui="v2"] .obos-v2 .ramp { height: 10px; border-radius: 99px; background: var(--heat-ramp); box-shadow: inset 0 0 0 1px oklch(0 0 0 / 0.05); }
+html[data-ui="v2"] .obos-v2 .ramp-scale { display: flex; justify-content: space-between; margin-top: 4px; font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .hk { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+html[data-ui="v2"] .obos-v2 .hk.h1 { background: var(--heat-1); }
+html[data-ui="v2"] .obos-v2 .hk.h2 { background: var(--heat-2); }
+html[data-ui="v2"] .obos-v2 .hk.h3 { background: var(--heat-3); }
+html[data-ui="v2"] .obos-v2 .hk.h4 { background: var(--heat-4); }
+html[data-ui="v2"] .obos-v2 .hk.h5 { background: var(--heat-5); }
+/* the diverging bar (twin .dbar), re-used for "vs reference" readings */
+html[data-ui="v2"] .obos-v2 .dbar { position: relative; margin-top: 12px; padding-top: 18px; }
+html[data-ui="v2"] .obos-v2 .dbar .ends { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .dbar .track { position: relative; height: 28px; border-radius: 99px; background: var(--heat-ramp); box-shadow: inset 0 0 0 1px oklch(0 0 0 / 0.05); }
+html[data-ui="v2"] .obos-v2 .dbar .mk { position: absolute; top: 15px; height: 34px; width: 1.5px; background: var(--ink-1); border-radius: 1px; box-shadow: 0 0 0 1.5px var(--card); }
+html[data-ui="v2"] .obos-v2 .dbar .tri { position: absolute; top: 3px; width: 0; height: 0; margin-left: -4.25px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid var(--ink-1); }
+
+/* ── symbols (spec §2.5): symbols.ts renders inline <svg class="sym">; a keyline rings the light fills ── */
+html[data-ui="v2"] .obos-v2 svg.sym { display: inline-block; vertical-align: middle; flex: none; overflow: visible; }
+html[data-ui="v2"] .obos-v2 .sym-keyline { stroke: var(--ink-1); stroke-width: 1.25px; vector-effect: non-scaling-stroke; }
+
+/* ── tinted tile and the bleeding mark (preview :231–236; not in the plan's surface block but used by S4/S5) ── */
+html[data-ui="v2"] .obos-v2 .tile { position: relative; overflow: hidden; border-radius: 18px; padding: 12px 12px 10px 14px; background: var(--tile); margin-top: 10px; }
+html[data-ui="v2"] .obos-v2[data-cards="plates"] .tile[style*="--sym"] { background: color-mix(in oklch, var(--sym) 14%, var(--plate)); }
+html[data-ui="v2"] .obos-v2 .bleed { position: absolute; right: -18px; top: -16px; width: 88px; height: 88px; pointer-events: none; }
+html[data-ui="v2"] .obos-v2 .bleed-room::before { content: ""; float: right; width: 62px; height: 56px; }
+
+/* ── surfaces (spec §2.2): Glass blurs only when live; flat = the 0.94 fallback; Plates never blur ── */
+html[data-ui="v2"] .obos-v2 :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
+  background: var(--glass-fill); border: 1px solid var(--glass-border); color: var(--ink-1);
+}
+html[data-ui="v2"] .obos-v2 :is(.bar, .toolbar, .place, .attrib, .rail, .side-panel) { background: var(--glass-fill-strong); }
+html[data-ui="v2"] .obos-v2 :is(.card, .bar, .side-panel, .toolbar) { box-shadow: var(--glass-hi), var(--shadow-float); }
+html[data-ui="v2"] .obos-v2 :is(.place, .attrib, .toast) { box-shadow: var(--glass-hi), var(--shadow); }
+html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+}
+html[data-ui="v2"] .obos-v2[data-cards="glass"]:not([data-glass="live"]) :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
+  background: var(--glass-fallback);
+}
+html[data-ui="v2"] .obos-v2[data-cards="plates"] :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
+  background: var(--plate); border-color: transparent; box-shadow: var(--plate-shadow);
+}
+html[data-ui="v2"] .obos-v2 .card { position: relative; border-radius: 22px; padding: 16px 16px 14px; min-width: 0; }
+/* live numerals (spec §2.6) */
+html[data-ui="v2"] .obos-v2 :is(.num, .hero, .k-time, .tc-n, .stats dd, #lst, #clockTime, #bcount) { font-variant-numeric: tabular-nums; font-kerning: none; }
+@media (forced-colors: active) {
+  html[data-ui="v2"] .obos-v2 :is(.card, .side-panel, .bar, .place, .toolbar, .rail, .toast) { border: 1px solid CanvasText; }
+  html[data-ui="v2"] .obos-v2 svg.sym .f { fill: CanvasText; stroke: CanvasText; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui="v2"] .obos-v2 :is(*, *::before, *::after) { animation: none !important; transition: none !important; }
+}
