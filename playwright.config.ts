@@ -128,7 +128,10 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     }]),
     /* OBOS v2 (spec §9.2). The flag comes from storage, so every v2 spec opens
-       the v2 tree with no query. SwiftShader = tier 0 = Plates: no backdrop-filter in CI. */
+       the v2 tree with no query. SwiftShader = tier 0 = Plates: no backdrop-filter in CI.
+       CI TIME BUDGET: this project (the whole @v2 suite) must stay <= 6 min on the 2-CPU runner
+       (S0 audit F6). Verify's browser contracts already use 29-31 of a 40 min globalTimeout.
+       Fold checks into one engine load (openV2 ~20 s locally) before adding a load. */
     {
       name: 'chromium-v2',
       testMatch: '**/obos-v2-*.spec.ts',
