@@ -1,6 +1,9 @@
 ---
 import Base from '../../../../layouts/Base.astro';
 import HeatMapStage from '../../../../components/ClimateEngine/HeatMapStage.astro';
+import HeatMapStageV2 from '../../../../components/ClimateEngine/v2/HeatMapStageV2.astro';
+import UiPrepaint from '../../../../components/ClimateEngine/v2/UiPrepaint.astro';
+import UiSwap from '../../../../components/ClimateEngine/v2/UiSwap.astro';
 import { AREA_KEYS, splitKey, type AreaKey } from '../../../../scripts/climate-engine/scope/registry.ts';
 import { resolve } from '../../../../scripts/climate-engine/scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from '../../../../scripts/climate-engine/scope/page-meta.ts';
@@ -65,7 +68,10 @@ const title = areaPageTitle(scope);
 const description = areaPageDescription(scope);
 ---
 <Base title={title} description={description} noindex={!indexable} nativeScroll>
+  <UiPrepaint />
   <HeatMapStage scope={scope} />
+  <template id="obos-v2-tree"><HeatMapStageV2 scope={scope} /></template>
+  <UiSwap />
 </Base>
 
 <script>

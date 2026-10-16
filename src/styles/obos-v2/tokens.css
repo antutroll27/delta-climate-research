@@ -1,0 +1,7 @@
+/* src/styles/obos-v2/tokens.css — spec §2. THE ONLY v2 stylesheet allowed a hex. */
+/* Between UiPrepaint and UiSwap no v1 frame may paint under the flag (spec §1.2). */
+html[data-ui="v2"] main#main:not(.obos-v2) { visibility: hidden; }
+html[data-ui="v2"] body { overflow: hidden; }
+html[data-ui="v2"] .obos-v2 { position: fixed; inset: 0; overflow: hidden; }
+html[data-ui="v2"] .obos-v2 #mlmap { position: absolute; inset: 0; z-index: 0; }
+html[data-ui="v2"] .obos-v2 [data-v2-parking] { display: none; }
