@@ -247,7 +247,10 @@ export function mountConsoleShell(): (() => void) | null {
     });
   }
 
-  paint();
+  /* A CONSOLE WITH NO PANES HAS NO PANE STATE (OBOS v2 spec C3). Painting here
+     would write data-panel="collapsed" and store obos:panel for a page that has
+     no panel at all, quietly changing the v1 reader's remembered preference. */
+  if (panes.length > 0) paint();
 
   /* ── the rail's collapse ─────────────────────────────────────────────────── */
 

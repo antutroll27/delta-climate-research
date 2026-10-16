@@ -73,3 +73,16 @@ for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-
     assert.ok(!/<script/i.test(v2.replace(/^<template id="obos-v2-tree">/, '')), 'no <script> may sit inside the v2 tree (template scripts never run)');
   });
 }
+
+test('console-shell paints no pane state on a console that has no panes (E6, spec C3)', () => {
+  const src = readFileSync('src/scripts/climate-engine/shell/console-shell.ts', 'utf8');
+  assert.match(src, /\n\s*if \(panes\.length > 0\) paint\(\);\n/);
+  assert.ok(!/\n\s{2}paint\(\);\n/.test(src), 'an unguarded paint() call remains');
+});
+
+test('the area page mounts the v2 shell only under the flag, after the instrument', () => {
+  const page = readFileSync('src/pages/heat-map/[country]/[city]/[area].astro', 'utf8');
+  assert.match(page, /getAttribute\('data-ui'\) !== 'v2'/);
+  assert.ok(page.indexOf('mountHeatMap()') < page.lastIndexOf('await bootV2(generation)'), 'v2 shell must mount after mountHeatMap');
+  assert.match(page, /disposeV2\?\.\(\); disposeV2 = null;/);
+});
