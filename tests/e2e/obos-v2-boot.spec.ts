@@ -55,4 +55,17 @@ test.describe('@v2 boot', () => {
     await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
     expect(await page.evaluate(() => localStorage.getItem('obos:ui')), 'the sticky flag itself must survive').toBe('v2');
   });
+
+  test('@v2 SwiftShader (tier 0): Plates by default, flat glass, no backdrop-filter anywhere', async ({ page }, testInfo) => {
+    /* chromium-v2-relief also runs this file, on a real GPU where tier 2 is Glass-live by design (obos-v2-glass.spec.ts). */
+    test.skip(testInfo.project.name === 'chromium-v2-relief', 'tier 0 is a SwiftShader property');
+    await openV2(page);
+    const root = page.locator('main.obos-v2');
+    await expect(root).toHaveAttribute('data-tier', 'low');
+    await expect(root).toHaveAttribute('data-glass', 'flat');
+    await expect(root).toHaveAttribute('data-cards', 'plates');
+    const blurred = await page.evaluate(() => [...document.querySelectorAll('main.obos-v2 *')]
+      .filter((e) => { const v = getComputedStyle(e).backdropFilter; return v && v !== 'none'; }).length);
+    expect(blurred).toBe(0);
+  });
 });
