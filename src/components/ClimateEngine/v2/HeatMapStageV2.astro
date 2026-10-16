@@ -18,6 +18,7 @@ import ScopeSwitcher from '../shell/ScopeSwitcher.astro';
 import LayerTree from '../shell/LayerTree.astro';
 import InterventionPane from '../shell/InterventionPane.astro';
 import '../../../styles/obos-v2/tokens.css';
+import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
 import { areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
 import { isAirCity } from '../../../lib/aqi/stations.ts';
 import { UNCOVERED_NOTE } from '../../../scripts/climate-engine/air/air-panel.ts';
@@ -152,7 +153,7 @@ const newCity = scope.area.hasData
   ? newCityToAnnounce(scope.city.id, new Date(), null)
   : null;
 ---
-<main id="main" class="stage obos-v2" data-console data-area={scope.key}>
+<main id="main" class="stage obos-v2" data-console data-area={scope.key} style={symbolCssVars()}>
   {scope.area.hasData && <div id="mlmap"></div>}
   <div data-v2-parking>
     {/* S0 PARKING. Copied verbatim from HeatMapStage.astro so the contract holds;
