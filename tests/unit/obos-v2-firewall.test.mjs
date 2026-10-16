@@ -24,19 +24,17 @@ test('v1 global CSS is fenced exactly once, with keyframes and @page hoisted out
   assert.ok(inside.includes('&[data-panel="collapsed"] .sidebar{display:none}'));
 });
 
-test('the BUILD carries the fence (this repo\'s Vite 8 emits NATIVE nesting; it does not flatten)', () => {
+test('the BUILD flattened the fence (lightningcss include: Nesting, S0 audit F1)', () => {
   assert.ok(existsSync('dist/_astro'), 'run npm run build first');
-  const css = readdirSync('dist/_astro').filter((f) => f.endsWith('.css'))
-    .map((f) => readFileSync(`dist/_astro/${f}`, 'utf8'))
-    .find((c) => c.includes('--studio-ink-amber'));
+  const files = readdirSync('dist/_astro').filter((f) => f.endsWith('.css'));
+  const css = files.map((f) => readFileSync(`dist/_astro/${f}`, 'utf8')).find((c) => c.includes('--studio-ink-amber'));
   assert.ok(css, 'v1 stage CSS not found in dist');
-  /* MEASURED at S0.3: spec 1.4.6 expected lightningcss to flatten to
-     `:where(html:not([data-ui=v2])) .stage{`. With Vite 8's default targets it does NOT:
-     it keeps `:where(html:not([data-ui=v2])){& .stage{...}}`, which Chrome 120+, Safari 17.2+
-     and Firefox 117+ read. Either spelling is a correct fence; a bare un-fenced .stage is not. */
-  const nested = /:where\(html:not\(\[data-ui=("?)v2\1\]\)\)\{[^]*?& \.stage\{/.test(css);
-  const flat = /:where\(html:not\(\[data-ui=("?)v2\1\]\)\) \.stage\{/.test(css);
-  assert.ok(nested || flat, 'the v1 .stage rule is not behind the data-ui fence in the build');
+  assert.match(css, /:where\(html:not\(\[data-ui=("?)v2\1\]\)\) \.stage\{/, 'flattened .stage rule missing');
+  assert.ok(!/:where\(html:not\(\[data-ui=("?)v2\1\]\)\)\{/.test(css), 'an unflattened nesting block reached the browser');
   assert.ok(!/(^|[}{;,])\.stage\{--base:/.test(css), 'an un-fenced v1 .stage token rule reached the browser');
   assert.equal((css.match(/@keyframes tipIn/g) ?? []).length, 1);
+  /* No stylesheet may ship native nesting (S0 audit F1): Chrome<112, Safari<16.5 and Firefox<117 drop it whole. */
+  for (const f of files) {
+    assert.ok(!/\{&|[,{]&[\s.[#:]/.test(readFileSync(`dist/_astro/${f}`, 'utf8')), `${f} ships native CSS nesting`);
+  }
 });
