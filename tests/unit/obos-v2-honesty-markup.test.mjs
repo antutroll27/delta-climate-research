@@ -185,3 +185,10 @@ test('F4: heat.css fades the column while data-v2-more is 1 (keyword colours onl
   const src = readFileSync('src/scripts/climate-engine/v2/heat-v2.ts', 'utf8');
   assert.ok(src.includes('dataset.v2More') && src.includes("'scroll'"), 'the flag is not maintained on scroll');
 });
+
+/* ── A-S3 audit F10: both colour keys read Comfortable → Extreme, the direction of the ramp above them ── */
+test('F10: the temperature card\'s key and the legend card\'s key list the classes in the ramp\'s order (h1..h5)', () => {
+  const order = (html) => [...html.matchAll(/<i class="hk h(\d)"><\/i>/g)].map((m) => m[1]).join('');
+  assert.equal(order(V2('TempCard.astro')), '12345');
+  assert.equal(order(V2('HeatCards.astro')), '12345');
+});
