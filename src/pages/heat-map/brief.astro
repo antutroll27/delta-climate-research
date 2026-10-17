@@ -21,8 +21,8 @@ import UiSwap from '../../components/ClimateEngine/v2/UiSwap.astro';
   let dispose: (() => void) | null = null;
   let bootGeneration = 0;
   let disposeV2: (() => void) | null = null;
-  /* OBOS v2 (spec §1.7, plan S9.3): only under the flag, imported dynamically so v1 never fetches it. The brief's root carries
-     data-compare-root, so mountShellV2 binds the frame only (menu pin, theme and card style, popovers). */
+  /* OBOS v2 (spec §1.7, plan S9.3): only under the flag, imported dynamically so v1 never fetches it. The brief's root is `[data-brief-root]`,
+     which mountShellV2 binds frame-only (c-02): menu pin, theme and card style, popovers. */
   const bootV2 = async (generation: number) => {
     if (document.documentElement.getAttribute('data-ui') !== 'v2' || disposeV2) return;
     const { mountShellV2 } = await import('../../scripts/climate-engine/v2/shell-v2');

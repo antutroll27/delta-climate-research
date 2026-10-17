@@ -7,9 +7,10 @@
  * goes missing) and every sentence of v1's brief is kept word for word. The page scrolls and prints: screens/brief.css makes
  * the root a block, print/brief.css turns it to ink on paper and drops the chrome and the print button.
  *
- *   · the root also carries `data-compare-root`. That attribute is not the Compare bench here (paired-controller.ts is never
- *     loaded on this route): it is the marker mountShellV2 reads to bind only the FRAME (menu pin, theme and card style,
- *     popovers), because every other binder assumes the area stage. A request asks for the cleaner `[data-brief-root]` match;
+ *   · the root is `[data-brief-root]` and nothing else: mountShellV2 binds only the FRAME on it (menu pin, theme and card style,
+ *     popovers; request c-02), because every other binder assumes the area stage. It must NOT carry `data-compare-root`: that is
+ *     the Compare bench's marker, and compare.astro's leftover astro:page-load listener would boot a second bench on the brief
+ *     (C audit F1);
  *   · all figures are modelled, so every mark is outlined;
  *   · no style element and no script element (template scripts never run; scoped CSS would stamp data-astro-cid).
  */
@@ -24,7 +25,7 @@ import '../../../styles/obos-v2/phone.css';
 import '../../../styles/obos-v2/print.css';
 import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
 ---
-<main id="main" class="heat-brief obos-v2" data-brief-root data-compare-root aria-busy="true" style={symbolCssVars()}>
+<main id="main" class="heat-brief obos-v2" data-brief-root aria-busy="true" style={symbolCssVars()}>
   <RailV2 current="compare" hasData={true} areaName="Compare" />
   <ToolbarV2 />
 

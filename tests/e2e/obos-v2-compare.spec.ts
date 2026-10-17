@@ -299,6 +299,28 @@ test.describe('@v2 compare', () => {
     await expect(page.locator('.nav-item[aria-current="page"]')).toHaveText(/Analysis · Compare/);
   });
 
+  test('@v2 C audit F1: the frame is bound once after soft hops (a ward to Compare by the menu, Compare to the brief by its link): the pin works and the brief starts ONE worker', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openV2(page, '/heat-map/in/kolkata/ballygunge/');
+    await page.locator('a.nav-item[data-rail="analysis"]').click({ position: { x: 30, y: 22 } });   // the icon: the item's centre is clipped or covered (S2 re-check R2)
+    await expect(page).toHaveURL(/\/heat-map\/compare\//);
+    const root = page.locator('main.obos-v2');
+    await expect(root).toHaveAttribute('aria-busy', 'false', { timeout: 120_000 });
+    const pinFlips = async (): Promise<void> => {
+      const was = await root.getAttribute('data-menu');
+      await page.locator('[data-menu-pin]').click({ position: { x: 30, y: 22 } });
+      await expect(root, 'a double binding flips the pin twice, which is no flip').not.toHaveAttribute('data-menu', was ?? '');
+    };
+    await pinFlips();
+    let workers = 0; page.on('worker', () => { workers += 1; });
+    await page.locator('a[data-role="brief-link"]').click();
+    await expect(page.locator('main.obos-v2[data-brief-root]')).toHaveAttribute('aria-busy', 'false', { timeout: 120_000 });
+    await pinFlips();
+    await page.waitForTimeout(1500);
+    expect(workers, 'only the brief\'s own reproduction may run on the brief (a hard load starts one)').toBe(1);
+    await expect(page.locator('main.obos-v2[data-compare-root]'), 'the brief is not a Compare bench').toHaveCount(0);
+  });
+
   test('@v2 the Compare link on a Bengaluru ward opens a Bengaluru pair that settles (v1 heat-map-compare-from-bengaluru)', async ({ page }) => {
     await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
     await page.goto('/heat-map/in/bengaluru/whitefield/', { waitUntil: 'domcontentloaded' });

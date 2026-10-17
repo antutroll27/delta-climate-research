@@ -29,6 +29,7 @@ test('every data hook the brief reads exists in HeatMapBriefV2', () => {
   const v2 = readFileSync(V2BF, 'utf8');
   assert.deepEqual([...pairs(V1B)].filter((p) => !v2.includes(p)), []);
   assert.match(v2, /<main id="main" class="heat-brief obos-v2"[^>]*data-brief-root/);
+  assert.doesNotMatch(v2.slice(v2.indexOf('<main')).split('>')[0], /data-compare-root/, 'C audit F1: the brief is not the Compare bench; compare.astro\'s leftover listener would boot a second one on it');
   for (const t of ['Paired scenario brief', 'This is not a ward ranking or an investment-priority recommendation.', 'It is not an observed regional heat-day record.']) assert.ok(v2.includes(t), t);
 });
 
