@@ -48,6 +48,14 @@ test('Light --ink-3 and --unit are #5C5B58 (AA, spec §7.1)', () => {
   assert.match(light, /--ink-3: var\(--hx-quiet-light\); --unit: var\(--hx-quiet-light\);/);
 });
 
+/* S1 audit F7: opacity on a text node halves its contrast (2.57:1 in Light); only the dot may fade. */
+test('.kind.stale fades the dot, never the text (AA)', () => {
+  const css = strip(readFileSync(join(STYLES, 'atoms.css'), 'utf8'));
+  assert.ok(!/\.kind\.stale\s*\{[^}]*opacity/.test(css), '.kind.stale must not set opacity on the text');
+  assert.match(css, /\.kind\.stale\s*\{\s*color: var\(--ink-3\);\s*\}/);
+  assert.match(css, /\.kind\.stale::before\s*\{\s*opacity: \.55;\s*\}/);
+});
+
 const hsl = (hex) => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
   const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, l = (max + min) / 2;

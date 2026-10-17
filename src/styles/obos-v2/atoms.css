@@ -45,7 +45,8 @@ html[data-ui="v2"] .obos-v2 .kind { display: inline-flex; align-items: center; g
 html[data-ui="v2"] .obos-v2 .kind::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none; }
 html[data-ui="v2"] .obos-v2 .kind.measured::before { background: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 .kind.modelled::before { background: transparent; border: 1.25px dashed var(--ink-1); box-sizing: border-box; }
-html[data-ui="v2"] .obos-v2 .kind.stale { opacity: .55; }
+html[data-ui="v2"] .obos-v2 .kind.stale { color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .kind.stale::before { opacity: .55; }
 /* stats grid */
 html[data-ui="v2"] .obos-v2 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 12px 0 0; }
 html[data-ui="v2"] .obos-v2 .stats dd { margin: 3px 0 0; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
