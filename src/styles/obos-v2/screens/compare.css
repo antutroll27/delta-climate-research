@@ -129,7 +129,7 @@ html[data-ui="v2"] .obos-v2.heat-compare .cmp-method { margin-top: 8px; }
   html[data-ui="v2"] .obos-v2.heat-compare[data-compare-root] .side-panel { position: fixed; z-index: 30; top: auto; left: var(--cmp-rail); right: 8px; bottom: 8px; width: auto;
     max-height: calc(100dvh - 16px); }
   html[data-ui="v2"] .obos-v2.heat-compare .side-panel[data-sheet="half"] { max-height: min(58dvh, 30rem); }
-  html[data-ui="v2"] .obos-v2.heat-compare[data-compare-root] .side-panel[data-sheet="full"] { top: 8px; }
+  html[data-ui="v2"] .obos-v2.heat-compare[data-compare-root] .side-panel[data-sheet="full"] { top: 8px; z-index: 60; }
   html[data-ui="v2"] .obos-v2.heat-compare .side-panel .sp-head { display: none; }
   html[data-ui="v2"] .obos-v2.heat-compare .side-panel[data-sheet="collapsed"] .sp-scroll { display: none; }
   html[data-ui="v2"] .obos-v2.heat-compare .cmp-handle { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border: 0;

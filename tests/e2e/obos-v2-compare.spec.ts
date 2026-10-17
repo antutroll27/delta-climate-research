@@ -410,6 +410,8 @@ async function cameras(page: Page): Promise<void> {
     const root = page.locator('main.obos-v2');
     await expect.poll(() => root.evaluate((n) => (n as HTMLElement).dataset.renderer === 'three' || Boolean((n as HTMLElement).dataset.rendererReason)), { timeout: 60_000 }).toBe(true);
     const three = (await root.getAttribute('data-renderer')) === 'three';
+    test.info().annotations.push({ type: 'renderer', description: three ? 'three' : 'canvas fallback' });
+    if (!process.env.CI) expect(three, 'Metal gives the Three.js renderer on a local run; a fallback here would hide the key and camera checks').toBe(true);
     if (!three) {
       /* the 2D fallback: orbit by drag, return by Reset linked */
       const map = page.locator('[data-map-field="a"]');
