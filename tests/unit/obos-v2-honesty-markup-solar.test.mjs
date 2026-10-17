@@ -144,3 +144,35 @@ test('S7.1 Air: the stylesheet draws bands only through --c-*/--aq-*, borrows no
   assert.match(AIR_CSS, /\.num\s*\{[^}]*color:\s*var\(--ink-1\)\s*!important/, 'the AQI numeral is ink; the band colour rides the dot beside the band word');
   assert.ok(!/violet|purple/i.test(AIR_CSS));
 });
+
+/* ───────────── B-S6 audit F1, F4, F5, F6, F7: CSS and binder pins ───────────── */
+const SOLAR_CSS = readFileSync('src/styles/obos-v2/screens/solar.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+test('F1: the sheet\'s button row is sticky so Close is in view on open; the scroll cue stays; scroll padding clears both sticky bars', () => {
+  assert.match(SOLAR_CSS, /#solPay \.sp-btns \{[^}]*position: sticky;[^}]*bottom: 0;[^}]*background: var\(--card\)/);
+  assert.match(SOLAR_CSS, /#solPay \{[^}]*scroll-padding: 64px 0 52px;/);
+  assert.match(SOLAR_CSS, /#solPay \{[^}]*scrollbar-width: thin;/);
+  assert.ok(!/#solPay::-webkit-scrollbar/.test(SOLAR_CSS) && !/scrollbar-width: none/.test(SOLAR_CSS), 'the sheet\'s scrollbar is not hidden');
+});
+
+test('F4: the ward card has no dead band: the float spacer is removed and its room becomes padding', () => {
+  assert.match(SOLAR_CSS, /\.sl-ward \.bleed-room::before \{ content: none; \}/);
+  assert.match(SOLAR_CSS, /\.sl-ward \.bleed-room \{[^}]*padding-right: 62px;/);
+});
+
+test('F5: the tariff unit uses --ink-3 (AA in Light-Plates), no hex', () => {
+  assert.match(SOLAR_CSS, /\.sl-tin \.u \{[^}]*color: var\(--ink-3\);/);
+  assert.ok(!/\.sl-tin \.u \{[^}]*var\(--unit\)/.test(SOLAR_CSS));
+});
+
+test('F6: the selected roof row is marked by a v2-only binder (no app edit), and the inverted-row rule is live', () => {
+  const bind = readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8');
+  assert.match(bind, /aria-selected/);
+  assert.match(bind, /#solList/);
+  assert.match(bind, /bcId/);
+  assert.match(SOLAR_CSS, /tr\[data-idx\]\[aria-selected="true"\]/);
+});
+
+test('F7: a ward with no solar screen hides the tariff tool and the empty list (the app hides #solCsv)', () => {
+  assert.match(SOLAR_CSS, /\[data-side-pane="solar"\]:has\(#solCsv\[hidden\]\) :is\(\.sl-tariff, #solTariffNote, \.sl-listh, \.roofs-scroll, \.sl-note\) \{ display: none; \}/);
+});

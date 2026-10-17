@@ -1,5 +1,6 @@
 // tests/e2e/obos-v2-solar.spec.ts — OBOS v2 spec §4.6, §3.10 [H] (Track B, plan S6.1 and S6.2)
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { openV2 } from './obos-v2-helpers';
 
@@ -31,7 +32,10 @@ test.describe('@v2 solar', () => {
     await expect(page.locator('#solPaneFloor')).not.toBeEmpty();
     /* H13: the floor is beside the headline, not under a fold: same card, same .interval row, within a headline's height */
     const k = await page.locator('#solPaneKwp').boundingBox(), f = await page.locator('#solPaneFloor').boundingBox();
-    expect(f!.y - k!.y, 'the floor is beside the headline, not under a fold').toBeLessThan(60);
+    /* B-S6 audit F3 (H13): the floor's top within 8 px of the headline's bottom, and nothing between them */
+    expect(f!.y - (k!.y + k!.height), 'the floor touches the headline').toBeLessThanOrEqual(8);
+    expect(f!.y - (k!.y + k!.height), 'the floor is below the headline, not behind it').toBeGreaterThanOrEqual(-2);
+    expect((await page.locator('#solPaneConf').boundingBox())!.y, 'nothing sits between the headline and its floor').toBeGreaterThan(f!.y);
     expect(await page.locator('#solPaneKwp').evaluate((e) => e.parentElement === document.querySelector('#solPaneFloor')!.parentElement
       && e.parentElement!.classList.contains('interval'))).toBe(true);
     await expect(page.locator('#solPaneFloor')).toContainText('strict roof mask');
@@ -58,6 +62,9 @@ test.describe('@v2 solar', () => {
       await page.keyboard.press(key);
       await expect(page.locator('#bcId')).toHaveText(`#${idx}`);
       await expect(page.locator('#bcard')).not.toHaveAttribute('hidden', '');
+      /* B-S6 audit F6: the selected roof's row is marked, and only that row */
+      await expect(page.locator(`#solList tr[data-idx="${idx}"]`)).toHaveAttribute('aria-selected', 'true');
+      await expect(page.locator('#solList tr[aria-selected="true"]')).toHaveCount(1);
     }
     const dl = page.waitForEvent('download');
     await page.locator('#solCsv').click();
@@ -76,6 +83,16 @@ test.describe('@v2 solar', () => {
     const idx = await selectRoofWithPayback(page);
     await page.locator('#bcPay').click();
     await expect(page.locator('#solPay')).toBeVisible();
+    /* B-S6 audit F1: the sheet opens at its top (the app focuses the last control, Close), so the size and owner are in view and Close is reachable without scrolling */
+    await expect.poll(() => page.locator('#solPay').evaluate((e) => e.scrollTop), { message: 'the sheet opens scrolled' }).toBe(0);
+    const inSheet = async (sel: string): Promise<boolean> => page.evaluate((q) => {
+      const s = document.querySelector('#solPay')!.getBoundingClientRect(), r = document.querySelector(q)!.getBoundingClientRect();
+      return r.top >= s.top && r.bottom <= s.bottom;
+    }, sel);
+    expect(await inSheet('#spSize'), 'the size slider is in view on open').toBe(true);
+    expect(await inSheet('input[name="spOwner"][value="home"]'), 'the owner choice is in view on open').toBe(true);
+    expect(await inSheet('#spClose'), 'Close is in view without scrolling').toBe(true);
+    expect(await page.locator('#solPay').evaluate((e) => getComputedStyle(e).scrollbarWidth), 'a scrollbar cue remains').not.toBe('none');
     await expect(page.locator('#spTag')).toHaveText('screened · estimate, not a quote');
     await expect(page.locator('#spAssume')).toContainText('reference defaults as of');
     /* the v1/preview mismatch: the warning points at "Use my bill", so that field is on the sheet, labelled, visible, and it works */
@@ -138,6 +155,39 @@ test.describe('@v2 solar', () => {
     await expect(page.locator('#solBrief')).toBeHidden();
   });
 
+  test('@v2 [H] a checked ward says "checked", never "validated", on every solar surface', async ({ page }) => {
+    /* B-S6 audit F2: the checked tier is unreachable on shipped data (tiers.validated is null), so the ward file is given a result, as solar-pane.spec.ts does */
+    const real = JSON.parse(await readFile(fileURLToPath(new URL('../../public/heat-map/data/pv-ballygunge.json', import.meta.url)), 'utf8'));
+    real.tiers.validated = { n: 31, months: 9, median_ratio: 0.97, within_15pct_share: 0.84, date: '2026-10-01' };
+    await page.route('**/heat-map/data/pv-ballygunge.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(real) }));
+    await page.addInitScript(() => { window.print = () => undefined; });
+    await openV2(page);
+    await openSolar(page);
+    await expect(page.locator('#solList tr[data-idx]').first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator('#solPaneTier')).toHaveText('checked');
+    await expect(page.locator('#solPaneConf')).toHaveText(/^Checked · /);
+    await expect(page.locator('#solPaneSure')).toContainText('Checked against 31 real rooftops');
+    await selectRoofWithPayback(page);
+    await expect(page.locator('#bcSolTier')).toHaveText('checked');
+    await page.locator('#bcBrief').click();
+    await expect(page.locator('#brTier')).toHaveText('checked');
+    await expect(page.locator('#brFoot')).toContainText('Checked against');
+    await expect(page.locator('#brFoot')).toContainText('not bankable');
+    for (const sel of ['.sl-ward', '[data-v2-card="ward-payback"]', '#solPay', '#solBrief', '#bcSol', '[data-side-pane="solar"]']) {
+      const text = await page.locator(sel).evaluate((e) => (e as HTMLElement).textContent ?? '');
+      expect(text, `${sel} must never say "validated"`).not.toMatch(/\bvalidated\b/i);
+    }
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  });
+
+  test('@v2 a ward with no solar screen shows the empty note alone, not an empty tariff tool', async ({ page }) => {
+    /* B-S6 audit F7 */
+    await openV2(page, '/heat-map/in/bengaluru/mg-road/');
+    await openSolar(page);
+    await expect(page.locator('#solPaneSum')).toContainText('No solar screen ships for');
+    for (const sel of ['.sl-tariff', '#solTariffNote', '.sl-listh', '.roofs-scroll', '#solCsv']) await expect(page.locator(sel), `${sel} stays hidden`).toBeHidden();
+  });
+
   test('@v2 [H] the roof CSV and the year CSV are byte-identical to v1\'s for the same inputs', async ({ page }) => {
     test.slow();
     await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } window.print = () => undefined; });
@@ -160,6 +210,11 @@ test.describe('@v2 solar', () => {
     await tap('#spCsv');
     const v1YearDl = await v1Year;
     const v1YearCsv = await read(v1YearDl);
+    /* B-S6 audit F8: the bill-mode year CSV, the most money-sensitive path */
+    await page.locator('#spUnits').evaluate((e, v) => { (e as HTMLInputElement).value = v; e.dispatchEvent(new Event('input', { bubbles: true })); }, '300');
+    const v1Bill = page.waitForEvent('download');
+    await tap('#spCsv');
+    const v1BillCsv = await read(await v1Bill);
     /* v2: the same ward, the same first roof, the same defaults */
     await openV2(page, `${BALLYGUNGE}?ui=v2`);
     await openSolar(page);
@@ -175,10 +230,17 @@ test.describe('@v2 solar', () => {
     await page.locator('#spCsv').click();
     const v2YearDl = await v2Year;
     const v2YearCsv = await read(v2YearDl);
+    await page.locator('#spUnits').fill('300');
+    await page.locator('#spUnits').dispatchEvent('input');
+    const v2Bill = page.waitForEvent('download');
+    await page.locator('#spCsv').click();
+    const v2BillCsv = await read(await v2Bill);
     expect(v1RoofCsv.length).toBeGreaterThan(100_000);
     expect(v2RoofCsv === v1RoofCsv, 'the roof CSV differs from v1').toBe(true);
     expect(v1YearCsv.length).toBeGreaterThan(500);
     expect(v2YearCsv === v1YearCsv, 'the year CSV differs from v1').toBe(true);
     expect(v2YearDl.suggestedFilename()).toBe(v1YearDl.suggestedFilename());
+    expect(v1BillCsv).not.toBe(v1YearCsv);
+    expect(v2BillCsv === v1BillCsv, 'the bill-mode year CSV differs from v1').toBe(true);
   });
 });
