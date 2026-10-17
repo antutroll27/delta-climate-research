@@ -146,6 +146,9 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         storageState: V2_STORAGE_STATE,
+        /* HEADED: a headless Chromium has no display vsync (the perf gate read 1.2 ms frames, 210 fps, for
+           everything), so Glass would look free. Brainstorm 02 measured vsync-on, headed. */
+        headless: false,
         launchOptions: { args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] },
       },
     }]),
