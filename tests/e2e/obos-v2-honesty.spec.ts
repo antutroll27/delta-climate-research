@@ -11,6 +11,15 @@ const go = (page: Page, section: string) => page.locator(`.nav-item[data-section
     HTMLElement.click() fires them on a hidden node. Once S5.1 lands this becomes a real click (the S5 gate). */
 const phase = (page: Page, p: string) => page.locator(`#segPhase button[data-p="${p}"]`).evaluate((b) => (b as HTMLElement).click());
 
+/** A-S3 audit F2: the ward mark wears #lst's own class colour, and only a heat-ramp one (lstColor writes cyan/bronze/orange/red; the bridge maps each to --heat-*). */
+async function markFollowsHero(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() => (document.querySelector('[data-v2-lstsym]') as HTMLElement).style.color), { timeout: 10_000 })
+    .toMatch(/^var\(--(cyan|bronze|orange|red)\)$/);
+  const [lc, sc] = await page.evaluate(() => [document.getElementById('lst')!.style.color, (document.querySelector('[data-v2-lstsym]') as HTMLElement).style.color]);
+  expect(lc).toMatch(/^var\(--(cyan|bronze|orange|red)\)$/);
+  expect(sc, 'the ward mark must wear #lst\'s colour').toBe(lc);
+}
+
 /** H1/H2: the only ± a reader sees is the one applyConfidence wrote on #conf. */
 async function singlePm(page: Page): Promise<number> {
   const conf = (await page.locator('#conf').textContent()) ?? '';
@@ -36,9 +45,11 @@ test.describe('@v2 honesty', () => {
     await phase(page, 'night');
     await expect(page.locator('#conf')).toContainText(/Calibrated · ±\d\.\d °C · n=\d+/, { timeout: 60_000 });
     expect(await singlePm(page)).toBe(1);
+    await markFollowsHero(page);
     await phase(page, 'peak');
     await expect(page.locator('#conf')).toContainText(/Indicative only · ±\d\.\d °C · n=\d+ · earlier set/, { timeout: 60_000 });
     expect(await singlePm(page)).toBe(1);
+    await markFollowsHero(page);
     await expect(page.locator('#lstPhase')).toHaveText('modelled at 13:00');
   });
 

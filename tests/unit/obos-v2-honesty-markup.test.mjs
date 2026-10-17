@@ -169,3 +169,10 @@ test('the card override is CSS-only: v2 neutralises the app\'s inline placement 
   assert.match(css, /#bcard \.lead \{ display: none; \}/);
   assert.ok(!/#[0-9a-f]{3,8}\b|rgba?\(/i.test(css), 'building.css spells a colour literal');
 });
+
+/* ── A-S3 audit F2: the ward mark's colour is synced once at mount, and on every change ── */
+test('F2: bindMirrors paints the ward mark at mount (named callback, called once), not only on a style change', () => {
+  const src = readFileSync('src/scripts/climate-engine/v2/heat-v2.ts', 'utf8');
+  assert.match(src, /const syncMark = \(\): void => \{ if \(sym && lst\) sym\.style\.color = lst\.style\.color \|\| ''; \};/);
+  assert.match(src, /attributeFilter: \['style'\] \}, syncMark\); syncMark\(\);/);
+});

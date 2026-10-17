@@ -35,9 +35,10 @@ export function bindAirKind(ctx: ShellCtx): void {
 export function bindMirrors(ctx: ShellCtx): void {
   const { root, cleanup } = ctx;
   const lst = $(root, '#lst'), phase = $(root, '#lstPhase'), conf = $(root, '#conf');
-  /* the ward mark takes #lst's own class colour, so the two cannot disagree (spec §4.1.5) */
+  /* the ward mark takes #lst's own class colour, so the two cannot disagree (spec §4.1.5); painted at mount (A-S3 audit F2) and on every change */
   const sym = $(root, '[data-v2-lstsym]');
-  observe(cleanup, lst, { attributes: true, attributeFilter: ['style'] }, () => { if (sym && lst) sym.style.color = lst.style.color || ''; });
+  const syncMark = (): void => { if (sym && lst) sym.style.color = lst.style.color || ''; };
+  observe(cleanup, lst, { attributes: true, attributeFilter: ['style'] }, syncMark); syncMark();
   bindAirKind(ctx);
   /* the clock widget says when the map is a modelled phase, in the app's own words (spec §3.6) */
   const kmap = $(root, '[data-v2-kmap]');
