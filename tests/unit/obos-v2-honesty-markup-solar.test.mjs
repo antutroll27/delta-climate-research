@@ -119,3 +119,27 @@ test('the brief keeps "Questions to ask your installer" and its footer words', (
   assert.ok(sheets.includes('Screening estimate · not bankable'));
   assert.equal((sheets.match(/<li>/g) ?? []).length, 6, 'six questions');
 });
+
+/* ───────────── S7.1 Air (Track B): the painter's words stay the painter's ───────────── */
+const AIR_CSS = readFileSync('src/styles/obos-v2/screens/air.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+test('S7.1 Air: AirSide keeps the painter\'s ids and writes no air-quality sentence of its own', () => {
+  const side = V2('AirSide.astro'), park = V2('ParkB1.astro');
+  assert.ok(side.includes('data-side-pane="air"') && side.includes('data-side-close'));
+  for (const id of ['airPane', 'airPaneArea', 'airPaneBody', 'airStatus', 'pane-air-h']) {
+    assert.equal(idsOf(side).filter((x) => x === id).length, 1, `#${id} must exist once in AirSide`);
+    assert.ok(!park.includes(`id="${id}"`), `#${id} is still parked in ParkB1`);
+  }
+  assert.ok(side.includes("isAirCity(scope.key) ? 'Loading air quality…' : UNCOVERED_NOTE"), 'the first-paint sentence is v1\'s, imported not retyped');
+  const text = noComments(side);
+  for (const phrase of ['legal standard', 'IQAir', 'aqi.in', 'Why do other apps', 'CPCB published', 'Severe']) assert.ok(!text.includes(phrase), `AirSide retypes the painter's words: ${phrase}`);
+  assert.ok(!/\b(wrong|incorrect|inaccurate)\b/i.test(text));
+});
+
+test('S7.1 Air: the stylesheet draws bands only through --c-*/--aq-*, borrows no heat colour, and the stale chip is ink', () => {
+  assert.ok(!/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|oklch\(/.test(AIR_CSS), 'air.css may not write a colour literal');
+  assert.ok(!/var\(--(heat-[1-5]|cyan|orange|red|bronze|sage|gold|sun)\)/.test(AIR_CSS), 'air.css uses a heat-ramp colour: temperature only');
+  assert.match(AIR_CSS, /\.chip\.old\s*\{[^}]*background:\s*var\(--ink-1\);[^}]*color:\s*var\(--on-ink\)/, '.chip.old is ink on ink (spec §2.4), never red');
+  assert.match(AIR_CSS, /\.chip\.live[^{]*\{[^}]*\}/, '.chip.live is styled as a measured kind');
+  assert.ok(!/violet|purple/i.test(AIR_CSS));
+});
