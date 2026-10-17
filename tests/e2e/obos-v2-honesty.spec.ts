@@ -51,6 +51,11 @@ test.describe('@v2 honesty', () => {
     /* the band v1 would have printed still exists in the DOM, hidden (CSS only: no app change) */
     expect(await page.locator('#lst .band').count()).toBe(1);
     await expect(page.locator('#lst .band')).toBeHidden();
+    /* A-S3 audit F1: Met Norway only is a FORECAST, never "observed", and its mark is outlined */
+    await expect(page.locator('#liveSrc')).toHaveText('Air now · Met Norway forecast');
+    await expect(page.locator('[data-v2-airkind]')).toHaveText('forecast');
+    await expect(page.locator('[data-v2-airkind]')).toHaveClass(/\bmodelled\b/);
+    await expect(page.locator('[data-v2-airsym] svg path')).toHaveAttribute('stroke-dasharray', /./);
   });
 
   test('@v2 [H] an April night carries the seasonal note under the hero', async ({ page }) => {
@@ -60,7 +65,7 @@ test.describe('@v2 honesty', () => {
     await expect(page.locator('#conf')).toContainText('dry-season warm');
   });
 
-  test('@v2 [H] Δ disclosure, surface-not-air lines, the observed air row', async ({ page }) => {
+  test('@v2 [H] Δ disclosure, surface-not-air lines, air row provenance follows the source', async ({ page }) => {
     await stubWeather(page, '2026-10-07T06:05:00Z');
     await openV2(page);
     const disc = page.locator(`${CARD} details.disc`);
@@ -76,6 +81,11 @@ test.describe('@v2 honesty', () => {
     await expect(page.locator('#liveSrc')).toHaveText('Air now · Dum Dum airport (16 km)');
     await expect(page.locator('#liveT')).toHaveText('31');
     await expect(page.locator('#wxLine')).toContainText('may differ over the ward');
+    /* A-S3 audit F1: a fresh airport report is OBSERVED and its mark is solid */
+    await expect(page.locator('[data-v2-airkind]')).toHaveText('observed');
+    await expect(page.locator('[data-v2-airkind]')).toHaveClass(/\bmeasured\b/);
+    await expect(page.locator('[data-v2-airsym] svg path')).not.toHaveAttribute('stroke-dasharray', /./);
+    await expect(page.locator('[data-v2-airsym] svg path')).toHaveAttribute('fill', 'var(--ink-1)');
   });
 
   test('@v2 [H] the hero keeps a generous gap above and below it (founder)', async ({ page }) => {

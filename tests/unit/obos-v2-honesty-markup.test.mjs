@@ -45,7 +45,7 @@ test('H6/H10: surface is not air; the map-face chip survives word for word', () 
 });
 
 test('H6: the air disc is ink, never a heat colour (air is not a surface class)', () => {
-  assert.match(V2('TempCard.astro'), /<Sym shape="disc" c="ink" size=\{26\} \/>/);
+  assert.match(V2('TempCard.astro'), /<Sym shape="disc" c="ink" kind="modelled" size=\{26\} \/>/);   // ink in both states; bindAirKind swaps solid/outlined (A-S3 audit F1)
 });
 
 test('H7/H8: the live lines are the app\'s (empty ids, hidden until the app paints), not copy of ours', () => {
