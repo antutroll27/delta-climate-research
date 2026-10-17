@@ -101,7 +101,7 @@ export function bindWeather(ctx: ShellCtx): void {
     const filed = $<HTMLDetailsElement>(root, '[data-wx="filed"]');
     if (!observed) {
       const has = isAreaKey(area) && (METAR_STATIONS[splitKey(area).city]?.length ?? 0) > 0;
-      const why = has ? `The newest airport report is older than ${METAR_STALE_MIN} minutes.` : 'No airport reports held for this city.';
+      const why = has ? `No airport report in the last ${METAR_STALE_MIN} minutes.` : 'No airport reports held for this city.';
       set('where', src.kind === 'forecast' ? 'Met Norway forecast' : 'No reading');
       set('when', why);
       set('tfoot', src.kind === 'forecast' ? 'The forecast for this point, to a tenth of a degree, not a measurement.' : '');
