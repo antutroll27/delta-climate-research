@@ -1,0 +1,12 @@
+---
+// src/components/ClimateEngine/v2/ParkB2.astro — OBOS v2 spec §4.9. Owner: Track B. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
+// Parked: the receipts button and panel (data areas only), until S7.3.
+import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
+---
+    {/* S7: the receipts button and its panel (v1 has them on data areas only). Track B (S7.3) re-homes them. */}
+    {scope.area.hasData && <Fragment>
+      <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
+      <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
+    </Fragment>}

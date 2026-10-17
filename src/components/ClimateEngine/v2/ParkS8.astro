@@ -1,0 +1,25 @@
+---
+// src/components/ClimateEngine/v2/ParkS8.astro — OBOS v2 spec §3.10 (phone). Owner: S8. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
+// Parked: #entryNote and #rotateNudge, until S8.1 re-homes them.
+---
+  <div class="entry" id="entryNote" hidden role="dialog" aria-modal="true" aria-labelledby="entry-h">
+    <div class="entry-card">
+      <p class="entry-k">OBOS · Urban heat instrument</p>
+      <h2 class="entry-h" id="entry-h">Best on a <em>bigger screen</em></h2>
+      <p class="entry-b">This is a full console — a live 3-D city, a heat field and its
+        error bars. It works on a phone, but a laptop, desktop or tablet is where you
+        can actually read it.</p>
+      <p class="entry-b entry-b-sm">On a phone, turn it sideways for the full width.</p>
+      <button class="entry-go" type="button" data-entry-close>Continue anyway</button>
+    </div>
+  </div>
+
+  <div class="rotate-nudge" id="rotateNudge" hidden>
+    <span class="rn-ico" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="2.5" width="10.5" height="19" rx="2"/><path d="M17.5 9.5a6 6 0 0 1 0 5"/><path d="M19.6 8l.4 2.2-2.2.3"/>
+      </svg>
+    </span>
+    <span class="rn-txt">Turn your phone for the full instrument</span>
+    <button class="rn-x" type="button" data-rn-dismiss aria-label="Dismiss">✕</button>
+  </div>

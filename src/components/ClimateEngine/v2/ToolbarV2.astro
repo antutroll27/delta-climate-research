@@ -1,0 +1,14 @@
+---
+// src/components/ClimateEngine/v2/ToolbarV2.astro — OBOS v2 spec §3.5. Owner: frozen. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
+import Sym from './Sym.astro';
+---
+<div class="toolbar" role="toolbar" aria-label="Display" data-hud>
+  <div class="seg" role="group" aria-label="Theme">
+    <button type="button" data-pref="theme" data-v="light">Light</button><button type="button" data-pref="theme" data-v="dark">Dark</button>
+  </div>
+  <div class="seg" role="group" aria-label="Card style">
+    <button type="button" data-pref="cards" data-v="glass">Glass</button><button type="button" data-pref="cards" data-v="plates">Plates</button>
+  </div>
+  <button class="key-btn place" type="button" data-pop-open="key" aria-expanded="false" aria-controls="v2Key">
+    <span class="pl-g"><Sym shape="disc" c="ink" size={12} /></span>Key</button>
+</div>

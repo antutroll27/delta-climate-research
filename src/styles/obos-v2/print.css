@@ -1,1 +1,3 @@
-/* OBOS v2 — print (§3.10 installer-brief print). Filled by a later slice. */
+/* src/styles/obos-v2/print.css — OBOS v2 print, as a MANIFEST (plan amendment A1). FROZEN: tracks write their partial, never this list. */
+@import './print/solar.css';
+@import './print/brief.css';

@@ -1,1 +1,13 @@
-/* OBOS v2 — screens (§4 screens). Filled by a later slice. */
+/* src/styles/obos-v2/screens.css — OBOS v2 screens, as a MANIFEST (plan amendment A1). FROZEN: tracks write their partial, never this list. */
+@import './screens/overview.css';
+@import './screens/heat.css';
+@import './screens/mapstack.css';
+@import './screens/building.css';
+@import './screens/explore.css';
+@import './screens/scenarios.css';
+@import './screens/solar.css';
+@import './screens/air.css';
+@import './screens/weather.css';
+@import './screens/methods.css';
+@import './screens/compare.css';
+@import './screens/brief.css';

@@ -6,9 +6,21 @@
 // is:global but only bundled onto the heat-map routes (the sole pages importing
 // this). Brand tokens are scoped to .stage so nothing leaks to :root; Mona Sans /
 // Noplato Mono come from global.css.
-import ConstructionStamp from '../../states/ConstructionStamp.astro';
 import RailV2 from './RailV2.astro';
-import Sym from './Sym.astro';
+import ToolbarV2 from './ToolbarV2.astro';
+import ExploreSide from './ExploreSide.astro';
+import SolarSide from './SolarSide.astro';
+import AirSide from './AirSide.astro';
+import MapStack from './MapStack.astro';
+import MapChips from './MapChips.astro';
+import StreetViewModal from './StreetViewModal.astro';
+import ToastsV2 from './ToastsV2.astro';
+import SolarSheets from './SolarSheets.astro';
+import ParkS8 from './ParkS8.astro';
+import ParkA1 from './ParkA1.astro';
+import ParkB1 from './ParkB1.astro';
+import ParkA2 from './ParkA2.astro';
+import ParkB2 from './ParkB2.astro';
 import TitleCard from './TitleCard.astro';
 import CompassV2 from './CompassV2.astro';
 import DockV2 from './DockV2.astro';
@@ -22,8 +34,6 @@ import RightColumn from './RightColumn.astro';
    a sidebar of panes, and a main column that keeps its top bar, its map and its
    ward strip. The toolbox's rules stay in the is:global block below because
    heat-map-app.ts classes its markup at runtime; see its own header. */
-import ScopeSwitcher from '../shell/ScopeSwitcher.astro';
-import InterventionPane from '../shell/InterventionPane.astro';
 import '../../../styles/obos-v2/tokens.css';
 import '../../../styles/obos-v2/atoms.css';
 import '../../../styles/obos-v2/shell.css';
@@ -32,9 +42,7 @@ import '../../../styles/obos-v2/phone.css';
 import '../../../styles/obos-v2/print.css';
 import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
 import { AREA_KEYS, areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
-import { isAirCity } from '../../../lib/aqi/stations.ts';
-import { UNCOVERED_NOTE } from '../../../scripts/climate-engine/air/air-panel.ts';
-import { areaPath, DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
+import { areaPath } from '../../../scripts/climate-engine/scope/paths.ts';
 import { resolve, type ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 import { newCityToAnnounce } from '../../../scripts/climate-engine/shell/new-city.ts';
 import { renderableWardById as wardById } from '../../../data/wards.ts';
@@ -137,13 +145,7 @@ const strip = siblings.flatMap((sib) => {
 const otherArea = AREA_KEYS.map(resolve).find((s) => s.city.id !== scope.city.id && s.area.hasData);
 const otherCity = otherArea ? { href: areaPath(otherArea.key), name: otherArea.city.name } : null;
 
-/* The ward's own data record. `/api/wards/[id]` is generated one route per BARE id
-   from src/data/wards.ts, so the key would 404 — and this link is a download, so
-   the browser would save the 404 body under a plausible filename rather than show
-   it. heat-map-app.ts's `updateReportHref` rebuilds this identically on every area
-   switch; the two agree because both read the area id, not because anyone matched
-   two strings by eye. */
-const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
+/* The ward record's href (reportHref) is computed where it is used: ParkB1.astro, until S7.3 moves it. */
 
 /* THE OTHER CITY, ANNOUNCED ONCE. Server-rendered rather than drawn by the app:
    the markup is identical for every reader, and the two reader-specific facts —
@@ -168,413 +170,28 @@ const newCity = scope.area.hasData
 ---
 <main id="main" class="stage obos-v2" data-console data-area={scope.key} style={symbolCssVars()}>
   {scope.area.hasData && <div id="mlmap"></div>}
+  {scope.area.hasData && <MapChips scope={scope} />}
   <RailV2 current="overview" hasData={scope.area.hasData} areaName={scope.area.name} />
-  <div class="toolbar" role="toolbar" aria-label="Display" data-hud>
-    <div class="seg" role="group" aria-label="Theme">
-      <button type="button" data-pref="theme" data-v="light">Light</button><button type="button" data-pref="theme" data-v="dark">Dark</button>
-    </div>
-    <div class="seg" role="group" aria-label="Card style">
-      <button type="button" data-pref="cards" data-v="glass">Glass</button><button type="button" data-pref="cards" data-v="plates">Plates</button>
-    </div>
-    <button class="key-btn place" type="button" data-pop-open="key" aria-expanded="false" aria-controls="v2Key">
-      <span class="pl-g"><Sym shape="disc" c="ink" size={12} /></span>Key</button>
-  </div>
+  <ToolbarV2 />
   <aside class="side-panel" id="v2Side" data-hud aria-label="Section panel">
-    <div class="sp-body" data-side-pane="explore"></div>
-    <div class="sp-body" data-side-pane="solar"></div>
-    <div class="sp-body" data-side-pane="air"></div>
+    <ExploreSide scope={scope} />
+    <SolarSide scope={scope} />
+    <AirSide scope={scope} />
   </aside>
   <div class="st-title" id="v2Title" data-hud><TitleCard scope={scope} /><CompassV2 /></div>
-  <div class="mapstack" id="v2MapStack" data-hud></div>
+  <div class="mapstack" id="v2MapStack" data-hud><MapStack scope={scope} /></div>
   <div class="st-dock" id="v2Dock">{scope.area.hasData && <DockV2 currentKey={scope.key} strip={strip} otherCity={otherCity} />}</div>
-  <div class="toasts" id="v2Toasts" data-hud>
-  {newCity && (
-    <div class="newcity toast" id="newCity" data-city={newCity.id} data-since={newCity.since} hidden>
-      {/* NO aria-label. The visible text already reads "New city Bengaluru", and a
-          label of "Bengaluru — newly added city" replaced it with a string those
-          visible words are not contained in — Label in Name (WCAG 2.5.3), so
-          "click New city" matched nothing by speech. The eyebrow is CLIPPED rather
-          than display:none on phones, so the name keeps "New city" there too. */}
-      <a href={newCity.href}>
-        <span class="t-eyebrow">New city</span>
-        <span class="t-go">{newCity.name} <span aria-hidden="true">→</span></span>
-      </a>
-      <button type="button" id="newCityHide" class="t-x" aria-label="Dismiss">×</button>
-    </div>
-  )}
-  {scope.area.hasData && <Fragment>
-    <!-- First-run affordance: the buildings became clickable and nothing said so. -->
-    <div class="tiphint toast" id="tiphint" hidden>
-      <span>Click any building for its data</span>
-      <button type="button" id="tipX" class="t-x" aria-label="Dismiss hint">✕</button>
-    </div>
-  </Fragment>}
-  </div>
+  <ToastsV2 newCity={newCity} hasData={scope.area.hasData} />
   <RightColumn scope={scope} />
   <div data-v2-parking>
-    {/* S0 PARKING. Copied verbatim from HeatMapStage.astro so the contract holds;
-        each block leaves this box in the slice named beside it. */}
-    {/* S8 */}
-  <div class="entry" id="entryNote" hidden role="dialog" aria-modal="true" aria-labelledby="entry-h">
-    <div class="entry-card">
-      <p class="entry-k">OBOS · Urban heat instrument</p>
-      <h2 class="entry-h" id="entry-h">Best on a <em>bigger screen</em></h2>
-      <p class="entry-b">This is a full console — a live 3-D city, a heat field and its
-        error bars. It works on a phone, but a laptop, desktop or tablet is where you
-        can actually read it.</p>
-      <p class="entry-b entry-b-sm">On a phone, turn it sideways for the full width.</p>
-      <button class="entry-go" type="button" data-entry-close>Continue anyway</button>
-    </div>
-  </div>
-
-  <div class="rotate-nudge" id="rotateNudge" hidden>
-    <span class="rn-ico" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="4" y="2.5" width="10.5" height="19" rx="2"/><path d="M17.5 9.5a6 6 0 0 1 0 5"/><path d="M19.6 8l.4 2.2-2.2.3"/>
-      </svg>
-    </span>
-    <span class="rn-txt">Turn your phone for the full instrument</span>
-    <button class="rn-x" type="button" data-rn-dismiss aria-label="Dismiss">✕</button>
-  </div>
-    {/* S5 */}
-    <ScopeSwitcher current={scope.key} />
-    {/* S5 */}
-    {scope.area.hasData ? <InterventionPane scope={scope} /> : null}
-    {/* S7 */}
-          {scope.area.publishes ? (
-          <Fragment>
-          <p class="pane-note">What is measured, the out-of-sample error and sample size, every
-            source dataset with its licence, and the analysis CRS and bounding box.</p>
-          <a class="cta" id="report-link" href={reportHref} download>Download ward record ↓</a>
-          </Fragment>
-          ) : (
-          <p class="pane-note">No record ships for {scope.area.name}. The ward record states what
-            was measured, with what error, from which datasets — and there is no measurement here
-            to state.</p>
-          )}
-    {/* S6 */}
-          <p class="pane-h" id="pane-solar-h">Solar · <span id="solPaneArea">{scope.area.name}</span></p>
-          {scope.area.hasData ? (
-          <Fragment>
-          <p class="pane-note" id="solPaneSum">Loading the rooftop-solar screen…</p>
-          {/* THE WARD BLOCK, at home in the pane rather than on the right panel, where it
-              pushed the colour legend off-screen (2026-09-06). Same numbers, same
-              painter, pane-prefixed ids. */}
-          <div class="solblock" id="solPaneBlock">
-            <div class="k legend-head"><span id="solPaneHead">Rooftop solar · installable, whole ward</span><span id="solPaneTier" class="bc-tier">screened</span></div>
-            <div class="big" id="solPaneKwp">—<span class="u">MWp</span></div>
-            <div class="conf screening" id="solPaneConf"></div>
-            <p class="solfloor" id="solPaneFloor"></p>
-            <p class="solfloor" id="solPaneSure"></p>
-            <div class="mrow">
-              <div><div class="k">Annual yield</div><div class="val" id="solPaneKwh">—</div></div>
-              <div><div class="k">Worth at tariff</div><div class="val sun" id="solPaneRs">—</div></div>
-              <div><div class="k" id="solPaneBigK">Roofs ≥ 3 kWp</div><div class="val" id="solPaneBig">—</div></div>
-              <div><div class="k">Losing ≥ 5 %, of those</div><div class="val sun" id="solPaneSh">—</div></div>
-            </div>
-          </div>
-          {/* The ward's conservative city case (spec D1, D6): every roof at full
-              size, no subsidy, every kWh at the tariff. Painted by paintSolarWard. */}
-          <p class="pane-note sol-small" id="solPanePay" hidden></p>
-          <div class="sol-tariff">
-            <label for="solTariff">Tariff · assumed · change it</label>
-            <span><span id="solCur" aria-hidden="true"></span><input id="solTariff" type="number" inputmode="decimal" min="0" step="0.25" value="8.00" aria-describedby="solTariffNote"> / kWh</span>
-          </div>
-          {/* THE UTILITY IS NAMED ONLY WHERE ITS TARIFF WAS SOURCED. CESC is
-              Kolkata's DISCOM; Bengaluru's is BESCOM, whose slabs we have not
-              sourced — so this sentence shipped a Kolkata utility's rates onto
-              Bengaluru's page, under a box pre-filled at 8.00. The other city
-              asserts no rate rather than guessing one.
-              ponytail: a city-id test, because one city has the datum and one does
-              not. It becomes a registry field beside the cost basis the moment a
-              second tariff is sourced — not before. */}
-          <p class="pane-note sol-small" id="solTariffNote">{scope.city.id === 'kolkata'
-            ? 'CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.'
-            : 'No local tariff is sourced for this city yet, so the box above is an assumption you should change. Not a rate we assert.'}</p>
-          <p class="pane-h">Best roofs by annual yield</p>
-          <div class="roofs-scroll">
-          <table class="roofs" aria-label="The ten best roofs by annual yield; each row selects its building on the map">
-            <thead><tr><th scope="col">#</th><th scope="col">kWp</th><th scope="col">kWh/yr</th><th scope="col">range</th><th scope="col">shaded</th><th scope="col">m²</th></tr></thead>
-            <tbody id="solList"></tbody>
-          </table>
-          </div>
-          <p class="pane-note sol-small">Yield uses NASA POWER irradiance and a Mumbai packing factor; shading is computed from this ward's own geometry and canopy, and the mask rule is its largest uncertainty — "at least" is the strict-mask floor. Screening only, not bankable.</p>
-          <a class="cta" id="solCsv" href="#" download>Download roof list · CSV ↓</a>
-          </Fragment>
-          ) : (
-          <p class="pane-note">No solar screen ships for {scope.area.name}. The screen needs footprints, heights and canopy, and this area ships none.</p>
-          )}
-    {/* S7 */}
-        <section class="pane-body" id="airPane" aria-labelledby="pane-air-h">
-          <p class="pane-h" id="pane-air-h">Air · <span id="airPaneArea">{scope.area.name}</span></p>
-          <p class="pane-note" id="airPaneBody">{isAirCity(scope.key) ? 'Loading air quality…' : UNCOVERED_NOTE}</p>
-        </section>
-      <p class="aq-sr" id="airStatus" role="status" aria-live="polite"></p>
-    {/* S4 */}
-    <p class="crumb"><span>{scope.country.name}</span><span>{scope.city.name}</span><b id="crumbArea">{scope.area.name}</b></p>
-    <div class="topmeta">
-      <div class="rig">{scope.area.hasData
-        ? <Fragment><span id="bcount">— buildings</span> · <span id="simBackend" aria-live="polite">SELECTING ENGINE</span></Fragment>
-        : <span>no artefacts · {scope.tier} tier</span>}</div>
-    </div>
-    {scope.area.hasData && <Fragment>
-      {/* S2/S4 */}
-    <div class="synthetic"><span class="d"></span><span class="full">Live basemap + real footprints &amp; Google heights · </span>heat field modelled<span class="sp"> · block detail illustrative</span></div>
-    <div class="stamp-slot"><ConstructionStamp /></div>
-    <div class="loadchip" id="loadchip"></div>
-
-    <!-- Sun reading. A SIBLING of the compass, never a child: the compass is a
-         button whose whole box resets the bearing, and text inside it would become
-         part of that click target. Always visible rather than a hover tooltip, so
-         it works on touch and so the caveat cannot hide. -->
-    <p class="sunline" id="sunLine" hidden>
-      <span id="sunLineText"></span>
-      <span class="sunline-note" id="sunLineNote" tabindex="0" role="note">geometry only</span>
-    </p>
-    <!-- Walk-time ring labels. Text is STATIC: the app only toggles `hidden` and
-         writes a transform, so nothing rewrites strings on every repaint.
-         Two lines each — the headline is the human unit (minutes), the second
-         line is the caveat, because a circle drawn on a map reads as "you can
-         reach all of this" and a straight-line radius is not that. -->
-    <!-- Ring labels are RULER MARKINGS, not findings: one quiet mono line, in
-         the ring's own colour, sitting on the circumference like a contour
-         label. The old data-chip styling promised a per-building measurement
-         and delivered a constant — the reader who commissioned the rings
-         misread them twice for exactly that reason. -->
-    <div class="ringlab" id="ringNear" hidden>1 min · 80 m</div>
-    <div class="ringlab" id="ringFar" hidden>5 min · 400 m</div>
-
-    <!-- The finding: nearest greenery, the number that changes with every
-         click. Data-chip anatomy (big value, small label) in the cooling
-         green so it belongs to the patches it stands on. -->
-    <!-- Two nodes on purpose: the OUTER one is written by the render loop every
-         repaint (translate3d onto the cooling patch), the INNER one owns the
-         pop-in. Animating one element with both would have the frame loop
-         stamping over the animation's transform sixty times a second. Same
-         split as .bcard / .bcard-in. -->
-    <div class="cooltag" id="coolTag" hidden>
-      <div class="cooltag-in" id="coolTagIn">
-        <b id="coolTagM">—</b><span>Nearest greenery</span>
-      </div>
-    </div>
-
-    <!-- LANDMARK LABELS. The named buildings of a ward that ships an authored
-         model — 0 in Indiranagar (a genuinely low-rise ward), 12 in MG Road, 35
-         in Whitefield. These are the only buildings whose height the instrument
-         asserts BY NAME, so every chip here has a citation behind it and one
-         without a stated source is never drawn at all.
-
-         Chips are created per ward by heat-map-app.ts and only TRANSFORMED per
-         repaint — the text never changes once written. They are real buttons
-         because the city is a <canvas>: this is the only way to reach a landmark
-         from the keyboard. -->
-    <div class="lmlabs" id="lmlabs" hidden></div>
-
-    <!-- Click-to-inspect. Positioned from the building's own ward-metre centroid
-         every time MapLibre repaints, so it tracks orbit, pan, zoom and flyTo. -->
-    <div class="bsel" id="bsel" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-      {/* S4 */}
-      {/* S3 */}
-    <aside class="panel right">
-      {/* AIR FIRST (founder decision 1, 2026-10-07). The surface figure used to be the
-          big number here and was read as the air temperature — 46.7 °C in the rain.
-          What a person feels is the air; the modelled ground and rooftops follow,
-          labelled as what they are. The source line names where "now" came from. */}
-      <div class="metric livem">
-        <div class="k"><span id="liveSrc">Air now</span> <span class="livedot" id="livedot"></span></div>
-        {/* ONE ROW: air leads; feels-like, humidity and wind stack beside it. A separate
-            RH/wind grid cost the rail ~40 px and pushed the legend under its fold. */}
-        <div class="airrow">
-          <div class="air"><b id="liveT">—</b><span class="u">°C air</span></div>
-          <div class="side">
-            <div class="feel"><b id="liveFeel">—</b><span class="u">°C feels</span></div>
-            <div class="aux"><span id="liveRH">—</span>% RH · <span id="liveWind">—</span> m/s</div>
-          </div>
-        </div>
-      </div>
-      <div class="metric">
-        <div class="k surface-k">Ground &amp; rooftop surface · <span id="lstPhase">modelled now</span></div>
-        <div class="lst sec" id="lst" style="color:var(--red)">—<span class="u">°C</span></div>
-        <div class="conf" id="conf"></div>
-        {/* THE SEASON'S WARNING, when the current month is one in which the displayed
-            mean breaks its own band (accuracy.ts SEASONAL_CAVEATS). Painted by the
-            instrument from the committed artefact; hidden the rest of the year. */}
-        <p class="season-note" id="seasonNote" hidden></p>
-        {/* WHAT THE FIGURES BELOW ARE TAKEN OVER, for an area with an administrative
-            boundary (ward-mask.ts): the mean, the share above 40 °C and the
-            histogram are the polygon's, not the square's. Painted by the instrument;
-            hidden for an area whose square is its study area. */}
-        <p class="ward-scope" id="wardScope" hidden></p>
-        {/* THE WEATHER LINE: condition, source, distance and observation time, and
-            what the model is doing about it. Painted by the instrument (paintLive). */}
-        <p class="wx-line" id="wxLine" hidden></p>
-      </div>
-      <div class="mrow">
-        <div><div class="k" title="Modelled land-cover thermal contrast: this ward's mean surface temperature minus a fully-vegetated reference cell under identical forcing. NOT a measured urban heat island — published Kolkata surface UHI is 0.85–1.5 °C from 1 km satellite data, a different quantity.">Δ vs all-green ref</div><div class="val" style="color:var(--cyan)" id="uhi">—</div></div>
-        <div><div class="k">Surface above 40 °C</div><div class="val" style="color:var(--red-ink)" id="area">—</div></div>
-      </div>
-      <div class="metric sep" style="padding-bottom:0"><div class="k">Surface temperature distribution</div></div>
-      <div class="histo" id="histo"></div>
-      {/* The ward record used to end this card. It is now the Reports pane's one
-          piece of content — a download named after itself, in the section named
-          after it, rather than a bronze button under a histogram. One element, one
-          id; `updateReportHref` still finds it by name. */}
-    </aside>
-      {/* S3/S7 */}
-    <div class="legend-parked">
-      <div class="k legend-head" style="margin-bottom:.6rem"><span>What the colours mean</span></div>
-      {/* `style` is an attribute whose CONTENT is CSS, unlike `stroke` above, so
-          `var()` resolves here normally. These swatches are inside `.stage`, which
-          is where the tokens are declared. */}
-      <div class="cindex">
-        <div class="ci"><span class="d" style="background:var(--red)"></span>Extreme</div>
-        <div class="ci"><span class="d" style="background:var(--orange)"></span>Severe</div>
-        <div class="ci"><span class="d" style="background:var(--bronze)"></span>Hot</div>
-        <div class="ci"><span class="d" style="background:var(--sage)"></span>Warm</div>
-        <div class="ci"><span class="d" style="background:var(--cyan)"></span>Comfortable</div>
-      </div>
-      <div class="k" style="margin:.9rem 0 .5rem"><span>Land Surface Temp</span><span>°C</span></div>
-      <div class="ramp"></div>
-      <!-- filled by syncRamp(): the scale moves with the weather, so hardcoded
-           numbers here would contradict the colours above them. -->
-      <div class="sc" id="rampSc"><span>26</span><span>32</span><span>37</span><span>42</span><span>48</span></div>
-      <!-- Filled from accuracy.ts SPATIAL, never hardcoded here: the legend is
-           where a reader goes to interpret the colours, so it is where the limit
-           of what the colours mean belongs. -->
-      <p class="pattern-note" id="patternNote"></p>
-    </div>
-      {/* S4 */}
-  <div class="svmodal" id="svModal" hidden>
-    <div class="svmodal-card">
-      <button class="svmodal-x" id="svClose" type="button" aria-label="Close street view">✕</button>
-      <div id="svViewer" class="svmodal-viewer"></div>
-      <div class="svmodal-credit">Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener">Mapillary</a> · community-captured (CC BY-SA)</div>
-    </div>
-  </div>
-    </Fragment>}
-    {/* S5 */}
-    {!scope.area.hasData && <Fragment>
-  <section class="notyet" aria-labelledby="notyet-h">
-    <p class="notyet-tier">{scope.tier} tier · {scope.city.koppen} climate</p>
-    <h1 class="notyet-h" id="notyet-h">{scope.area.name}</h1>
-    <p class="notyet-sub">{scope.area.descriptor} · {scope.city.name}, {scope.country.name}</p>
-    {/* What is missing, stated, rather than a spinner or an apology. The gap between
-        this tier and a validated one is the thing the twin is asking to be funded to
-        close, so naming it is the page's whole content. */}
-    <p class="notyet-body">
-      This area is registered in the twin and has a permanent address, but no measured
-      heat artefacts ship for it yet — no footprints, no surface temperature, no
-      canopy. Nothing here would be a reading, so nothing is drawn. The instrument
-      runs where the observations do.
-    </p>
-    <p class="notyet-links"><a href={DEFAULT_AREA_PATH}>Open a validated area →</a></p>
-  </section>
-    </Fragment>}
-    {/* S7: the receipts button and its panel (v1 has them on data areas only). Track B (S7.3) re-homes them. */}
-    {scope.area.hasData && <Fragment>
-      <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
-      <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
-    </Fragment>}
+    <ParkS8 />
+    <ParkA1 scope={scope} />
+    <ParkB1 scope={scope} />
+    <ParkA2 scope={scope} />
+    <ParkB2 scope={scope} />
   </div>
   <LayersPopover current={scope.key} mapillary={mapillary} hasData={scope.area.hasData} />
   <Overlays scope={scope} />
-  {/* S6: direct children of .stage (app:1077). UNCONDITIONAL, as in v1 (stage :847–962 sit outside the data gate). */}
-  <section class="solpay" id="solPay" hidden role="dialog" aria-modal="true" aria-labelledby="spHead">
-    <header class="sp-head">
-      <h2 id="spHead">Payback for this roof</h2>
-      <span class="bc-tier" id="spTag">screened · estimate, not a quote</span>
-    </header>
-    <div class="sp-sec">
-      <label class="sp-k" for="spSize">System size</label>
-      <span class="sp-size"><input id="spSize" type="range" min="1" step="0.5" value="3" aria-describedby="spSizeOut">
-        <input id="spSizeNum" type="number" inputmode="decimal" min="1" step="0.5" value="3" aria-label="System size in kW" aria-describedby="spSizeOut"> kW</span>
-      <p class="sp-note" id="spSizeOut">—</p>
-    </div>
-    <fieldset class="sp-sec sp-owner">
-      <legend class="sp-k">Who owns the roof</legend>
-      <label><input type="radio" name="spOwner" value="home" checked> Home</label>
-      <label><input type="radio" name="spOwner" value="society"> Housing society</label>
-      <label><input type="radio" name="spOwner" value="business"> Business</label>
-      <p class="sp-note" id="spSubsidy">—</p>
-    </fieldset>
-    <div class="sp-sec">
-      <span class="sp-k">Cost per kW, installed</span>
-      <span class="sp-pair"><input id="spCostLo" type="number" inputmode="numeric" min="0" step="1000" aria-label="Lowest cost per kW" aria-describedby="spCostNote">
-        – <input id="spCostHi" type="number" inputmode="numeric" min="0" step="1000" aria-label="Highest cost per kW" aria-describedby="spCostNote"></span>
-      <p class="sp-note" id="spCostNote">—</p>
-      <label class="sp-k" for="spTariff">Your tariff, per kWh</label>
-      <input id="spTariff" type="number" inputmode="decimal" min="0" step="0.25" aria-describedby="spTariffNote">
-      <p class="sp-note" id="spTariffNote">—</p>
-      <p class="sp-note sp-warn" id="spFlat" hidden></p>
-      <div id="spBill">
-        <label class="sp-k" for="spUnits">Use my bill (optional): units a month</label>
-        <input id="spUnits" type="number" inputmode="numeric" min="0" step="10" aria-describedby="spSizing">
-        <p class="sp-note" id="spSizing" hidden></p>
-        <p class="sp-note sp-warn" id="spWarn" hidden></p>
-      </div>
-    </div>
-    <div class="sp-sec sp-res">
-      <div><span class="sp-k">Pays back in</span><output class="sp-big" id="spPayback">—</output></div>
-      <div><span class="sp-k">Net saving, 25 years</span><output class="sp-big" id="spSaving">—</output></div>
-      <p class="sp-assume" id="spAssume">—</p>
-    </div>
-    <div class="sp-btns">
-      <button class="bc-brief" id="spPrint" type="button">Print the installer brief</button>
-      <a class="bc-brief" id="spCsv" href="#" download>Year-by-year CSV</a>
-      <button class="sb-x" id="spClose" type="button">Close ✕</button>
-    </div>
-  </section>
-  <section class="solbrief" id="solBrief" hidden role="dialog" aria-modal="true" aria-label="Installer brief">
-    <header class="sb-head">
-      <p class="sb-org">Delta Climate Research · Rooftop solar brief</p>
-      <p class="sb-who">
-        <span id="brWard">—</span><span id="brIdx">—</span><span id="brLatLon">—</span><span id="brDate">—</span><span id="brTier" class="bc-tier">screened</span>
-      </p>
-    </header>
-    <div class="sb-cols">
-      {/* The footprint as the registry holds it, drawn north-up. Empty in the
-          markup: the ring is a per-building Float32Array, so the one <polygon>
-          and the north arrow are written by renderBrief. */}
-      <figure class="sb-fig">
-        <svg id="brOutline" viewBox="0 0 200 200" role="img" aria-label="Roof outline, north up"></svg>
-        <figcaption>Footprint · north up</figcaption>
-      </figure>
-      <dl class="sb-dl">
-        <dt>Footprint</dt><dd id="brArea">—</dd>
-        <dt>Height</dt><dd id="brHeight">—</dd>
-        <dt>Installable</dt><dd id="brKwp">—</dd>
-        <dt>Annual yield</dt><dd id="brKwh">—</dd>
-        <dt>Shaded</dt><dd id="brLoss">—</dd>
-        <dt>At least</dt><dd id="brFloor">—</dd>
-        <dt>Raised 2 m</dt><dd id="brRaised">—</dd>
-        <dt>Worth at tariff</dt><dd id="brRs">—</dd>
-        <dt>Payback</dt><dd id="brPay">—</dd>
-      </dl>
-    </div>
-    <p class="sb-basis" id="brPayAssume" hidden>—</p>
-    <h2 class="sb-h2">How sure, and what would make it surer</h2>
-    {/* Filled from the card's own ladder at render time, never retyped: two copies
-        of five sentences would disagree the first time one of them was edited. */}
-    <ol class="sb-sure" id="brSure"></ol>
-    <h2 class="sb-h2">Questions to ask your installer</h2>
-    <ol class="br-ask">
-      <li>The proposed tilt and orientation, and why.</li>
-      <li>The module count and DC capacity, against the range above.</li>
-      <li>Their expected yield against ours, and the assumptions behind theirs.</li>
-      <li>Whether a shading study was done, and how.</li>
-      <li>The net-metering limit that applies to this connection.</li>
-      <li>Their monitoring access, so generation can be checked against the promise.</li>
-    </ol>
-    <p class="sb-basis" id="brBasis">—</p>
-    <footer class="sb-foot">
-      {/* PAINTED, NOT FIXED. renderBrief runs this through the same tier-aware
-          builder as the card's note, so a validated ward's sheet cannot wear a
-          `validated` chip over a footer that still opens "Screening estimate". */}
-      <span id="brFoot">Screening estimate · not bankable</span><span>deltaclimate.earth</span>
-    </footer>
-    {/* THE WAY BACK. On paper this button is nothing, so print hides it; on screen it
-        is the only control the reader can see once an opaque sheet covers the
-        console, and the three event paths that also close it are all invisible. */}
-    <button class="sb-x" id="brClose" type="button">Close ✕</button>
-  </section>
+  <StreetViewModal scope={scope} />
+  <SolarSheets scope={scope} />
 </main>

@@ -1,0 +1,7 @@
+---
+// src/components/ClimateEngine/v2/SolarSide.astro — OBOS v2 spec §4.6. Owner: Track B. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
+// A1 SLOT (plan S6.1): keeps data-side-pane="solar" on its root when filled.
+import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+interface Props { scope: ResolvedScope }
+---
+<div class="sp-body" data-side-pane="solar"></div>

@@ -1,0 +1,80 @@
+---
+// src/components/ClimateEngine/v2/ParkB1.astro — OBOS v2 spec §4.6, §4.4, §4.9. Owner: Track B. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
+// Parked: the report-link fragment, the solar pane-body, #airPane and #airStatus, until S6.1, S7.1 and S7.3.
+import { isAirCity } from '../../../lib/aqi/stations.ts';
+import { UNCOVERED_NOTE } from '../../../scripts/climate-engine/air/air-panel.ts';
+import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
+const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
+---
+    {/* S7 */}
+          {scope.area.publishes ? (
+          <Fragment>
+          <p class="pane-note">What is measured, the out-of-sample error and sample size, every
+            source dataset with its licence, and the analysis CRS and bounding box.</p>
+          <a class="cta" id="report-link" href={reportHref} download>Download ward record ↓</a>
+          </Fragment>
+          ) : (
+          <p class="pane-note">No record ships for {scope.area.name}. The ward record states what
+            was measured, with what error, from which datasets — and there is no measurement here
+            to state.</p>
+          )}
+    {/* S6 */}
+          <p class="pane-h" id="pane-solar-h">Solar · <span id="solPaneArea">{scope.area.name}</span></p>
+          {scope.area.hasData ? (
+          <Fragment>
+          <p class="pane-note" id="solPaneSum">Loading the rooftop-solar screen…</p>
+          {/* THE WARD BLOCK, at home in the pane rather than on the right panel, where it
+              pushed the colour legend off-screen (2026-09-06). Same numbers, same
+              painter, pane-prefixed ids. */}
+          <div class="solblock" id="solPaneBlock">
+            <div class="k legend-head"><span id="solPaneHead">Rooftop solar · installable, whole ward</span><span id="solPaneTier" class="bc-tier">screened</span></div>
+            <div class="big" id="solPaneKwp">—<span class="u">MWp</span></div>
+            <div class="conf screening" id="solPaneConf"></div>
+            <p class="solfloor" id="solPaneFloor"></p>
+            <p class="solfloor" id="solPaneSure"></p>
+            <div class="mrow">
+              <div><div class="k">Annual yield</div><div class="val" id="solPaneKwh">—</div></div>
+              <div><div class="k">Worth at tariff</div><div class="val sun" id="solPaneRs">—</div></div>
+              <div><div class="k" id="solPaneBigK">Roofs ≥ 3 kWp</div><div class="val" id="solPaneBig">—</div></div>
+              <div><div class="k">Losing ≥ 5 %, of those</div><div class="val sun" id="solPaneSh">—</div></div>
+            </div>
+          </div>
+          {/* The ward's conservative city case (spec D1, D6): every roof at full
+              size, no subsidy, every kWh at the tariff. Painted by paintSolarWard. */}
+          <p class="pane-note sol-small" id="solPanePay" hidden></p>
+          <div class="sol-tariff">
+            <label for="solTariff">Tariff · assumed · change it</label>
+            <span><span id="solCur" aria-hidden="true"></span><input id="solTariff" type="number" inputmode="decimal" min="0" step="0.25" value="8.00" aria-describedby="solTariffNote"> / kWh</span>
+          </div>
+          {/* THE UTILITY IS NAMED ONLY WHERE ITS TARIFF WAS SOURCED. CESC is
+              Kolkata's DISCOM; Bengaluru's is BESCOM, whose slabs we have not
+              sourced — so this sentence shipped a Kolkata utility's rates onto
+              Bengaluru's page, under a box pre-filled at 8.00. The other city
+              asserts no rate rather than guessing one.
+              ponytail: a city-id test, because one city has the datum and one does
+              not. It becomes a registry field beside the cost basis the moment a
+              second tariff is sourced — not before. */}
+          <p class="pane-note sol-small" id="solTariffNote">{scope.city.id === 'kolkata'
+            ? 'CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.'
+            : 'No local tariff is sourced for this city yet, so the box above is an assumption you should change. Not a rate we assert.'}</p>
+          <p class="pane-h">Best roofs by annual yield</p>
+          <div class="roofs-scroll">
+          <table class="roofs" aria-label="The ten best roofs by annual yield; each row selects its building on the map">
+            <thead><tr><th scope="col">#</th><th scope="col">kWp</th><th scope="col">kWh/yr</th><th scope="col">range</th><th scope="col">shaded</th><th scope="col">m²</th></tr></thead>
+            <tbody id="solList"></tbody>
+          </table>
+          </div>
+          <p class="pane-note sol-small">Yield uses NASA POWER irradiance and a Mumbai packing factor; shading is computed from this ward's own geometry and canopy, and the mask rule is its largest uncertainty — "at least" is the strict-mask floor. Screening only, not bankable.</p>
+          <a class="cta" id="solCsv" href="#" download>Download roof list · CSV ↓</a>
+          </Fragment>
+          ) : (
+          <p class="pane-note">No solar screen ships for {scope.area.name}. The screen needs footprints, heights and canopy, and this area ships none.</p>
+          )}
+    {/* S7 */}
+        <section class="pane-body" id="airPane" aria-labelledby="pane-air-h">
+          <p class="pane-h" id="pane-air-h">Air · <span id="airPaneArea">{scope.area.name}</span></p>
+          <p class="pane-note" id="airPaneBody">{isAirCity(scope.key) ? 'Loading air quality…' : UNCOVERED_NOTE}</p>
+        </section>
+      <p class="aq-sr" id="airStatus" role="status" aria-live="polite"></p>

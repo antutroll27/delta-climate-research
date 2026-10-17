@@ -4,15 +4,18 @@
  * after mountHeatMap. Returns a disposer.
  */
 import { bindGlass } from './glass.ts';
+import { bindMirrors, bindWardCard } from './heat-v2.ts';
+import { bindSunCard } from './sun-card.ts';
+import { bindWeather } from './weather-v2.ts';
+import { bindPhone } from './phone-v2.ts';
+import type { LayerStack, Sections, ShellCtx } from './shell-ctx.ts';
+
+export type { ShellCtx, Sections, LayerStack } from './shell-ctx.ts';
 import { $, $$, observe, on, store, type Cleanup } from './dom.ts';
 import { onMenuClick, sectionOf, type NavState, type SectionId } from './sections.ts';
 import { effectiveMenu, V2_KEYS, type MenuState } from './ui-flag.ts';
 import { ICON } from '../../../components/ClimateEngine/v2/icons.ts';
 
-export interface Sections { readonly go: (id: SectionId, side?: boolean) => void; readonly paint: () => void }
-/* ── layers: popovers, the drawer (S8) — ONE Esc stack, topmost only (spec §3.11) ── */
-export interface LayerStack { open(el: HTMLElement, opener: HTMLElement | null, onClose?: () => void): void; closeTop(): boolean; isOpen(el: HTMLElement): boolean }
-export interface ShellCtx { readonly root: HTMLElement; readonly cleanup: Cleanup; glassRefresh: () => void; sections?: Sections; layers?: LayerStack }
 
 /** aria-pressed mirrors v1's `.on` classes (the app writes the class; the shell tells assistive tech). */
 export function bindPressedMirror(ctx: ShellCtx): void {
@@ -222,13 +225,20 @@ export function mountShellV2(): (() => void) | null {
   let disposed = false;
   const dispose = (): void => { for (const off of cleanup.splice(0)) off(); };
   const ctx: ShellCtx = { root, cleanup, glassRefresh: () => {} };
+  /* Compare binds only the frame (plan S9.2 Step 4, pre-wired by A1 so Track C never edits this file). */
+  const compare = root.matches('[data-compare-root]');
   ctx.sections = bindSections(ctx);
   bindPrefs(ctx);
-  bindPerArea(ctx);
-  bindPressedMirror(ctx);
-  bindProxies(ctx);
+  if (!compare) { bindPerArea(ctx); bindPressedMirror(ctx); bindProxies(ctx); }
   ctx.layers = bindLayers(ctx);
-  bindFlash(ctx);
+  bindPhone(root, cleanup, ctx.layers);          // S8
+  if (!compare) {
+    bindFlash(ctx);
+    bindMirrors(ctx);                            // Track A, S3.2 (heat-v2.ts)
+    bindSunCard(root, cleanup);                  // Track A, S4.1 (sun-card.ts)
+    bindWardCard(ctx);                           // Track A, S4.2 (heat-v2.ts)
+    bindWeather(ctx);                            // Track B, S7.2 (weather-v2.ts)
+  }
   /* bindGlass is async: if the page was left before it resolved, undo what it registered. */
   void bindGlass(root, cleanup).then((g) => { ctx.glassRefresh = g.refresh; if (disposed) dispose(); });
   return () => { disposed = true; dispose(); };

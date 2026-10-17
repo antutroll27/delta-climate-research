@@ -8,14 +8,17 @@ import { join } from 'node:path';
    purpose: a v2 file that disappears FAILS (no `catch { continue; }`), and a hex may
    live only in tokens.css (stylesheets) or symbols.ts (marks), each at most once. */
 const STYLES = 'src/styles/obos-v2';
-const SHEETS = ['tokens.css', 'atoms.css', 'shell.css', 'screens.css', 'phone.css', 'print.css'];
+const REQUIRED = ['tokens.css', 'atoms.css', 'shell.css', 'screens.css', 'phone.css', 'print.css',
+  ...['overview', 'heat', 'mapstack', 'building', 'explore', 'scenarios', 'solar', 'air', 'weather', 'methods', 'compare', 'brief'].map((p) => `screens/${p}.css`),
+  'print/solar.css', 'print/brief.css'];
+const SHEETS = readdirSync(STYLES, { recursive: true }).map(String).filter((f) => f.endsWith('.css') && !f.split('/').pop().startsWith('._')).sort();
 const COMPONENTS = 'src/components/ClimateEngine/v2';
 const SCRIPTS = 'src/scripts/climate-engine/v2';
 /* hex AND functional colours (S1 audit F5): rgb(a), hsl(a), oklch, oklab, lch, lab, color(). color-mix(... var() ...) does not match. */
 const HEX = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lch|lab|color)\([^()]*\)/g;
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/<!--[\s\S]*?-->/g, '');
 
-test('every v2 sheet exists', () => { for (const f of SHEETS) assert.ok(existsSync(join(STYLES, f)), f); });
+test('every v2 sheet exists', () => { for (const f of REQUIRED) assert.ok(existsSync(join(STYLES, f)), f); });
 
 test('colour literals only in tokens.css (sheets) and symbols.ts (marks), each spelled once', () => {
   const offences = [];
@@ -23,8 +26,12 @@ test('colour literals only in tokens.css (sheets) and symbols.ts (marks), each s
     const h = strip(readFileSync(join(STYLES, f), 'utf8')).match(HEX) ?? [];
     if (h.length) offences.push(`${f}: ${h.join(' ')}`);
   }
-  for (const f of readdirSync(COMPONENTS).filter((x) => x.endsWith('.astro'))) {
-    const src = strip(readFileSync(join(COMPONENTS, f), 'utf8')).replace(/href="[^"]*"/g, '');
+  /* A1 S2.9: Track C's Compare and brief components would otherwise escape the census */
+  const compo = [...readdirSync(COMPONENTS).filter((x) => x.endsWith('.astro') && !x.startsWith('._')).map((f) => join(COMPONENTS, f)),
+    'src/components/ClimateEngine/compare/PairedBenchV2.astro', 'src/components/ClimateEngine/brief/HeatMapBriefV2.astro'].filter(existsSync);
+  for (const path of compo) {
+    const f = path;
+    const src = strip(readFileSync(path, 'utf8')).replace(/href="[^"]*"/g, '');
     const h = src.match(HEX) ?? [];
     if (h.length) offences.push(`${f}: ${h.join(' ')}`);
   }
