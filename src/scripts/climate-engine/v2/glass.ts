@@ -28,6 +28,7 @@ export async function bindGlass(root: HTMLElement, cleanup: Cleanup): Promise<Gl
   const mm = (q: string): boolean => { try { return matchMedia(q).matches; } catch { return false; } };
   const coarsePointer = mm('(pointer: coarse)');
   const nav = navigator as Navigator & { connection?: { saveData?: boolean } };
+  /* a mutable record: reduced transparency can be switched on mid-session (S1 audit F3) */
   const env = {
     baseTier: base.tier, coarsePointer, softwareRenderer: rq.isSoftwareRenderer(base.gpuLabel),
     reducedTransparency: mm('(prefers-reduced-transparency: reduce)'),
@@ -51,13 +52,9 @@ export async function bindGlass(root: HTMLElement, cleanup: Cleanup): Promise<Gl
   };
   const unsub = rq.subscribeRenderQuality((p) => { if (p.tier < 2 && !demoted) { demoted = true; apply(); } });
   cleanup.push(() => { unsub(); stopMonitor?.(); stopMonitor = null; });
-  /* ?lab=1 only: a test hook to prove the demotion path without a weak GPU. */
-  if (new URLSearchParams(location.search).has('lab')) {
-    on(cleanup, document, 'obos:render-quality-test', (e) => {
-      const tier = (e as CustomEvent<{ tier: number }>).detail?.tier;
-      if (typeof tier === 'number' && tier < 2) { demoted = true; apply(); }
-    });
-  }
+  /* keep the attribute truthful, and stop the monitor, when the reader turns reduced transparency on or off */
+  const rtq = ((): MediaQueryList | null => { try { return matchMedia('(prefers-reduced-transparency: reduce)'); } catch { return null; } })();
+  on(cleanup, rtq, 'change', () => { env.reducedTransparency = rtq?.matches ?? false; apply(); });
   apply();
   return { refresh: apply };
 }

@@ -116,6 +116,12 @@ html[data-ui="v2"] .obos-v2 :is(.place, .attrib, .toast) { box-shadow: var(--gla
 html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
   -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
 }
+/* S1 audit F3: the belt. Reduced transparency blurs nothing, whatever data-glass says at that instant (same selector, later in source). */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
+    -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--glass-fallback);
+  }
+}
 html[data-ui="v2"] .obos-v2[data-cards="glass"]:not([data-glass="live"]) :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
   background: var(--glass-fallback);
 }

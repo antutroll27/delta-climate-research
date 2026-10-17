@@ -172,16 +172,42 @@ test.describe('tier matrix (report only)', () => {
   }
 });
 
-test('tier 2: Glass goes live; a demotion goes flat for the session; no digits font fetched on macOS', async ({ page }) => {
+type RQ = { __deltaRenderQualityController: { applyTier(t: number): void } };
+const FONT_PROBE = '<p class="hero">31.4<span class="u">°C</span></p><p class="hero thin">12:30</p><b style="font-weight:500">−4 %</b>';
+
+test('tier 2: Glass goes live; the governor\'s own demotion goes flat for the session; no digits font fetched on macOS', async ({ page }) => {
   test.setTimeout(180_000);
   const fonts: string[] = [];
   page.on('request', (r) => { if (/obos-num-/.test(r.url())) fonts.push(r.url()); });
   await page.addInitScript(() => { try { localStorage.setItem('obos:v2:cards', 'glass'); } catch { /* none */ } });
-  await page.goto('/heat-map/in/kolkata/ballygunge/?lab=1');
+  await page.goto('/heat-map/in/kolkata/ballygunge/');
   await expect(page.locator('main.obos-v2')).toHaveAttribute('data-tier', 'full', { timeout: 60_000 });
   await expect(page.locator('main.obos-v2')).toHaveAttribute('data-glass', 'live');
-  await page.evaluate(() => document.dispatchEvent(new CustomEvent('obos:render-quality-test', { detail: { tier: 1 } })));
-  await expect(page.locator('main.obos-v2')).toHaveAttribute('data-glass', 'flat');
-  await page.waitForTimeout(2000);
+  /* S1 audit F4: the assertion below is only as strong as what the page draws. Put visible digits in --sans first,
+     so a stack that lists "OBOS Num" ahead of Helvetica Neue would fetch a woff2 and fail this test. */
+  await page.evaluate((html) => { const d = document.createElement('div'); d.setAttribute('data-font-probe', ''); d.style.cssText = 'position:absolute;left:600px;top:300px;z-index:60'; d.innerHTML = html; document.querySelector('main.obos-v2')!.appendChild(d); }, FONT_PROBE);
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(1000);
   expect(fonts, 'Helvetica Neue covers digits on macOS; the subset must not download').toEqual([]);
+  /* S1 audit F2: the governor's own notification path (no ?lab hook): applyTier(1) is what a real demotion calls. */
+  await page.evaluate(() => (window as unknown as RQ).__deltaRenderQualityController.applyTier(1));
+  await expect(page.locator('main.obos-v2')).toHaveAttribute('data-glass', 'flat');
+});
+
+test('tier 2: reduced transparency switched on mid-session goes flat, and the CSS alone stops the blur (S1 audit F3)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.addInitScript(() => { try { localStorage.setItem('obos:v2:cards', 'glass'); } catch { /* none */ } });
+  await page.goto('/heat-map/in/kolkata/ballygunge/');
+  const root = page.locator('main.obos-v2');
+  await expect(root).toHaveAttribute('data-glass', 'live', { timeout: 60_000 });
+  await page.evaluate(() => { const p = document.createElement('div'); p.className = 'card'; p.setAttribute('data-rt-probe', ''); document.querySelector('main.obos-v2')!.appendChild(p); });
+  const blur = (): Promise<string> => page.evaluate(() => getComputedStyle(document.querySelector('[data-rt-probe]')!).backdropFilter);
+  expect(await blur(), 'a live Glass card blurs').not.toBe('none');
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] });
+  await expect(root, 'the attribute stays truthful').toHaveAttribute('data-glass', 'flat');
+  expect(await blur()).toBe('none');
+  /* the CSS belt on its own: force the attribute back to live under the media feature */
+  await page.evaluate(() => { document.querySelector<HTMLElement>('main.obos-v2')!.dataset.glass = 'live'; });
+  expect(await blur(), 'prefers-reduced-transparency blurs nothing even if the attribute lags').toBe('none');
 });
