@@ -1,6 +1,6 @@
-// src/scripts/climate-engine/v2/glass.ts — OBOS v2 spec §2.3 (founder D2, 16 Oct)
-import { on, store, type Cleanup } from './dom.ts';
-import { V2_KEYS, type Cards } from './ui-flag.ts';
+// src/scripts/climate-engine/v2/glass.ts — OBOS v2 spec §2.3 (founder D2, 16 Oct; REVISED 17 Oct: Plates by default, Glass only when chosen)
+import { on, type Cleanup } from './dom.ts';
+import type { Cards } from './ui-flag.ts';
 
 export type Tier = 0 | 1 | 2;
 export type GlassMode = 'live' | 'flat';
@@ -15,8 +15,11 @@ export function decideGlass(i: GlassInput): GlassMode {
     && !i.reducedTransparency && i.supportsBackdrop && !i.saveData && !i.demoted ? 'live' : 'flat';
 }
 
-export function defaultCards(e: { readonly coarsePointer: boolean; readonly baseTier: Tier }): Cards {
-  return e.coarsePointer || e.baseTier === 0 ? 'plates' : 'glass';
+/** D2 REVISED (founder, 17 Oct): the default is Plates on every device and tier. The S2 audit measured live Glass at +6.2 ms/frame at DSF 2
+ *  with only ~62 % of the final blurred area built. Glass is a manual choice (stored like the theme); decideGlass still refuses it where
+ *  it is unsafe. The argument is kept so a future per-device default needs no call-site change. */
+export function defaultCards(_e: { readonly coarsePointer: boolean; readonly baseTier: Tier }): Cards {
+  return 'plates';
 }
 
 export interface GlassBinding { readonly refresh: () => void }
@@ -36,11 +39,7 @@ export async function bindGlass(root: HTMLElement, cleanup: Cleanup): Promise<Gl
     saveData: nav.connection?.saveData === true,
   };
   root.dataset.tier = TIER_NAME[base.tier];
-  /* A stored-less tier-0 desktop opened as Glass (the pre-paint guess); it gets Plates now (spec §1.5). */
-  if (store.get(V2_KEYS.cards) === null) {
-    root.dataset.cards = defaultCards(env);
-    for (const b of document.querySelectorAll('[data-pref="cards"]')) b.setAttribute('aria-pressed', String(b.getAttribute('data-v') === root.dataset.cards));
-  }
+  /* D2 revised: the pre-paint script already wrote Plates for an empty store, so there is no guess to correct; only a CHOSEN Glass arrives here. */
   let demoted = false;
   let stopMonitor: (() => void) | null = null;
   const apply = (): void => {

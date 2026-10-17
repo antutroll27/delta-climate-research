@@ -52,7 +52,8 @@ export function resolvePrefs(
   const s = (k: string): string | null => stored[k] ?? null;
   const theme = s(V2_KEYS.theme) === 'light' ? 'light' : 'dark';
   const c = s(V2_KEYS.cards);
-  const cards: Cards = c === 'glass' || c === 'plates' ? c : env.coarse ? 'plates' : 'glass';
+  /* D2 revised (founder, 17 Oct): Plates by default on every device and tier; Glass only when chosen. `env.coarse` no longer decides. */
+  const cards: Cards = c === 'glass' ? 'glass' : 'plates';
   const m = s(V2_KEYS.menu);
   const menu: MenuState = m === 'labels' || m === 'icons' ? m : env.width >= DESKTOP_MIN_PX ? 'labels' : 'icons';
   const side: SideState = s(V2_KEYS.side) === 'closed' ? 'closed' : 'open';
@@ -87,13 +88,12 @@ var frag=t.content.cloneNode(true);
 var root=frag.querySelector('main.obos-v2');
 if(!v1||!root){d.removeAttribute(${J(UI_ATTR)});t.remove();return;}
 function g(k){try{return localStorage.getItem(k);}catch(e){return null;}}
-var coarse=false;try{coarse=matchMedia('(pointer: coarse)').matches;}catch(e){}
 var w=window.innerWidth||1440;
 var th=g(${J(V2_KEYS.theme)}),cd=g(${J(V2_KEYS.cards)}),mn=g(${J(V2_KEYS.menu)}),sd=g(${J(V2_KEYS.side)});
 var menu=mn==='labels'||mn==='icons'?mn:(w>=${DESKTOP_MIN_PX}?'labels':'icons');
 var side=sd==='closed'?'closed':'open',shown=side==='open';
 root.setAttribute('data-theme',th==='light'?'light':'dark');
-root.setAttribute('data-cards',cd==='glass'||cd==='plates'?cd:(coarse?'plates':'glass'));
+root.setAttribute('data-cards',cd==='glass'?'glass':'plates');
 root.setAttribute('data-menu',menu);
 root.setAttribute('data-side',side);
 root.setAttribute('data-side-current','explore');

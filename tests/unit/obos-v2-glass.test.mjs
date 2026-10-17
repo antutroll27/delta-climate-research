@@ -13,10 +13,20 @@ test('live only on tier 2 with every condition met (D2, spec §2.3)', () => {
   }
 });
 
-test('default cards: plates on tier 0 or a coarse pointer, else glass', () => {
-  assert.equal(defaultCards({ coarsePointer: false, baseTier: 2 }), 'glass');
-  assert.equal(defaultCards({ coarsePointer: false, baseTier: 1 }), 'glass');
-  assert.equal(defaultCards({ coarsePointer: false, baseTier: 0 }), 'plates');
-  assert.equal(defaultCards({ coarsePointer: true, baseTier: 2 }), 'plates');
+/* D2 REVISED (founder, 17 Oct): PLATES is the default on every device and tier. Glass is a manual choice, and the safety rules
+   (tier 2 only, no phones, no software renderer, no reduced transparency, no save-data, no demotion) still decide whether a CHOSEN Glass is live. */
+test('default cards: plates on every device and tier (D2 revised, 17 Oct)', () => {
+  for (const baseTier of [0, 1, 2]) for (const coarsePointer of [false, true]) {
+    assert.equal(defaultCards({ coarsePointer, baseTier }), 'plates', `tier ${baseTier}, coarse ${coarsePointer}`);
+  }
   assert.deepEqual(TIER_NAME, { 0: 'low', 1: 'balanced', 2: 'full' });
+});
+
+test('a CHOSEN Glass is still refused on tier 0, tier 1, phones, software rendering, reduced transparency and after demotion', () => {
+  assert.equal(decideGlass({ ...BASE, cards: 'glass', baseTier: 0 }), 'flat');
+  assert.equal(decideGlass({ ...BASE, cards: 'glass', baseTier: 1 }), 'flat');
+  assert.equal(decideGlass({ ...BASE, cards: 'glass', coarsePointer: true }), 'flat');
+  assert.equal(decideGlass({ ...BASE, cards: 'glass', reducedTransparency: true }), 'flat');
+  assert.equal(decideGlass({ ...BASE, cards: 'glass', demoted: true }), 'flat');
+  assert.equal(decideGlass({ ...BASE, cards: 'plates' }), 'flat', 'the default never blurs');
 });

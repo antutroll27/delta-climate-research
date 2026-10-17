@@ -72,14 +72,15 @@ test('a soft navigation to a page with no v2 tree drops data-ui (S0 audit F4)', 
 });
 
 test('prefs: stored choice wins, defaults follow pointer and width (spec §1.5)', () => {
+  /* D2 revised (17 Oct): an empty store is Plates everywhere; Glass only when it was chosen */
   assert.deepEqual(resolvePrefs({}, { coarse: false, width: 1440 }),
-    { theme: 'dark', cards: 'glass', menu: 'labels', side: 'open' });
+    { theme: 'dark', cards: 'plates', menu: 'labels', side: 'open' });
   assert.deepEqual(resolvePrefs({}, { coarse: true, width: 390 }),
     { theme: 'dark', cards: 'plates', menu: 'icons', side: 'open' });
   assert.deepEqual(resolvePrefs({ [V2_KEYS.theme]: 'light', [V2_KEYS.cards]: 'glass', [V2_KEYS.menu]: 'icons', [V2_KEYS.side]: 'closed' },
     { coarse: true, width: 390 }), { theme: 'light', cards: 'glass', menu: 'icons', side: 'closed' });
   assert.deepEqual(resolvePrefs({ [V2_KEYS.theme]: 'neon' }, { coarse: false, width: 1300 }),
-    { theme: 'dark', cards: 'glass', menu: 'icons', side: 'open' });
+    { theme: 'dark', cards: 'plates', menu: 'icons', side: 'open' });
 });
 
 test('effective menu: icons at laptop width while a side panel shows (twin rule, spec §3.1)', () => {

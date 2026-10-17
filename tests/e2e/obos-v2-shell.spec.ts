@@ -61,6 +61,22 @@ test.describe('@v2 shell', () => {
     expect(styleLoads, 'flipping the theme alone must not reload the basemap').toBeLessThan(50);
   });
 
+  test('@v2 D2 revised: an empty store is Plates; a chosen Glass persists but stays flat where Glass is refused (tier 0 here)', async ({ page }) => {
+    await openV2(page);
+    const root = page.locator('main.obos-v2');
+    expect(await page.evaluate(() => localStorage.getItem('obos:v2:cards'))).toBeNull();
+    await expect(root).toHaveAttribute('data-cards', 'plates');
+    await page.locator('[data-pref="cards"][data-v="glass"]').click();
+    await expect(root).toHaveAttribute('data-cards', 'glass');
+    await expect(root, 'SwiftShader is tier 0: the choice is kept, the blur is refused').toHaveAttribute('data-glass', 'flat');
+    await page.reload();
+    const first = await page.evaluate(() => { const r = document.querySelector('main.obos-v2'); return [r?.getAttribute('data-cards'), r?.getAttribute('data-glass')]; });
+    expect(first[0], 'applied before paint after a reload').toBe('glass');
+    await expect(root).toHaveAttribute('data-glass', 'flat', { timeout: 30_000 });
+    const blurred = await page.evaluate(() => [...document.querySelectorAll('main.obos-v2 *')].filter((e) => { const v = getComputedStyle(e).backdropFilter; return !!v && v !== 'none'; }).length);
+    expect(blurred).toBe(0);
+  });
+
   test('@v2 first visit pairs the map look with the theme until the look is chosen (D1)', async ({ page }) => {
     await openV2(page);
     await page.locator('[data-pref="theme"][data-v="light"]').click();
@@ -194,7 +210,8 @@ test.describe('@v2 shell', () => {
     await expect(page.locator('.tc')).toBeVisible();
     await expect(page.locator('#compass')).toHaveCount(0);
     await expect(page.locator('.tc-legend')).toHaveCount(0);
-    await expect(page.locator('#coord')).toHaveCount(0);
+    await expect(page.locator('#coord'), 'the app binds #coord (the unit contract counts it), so it stays in the tree, hidden and empty').toBeHidden();
+    await expect(page.locator('#coord')).toHaveText('');
     await page.waitForTimeout(1500);
     expect(errors).toEqual([]);
   });

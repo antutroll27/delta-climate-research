@@ -1,4 +1,9 @@
 // tests/e2e/obos-v2-glass.spec.ts — OBOS v2 spec §8.2. LOCAL ONLY (needs a real GPU).
+/* D2 REVISED (founder, 17 Oct): PLATES is the default card style on every device and tier, so the BINDING perf gate is the default
+   path (Plates, on the real chrome, against v1). Glass is a manual choice: its cost is INFORMATIONAL (the JSON's glassWhenChosen,
+   judged against the unchanged 6.0 ms reference, never failing the run) and the demotion test below proves a chosen Glass still goes
+   flat when the governor says so. Why: the S2 audit measured live Glass at +6.2 ms at DSF 2 on a loaded M4 with ~62 % of the final
+   blurred area built. S2 numbers, as a range (S2 audit F2): +1.9 to +3.1 ms at DSF 1, +4.6 to +6.2 ms at DSF 2, 12 surfaces, 494k px2. */
 import { chromium, expect, test, type Browser, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
@@ -180,7 +185,8 @@ for (const dsf of [1, 2]) {
     const { sum, raw, gpu, shipped: asShipped, pr, env } = await bench(browser, dsf, {});
     mkdirSync('/Volumes/OBOSLab/obos-v2/audits', { recursive: true });
     const cost = sum.live.p50 - sum.flat.p50;
-    writeFileSync(OUT.replace('.json', `-dsf${dsf}.json`), JSON.stringify({ dsf, devicePixelRatio: pr, slice: SLICE, binding: BINDING, mode: CHROME_ONLY ? 'real-chrome (DUMMY=0)' : 'dummies', headless: HEADLESS, offscreen: HEADLESS ? null : !!env.window && offScreen(env.window), window: env.window, displayHz: env.displayHz, loadavg: env.loadavg, liveMinusFlatMs: cost, gpu, secs: SECS, reps: REPS, shippedState: asShipped, summary: named(sum), raw: named(raw) }, null, 1));
+    const GLASS_REFERENCE_MS = 6.0;
+    writeFileSync(OUT.replace('.json', `-dsf${dsf}.json`), JSON.stringify({ dsf, devicePixelRatio: pr, slice: SLICE, bindingSlice: BINDING, mode: CHROME_ONLY ? 'real-chrome (DUMMY=0)' : 'dummies', headless: HEADLESS, offscreen: HEADLESS ? null : !!env.window && offScreen(env.window), window: env.window, displayHz: env.displayHz, loadavg: env.loadavg, binding: BINDING ? 'plates (the default path), real chrome' : 'plates (the default path)', glassWhenChosen: { informational: true, liveMinusFlatMs: cost, referenceMs: GLASS_REFERENCE_MS, withinReference: cost <= GLASS_REFERENCE_MS }, gpu, secs: SECS, reps: REPS, shippedState: asShipped, summary: named(sum), raw: named(raw) }, null, 1));
     console.log(JSON.stringify({ dsf, asShipped, env, cost, sum: named(sum) }));
     /* THE FOUNDER RULE: no window on any display. In new headless there is no window at all; if METAL ever goes headed again,
        Browser.getWindowBounds is the proof and this fails when macOS clamps the window back on screen. */
@@ -189,8 +195,8 @@ for (const dsf of [1, 2]) {
     expect(sum.bare.fps, `off-screen window throttled: ${sum.bare.fps.toFixed(0)} fps against ${env.displayHz.toFixed(0)} Hz`).toBeGreaterThan(0.9 * env.displayHz);
     /* S2 audit F2(3): a loaded machine moves the cost by ~1.5 ms; v1's own p50 is the yardstick (7.0 quiet, 9.9 loaded) */
     if (dsf === 1) expect(sum.v1.p50, `environment loaded (loadavg ${env.loadavg.map((x) => x.toFixed(1)).join(' ')}), re-run`).toBeLessThanOrEqual(8.0);
-    /* the shipped decision on a tier-2 desktop is Glass, live (spec §2.3) */
-    expect(asShipped, 'v2 on a tier-2 desktop boots as Glass, live').toMatchObject({ tier: 'full', cards: 'glass', glass: 'live' });
+    /* D2 revised: the shipped decision on a tier-2 desktop is PLATES (flat, nothing blurred); Glass is a manual choice */
+    expect(asShipped, 'v2 on a tier-2 desktop boots as Plates').toMatchObject({ tier: 'full', cards: 'plates', glass: 'flat', blurred: 0 });
     /* S1 audit F1(4): an occluded or throttled headed window reads low fps for everything and would pass vacuously */
     expect(sum.v1.fps, 'the headed window was occluded or throttled').toBeGreaterThan(50);
     /* From S2 the shell is real: with the 14 dummies ON TOP of it every surface would blur twice, so the S2+ measurement is DUMMY=0
@@ -208,7 +214,8 @@ for (const dsf of [1, 2]) {
       expect(sum[m].p50, `${m} p50 vs bare v2`).toBeLessThanOrEqual(sum.bare.p50 * 1.05);
       expect(sum[m].p95, `${m} p95 vs bare v2`).toBeLessThanOrEqual(sum.bare.p95 * 1.10);
     }
-    expect(sum.live.p50 - sum.flat.p50, 'live Glass beyond the founder-accepted cost').toBeLessThanOrEqual(6.0);
+    /* Glass-when-chosen is INFORMATIONAL (D2 revised): reported above in glassWhenChosen, never a failure. */
+    if (cost > GLASS_REFERENCE_MS) console.log(`[informational] Glass when chosen costs +${cost.toFixed(2)} ms at DSF ${dsf}, over the ${GLASS_REFERENCE_MS} ms reference; the default (Plates) is unaffected`);
   });
 }
 
@@ -282,4 +289,27 @@ test('tier 2: reduced transparency switched on mid-session goes flat, and the CS
   /* the CSS belt on its own: force the attribute back to live under the media feature */
   await page.evaluate(() => { document.querySelector<HTMLElement>('main.obos-v2')!.dataset.glass = 'live'; });
   expect(await blur(), 'prefers-reduced-transparency blurs nothing even if the attribute lags').toBe('none');
+});
+
+/* D2 REVISED (founder, 17 Oct): Plates is the default on every device and tier; Glass is a manual choice. */
+test('D2 revised: a first visit on tier 2 is Plates (nothing blurred); choosing Glass goes live, persists across a reload, and Plates takes it back', async ({ page }) => {
+  test.setTimeout(180_000);
+  const root = page.locator('main.obos-v2');
+  const blurred = (): Promise<number> => page.evaluate(() => [...document.querySelectorAll('main.obos-v2 *')].filter((e) => { if (e.getClientRects().length === 0) return false; const v = getComputedStyle(e).backdropFilter; return !!v && v !== 'none'; }).length);
+  await page.goto('/heat-map/in/kolkata/ballygunge/');
+  await expect(root).toHaveAttribute('data-tier', 'full', { timeout: 60_000 });
+  expect(await page.evaluate(() => localStorage.getItem('obos:v2:cards')), 'storage holds no card choice').toBeNull();
+  await expect(root, 'a first visit renders Plates').toHaveAttribute('data-cards', 'plates');
+  await expect(root).toHaveAttribute('data-glass', 'flat');
+  expect(await blurred(), 'Plates blur nothing').toBe(0);
+  await page.locator('[data-pref="cards"][data-v="glass"]').click();
+  await expect(root).toHaveAttribute('data-glass', 'live');
+  expect(await blurred(), 'chosen Glass blurs the chrome').toBeGreaterThan(8);
+  await page.reload();
+  const first = await page.evaluate(() => { const r = document.querySelector('main.obos-v2'); return [r?.getAttribute('data-cards'), localStorage.getItem('obos:v2:cards')]; });
+  expect(first, 'the choice survives a reload and is applied before paint').toEqual(['glass', 'glass']);
+  await expect(root).toHaveAttribute('data-glass', 'live', { timeout: 60_000 });
+  await page.locator('[data-pref="cards"][data-v="plates"]').click();
+  await expect(root).toHaveAttribute('data-glass', 'flat');
+  expect(await blurred()).toBe(0);
 });
