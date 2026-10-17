@@ -176,3 +176,12 @@ test('F2: bindMirrors paints the ward mark at mount (named callback, called once
   assert.match(src, /const syncMark = \(\): void => \{ if \(sym && lst\) sym\.style\.color = lst\.style\.color \|\| ''; \};/);
   assert.match(src, /attributeFilter: \['style'\] \}, syncMark\); syncMark\(\);/);
 });
+
+/* ── A-S3 audit F4: a scroll cue on the right column ── */
+test('F4: heat.css fades the column while data-v2-more is 1 (keyword colours only), and heat-v2.ts maintains the flag', () => {
+  const css = strip(CSS('heat.css'));
+  assert.match(css, /#legend\.heat-panel\[data-v2-more="1"\] \{[^}]*mask-image: linear-gradient\(to bottom, black calc\(100% - 28px\), transparent\)/);
+  assert.ok(!/#[0-9a-f]{3,8}\b|rgba?\(/i.test(css), 'heat.css spells a colour literal');
+  const src = readFileSync('src/scripts/climate-engine/v2/heat-v2.ts', 'utf8');
+  assert.ok(src.includes('dataset.v2More') && src.includes("'scroll'"), 'the flag is not maintained on scroll');
+});

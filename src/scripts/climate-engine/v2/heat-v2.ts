@@ -31,6 +31,24 @@ export function bindAirKind(ctx: ShellCtx): void {
   paint();
 }
 
+/** A-S3 audit F4. #legend scrolls with its bar hidden: data-v2-more="1" while there is more below, so screens/heat.css can fade the foot of the column.
+    The fade lifts at the end, so the last line is never faded. Layout is read in a frame, never in an observer callback. */
+export function bindScrollCue(ctx: ShellCtx): void {
+  const { root, cleanup } = ctx;
+  const col = $(root, '#legend');
+  if (!col) return;
+  let queued = 0;
+  const sync = (): void => { queued = 0; col.dataset.v2More = col.scrollHeight - col.clientHeight - col.scrollTop > 2 ? '1' : '0'; };
+  const queue = (): void => { if (!queued) queued = requestAnimationFrame(sync); };
+  on(cleanup, col, 'scroll', queue, { passive: true });
+  on(cleanup, col, 'toggle', queue, { capture: true });      // a disclosure opening changes the height (toggle does not bubble)
+  on(cleanup, window, 'resize', queue);
+  observe(cleanup, col, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'open', 'class'] }, queue);
+  observe(cleanup, root, { attributes: true, attributeFilter: ['data-section'] }, queue);
+  cleanup.push(() => { if (queued) cancelAnimationFrame(queued); });
+  sync();
+}
+
 /** Plan S3.2 Step 7. Reads what the app wrote into #lst, #lstPhase and #conf and mirrors it; derives nothing (brainstorm 03 R7). */
 export function bindMirrors(ctx: ShellCtx): void {
   const { root, cleanup } = ctx;
@@ -40,6 +58,7 @@ export function bindMirrors(ctx: ShellCtx): void {
   const syncMark = (): void => { if (sym && lst) sym.style.color = lst.style.color || ''; };
   observe(cleanup, lst, { attributes: true, attributeFilter: ['style'] }, syncMark); syncMark();
   bindAirKind(ctx);
+  bindScrollCue(ctx);
   /* the clock widget says when the map is a modelled phase, in the app's own words (spec §3.6) */
   const kmap = $(root, '[data-v2-kmap]');
   const syncPhase = (): void => {

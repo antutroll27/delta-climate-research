@@ -159,4 +159,24 @@ test.describe('@v2 honesty', () => {
     await expect(page.locator('[data-sun="line"]')).toHaveText(/^rises \d\d:\d\d$/);
     await expect(page.locator('[data-sun="az"]')).toBeHidden();
   });
+  /* A-S3 audit F4: #legend scrolls with its bar hidden, so on Heat the honesty cards sat below a fold nothing announced. */
+  for (const [w, h] of [[1440, 900], [1280, 720]] as const) {
+    test(`@v2 [H] Heat at ${w} x ${h}: the right column fades while there is more below, and the method card is reachable`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await stubWeather(page, '2026-10-07T06:05:00Z');
+      await openV2(page);
+      await go(page, 'heat');
+      const col = page.locator('#legend');
+      await expect(col).toHaveAttribute('data-v2-more', '1');
+      expect(await col.evaluate((e) => getComputedStyle(e).maskImage), 'the cue is a fade on the column').not.toBe('none');
+      await page.locator('[data-v2-card="method"] summary').first().scrollIntoViewIfNeeded();
+      await expect(page.locator('[data-v2-card="method"] summary').first()).toBeVisible();
+      await col.evaluate((e) => { e.scrollTop = e.scrollHeight; });
+      await expect(col).toHaveAttribute('data-v2-more', '0');                // the fade lifts at the end: the last line is never faded
+      expect(await col.evaluate((e) => getComputedStyle(e).maskImage)).toBe('none');
+      /* the last line of the legend/method cards is wholly inside the column when scrolled to the end */
+      const last = await page.locator('[data-v2-card="method"]').boundingBox(), c = await col.boundingBox();
+      expect(last!.y + last!.height).toBeLessThanOrEqual(c!.y + c!.height + 1);
+    });
+  }
 });
