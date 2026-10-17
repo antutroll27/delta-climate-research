@@ -48,7 +48,8 @@ export function bindBriefLink(ctx: ShellCtx): void {
   const cmp = document.querySelector<HTMLAnchorElement>('a[data-rail="analysis"]');
   const sync = (): void => {
     const b = $<HTMLAnchorElement>(root, '[data-v2-brief]');
-    if (b && cmp?.getAttribute('href')) b.href = cmp.href.replace('/heat-map/compare/', '/heat-map/brief/');
+    const href = cmp?.getAttribute('href');
+    if (b && href) b.setAttribute('href', href.replace('/heat-map/compare/', '/heat-map/brief/'));
   };
   observe(cleanup, cmp, { attributes: true, attributeFilter: ['href'] }, sync);
   sync();
