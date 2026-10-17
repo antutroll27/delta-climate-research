@@ -271,6 +271,10 @@ test('tier 2: reduced transparency switched on mid-session goes flat, and the CS
   await page.evaluate(() => { const p = document.createElement('div'); p.className = 'card'; p.setAttribute('data-rt-probe', ''); document.querySelector('main.obos-v2')!.appendChild(p); });
   const blur = (): Promise<string> => page.evaluate(() => getComputedStyle(document.querySelector('[data-rt-probe]')!).backdropFilter);
   expect(await blur(), 'a live Glass card blurs').not.toBe('none');
+  /* S2 audit F5: no blurred surface inside another. The Key button is a .place inside the blurred toolbar. */
+  const nested = await page.evaluate(() => { const b = document.querySelector('.toolbar .place'); const t = document.querySelector('.toolbar'); return [t && getComputedStyle(t).backdropFilter, b && getComputedStyle(b).backdropFilter]; });
+  expect(nested[0], 'the toolbar blurs under live Glass').not.toBe('none');
+  expect(nested[1], 'the Key button inside it does not blur again').toBe('none');
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] });
   await expect(root, 'the attribute stays truthful').toHaveAttribute('data-glass', 'flat');

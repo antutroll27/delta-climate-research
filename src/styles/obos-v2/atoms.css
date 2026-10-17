@@ -123,6 +123,10 @@ html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] :is(.card, .s
     -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--glass-fallback);
   }
 }
+/* S2 audit F5: no blurred surface inside another. The Key button is a .place inside the blurred toolbar; it takes the toolbar's blur
+   (and, closed, its fill). Open, it keeps its inverted fill. Must follow the live rule above. */
+html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] .toolbar .place { -webkit-backdrop-filter: none; backdrop-filter: none; }
+html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] .toolbar .place:not([aria-expanded="true"]) { background: transparent; }
 html[data-ui="v2"] .obos-v2[data-cards="glass"]:not([data-glass="live"]) :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
   background: var(--glass-fallback);
 }
