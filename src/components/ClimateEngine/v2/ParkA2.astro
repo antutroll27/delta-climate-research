@@ -1,6 +1,7 @@
 ---
 // src/components/ClimateEngine/v2/ParkA2.astro — OBOS v2 spec §3.8, §4.1, §4.8. Owner: Track A. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
-// Parked: the crumb, the rig, the data fragment (loadchip, sun line, ring labels, cool tag, landmarks, selection, aside, legend leftovers, street modal) and the no-data card, until S3–S5.
+// Parked: the crumb, the rig, the data fragment (loadchip, sun line, ring labels, cool tag, landmarks, selection, #patternNote, street modal) and the no-data card, until S3–S5.
+// S3.2 re-homed the right aside and the legend into TempCard; #patternNote leaves in S3.3 (HeatCards).
 import ConstructionStamp from '../../states/ConstructionStamp.astro';
 import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
@@ -72,74 +73,8 @@ const { scope } = Astro.props;
     <div class="bsel" id="bsel" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       {/* S4 */}
       {/* S3 */}
-    <aside class="panel right">
-      {/* AIR FIRST (founder decision 1, 2026-10-07). The surface figure used to be the
-          big number here and was read as the air temperature — 46.7 °C in the rain.
-          What a person feels is the air; the modelled ground and rooftops follow,
-          labelled as what they are. The source line names where "now" came from. */}
-      <div class="metric livem">
-        <div class="k"><span id="liveSrc">Air now</span> <span class="livedot" id="livedot"></span></div>
-        {/* ONE ROW: air leads; feels-like, humidity and wind stack beside it. A separate
-            RH/wind grid cost the rail ~40 px and pushed the legend under its fold. */}
-        <div class="airrow">
-          <div class="air"><b id="liveT">—</b><span class="u">°C air</span></div>
-          <div class="side">
-            <div class="feel"><b id="liveFeel">—</b><span class="u">°C feels</span></div>
-            <div class="aux"><span id="liveRH">—</span>% RH · <span id="liveWind">—</span> m/s</div>
-          </div>
-        </div>
-      </div>
-      <div class="metric">
-        <div class="k surface-k">Ground &amp; rooftop surface · <span id="lstPhase">modelled now</span></div>
-        <div class="lst sec" id="lst" style="color:var(--red)">—<span class="u">°C</span></div>
-        <div class="conf" id="conf"></div>
-        {/* THE SEASON'S WARNING, when the current month is one in which the displayed
-            mean breaks its own band (accuracy.ts SEASONAL_CAVEATS). Painted by the
-            instrument from the committed artefact; hidden the rest of the year. */}
-        <p class="season-note" id="seasonNote" hidden></p>
-        {/* WHAT THE FIGURES BELOW ARE TAKEN OVER, for an area with an administrative
-            boundary (ward-mask.ts): the mean, the share above 40 °C and the
-            histogram are the polygon's, not the square's. Painted by the instrument;
-            hidden for an area whose square is its study area. */}
-        <p class="ward-scope" id="wardScope" hidden></p>
-        {/* THE WEATHER LINE: condition, source, distance and observation time, and
-            what the model is doing about it. Painted by the instrument (paintLive). */}
-        <p class="wx-line" id="wxLine" hidden></p>
-      </div>
-      <div class="mrow">
-        <div><div class="k" title="Modelled land-cover thermal contrast: this ward's mean surface temperature minus a fully-vegetated reference cell under identical forcing. NOT a measured urban heat island — published Kolkata surface UHI is 0.85–1.5 °C from 1 km satellite data, a different quantity.">Δ vs all-green ref</div><div class="val" style="color:var(--cyan)" id="uhi">—</div></div>
-        <div><div class="k">Surface above 40 °C</div><div class="val" style="color:var(--red-ink)" id="area">—</div></div>
-      </div>
-      <div class="metric sep" style="padding-bottom:0"><div class="k">Surface temperature distribution</div></div>
-      <div class="histo" id="histo"></div>
-      {/* The ward record used to end this card. It is now the Reports pane's one
-          piece of content — a download named after itself, in the section named
-          after it, rather than a bronze button under a histogram. One element, one
-          id; `updateReportHref` still finds it by name. */}
-    </aside>
       {/* S3/S7 */}
-    <div class="legend-parked">
-      <div class="k legend-head" style="margin-bottom:.6rem"><span>What the colours mean</span></div>
-      {/* `style` is an attribute whose CONTENT is CSS, unlike `stroke` above, so
-          `var()` resolves here normally. These swatches are inside `.stage`, which
-          is where the tokens are declared. */}
-      <div class="cindex">
-        <div class="ci"><span class="d" style="background:var(--red)"></span>Extreme</div>
-        <div class="ci"><span class="d" style="background:var(--orange)"></span>Severe</div>
-        <div class="ci"><span class="d" style="background:var(--bronze)"></span>Hot</div>
-        <div class="ci"><span class="d" style="background:var(--sage)"></span>Warm</div>
-        <div class="ci"><span class="d" style="background:var(--cyan)"></span>Comfortable</div>
-      </div>
-      <div class="k" style="margin:.9rem 0 .5rem"><span>Land Surface Temp</span><span>°C</span></div>
-      <div class="ramp"></div>
-      <!-- filled by syncRamp(): the scale moves with the weather, so hardcoded
-           numbers here would contradict the colours above them. -->
-      <div class="sc" id="rampSc"><span>26</span><span>32</span><span>37</span><span>42</span><span>48</span></div>
-      <!-- Filled from accuracy.ts SPATIAL, never hardcoded here: the legend is
-           where a reader goes to interpret the colours, so it is where the limit
-           of what the colours mean belongs. -->
-      <p class="pattern-note" id="patternNote"></p>
-    </div>
+    <p class="pattern-note" id="patternNote"></p>
       {/* S4 */}
   <div class="svmodal" id="svModal" hidden>
     <div class="svmodal-card">
