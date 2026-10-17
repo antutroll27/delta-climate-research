@@ -33,6 +33,10 @@ export function bindSolarRows(ctx: ShellCtx): void {
   observe(cleanup, document.getElementById('bcard'), { attributes: true, attributeFilter: ['hidden'] }, sync);
   observe(cleanup, document.getElementById('solList'), { childList: true }, sync);
   sync();
+  /* THE SHEET OPENS AT ITS TOP (B-S6 audit F1). The app focuses #spClose, the last control, the moment it un-hides the sheet, and the browser scrolls a tall sheet
+     to it. Focus stays on Close (reachable in the sticky button row, keyboard behaviour unchanged); only the scroll offset is put back, after the app's own call has run. */
+  const sheet = document.getElementById('solPay');
+  observe(cleanup, sheet, { attributes: true, attributeFilter: ['hidden'] }, () => { if (sheet && !sheet.hasAttribute('hidden')) sheet.scrollTop = 0; });
 }
 
 export function bindWeather(ctx: ShellCtx): void {
