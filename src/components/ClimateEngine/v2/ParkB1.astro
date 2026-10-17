@@ -1,8 +1,6 @@
 ---
 // src/components/ClimateEngine/v2/ParkB1.astro — OBOS v2 spec §4.6, §4.4, §4.9. Owner: Track B. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
-// Parked: the report-link fragment, #airPane and #airStatus, until S7.1 and S7.3. (The solar pane-body left in S6.1.)
-import { isAirCity } from '../../../lib/aqi/stations.ts';
-import { UNCOVERED_NOTE } from '../../../scripts/climate-engine/air/air-panel.ts';
+// Parked: the report-link fragment, until S7.3. (The solar pane-body left in S6.1; #airPane and #airStatus in S7.1.)
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
@@ -20,9 +18,3 @@ const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
             was measured, with what error, from which datasets — and there is no measurement here
             to state.</p>
           )}
-    {/* S7 */}
-        <section class="pane-body" id="airPane" aria-labelledby="pane-air-h">
-          <p class="pane-h" id="pane-air-h">Air · <span id="airPaneArea">{scope.area.name}</span></p>
-          <p class="pane-note" id="airPaneBody">{isAirCity(scope.key) ? 'Loading air quality…' : UNCOVERED_NOTE}</p>
-        </section>
-      <p class="aq-sr" id="airStatus" role="status" aria-live="polite"></p>

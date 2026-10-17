@@ -141,5 +141,6 @@ test('S7.1 Air: the stylesheet draws bands only through --c-*/--aq-*, borrows no
   assert.ok(!/var\(--(heat-[1-5]|cyan|orange|red|bronze|sage|gold|sun)\)/.test(AIR_CSS), 'air.css uses a heat-ramp colour: temperature only');
   assert.match(AIR_CSS, /\.chip\.old\s*\{[^}]*background:\s*var\(--ink-1\);[^}]*color:\s*var\(--on-ink\)/, '.chip.old is ink on ink (spec §2.4), never red');
   assert.match(AIR_CSS, /\.chip\.live[^{]*\{[^}]*\}/, '.chip.live is styled as a measured kind');
+  assert.match(AIR_CSS, /\.num\s*\{[^}]*color:\s*var\(--ink-1\)\s*!important/, 'the AQI numeral is ink; the band colour rides the dot beside the band word');
   assert.ok(!/violet|purple/i.test(AIR_CSS));
 });
