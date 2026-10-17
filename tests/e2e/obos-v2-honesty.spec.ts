@@ -7,14 +7,8 @@ const pm = (s: string) => (s.match(/±/g) ?? []).length;
 /** the rail icon, not the item centre: in icons mode the rail is clipped to 72 px (S2 audit F10) */
 const go = (page: Page, section: string) => page.locator(`.nav-item[data-section="${section}"]`).click({ position: { x: 30, y: 22 } });
 
-/** The phase control is the Explore panel's (S5.1); until it is built it is parked and hidden, with the app's handlers still bound, and HTMLElement.click() fires them.
-    A-S3 audit F3: the guard below FAILS the moment S5.1 makes #segPhase visible, so this stopgap cannot survive into the flip.
-    S5 GATE: replace this body with a real `.click()` on the visible button; no `evaluate(... .click())` may remain in tests/e2e/obos-v2-*.ts. */
-const phase = async (page: Page, p: string): Promise<void> => {
-  const b = page.locator(`#segPhase button[data-p="${p}"]`);
-  await expect(b, '#segPhase is visible now (S5.1 landed): convert phase() to a real click').toBeHidden();
-  await b.evaluate((x) => (x as HTMLElement).click());
-};
+/** The phase control is the Explore panel's, visible since S5.1: a real click, as a reader does it (A-S3 audit F3 closed). */
+const phase = (page: Page, p: string): Promise<void> => page.locator(`#segPhase button[data-p="${p}"]`).click();
 
 /** A-S3 audit F2: the ward mark wears #lst's own class colour, and only a heat-ramp one (lstColor writes cyan/bronze/orange/red; the bridge maps each to --heat-*). */
 async function markFollowsHero(page: Page): Promise<void> {

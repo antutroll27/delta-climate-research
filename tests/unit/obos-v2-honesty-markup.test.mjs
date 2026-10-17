@@ -223,3 +223,56 @@ test('the binder listens to the app\'s own source event and mounts with the shel
   assert.ok(shell.includes('bindMirrors(ctx)'), 'bindMirrors is the mount point');
   assert.match(src, /export function bindMirrors[^]*bindAirKind\(ctx\)/, 'bindMirrors must start the air-kind binder');
 });
+
+/* ── S5: Explore the ward, Scenarios, the no-artefacts page ── */
+const PANE = readFileSync('src/components/ClimateEngine/shell/InterventionPane.astro', 'utf8');
+
+test('S5.1: the Explore panel hosts the real switcher and the real toolbox, once, and nothing else owns their ids', () => {
+  const ex = V2('ExploreSide.astro');
+  assert.match(ex, /<div class="sp-body ov-panel" data-side-pane="explore">/);
+  assert.ok(ex.includes('<ScopeSwitcher current={scope.key} />'), 'the app\'s own Location switcher');
+  assert.ok(ex.includes('<InterventionPane scope={scope} />'), 'the app\'s own toolbox');
+  assert.ok(ex.includes('Explore the ward') && ex.includes('Every result is the live map’s own.'));
+  assert.ok(ex.includes('data-side-close'), 'the panel closes through the shell\'s own handler');
+  assert.ok(!/<ScopeSwitcher|<InterventionPane/.test(V2('ParkA1.astro').replace(/^---[\s\S]*?---/, '')), 'the parked copies must be gone');
+});
+
+test('S5.1: the toolbox keeps v1\'s real ranges and steps (the pane file is unchanged and v2 never types a range)', () => {
+  assert.ok(PANE.includes('id="ivTrees" min="0" max="50" value="0"'));
+  assert.ok(PANE.includes('id="ivRoof" min="0" max="100" value="0" step="5"'));
+  assert.ok(PANE.includes('id="ivFacades" min="0" max="15" value="0"'));
+  assert.ok(!/type="range"/.test(V2('ExploreSide.astro')), 'v2 must not draw its own sliders');
+});
+
+test('H16: Resilience says "Coming soon" and the score block stays withdrawn (inert, hidden): no number is ever drawn', () => {
+  assert.ok(PANE.includes('WITHDRAWN 2026-09-17'));
+  assert.ok(PANE.includes('<p class="soon"><b>Resilience Score</b><span>Coming soon</span></p>'));
+  const css = strip(CSS('explore.css'));
+  assert.match(css, /\.scorebox\[data-soon\] \.scorebox-body \{ display: none; \}/);
+});
+
+test('S5.1: no-data Explore carries v1\'s empty-toolbox text word for word', () => {
+  const stageBlock = /<p class="pane-h" id="pane-map-h">Interventions<\/p>([\s\S]*?)<\/section>/.exec(STAGE)?.[1];
+  assert.ok(stageBlock, 'v1\'s no-data pane text moved');
+  const norm = (t) => t.replace(/\{' '\}/g, ' ').replace(/\s+/g, ' ').trim();
+  const wanted = [...stageBlock.matchAll(/<p class="pane-note">([\s\S]*?)<\/p>/g)].map((m) => norm(m[1]));
+  const ex = norm(V2('ExploreSide.astro'));
+  for (const w of wanted) assert.ok(ex.includes(w), `v1 sentence missing from ExploreSide: ${w.slice(0, 60)}`);
+});
+
+test('S5.1: v2 restyles the v1 select control without a second copy: the scoped v1 colours are overridden under the v2 root', () => {
+  const css = strip(CSS('explore.css'));
+  for (const sel of ['.field', '.field-key', '.field-value', '.field-list', '.scope-tier']) assert.ok(css.includes(sel), `${sel} is not restyled`);
+  assert.ok(!/#[0-9a-f]{3,8}\b|rgba?\(/i.test(css), 'explore.css spells a colour literal');
+});
+
+test('S5: the Explore text for every area is derived, never an empty slab: ExploreSide always has the head and a scroller', () => {
+  const ex = V2('ExploreSide.astro');
+  assert.ok(ex.includes('<div class="sp-head">') && ex.includes('<div class="sp-scroll">'));
+});
+
+test('A-S3 F3 closed: no stopgap click survives in Track A\'s honesty spec (phase() is a real click on a visible control)', () => {
+  const spec = readFileSync('tests/e2e/obos-v2-honesty.spec.ts', 'utf8');
+  assert.ok(!/evaluate\([^)]*\.click\(\)/.test(spec), 'an evaluate(... .click()) remains in obos-v2-honesty.spec.ts');
+  assert.match(spec, /const phase = \(page: Page, p: string\): Promise<void> => page\.locator\(`#segPhase button\[data-p="\$\{p\}"\]`\)\.click\(\);/);
+});

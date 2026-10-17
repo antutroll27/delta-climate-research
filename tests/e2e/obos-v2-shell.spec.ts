@@ -1,6 +1,6 @@
 // tests/e2e/obos-v2-shell.spec.ts
 import { expect, test } from '@playwright/test';
-import { openV2 } from './obos-v2-helpers';
+import { openV2, stubWeather } from './obos-v2-helpers';
 
 test.describe('@v2 shell', () => {
   test.setTimeout(180_000);
@@ -278,4 +278,93 @@ test.describe('@v2 shell', () => {
     expect(pill!.x + pill!.width, 'the pill ends before the right column starts').toBeLessThanOrEqual(col!.x);
     expect(pill!.y, 'and sits below the compass').toBeGreaterThanOrEqual(compass!.y + compass!.height);
   });
+  /* ── S5.1: Explore the ward (plan S5.1; every control is the app's own and every result is the live map's) ── */
+  test('@v2 Explore: the toolbox, phase and pathway are the app\'s controls and move the reading; Resilience says Coming soon, with no number', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await stubWeather(page, '2026-10-07T06:05:00Z');
+    await openV2(page);
+    const pane = page.locator('[data-side-pane="explore"]');
+    await expect(pane).toBeVisible();
+    await expect(pane.locator('h2')).toHaveText('Explore the ward');
+    /* the real ranges, from v1's pane */
+    for (const [id, min, max, step] of [['ivTrees', '0', '50', null], ['ivRoof', '0', '100', '5'], ['ivFacades', '0', '15', null]] as const) {
+      await expect(pane.locator(`#${id}`)).toBeVisible();
+      await expect(pane.locator(`#${id}`)).toHaveAttribute('min', min);
+      await expect(pane.locator(`#${id}`)).toHaveAttribute('max', max);
+      if (step) await expect(pane.locator(`#${id}`)).toHaveAttribute('step', step);
+    }
+    /* Resilience: withdrawn; the words, no figure */
+    await expect(pane.locator('.scorebox .soon')).toContainText('Coming soon');
+    await expect(pane.locator('.scorebox-body')).toBeHidden();
+    await expect(pane.locator('#scoreNum')).toBeHidden();
+    /* sliders: the readouts follow and the reading moves (the app's scenario logic, not ours) */
+    const before = await page.locator('#lst').textContent();
+    await pane.locator('#ivTrees').fill('50');
+    await expect(pane.locator('#v1')).toHaveText('50');
+    await pane.locator('#ivRoof').fill('100');
+    await expect(pane.locator('#v2')).toHaveText('100%');
+    await pane.locator('#ivFacades').fill('15');
+    await expect(pane.locator('#v4')).toHaveText('15');
+    await expect.poll(() => page.locator('#lst').textContent(), { timeout: 30_000 }).not.toBe(before);
+    await expect(page.locator('[data-v2-mirror="lst"]')).toHaveText(/^\d+\.\d.?C$/);
+    await expect(page.locator('.ov-hero')).toHaveAttribute('aria-hidden', 'true');                // a read-only mirror: the real readout is the temperature card
+  });
+
+  test('@v2 Explore: every phase and pathway button is a real click on a visible control', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await stubWeather(page, '2026-10-07T06:05:00Z');
+    await openV2(page);
+    const phase = page.locator('[data-side-pane="explore"] #segPhase');
+    await expect(phase.locator('button')).toHaveText(['Now', '13:00 Peak', '22:00 Retained', 'Heatwave']);
+    for (const [p, label] of [['peak', 'modelled at 13:00'], ['night', 'modelled at 22:00'], ['heatwave', 'modelled at 13:00 · 1-in-100 heat'], ['now', 'modelled now']] as const) {
+      await phase.locator(`button[data-p="${p}"]`).click();
+      await expect(phase.locator(`button[data-p="${p}"]`)).toHaveClass(/\bon\b/);
+      await expect(page.locator('#lstPhase')).toHaveText(label, { timeout: 30_000 });
+    }
+    const path = page.locator('[data-side-pane="explore"] #segPath');
+    await expect(path.locator('button')).toHaveCount(3);
+    await phase.locator('button[data-p="night"]').click();
+    await expect(page.locator('#conf')).toContainText('Calibrated', { timeout: 30_000 });
+    const base = await page.locator('#lst').textContent();
+    await path.locator('button').nth(2).click();
+    await expect(path.locator('button').nth(2)).toHaveClass(/\bon\b/);
+    await expect.poll(() => page.locator('#lst').textContent(), { timeout: 30_000 }).not.toBe(base);
+  });
+
+  test('@v2 Explore: the area switch from the side panel goes through the app\'s own switcher; the panel closes and the menu reopens it', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openV2(page);
+    await page.locator('#scope-area-trigger').click();
+    await expect(page.locator('#scope-area-trigger')).toHaveAttribute('aria-expanded', 'true');
+    await page.locator('#scope-area-list li[data-value="in/kolkata/barrackpore"]').click();
+    await expect(page.locator('main.obos-v2')).toHaveAttribute('data-area', 'in/kolkata/barrackpore', { timeout: 30_000 });
+    await expect(page.locator('#crumbArea')).toHaveText('Barrackpore');
+    await expect(page.locator('select[data-scope="area"]')).toHaveValue('in/kolkata/barrackpore');
+    /* close, then the menu brings it back */
+    await page.locator('[data-side-pane="explore"] [data-side-close]').click();
+    await expect(page.locator('main.obos-v2')).toHaveAttribute('data-side-shown', '0');
+    await page.locator('.nav-item[data-section="overview"]').click({ position: { x: 30, y: 22 } });
+    await expect(page.locator('main.obos-v2')).toHaveAttribute('data-side-shown', '1');
+  });
+
+  /* the S2 audit's gate addition: the Explore pane is never an empty slab, on any area, in either section it serves */
+  for (const path of ['/heat-map/in/kolkata/ballygunge/', '/heat-map/in/bengaluru/mg-road/', '/heat-map/ae/dubai/al-quoz/']) {
+    test(`@v2 Explore is never an empty slab: ${path}`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await openV2(page, path);
+      for (const section of path.includes('/ae/') ? ['overview'] : ['overview', 'scenarios']) {       // Al Quoz: Scenarios is disabled (nothing ships)
+        const item = page.locator(`.nav-item[data-section="${section}"]`);
+        const pane = page.locator('[data-side-pane="explore"]');
+        if (!(await pane.isVisible()) || (await item.getAttribute('aria-current')) !== 'true') await item.click({ position: { x: 30, y: 22 } });
+        if (!(await pane.isVisible())) await item.click({ position: { x: 30, y: 22 } });
+        await expect(pane).toBeVisible();
+        const box = await pane.boundingBox();
+        expect(box!.height, 'a panel with content is taller than its head').toBeGreaterThan(200);
+        await expect(pane.locator('#scope-area-trigger')).toBeVisible();
+        expect(await pane.locator('.sp-scroll').evaluate((e) => e.scrollHeight)).toBeGreaterThan(150);
+        if (path.includes('/ae/')) await expect(pane).toContainText('There is nothing to intervene in here.');
+        else await expect(pane.locator('#ivTrees')).toBeVisible();
+      }
+    });
+  }
 });

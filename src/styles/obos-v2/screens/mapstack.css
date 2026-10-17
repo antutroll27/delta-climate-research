@@ -53,7 +53,7 @@ html[data-ui="v2"] .obos-v2 .scale .maplibregl-ctrl-scale { position: static; fl
 
 /* ── the Ward card ── */
 html[data-ui="v2"] .obos-v2 .wardc > .row { gap: 6px; min-width: 0; align-items: center; }
-html[data-ui="v2"] .obos-v2 .crumb { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; display: flex; align-items: center; gap: 2px; min-height: 24px;
+html[data-ui="v2"] .obos-v2 .crumb { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0 2px; min-height: 24px;
   font: 400 11px/1.2 var(--sans); letter-spacing: -0.005em; text-transform: none; color: var(--ink-2); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
 html[data-ui="v2"] .obos-v2 .crumb b { font-weight: 700; color: var(--ink-1); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 html[data-ui="v2"] .obos-v2 .crumb > span:not(.crumb-g) { flex: none; }
