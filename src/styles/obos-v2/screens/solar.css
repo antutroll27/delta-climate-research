@@ -52,7 +52,9 @@ html[data-ui="v2"] .obos-v2 .sl-csv[hidden] { display: none; }
 html[data-ui="v2"] .obos-v2 .sl-csv svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ───────────── the ward's solar card: the headline, and its strict-mask floor in the same row ───────────── */
-html[data-ui="v2"] .obos-v2 .sl-ward .bleed-room { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+html[data-ui="v2"] .obos-v2 .sl-ward .bleed-room { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding-right: 62px; }
+/* the float spacer would be a stacked flex item here: a dead band at the card's top. The mark's room is padding instead (B-S6 audit F4) */
+html[data-ui="v2"] .obos-v2 .sl-ward .bleed-room::before { content: none; }
 html[data-ui="v2"] .obos-v2 .sl-ward .name-xl { margin-top: 0; }
 html[data-ui="v2"] .obos-v2 .sl-ward .interval { margin-top: 14px; gap: 4px 12px; }
 html[data-ui="v2"] .obos-v2 .sl-ward .hero { font-size: 44px; }
