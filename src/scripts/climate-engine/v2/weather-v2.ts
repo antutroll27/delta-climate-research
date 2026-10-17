@@ -104,7 +104,7 @@ export function bindWeather(ctx: ShellCtx): void {
       const why = has ? `No airport report in the last ${METAR_STALE_MIN} minutes.` : 'No airport reports held for this city.';
       set('where', src.kind === 'forecast' ? 'Met Norway forecast' : 'No reading');
       set('when', why);
-      set('tfoot', src.kind === 'forecast' ? 'The forecast for this point, to a tenth of a degree, not a measurement.' : '');
+      set('tfoot', '');
       for (const k of ['dew', 'wdir', 'qnh', 'raw']) set(k, '');
       for (const k of ['sky', 'vis']) set(k, '—');
       if (filed) { filed.hidden = true; filed.open = false; }
