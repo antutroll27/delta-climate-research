@@ -1,13 +1,26 @@
 // tests/e2e/obos-v2-air-weather.spec.ts — OBOS v2 spec §4.4, §4.5 [H] (Track B, plan S7.1 and S7.2)
 import { expect, test, type Page } from '@playwright/test';
 import { cpcbBallygunge, stubAir } from './aqi-cpcb-stub';
-import { METAR, openV2, stubWeather } from './obos-v2-helpers';
+import { METAR, METNO, openV2, stubWeather } from './obos-v2-helpers';
 
 /** The icon, not the item's centre: in icons mode the centre is clipped away (S2 audit F10). */
 const go = (page: Page, section: string): Promise<void> => page.locator(`.nav-item[data-section="${section}"]`).click({ position: { x: 30, y: 22 } });
 /** VECC's reports for the four hours the app holds in production (api/metar.ts HOURS = 4), up to 06:00Z on 2026-10-07; only the newest carries rain. */
 const FOUR_HOURS = METAR.filter((r) => r.icaoId === 'VECC' && /^METAR VECC 0702|^METAR VECC 0703|^METAR VECC 0704|^METAR VECC 0705|^METAR VECC 0706/.test(r.rawOb))
   .map((r) => ({ icao: r.icaoId, raw: r.rawOb }));
+/** a mutable weather world (B-S7 audit F7): met.no on or off, the airport list, the server clock; re-read with a #clockAge click */
+function world(page: Page): { now: string; metno: boolean; reports: { icao: string; raw: string }[] } {
+  const w = { now: '2026-10-07T06:05:00Z', metno: true, reports: FOUR_HOURS };
+  void page.route(/\/api\/live\?/, (route) => w.metno
+    ? route.fulfill({ status: 200, contentType: 'application/json', headers: { date: new Date(w.now).toUTCString(), age: '0' }, body: METNO })
+    : route.fulfill({ status: 503, body: 'down' }));
+  void page.route(/\/api\/metar\?/, (route) => {
+    const ids = new URL(route.request().url()).searchParams.get('ids')?.split(',') ?? [];
+    void route.fulfill({ status: 200, contentType: 'application/json', headers: { date: new Date(w.now).toUTCString() },
+      body: JSON.stringify({ source: 'aviationweather.gov', fetchedAt: '2026-10-07T06:09:00.000Z', reports: w.reports.filter((r) => ids.includes(r.icao)) }) });
+  });
+  return w;
+}
 /** a colour as the browser computes it, from any CSS colour expression, probed inside the element it will be used in */
 const resolved = (page: Page, sel: string, css: string): Promise<string> => page.locator(sel).first().evaluate((el, c) => {
   const p = document.createElement('span'); p.style.color = c; el.appendChild(p);
@@ -112,7 +125,9 @@ test.describe('@v2 air and weather', () => {
     await openV2(page);
     await go(page, 'weather');
     await expect(page.locator('[data-wx="where"]')).toHaveText('Met Norway forecast', { timeout: 60_000 });
-    await expect(page.locator('[data-wx="when"]')).toHaveText('The newest airport report is older than 90 minutes.');
+    await expect(page.locator('[data-wx="when"]')).toHaveText('No airport report in the last 90 minutes.');
+    /* B-S7 audit F3: no invented precision line under the forecast temperature */
+    await expect(page.locator('[data-wx="tfoot"]')).toHaveText('');
     const chip = page.locator('[data-v2-card="weather-now"] [data-wx="chip"]');
     await expect(chip).toHaveText('forecast');
     await expect(chip).toHaveClass(/modelled/);
@@ -122,5 +137,41 @@ test.describe('@v2 air and weather', () => {
     /* the rain card claims no observation either */
     await expect(page.locator('[data-v2-card="rain"] .kind')).not.toHaveText('observed');
     await expect(page.locator('[data-wx="rain-cells"] li')).toHaveCount(0);
+  });
+
+  test('@v2 [H] Weather: no reading at all says "no reading", claims no source, and says no airport report (not that one is old)', async ({ page }) => {
+    /* B-S7 audit F2, F7: met.no down and an empty airport list */
+    const w = world(page); w.metno = false; w.reports = [];
+    await openV2(page);
+    await go(page, 'weather');
+    const chip = page.locator('[data-v2-card="weather-now"] [data-wx="chip"]');
+    await expect(chip).toHaveText('no reading', { timeout: 60_000 });
+    await expect(chip).toHaveClass(/modelled/);
+    await expect(page.locator('[data-v2-card="weather-now"] [data-wx-src="observed"]')).toBeHidden();
+    await expect(page.locator('[data-wx="where"]')).toHaveText('No reading');
+    await expect(page.locator('[data-wx="when"]')).toHaveText('No airport report in the last 90 minutes.');
+    await expect(page.locator('[data-wx="rain-sum"]')).not.toContainText('older than');
+    await expect(page.locator('[data-wx="rain-cells"] li')).toHaveCount(0);
+  });
+
+  test('@v2 [H] Weather: fresh, then a stale clock, then fresh again, in one session; each flip is true and clears what it should', async ({ page }) => {
+    /* B-S7 audit F7: the live transition, driven by the ward clock's own re-read */
+    const w = world(page);
+    await openV2(page);
+    await go(page, 'weather');
+    const chip = page.locator('[data-v2-card="weather-now"] [data-wx="chip"]');
+    await expect(chip).toHaveText('observed', { timeout: 60_000 });
+    await expect(page.locator('[data-wx="rain-cells"] li')).toHaveCount(FOUR_HOURS.length);
+    w.now = '2026-10-07T08:05:00Z';
+    await page.locator('#clockAge').click();
+    await expect(chip).toHaveText('forecast', { timeout: 30_000 });
+    await expect(page.locator('[data-v2-card="weather-now"] [data-wx-src="forecast"]')).toBeVisible();
+    await expect(page.locator('[data-wx="rain-cells"] li')).toHaveCount(0);
+    await expect(page.locator('[data-wx="decode"] li')).toHaveCount(0);
+    w.now = '2026-10-07T06:05:00Z';
+    await page.locator('#clockAge').click();
+    await expect(chip).toHaveText('observed', { timeout: 30_000 });
+    await expect(page.locator('[data-v2-card="weather-now"] [data-wx-src="observed"]')).toBeVisible();
+    await expect(page.locator('[data-wx="rain-cells"] li')).toHaveCount(FOUR_HOURS.length);
   });
 });

@@ -51,7 +51,7 @@ test('receipts: v1\'s button words and ids, data areas only; no panel text is ty
 });
 
 test('the ward brief link, and every licence a real https link', () => {
-  assert.match(CODE, /href="\/heat-map\/brief\/"[^>]*>Open the ward brief →</);
+  assert.match(CODE, /<a class="cta" data-v2-brief href="\/heat-map\/brief\/">Open the ward brief →</, 'the brief link is marked so the binder can point it at THIS ward');
   for (const [name, l] of Object.entries(LICENCES)) assert.match(l.url, /^https:\/\//, `${name} has no https url`);
   assert.match(CODE, /Object\.entries\(LICENCES\)/);
   assert.match(CODE, /target="_blank" rel="noopener noreferrer"/);
@@ -61,4 +61,29 @@ test('the ward brief link, and every licence a real https link', () => {
 test('honesty words: "checked", never "validated"; no tier colour; no banned money word', () => {
   assert.ok(!/\bvalidated\b/i.test(CODE), 'the solar/accuracy tier word is "checked"');
   assert.ok(!/guarantee|ROI of/i.test(CODE));
+});
+
+test('F4 (B-S7 audit): no numeric literal hides inside a {…} expression, with or without a comment naming the export', () => {
+  /* two or more digits, or a decimal: an index like `i > 0` is not a figure */
+  const NUM = /(?<![\w.])(?:\d{2,}|\d+\.\d+)(?![\w])/;
+  /* a literal in an expression, comments and the allowed forms removed; a Sym's pixel size is a prop, not a figure */
+  const typed = (raw) => NUM.test(raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/toFixed\(\d\)|1e6|1000/g, ''));
+  const exprs = [...CODE.replace(/size=\{\d+\}/g, 'size=SZ').matchAll(/\{([^{}]*)\}/g)].map((m) => m[1]);
+  assert.ok(exprs.length > 10, 'the scan found the expressions');
+  for (const raw of exprs) assert.ok(!typed(raw), `a number is typed inside {${raw}}`);
+  /* the guard guards itself: the mutation that survived the first test (a figure typed beside a comment naming its export) is caught */
+  assert.ok(typed('29 /* ACCURACY.peak.n */'), 'the scan must catch a typed figure beside a comment');
+  assert.ok(typed("'0.93'.length + 2207"));
+  assert.ok(!typed('ACCURACY.night.bandK.toFixed(1)') && !typed('(m2 / 1e6).toFixed(2)'));
+});
+
+test('F8: a unit never runs into its figure for a screen reader (a space before every <small> in a stat)', () => {
+  for (const f of ['MethodsCards.astro', 'WeatherCards.astro']) {
+    const src = readFileSync(`src/components/ClimateEngine/v2/${f}`, 'utf8');
+    for (const m of src.matchAll(/(.)<small>/g)) assert.equal(m[1], ' ', `${f}: <small> follows "${m[1]}" with no space`);
+  }
+});
+
+test('F9: the count grouping choice is recorded where it is made', () => {
+  assert.match(SRC, /en-GB[\s\S]*100,000|100,000[\s\S]*en-GB/, 'MethodsCards records why en-GB and when it would differ from v1');
 });

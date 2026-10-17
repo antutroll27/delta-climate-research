@@ -21,11 +21,14 @@ test.describe('@v2 data and methods', () => {
     await expect(page.locator('[data-v2-for="in/kolkata/ballygunge"][data-v2-record]')).toContainText('km²');
     await expect(page.locator('[data-v2-card="how-sure"]')).toContainText('±3.0 °C');
     await expect(page.locator('[data-v2-card="how-sure"]')).not.toContainText(/validated/i);
-    await expect(page.getByRole('link', { name: 'Open the ward brief →' })).toHaveAttribute('href', '/heat-map/brief/');
+    /* B-S7 audit F1: the brief opens THIS ward (the app's own Compare query, with /brief/ for /compare/), not the default pair */
+    const brief = page.getByRole('link', { name: 'Open the ward brief →' });
+    await expect(brief).toHaveAttribute('href', /^\/heat-map\/brief\/\?.*\ba=ballygunge\b/);
     await page.evaluate(() => document.dispatchEvent(new CustomEvent('obos:open-area', { detail: { key: 'in/kolkata/baruipur' } })));
     await expect(page.locator('#report-link')).toHaveAttribute('href', '/api/wards/baruipur/metadata.json', { timeout: 30_000 });
     await expect(page.locator('[data-v2-for="in/kolkata/baruipur"][data-v2-record]')).toBeVisible();
     await expect(page.locator('[data-v2-for="in/kolkata/ballygunge"][data-v2-record]')).toBeHidden();
+    await expect(brief).toHaveAttribute('href', /^\/heat-map\/brief\/\?.*\ba=baruipur\b/);
     const links = await page.locator('[data-v2-card="licences"] a').evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).href));
     expect(links.length).toBeGreaterThan(3);
     for (const h of links) expect(h).toMatch(/^https:\/\//);

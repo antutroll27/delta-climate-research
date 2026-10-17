@@ -1,7 +1,7 @@
 // tests/unit/obos-v2-weather-panel.test.mjs — OBOS v2 spec §4.5, H22 [H] (Track B, plan S7.2)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { parseMetar } from '../../src/lib/weather/metar.ts';
 import { decodeRows, rainMemory, wardTime, weatherSource } from '../../src/scripts/climate-engine/v2/weather-panel.ts';
 
@@ -71,4 +71,35 @@ test('the bound script writes the chip and the mark from weatherSource, not from
   assert.match(src, /weatherSource\(/);
   assert.match(src, /data-wx-src/);
   assert.match(src, /obos:observed/);
+});
+
+test('F2/F3/F8 (B-S7 audit): the no-report sentence is v1\'s truth, no invented precision line, the dew source is named', () => {
+  const src = readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8');
+  assert.ok(src.includes('`No airport report in the last ${METAR_STALE_MIN} minutes.`'), 'F2: the sentence must not claim a report exists');
+  assert.ok(!/older than/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')), 'F2: "older than" claims a report');
+  assert.ok(!/to a tenth of a degree/.test(src), 'F3: an invented precision line');
+  assert.match(src, /set\('tfoot', ''\)/, 'F3: the forecast branch leaves the temperature foot empty');
+  assert.ok(src.includes("'from the Met Norway forecast'"), 'F8: humidity under an observed chip that is met.no\'s says so');
+});
+
+test('F5 (B-S7 audit): the pane\'s sub-index bars are ink, not a band colour with no band word', () => {
+  const css = readFileSync('src/styles/obos-v2/screens/air.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(css, /#airPane \.si i \{[^}]*background: var\(--ink-3\) !important/);
+});
+
+test('F8 (B-S7 audit): the forecast state does not describe rings that are not drawn', () => {
+  const css = readFileSync('src/styles/obos-v2/screens/weather.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(css, /\[data-v2-card="rain"\] \.hrs:empty ~ \.foot \{ display: none; \}/);
+});
+
+test('F6 (B-S7 audit): the solar binder is a recorded request, not a silent smell', () => {
+  assert.ok(existsSync('/Volumes/OBOSLab/obos-v2/requests/b-01-solar-binder.md'), 'requests/b-01-solar-binder.md');
+  assert.match(readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8'), /TODO\(request b-01\)/);
+});
+
+test('F1 (B-S7 audit): the brief link mirrors the app\'s own Compare query', () => {
+  const src = readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8');
+  assert.match(src, /a\[data-rail="analysis"\]/);
+  assert.match(src, /\/heat-map\/compare\/[\s\S]*\/heat-map\/brief\//);
+  assert.match(src, /data-v2-brief/);
 });
