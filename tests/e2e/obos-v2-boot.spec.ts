@@ -49,9 +49,9 @@ test.describe('@v2 boot', () => {
     await expect(page.locator('html')).toHaveAttribute('data-ui', 'v2');
     await expect(page.locator('main.obos-v2')).toHaveCount(1);
     expect(await duplicateIds(page)).toEqual([]);
-    /* S0 audit F4: compare has no v2 tree yet (S9), so the soft hop must not leave data-ui="v2" on it */
-    await soft('/heat-map/compare/');
-    await expect(page).toHaveURL(/\/heat-map\/compare/);
+    /* S0 audit F4: a page with no v2 tree (here /team/; Compare and the brief have one since S9) must not keep data-ui="v2" */
+    await soft('/team/');
+    await expect(page).toHaveURL(/\/team/);
     await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
     expect(await page.evaluate(() => localStorage.getItem('obos:ui')), 'the sticky flag itself must survive').toBe('v2');
   });

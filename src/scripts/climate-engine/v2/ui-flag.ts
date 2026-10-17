@@ -64,7 +64,7 @@ const J = (v: string): string => JSON.stringify(v);
 
 /** Runs in <head>-order before the v1 tree. Query wins; storage answers only without one.
  *  On a soft navigation the new body is already in place (its inline scripts have not run), so the
- *  template is findable: a page without a v2 tree (compare, team) must not keep data-ui="v2". */
+ *  template is findable: a page without a v2 tree (e.g. team) must not keep data-ui="v2". */
 export const UI_PREPAINT_JS = `(function(){
 var d=document.documentElement,K=${J(UI_FLAG_KEY)};
 function apply(){
