@@ -1,1 +1,46 @@
-/* OBOS v2 — screens/methods.css (spec §4.9). Owner: Track B (plan A1). */
+/* OBOS v2 — screens/methods.css (spec §4.9). Owner: Track B (plan A1; S7.3 Step 3). NO HEX HERE (tokens.css owns them).
+   Ported from the preview's screens/reports.html `<style>` for the classes the cards use, and v1's .src-row rules (stage :1826–1844) onto v2 tokens.
+   The `.k` tag on a receipt row is a kind chip: a solid dot for measured, an outlined (dashed) dot for modelled, derived or reference. Never a colour. */
+html[data-ui="v2"] .obos-v2 [data-v2-card] .cta { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 40px; margin-top: 14px; padding: 11px 14px; border: 0; border-radius: 14px;
+  background: var(--ink-1); color: var(--on-ink); font: 600 13px/1.2 var(--sans); cursor: pointer; text-decoration: none; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="record"] .name-xl { margin-top: 10px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="record"] .body-s, html[data-ui="v2"] .obos-v2 [data-v2-card="brief"] .body-s { margin-top: 6px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="brief"] .cta { margin-top: 10px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="record"] [data-v2-record][hidden], html[data-ui="v2"] .obos-v2 [data-v2-card] ul[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="record"] .pane-note { margin-top: 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 [data-v2-card="record"] .stats dd { overflow-wrap: anywhere; }
+
+/* the receipts: v1's button and panel, the panel in the card instead of floating over the map */
+html[data-ui="v2"] .obos-v2 .srcbtn { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 28px; padding: 0; border: 0; background: transparent; cursor: pointer;
+  font: 600 13.5px/1.3 var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink-1); text-align: left; }
+html[data-ui="v2"] .obos-v2 .srcbtn[aria-expanded="true"] { margin-bottom: 8px; }
+html[data-ui="v2"] .obos-v2 .srcpanel { position: static; width: auto; max-height: none; overflow: visible; padding: 0; border: 0; background: transparent; box-shadow: none; border-radius: 0; }
+html[data-ui="v2"] .obos-v2 .srcpanel[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .srcpanel h4 { margin: 0 0 6px; font: var(--micro-weight) var(--micro-size)/1.35 var(--sans); letter-spacing: var(--micro-ls); text-transform: uppercase; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .src-row { padding: 8px 0; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 .src-row:first-of-type { border-top: 0; }
+html[data-ui="v2"] .obos-v2 .src-row .l { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+html[data-ui="v2"] .obos-v2 .src-row .nm { font-weight: 600; font-size: 12.5px; letter-spacing: -0.01em; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .src-row .k { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px 1px 5px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); background: transparent; color: var(--ink-2);
+  font: 600 9.5px/1.6 var(--sans); letter-spacing: 0.06em; text-transform: uppercase; }
+html[data-ui="v2"] .obos-v2 .src-row .k::before { content: ""; width: 7px; height: 7px; border-radius: 50%; box-sizing: border-box; border: 1.25px dashed var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .src-row .k.measured::before { background: var(--ink-1); border: 0; }
+html[data-ui="v2"] .obos-v2 .src-row .s { margin-top: 2px; font-size: 11.5px; line-height: 1.45; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .src-row .s a { color: var(--ink-1); text-underline-offset: 2px; }
+html[data-ui="v2"] .obos-v2 .src-row .meta { margin-top: 3px; font-size: 11px; letter-spacing: 0; color: var(--ink-3); line-height: 1.5; }
+
+/* how sure: key/value rows (atoms' .method), the "is not" list struck through */
+html[data-ui="v2"] .obos-v2 [data-v2-card="how-sure"] .method { margin-top: 6px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="how-sure"] .method li .foot { color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 [data-v2-card="how-sure"] s { text-decoration-thickness: 1px; color: var(--ink-2); }
+
+/* footprints and licences */
+html[data-ui="v2"] .obos-v2 [data-v2-card="licences"] .sym-list { margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="licences"] .lic { margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 .lic li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 9.5em); gap: 2px 10px; padding: 7px 0; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 .lic li:first-child { border-top: 0; }
+html[data-ui="v2"] .obos-v2 .lic .ly { font-size: 12.5px; font-weight: 600; }
+html[data-ui="v2"] .obos-v2 .lic .ds { grid-column: 1; font-size: 11.5px; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .lic .lc { grid-row: 1 / span 2; grid-column: 2; align-self: center; display: inline-flex; align-items: center; min-height: 24px; padding: 3px 9px; border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--line); font-size: 11px; line-height: 1.25; font-weight: 500; color: var(--ink-1); text-decoration: none; text-align: center; overflow-wrap: anywhere; justify-self: end; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="licences"] > .foot { margin-top: 8px; }

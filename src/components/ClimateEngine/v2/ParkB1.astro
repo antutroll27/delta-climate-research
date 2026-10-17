@@ -1,20 +1,4 @@
 ---
-// src/components/ClimateEngine/v2/ParkB1.astro — OBOS v2 spec §4.6, §4.4, §4.9. Owner: Track B. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
-// Parked: the report-link fragment, until S7.3. (The solar pane-body left in S6.1; #airPane and #airStatus in S7.1.)
-import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
-interface Props { scope: ResolvedScope }
-const { scope } = Astro.props;
-const reportHref = `/api/wards/${scope.area.id}/metadata.json`;
+// src/components/ClimateEngine/v2/ParkB1.astro — OBOS v2 spec §4.6, §4.4, §4.9. Owner: Track B. EMPTY since S7.3 (S8 removes the empty Park files).
+// The solar pane-body left in S6.1 (SolarSide), #airPane and #airStatus in S7.1 (AirSide), the report-link fragment in S7.3 (MethodsCards).
 ---
-    {/* S7 */}
-          {scope.area.publishes ? (
-          <Fragment>
-          <p class="pane-note">What is measured, the out-of-sample error and sample size, every
-            source dataset with its licence, and the analysis CRS and bounding box.</p>
-          <a class="cta" id="report-link" href={reportHref} download>Download ward record ↓</a>
-          </Fragment>
-          ) : (
-          <p class="pane-note">No record ships for {scope.area.name}. The ward record states what
-            was measured, with what error, from which datasets — and there is no measurement here
-            to state.</p>
-          )}

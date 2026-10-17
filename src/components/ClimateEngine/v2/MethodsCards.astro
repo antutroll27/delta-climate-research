@@ -1,6 +1,69 @@
 ---
-// src/components/ClimateEngine/v2/MethodsCards.astro — OBOS v2 spec §4.9.
-// A1 SLOT (S2.8): renders nothing until its owner fills it. Owner: Track B, plan S7.3.
-import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+// src/components/ClimateEngine/v2/MethodsCards.astro — OBOS v2 spec §4.9 [H]. Owner: Track B (plan S7.3).
+// Every figure is read: wardRecord() through allWardRecords(), and accuracy.ts. Rendered at build for every area of the city; the per-sibling
+// blocks carry data-v2-for and shell-v2 shows the one whose key is the root's data-area, so an in-place switch needs no re-render.
+// The receipts button and panel are v1's: the app fills #srcPanel from {ward}-layers.json (or "Provenance manifest unavailable.").
+import Sym from './Sym.astro';
+import { allWardRecords, LICENCES } from '../../../scripts/standards/ward-record.ts';
+import { ACCURACY, SPATIAL, HEIGHTS, PEAK_EVIDENCE_BASIS, HEIGHTS_EVIDENCE_BASIS } from '../../../scripts/climate-engine/accuracy.ts';
+import { areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
+import { resolve, type ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
+const records = allWardRecords();
+const sibs = areaKeysInCity(scope.key).map(resolve).map((s) => ({ key: s.key, name: s.area.name, publishes: s.area.publishes, rec: records.find((r) => r.id === s.area.id) ?? null }));
+const km2 = (m2: number) => (m2 / 1e6).toFixed(2);
+const km = (m: number) => (m / 1000).toFixed(1);
+const first = sibs.find((s) => s.rec)?.rec ?? null;
+const shareAlike = sibs.find((s) => s.rec?.boundary)?.rec?.boundary?.shareAlike ?? null;
 ---
+{scope.area.hasData && <article class="card" data-v2-card="receipts" data-sections="methods">
+  <button class="srcbtn disc-btn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
+  <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
+</article>}
+<article class="card" data-v2-card="record" data-sections="methods">
+  <div class="row"><span class="micro">Ward record</span><span class="chip line">prototype</span></div>
+  {sibs.map((s) => (
+    <div data-v2-for={s.key} data-v2-record hidden={s.key !== scope.key}>
+      {s.publishes && s.rec ? (
+        <Fragment>
+          <p class="name-xl"><b>{s.rec.name}</b><span> {s.rec.zone}</span></p>
+          <p class="body-s">What is measured, the out-of-sample error and sample size, every source dataset with its licence, and the analysis CRS and bounding box.</p>
+          <dl class="stats">
+            {s.rec.boundary && <div><dt class="micro">Ward area</dt><dd>{km2(s.rec.boundary.areaM2)}<small>km²</small></dd></div>}
+            {s.rec.boundary && <div><dt class="micro">Buildings</dt><dd>{s.rec.boundary.buildingsInWard.toLocaleString('en-GB')}<small>of {s.rec.boundary.buildingsInDomain.toLocaleString('en-GB')} drawn</small></dd></div>}
+            <div><dt class="micro">Study square</dt><dd>{km(s.rec.footprintM)}<small>km a side</small></dd></div>
+            <div><dt class="micro">Analysis CRS</dt><dd>{s.rec.analysisCrs}</dd></div>
+          </dl>
+        </Fragment>
+      ) : <p class="pane-note">No record ships for {s.name}. The ward record states what was measured, with what error, from which datasets — and there is no measurement here to state.</p>}
+    </div>))}
+  {scope.area.publishes && <a class="cta" id="report-link" href={`/api/wards/${scope.area.id}/metadata.json`} download>Download ward record ↓</a>}
+</article>
+<article class="card" data-v2-card="brief" data-sections="methods">
+  <span class="micro">Ward brief</span>
+  <p class="body-s">The paired scenario brief OBOS prints from Compare.</p>
+  <a class="cta" href="/heat-map/brief/">Open the ward brief →</a>
+</article>
+{first && (
+<article class="card" data-v2-card="how-sure" data-sections="methods">
+  <span class="micro">How sure</span>
+  <ul class="method">
+    <li><span class="micro">Measured</span><span class="foot">{first.quantity.measured}. Not: {first.quantity.isNot.map((x, i) => <Fragment>{i > 0 && ', '}<s>{x}</s></Fragment>)}. {first.quantity.note}</span></li>
+    <li><span class="micro">Night</span><span class="foot">calibrated · ±{ACCURACY.night.bandK.toFixed(1)} °C · n = {ACCURACY.night.n} · model error {ACCURACY.night.modelRmseK} K · ceiling {ACCURACY.night.ceilingRmseK} K</span></li>
+    <li><span class="micro">13:00 peak</span><span class="foot">indicative · ±{ACCURACY.peak.bandK.toFixed(1)} °C · n = {ACCURACY.peak.n}. {PEAK_EVIDENCE_BASIS}</span></li>
+    <li><span class="micro">Pattern</span><span class="foot">r {SPATIAL.rModel.toFixed(2)} block by block, below a vegetation map's r {SPATIAL.rVegOnly.toFixed(2)} · n = {SPATIAL.n}. {SPATIAL.note}</span></li>
+    <li><span class="micro">Heights</span><span class="foot">{HEIGHTS.nBuildings} of {HEIGHTS.minBuildings} buildings needed · {HEIGHTS.verdict}. {HEIGHTS_EVIDENCE_BASIS}</span></li>
+  </ul>
+</article>)}
+<article class="card" data-v2-card="licences" data-sections="methods">
+  <span class="micro">Building footprints and every licence</span>
+  {sibs.map((s) => s.rec && (
+    <ul class="sym-list" data-v2-for={s.key} hidden={s.key !== scope.key}>
+      {s.rec.provenance.footprints.byDataset.map((d) => (
+        <li><span class="sym-tile sm"><Sym shape="square" c="ink" kind={d.traced ? 'measured' : 'modelled'} size={14} /></span>
+          <div><div class="sym-hd"><b>{d.count.toLocaleString('en-GB')}</b> · {d.dataset}</div><div class="sym-sub">{d.traced ? 'traced by people' : 'machine-detected'}</div></div></li>))}
+    </ul>))}
+  <ul class="lic">{Object.entries(LICENCES).map(([name, l]) => <li><span class="ly">{name}</span><span class="ds">{l.holder}</span><a class="lc" href={l.url} target="_blank" rel="noopener noreferrer">{l.licence}</a></li>)}</ul>
+  {shareAlike && <p class="foot">{shareAlike}</p>}
+</article>

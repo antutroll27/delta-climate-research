@@ -42,7 +42,7 @@ test.describe('@v2 data and methods', () => {
     expect(rec.id).toBe('ballygunge');
     const card = page.locator('[data-v2-for="in/kolkata/ballygunge"][data-v2-record]');
     await expect(card).toContainText((rec.boundary!.areaM2 / 1e6).toFixed(2));
-    await expect(card).toContainText(rec.boundary!.buildingsInWard.toLocaleString('en-IN'));
+    await expect(card).toContainText(rec.boundary!.buildingsInWard.toLocaleString('en-GB'));
     await expect(page.locator('[data-v2-card="how-sure"]')).toContainText(`±${rec.confidence.night.bandK.toFixed(1)} °C`);
   });
 });
