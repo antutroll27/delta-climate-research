@@ -105,4 +105,32 @@ test.describe('@v2 honesty', () => {
     await go(page, 'overview');
     await expect(page.locator('[data-v2-card="heat-legend"]')).toBeHidden();
   });
+  test('@v2 [H] Sun card: geometry only stays visible and explains itself in the app\'s words; the scale bar is the live one', async ({ page }) => {
+    await stubWeather(page, '2026-10-07T06:05:00Z');
+    await openV2(page);
+    await expect(page.locator('#v2SunCard')).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator('#sunLineNote')).toBeVisible();
+    await page.locator('#sunLineNote').click();
+    const title = await page.locator('#sunLineNote').getAttribute('title');
+    expect(title).toContain('failed its pre-registered night placebo (p = 5.4e-07)');
+    await expect(page.locator('[data-sun="note"]')).toHaveText(title!);
+    await expect(page.locator('[data-sun="line"]')).toHaveText(/^(\d+° azimuth · sets \d\d:\d\d|rises \d\d:\d\d)$/);
+    const box = await page.locator('#sunLineNote').boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(24);
+    /* the app's own sentence is what assistive technology reads */
+    await expect(page.locator('#sunLineText')).toHaveText(/^sun (\d+° · \d+° up · sets \d\d:\d\d|below horizon · rises \d\d:\d\d)$/);
+    /* MapLibre's scale control lives in the card, not on the map */
+    await expect(page.locator('#v2SunCard .maplibregl-ctrl-scale')).toHaveCount(1);
+    await expect(page.locator('#v2SunCard .maplibregl-ctrl-scale')).toContainText(/\d+\s(m|km)/);
+  });
+
+  test('@v2 [H] Sun card at night: "Below horizon" and the rise time, no azimuth claimed', async ({ page }) => {
+    await stubAt(page, '2026-10-15T17:30:00Z');          // 23:00 IST, the sun is down
+    await openV2(page);
+    await expect(page.locator('#v2SunCard')).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator('[data-sun="big"]')).toHaveText('Below');
+    await expect(page.locator('[data-sun="unit"]')).toHaveText('horizon');
+    await expect(page.locator('[data-sun="line"]')).toHaveText(/^rises \d\d:\d\d$/);
+    await expect(page.locator('[data-sun="az"]')).toBeHidden();
+  });
 });

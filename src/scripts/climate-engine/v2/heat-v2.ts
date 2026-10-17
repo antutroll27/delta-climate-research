@@ -1,5 +1,5 @@
 // src/scripts/climate-engine/v2/heat-v2.ts — OBOS v2 spec §4.1, §3.8. Owner: Track A (plan A1). The plan wrote these into shell-v2.ts; A1 moves them here.
-import { $, $$, observe } from './dom.ts';
+import { $, $$, observe, on } from './dom.ts';
 import type { ShellCtx } from './shell-ctx.ts';
 
 /** Plan S3.2 Step 7. Reads what the app wrote into #lst, #lstPhase and #conf and mirrors it; derives nothing (brainstorm 03 R7). */
@@ -29,5 +29,20 @@ export function bindMirrors(ctx: ShellCtx): void {
   syncPhase(); syncHero();
 }
 
-/** Filled by plan S4.2 Step 3. */
-export function bindWardCard(_ctx: ShellCtx): void { /* S4.2 */ }
+/** Plan S4.2 Step 3. The breadcrumb opens the Explore panel on its Area select; Less/More folds the card. On a laptop it starts folded (the preview's rule). */
+export function bindWardCard(ctx: ShellCtx): void {
+  const { root, cleanup } = ctx;
+  on(cleanup, $(root, '[data-v2-crumb]'), 'click', () => {
+    ctx.sections?.go('overview', true);
+    $(root, '#scope-area-trigger')?.focus();
+  });
+  const card = $(root, '#v2WardCard'), more = $<HTMLButtonElement>(root, '[data-v2-more]');
+  const set = (open: boolean): void => {
+    if (card) card.dataset.more = String(open);
+    more?.setAttribute('aria-expanded', String(open));
+    more?.setAttribute('aria-label', open ? 'Show less about this ward' : 'Show more about this ward');
+    if (more) more.textContent = open ? 'Less' : 'More';
+  };
+  set(window.matchMedia('(min-width: 1366px)').matches);
+  on(cleanup, more, 'click', () => set(card?.dataset.more !== 'true'));
+}

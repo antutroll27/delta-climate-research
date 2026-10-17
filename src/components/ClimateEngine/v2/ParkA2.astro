@@ -2,33 +2,15 @@
 // src/components/ClimateEngine/v2/ParkA2.astro — OBOS v2 spec §3.8, §4.1, §4.8. Owner: Track A. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
 // Parked: the crumb, the rig, the data fragment (loadchip, sun line, ring labels, cool tag, landmarks, selection, street modal) and the no-data card, until S3–S5.
 // S3 re-homed the right aside and the legend: TempCard (S3.2), HeatCards with #patternNote (S3.3).
-import ConstructionStamp from '../../states/ConstructionStamp.astro';
 import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
 ---
     {/* S4 */}
-    <p class="crumb"><span>{scope.country.name}</span><span>{scope.city.name}</span><b id="crumbArea">{scope.area.name}</b></p>
-    <div class="topmeta">
-      <div class="rig">{scope.area.hasData
-        ? <Fragment><span id="bcount">— buildings</span> · <span id="simBackend" aria-live="polite">SELECTING ENGINE</span></Fragment>
-        : <span>no artefacts · {scope.tier} tier</span>}</div>
-    </div>
     {scope.area.hasData && <Fragment>
       {/* S2/S4 */}
-    <div class="synthetic"><span class="d"></span><span class="full">Live basemap + real footprints &amp; Google heights · </span>heat field modelled<span class="sp"> · block detail illustrative</span></div>
-    <div class="stamp-slot"><ConstructionStamp /></div>
-    <div class="loadchip" id="loadchip"></div>
 
-    <!-- Sun reading. A SIBLING of the compass, never a child: the compass is a
-         button whose whole box resets the bearing, and text inside it would become
-         part of that click target. Always visible rather than a hover tooltip, so
-         it works on touch and so the caveat cannot hide. -->
-    <p class="sunline" id="sunLine" hidden>
-      <span id="sunLineText"></span>
-      <span class="sunline-note" id="sunLineNote" tabindex="0" role="note">geometry only</span>
-    </p>
     <!-- Walk-time ring labels. Text is STATIC: the app only toggles `hidden` and
          writes a transform, so nothing rewrites strings on every repaint.
          Two lines each — the headline is the human unit (minutes), the second

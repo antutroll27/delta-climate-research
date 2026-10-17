@@ -82,3 +82,34 @@ test('H23: the method card prints method-copy rows, and "checked", never "valida
   for (const f of ['HeatCards.astro', 'TempCard.astro']) assert.ok(!/validated/i.test(V2(f)), `${f} says "validated"`);
   assert.ok(!/validated/i.test(readFileSync('src/scripts/climate-engine/v2/method-copy.ts', 'utf8')), 'method-copy says "validated"');
 });
+
+/* ── S4.2: the ward card ── */
+test('H10: the ward card carries the v1 map-face chip word for word, as three provenance rows', () => {
+  const ms = V2('MapStack.astro');
+  const chip = /<span class="full">([^<]+?) · <\/span>heat field modelled<span class="sp"> · block detail illustrative<\/span>/.exec(STAGE);
+  assert.ok(chip, 'v1\'s .synthetic chip moved');
+  assert.equal(chip[1], 'Live basemap + real footprints &amp; Google heights', 'v1 wording changed: re-check the three rows');
+  for (const t of ['Live basemap, real footprints &amp; Google heights', 'Heat field · modelled', 'Block detail · illustrative']) assert.ok(ms.includes(t), t);
+  assert.ok(/<Sym shape="square" c="ink" size=\{13\} \/><\/span><span>Live basemap/.test(ms), 'the measured row must be SOLID');
+  assert.ok(/<Sym shape="ward" c="heat-4" kind="modelled"/.test(ms), 'the heat field row must be OUTLINED');
+  assert.ok(/<Sym shape="square" c="neutral" kind="modelled"[^>]*\/><\/span><span>Block detail/.test(ms), 'illustrative block detail must be OUTLINED, neutral');
+});
+
+test('the ward card: the app\'s ids stay once, the count is the app\'s sentence, the breadcrumb glyph is the ward\'s own outline (no India outline)', () => {
+  const ms = V2('MapStack.astro');
+  for (const id of ['bcount', 'simBackend', 'loadchip', 'crumbArea']) assert.equal((ms.match(new RegExp(`id="${id}"`, 'g')) ?? []).length, 1, `#${id} must be in MapStack once`);
+  assert.ok(ms.includes('areaFacts('), 'the crumb glyph must be the ward outline from areaFacts');
+  assert.ok(!/india|IN_OUTLINE|natural.?earth/i.test(ms), 'no India outline in the ward card');
+  assert.ok(ms.includes('<span id="bcount">— buildings</span>'), '#bcount starts as the app\'s placeholder; the app writes the sentence');
+  assert.ok(ms.includes('aria-live="polite">SELECTING ENGINE</span>'), '#simBackend keeps its live region and v1\'s first word');
+});
+
+test('the breadcrumb is sentence case and the Less/More toggle keeps its accessible name', () => {
+  const css = strip(CSS('mapstack.css'));
+  assert.match(css, /\.crumb \{[^}]*text-transform: none/);
+  assert.match(V2('MapStack.astro'), /aria-label="Show less about this ward"/);
+});
+
+test('the loading chip shows only while loading or failed (the app toggles .on and .fail)', () => {
+  assert.match(strip(CSS('mapstack.css')), /#loadchip:not\(\.on\):not\(\.fail\) \{ display: none; \}/);
+});
