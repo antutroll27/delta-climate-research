@@ -39,3 +39,7 @@ html[data-ui="v2"] .obos-v2 .rule b { color: var(--ink-1); font-weight: 600; }
 html[data-ui="v2"] .obos-v2 [data-v2-card="wx-model"] .tile .hero { margin-top: 6px; }
 html[data-ui="v2"] .obos-v2 [data-v2-card="wx-model"] .tile .foot { margin-top: 4px; }
 html[data-ui="v2"] .obos-v2 [data-v2-card="rain"] .name { margin-top: 8px; }
+/* in the forecast state no rings are drawn, so the foot that describes them is not either (B-S7 audit F8) */
+html[data-ui="v2"] .obos-v2 [data-v2-card="rain"] .hrs:empty ~ .foot { display: none; }
+/* the unit is spaced from its figure in the markup (a screen reader reads "2,207 of", not "2,207of"), so the atom's own left margin is not added on top */
+html[data-ui="v2"] .obos-v2 [data-v2-card] .stats dd small { margin-left: 0; }

@@ -118,8 +118,9 @@ export function bindWeather(ctx: ShellCtx): void {
     set('where', `${observed.station.name}, ${Math.round(observed.km)} km from the ward`);
     set('when', `Report of ${wardTime(m.time, tz)}`);
     set('tfoot', 'Whole degrees, as the report carries them.');
-    set('dew', m.dewC === null ? '' : `from a ${m.dewC} °C dew point`);
-    set('wdir', m.wind?.dirDeg == null ? '' : `from ${String(m.wind.dirDeg).padStart(3, '0')}°`);
+    /* the app fills a missing dew point or wind from Met Norway (humidity, wind m/s): say so rather than leave them under the OBSERVED chip unmarked */
+    set('dew', m.dewC === null ? 'from the Met Norway forecast' : `from a ${m.dewC} °C dew point`);
+    set('wdir', !m.wind ? 'from the Met Norway forecast' : m.wind.dirDeg === null ? '' : `from ${String(m.wind.dirDeg).padStart(3, '0')}°`);
     set('sky', describeWeather(observed).text);
     set('vis', m.cavok ? '10 km or more' : m.visibilityM === null ? '—' : `${m.visibilityM.toLocaleString('en-GB')} m`);
     set('qnh', m.qnhHpa === null ? '' : `pressure ${m.qnhHpa} hPa`);
