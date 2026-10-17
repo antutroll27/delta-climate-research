@@ -1,0 +1,48 @@
+---
+// src/components/ClimateEngine/v2/RightColumn.astro — OBOS v2 spec §1.6 (#legend is the right column), §3.9.
+// FROZEN after S2 (plan amendment A1): tracks fill the card components, never this file.
+import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+import BuildingCardV2 from './BuildingCardV2.astro';
+import TempCard from './TempCard.astro';
+import HeatCards from './HeatCards.astro';
+import ScenarioCards from './ScenarioCards.astro';
+import SolarCards from './SolarCards.astro';
+import WeatherCards from './WeatherCards.astro';
+import MethodsCards from './MethodsCards.astro';
+interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
+const data = scope.area.hasData;
+---
+<section class="heat-panel" id="legend" data-hud aria-label="Readings">
+  {data && <BuildingCardV2 scope={scope} />}
+  {data && <TempCard scope={scope} />}
+  {data && <div class="aqblock legend-air card" id="aqiBlock" role="region" aria-label="Air quality" hidden data-sections="overview air"></div>}
+  {data && <HeatCards scope={scope} />}
+  <ScenarioCards scope={scope} />
+  {data && <SolarCards scope={scope} />}
+  {data && <WeatherCards scope={scope} />}
+  <MethodsCards scope={scope} />
+  {data && <Fragment>
+    {/* The ward's solar numbers, BELOW the colour key and folded to a header by
+        default: the key is what a reader entering the console sees first
+        (founder's call, 2026-09-06). On the Solar screen the script moves this
+        block above the key and unfolds it. It sits above the attribution and the
+        receipts button so the receipts panel's anchor never moves. Hidden until a
+        solar screen ships. */}
+    <div class="solblock legend-solar" id="solBlock" role="region" aria-label="Rooftop solar, whole ward" hidden>
+      <div class="k legend-head"><span id="solHead">Rooftop solar · whole ward</span><button class="solbtn" id="solToggle" type="button" aria-expanded="false" aria-controls="solBody">Show ▾</button></div>
+      <div class="solbody" id="solBody" hidden>
+        <div class="big" id="solKwp">—<span class="u">MWp</span></div>
+        <div class="conf screening" id="solConf"></div>
+        <p class="solfloor" id="solFloor"></p>
+        <div class="mrow">
+          <div><div class="k">Annual yield</div><div class="val" id="solKwh">—</div></div>
+          <div><div class="k">Worth at tariff</div><div class="val sun" id="solRs">—</div></div>
+          <div><div class="k" id="solBigK">Roofs ≥ 3 kWp</div><div class="val" id="solBig">—</div></div>
+          <div><div class="k">Losing ≥ 5 %, of those</div><div class="val sun" id="solSh">—</div></div>
+        </div>
+      </div>
+    </div>
+  </Fragment>}
+  {data && <span class="attr" hidden></span>}
+</section>

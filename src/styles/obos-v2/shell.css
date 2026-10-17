@@ -195,9 +195,11 @@ html[data-ui="v2"] .obos-v2 .toast a { display: inline-flex; align-items: center
 html[data-ui="v2"] .obos-v2 .toast a, html[data-ui="v2"] .obos-v2 .toast .t-go { font-weight: 600; }
 html[data-ui="v2"] .obos-v2 .toast .t-x { width: 24px; height: 24px; min-width: 24px; min-height: 24px; border-radius: 50%; border: 0; background: var(--well); color: var(--ink-2); cursor: pointer; display: grid; place-items: center; }
 html[data-ui="v2"] .obos-v2 .toast[hidden] { display: none; }
-html[data-ui="v2"] .obos-v2 .flash { position: absolute; z-index: 90; left: 50%; bottom: 96px; transform: translateX(-50%); padding: 8px 14px; border-radius: 99px; font-size: 12.5px; color: var(--ink-1); display: none; white-space: nowrap; }
-html[data-ui="v2"] .obos-v2 .flash[data-on="true"] { display: block; animation: obos-v2-fade-up .3s var(--ease) both; }
-@keyframes obos-v2-fade-up { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+html[data-ui="v2"] .obos-v2 .flash { position: absolute; z-index: 90; left: 50%; bottom: 96px; transform: translate(-50%, 10px); padding: 8px 14px; border-radius: 99px; font-size: 12.5px; color: var(--ink-1);
+  white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .3s var(--ease), transform .3s var(--ease); }
+/* opacity, not display or visibility: the live region stays in the accessibility tree so its text is announced. No @keyframes here:
+   v2's sheet loads on v1's pages too, and v1's baseline records the keyframes inventory. */
+html[data-ui="v2"] .obos-v2 .flash[data-on="true"] { opacity: 1; transform: translate(-50%, 0); }
 
 /* ── the key popover (preview index.html :48–56) ── */
 html[data-ui="v2"] .obos-v2 .key-pop { position: absolute; z-index: 80; left: 50%; top: 64px; transform: translateX(-50%); width: 560px; max-width: calc(100% - 16px); }
@@ -228,3 +230,22 @@ html[data-ui="v2"] .obos-v2 .credits-pop ul { margin-top: 8px; }
 @media (pointer: coarse) {
   html[data-ui="v2"] .obos-v2 button:not(.k-mer, .sym, .t-x, .sp-close) { min-height: 44px; }
 }
+
+/* ── the right column, #legend (spec §1.6, §3.9; sys.css :325–328, :506, :718). A1 S2.8: a frame region, filled by the card components. ── */
+html[data-ui="v2"] .obos-v2 #legend.heat-panel { position: absolute; z-index: 20; top: 68px; right: 16px; width: 320px; bottom: 46px; display: flex; flex-direction: column; gap: 10px;
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; border-radius: 22px; }
+html[data-ui="v2"] .obos-v2 #legend.heat-panel::-webkit-scrollbar { display: none; }
+html[data-ui="v2"] .obos-v2 #legend.heat-panel .card { flex: none; }
+@media (min-width: 700px) and (max-width: 1365px) { html[data-ui="v2"] .obos-v2 #legend.heat-panel { width: 300px; } }
+
+/* right-column composition by section (spec §3.9) */
+html[data-ui="v2"] .obos-v2 #legend [data-sections] { display: none; }
+html[data-ui="v2"] .obos-v2[data-section="overview"] #legend [data-sections~="overview"]:not([hidden]),
+html[data-ui="v2"] .obos-v2[data-section="heat"] #legend [data-sections~="heat"]:not([hidden]),
+html[data-ui="v2"] .obos-v2[data-section="air"] #legend [data-sections~="air"]:not([hidden]),
+html[data-ui="v2"] .obos-v2[data-section="solar"] #legend [data-sections~="solar"]:not([hidden]),
+html[data-ui="v2"] .obos-v2[data-section="weather"] #legend [data-sections~="weather"]:not([hidden]),
+html[data-ui="v2"] .obos-v2[data-section="scenarios"] #legend [data-sections~="scenarios"]:not([hidden]),
+html[data-ui="v2"] .obos-v2[data-section="methods"] #legend [data-sections~="methods"]:not([hidden]) { display: block; }
+html[data-ui="v2"] .obos-v2 #solBlock { display: none !important; }
+html[data-ui="v2"] .obos-v2 #legend { display: flex; flex-direction: column; gap: 10px; }

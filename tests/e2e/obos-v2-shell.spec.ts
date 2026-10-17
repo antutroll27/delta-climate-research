@@ -152,4 +152,16 @@ test.describe('@v2 shell', () => {
     const box = await page.locator('#tipX').boundingBox().catch(() => null);
     if (box) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(24);
   });
+
+  test('@v2 A1: the right column composes by section (#aqiBlock on Overview and Air only; #solBlock never)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });   // desktop: the rail is 220 px wide, so a centre click lands on it
+    await openV2(page);
+    /* a probe: the painter unhides #aqiBlock only when a payload lands; the rule under test is the CSS */
+    await page.evaluate(() => { const a = document.getElementById('aqiBlock'); if (a) { a.hidden = false; a.textContent = 'probe'; } });
+    for (const [s, shown] of [['overview', true], ['heat', false], ['air', true], ['solar', false], ['methods', false]] as const) {
+      await page.locator(`.nav-item[data-section="${s}"]`).click();
+      await expect(page.locator('#aqiBlock')).toBeVisible({ visible: shown });
+    }
+    await expect(page.locator('#solBlock')).toBeHidden();
+  });
 });

@@ -86,3 +86,22 @@ test('the area page mounts the v2 shell only under the flag, after the instrumen
   assert.ok(page.indexOf('mountHeatMap()') < page.lastIndexOf('await bootV2(generation)'), 'v2 shell must mount after mountHeatMap');
   assert.match(page, /disposeV2\?\.\(\); disposeV2 = null;/);
 });
+
+/* A1 (parallel tracks): the right column is a frame region, not a Track A card. It exists
+   on every area, outside parking, and the app's re-seated blocks and the building card sit
+   inside it, before the .attr marker the app inserts against (app:1212, :1238). */
+for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road', 'heat-map/ae/dubai/al-quoz']) {
+  test(`${path}: A1 the right column is #legend, once, before the parking box`, () => {
+    const { v2 } = pageParts(path);
+    const col = v2.indexOf(' id="legend"'), park = v2.indexOf('data-v2-parking');
+    assert.equal((v2.match(/\sid="legend"/g) ?? []).length, 1);
+    assert.ok(col > 0 && col < park, '#legend must sit before the parking box');
+    if (!path.includes('/ae/')) {
+      const attr = v2.indexOf('<span class="attr" hidden></span>', col);
+      for (const id of ['bcard', 'aqiBlock', 'solBlock']) {
+        const at = v2.indexOf(` id="${id}"`);
+        assert.ok(at > col && at < attr && attr < park, `#${id} must sit inside #legend, before .attr`);
+      }
+    }
+  });
+}

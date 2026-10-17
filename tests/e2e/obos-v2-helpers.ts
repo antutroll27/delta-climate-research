@@ -27,6 +27,17 @@ export async function stubWeather(page: Page, serverNow: string, reports: readon
   });
 }
 
+/** A fixed instant and a synthetic met.no reading at it; /api/metar stays the server's canned empty list. */
+export async function stubAt(page: Page, iso: string): Promise<void> {
+  await page.clock.setFixedTime(new Date(iso));
+  await page.route(/\/api\/live\?/, (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    headers: { date: new Date(iso).toUTCString(), age: '0' },
+    body: JSON.stringify({ properties: { timeseries: [{ time: `${iso.slice(0, 14)}00:00Z`, data: { instant: { details: {
+      air_temperature: 30.0, relative_humidity: 65, wind_speed: 2.4, cloud_area_fraction: 20 } } } }] } }),
+  }));
+}
+
 export async function openV2(page: Page, path = '/heat-map/in/kolkata/ballygunge/'): Promise<void> {
   await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
   await page.goto(path);

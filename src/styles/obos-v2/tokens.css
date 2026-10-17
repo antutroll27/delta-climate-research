@@ -34,6 +34,8 @@ html[data-ui="v2"] .obos-v2 {
   --hx-snow-1: #F1F3F0; --hx-snow-2: #D3DCDB; --hx-snow-3: #A9BCBE; --hx-snow-u: #9FB3B5;
   --hx-stone: #ECE8E1; --hx-char-1: #141614; --hx-char-2: #363936; --hx-char-3: #4A4D49; --hx-char-u: #5A5D59;
   --hx-quiet-light: #5C5B58; --hx-dock-light: #F8F8F6;
+  /* print: the installer brief and the payback sheet are ink on paper in every theme (A1 S2.8; plan S6.2 Step 2) */
+  --print-ink: #000000; --print-paper: #FFFFFF;
   --hx-focus-light: #1f63d6; --hx-focus-dark: #8ab4ff;
   /* the teal hairlines and the ramp's hairline, each spelled once (S1 audit F5) */
   --hx-teal-a08: rgba(111, 202, 214, 0.08); --hx-teal-a14: rgba(111, 202, 214, 0.14); --hx-teal-a16: rgba(111, 202, 214, 0.16); --hairline: oklch(0 0 0 / 0.05);

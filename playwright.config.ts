@@ -136,13 +136,13 @@ export default defineConfig({
     {
       name: 'chromium-v2',
       testMatch: '**/obos-v2-*.spec.ts',
-      testIgnore: ['**/obos-v2-glass.spec.ts'],
+      testIgnore: ['**/obos-v2-glass.spec.ts', '**/obos-v2-split-baseline.spec.ts'],
       grep: /@v2/,
       use: { ...devices['Desktop Chrome'], storageState: V2_STORAGE_STATE },
     },
     ...(process.env.CI ? [] : [{
       name: 'chromium-v2-relief',
-      testMatch: ['**/obos-v2-glass.spec.ts', '**/obos-v2-boot.spec.ts'],
+      testMatch: ['**/obos-v2-glass.spec.ts', '**/obos-v2-boot.spec.ts', '**/obos-v2-contrast.spec.ts', '**/obos-v2-shots.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: V2_STORAGE_STATE,
@@ -151,6 +151,13 @@ export default defineConfig({
         headless: false,
         launchOptions: { args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] },
       },
+    }]),
+    /* A1 S2.9: the split changes nothing (v2 markup, computed style, pixels). Local only; runs only with V2_SPLIT set. */
+    ...(process.env.CI ? [] : [{
+      name: 'chromium-v2-split',
+      testMatch: '**/obos-v2-split-baseline.spec.ts',
+      snapshotPathTemplate: '/Volumes/OBOSLab/obos-v2/shots/v2-split-baseline/png/{arg}{ext}',
+      use: { ...devices['Desktop Chrome'], storageState: V2_STORAGE_STATE },
     }]),
     {
       name: 'firefox-cbam',

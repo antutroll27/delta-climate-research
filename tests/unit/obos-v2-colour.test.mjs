@@ -79,8 +79,8 @@ test('warm reds and oranges belong only to the heat ramp, the AQI bands and the 
   assert.deepEqual(bad, []);
 });
 
-/* Turned back into test() by S3.1, which lands E3 (lstColor reads var(--orange)). */
-test.todo('the app no longer writes #d46b4a (E3)', () => {
+/* E3 (lstColor reads var(--orange)): landed in S2.8 by plan amendment A1 (was S3.1). */
+test('the app no longer writes #d46b4a (E3)', () => {
   const app = readFileSync('src/scripts/climate-engine/heat-map-app.ts', 'utf8');
   assert.ok(!/#d46b4a/i.test(app), 'lstColor still spells the Severe hex by hand');
 });

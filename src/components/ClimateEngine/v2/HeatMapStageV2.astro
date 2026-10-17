@@ -14,6 +14,7 @@ import CompassV2 from './CompassV2.astro';
 import DockV2 from './DockV2.astro';
 import LayersPopover from './LayersPopover.astro';
 import Overlays from './Overlays.astro';
+import RightColumn from './RightColumn.astro';
 /* THE FOUR SHELL COMPONENTS, COMPOSED. Until this task each was imported by
    nothing: the rail, the scope switcher and the layer tree were built and proven
    against their own sources, and the toolbox had been moved out of this file with
@@ -209,6 +210,7 @@ const newCity = scope.area.hasData
     </div>
   </Fragment>}
   </div>
+  <RightColumn scope={scope} />
   <div data-v2-parking>
     {/* S0 PARKING. Copied verbatim from HeatMapStage.astro so the contract holds;
         each block leaves this box in the slice named beside it. */}
@@ -371,84 +373,6 @@ const newCity = scope.area.hasData
     <!-- Click-to-inspect. Positioned from the building's own ward-metre centroid
          every time MapLibre repaints, so it tracks orbit, pan, zoom and flyTo. -->
     <div class="bsel" id="bsel" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-    <div class="bcard" id="bcard" hidden role="dialog" aria-label="Selected building">
-      <span class="lead"></span>
-      <div class="bcard-in">
-        <div class="bc-h"><span>Building</span><span id="bcId">—</span></div>
-        <dl>
-          <dt>Coordinates</dt><dd id="bcLL">—</dd>
-          <dt>Height</dt><dd id="bcH">—</dd>
-          <dt>Floors ≈</dt><dd id="bcF">—</dd>
-          <dt>Footprint</dt><dd id="bcA">—</dd>
-          <dt>Vegetation</dt><dd id="bcV">—</dd>
-          <dt>Albedo</dt><dd id="bcAl">—</dd>
-          <dt>Surface</dt><dd id="bcT">—</dd>
-        </dl>
-        {/* LANDMARK — shown only when the selected building is one of the ward's
-            named buildings, and then it prints the published height AND where
-            that height came from. The source row is not decoration: a height
-            with no stated source is not drawn as a landmark at all, so this row
-            is the reason the rest of the block is allowed to exist.
-
-            ABOVE the rooftop-solar block and ruled off in cyan rather than the
-            screening amber, because this is the best-evidenced number on the
-            card and must never read as a sibling of the estimate below it. */}
-        <div class="bc-lm" id="bcLm" hidden>
-          <div class="bc-h"><span>Landmark</span></div>
-          <p class="bc-lm-name" id="bcLmName">—</p>
-          <dl>
-            <dt>Published height</dt><dd id="bcLmH">—</dd>
-            <dt>Source</dt><dd id="bcLmSrc">—</dd>
-          </dl>
-        </div>
-        {/* ROOFTOP SOLAR — a screening estimate ABOUT the building, under the
-            measured rows and in a different ink. Painted by paintSolarCard from
-            the ward's solar file; hidden when none ships. "At least" is the
-            strict-mask floor: the mask rule is the largest lever in the estimate,
-            so the headline never prints without it (spec §2.4). */}
-        <div class="bc-sol" id="bcSol" hidden>
-          <div class="bc-h"><span>Rooftop solar</span><span id="bcSolTier" class="bc-tier">screened</span></div>
-          <dl>
-            <dt>Installable</dt><dd id="bcSolKwp" class="sun">—</dd>
-            <dt>Yield</dt><dd id="bcSolKwh">—</dd>
-            <dt>Shaded</dt><dd id="bcSolLoss">—</dd>
-            <dt>At least</dt><dd id="bcSolFloor">—</dd>
-            <dt>Raised 2 m</dt><dd id="bcSolRaised">—</dd>
-            <dt>Worth</dt><dd id="bcSolRs">—</dd>
-          </dl>
-          <p class="bc-sol-note" id="bcSolNote">Screening estimate · not bankable · canopy Meta/WRI CHM v2 · 0.5 m grid · NASA POWER irradiance</p>
-          {/* THE HOW-SURE LADDER (spec 2026-09-07-solar-guide §2.3). Every rung names a
-              limit, the fix for it, and what the fix narrows it to — the middle <b>
-              is this roof's own band, painted by paintSolarCard. The buttons open a
-              pre-filled email and nothing else: the survey app does not exist, and a
-              button that pretended it did would be the one dishonest thing on the card. */}
-          <details class="bc-sure" id="bcSure">
-            <summary>How sure, and what would make it surer</summary>
-            <ul>
-              <li data-limit="roof">Roof obstacles unknown: tanks, stair rooms, parapets. <b id="bcSureRoof"></b> A ten-minute walk of the roof with a phone narrows it to about ±10%. <button type="button" class="bc-ask" data-limit="roof" aria-label="Ask about roof obstacles">Ask about this</button></li>
-              <li data-limit="canopy">Canopy over the roof: usable or not. <b id="bcSureCanopy"></b> One photo from the roof settles it. <button type="button" class="bc-ask" data-limit="canopy" aria-label="Ask about canopy over the roof">Ask about this</button></li>
-              <li data-limit="irradiance">Sunlight from a coarse satellite cell. <b id="bcSureIrr"></b> The ground station inside that cell narrows yield to about ±5%, city-wide. <button type="button" class="bc-ask" data-limit="irradiance" aria-label="Ask about sunlight data">Ask about this</button></li>
-              <li data-limit="height">Building height unverified for this roof. A survey or a drone pass fixes it. <button type="button" class="bc-ask" data-limit="height" aria-label="Ask about building height">Ask about this</button></li>
-              <li data-limit="validation" id="bcSureValid">Never compared with real rooftops yet. The validation study is under way. <button type="button" class="bc-ask" data-limit="validation">Join the study</button></li>
-            </ul>
-          </details>
-          {/* THE WAY OFF THE SCREEN. It renders #solBrief from this roof and hands the
-              page to the browser's own print dialogue — no PDF library, no server.
-              It was born `hidden`, because a styled button that does nothing is a lie
-              the reader can click; the renderer exists now, so it does not stay one. */}
-          <button class="bc-brief" id="bcBrief" type="button">Print the installer brief</button>
-          {/* THE PAYBACK SHEET'S DOOR (spec 2026-09-30-solar-roi D7). Painted by
-              paintSolarCard: hidden when the city has no sourced cost basis, disabled
-              with its own reason when the roof takes under 1 kW. */}
-          <button class="bc-brief" id="bcPay" type="button" hidden>Work out payback</button>
-        </div>
-        <div class="sv-thumb" id="svThumb" hidden></div>
-        <p class="bc-rings" id="bcRings"></p>
-        <p class="bc-ins" id="bcIns"></p>
-        <p class="bc-prov" id="bcSrc"></p>
-        <button class="bc-x" id="bcX" type="button" aria-label="Close building details">Close ✕</button>
-      </div>
-    </div>
       {/* S4 */}
       {/* S3 */}
     <aside class="panel right">
@@ -497,7 +421,7 @@ const newCity = scope.area.hasData
           id; `updateReportHref` still finds it by name. */}
     </aside>
       {/* S3/S7 */}
-    <div class="legend" id="legend">
+    <div class="legend-parked">
       <div class="k legend-head" style="margin-bottom:.6rem"><span>What the colours mean</span></div>
       {/* `style` is an attribute whose CONTENT is CSS, unlike `stroke` above, so
           `var()` resolves here normally. These swatches are inside `.stage`, which
@@ -518,32 +442,6 @@ const newCity = scope.area.hasData
            where a reader goes to interpret the colours, so it is where the limit
            of what the colours mean belongs. -->
       <p class="pattern-note" id="patternNote"></p>
-      {/* The ward's solar numbers, BELOW the colour key and folded to a header by
-          default: the key is what a reader entering the console sees first
-          (founder's call, 2026-09-06). On the Solar screen the script moves this
-          block above the key and unfolds it. It sits above the attribution and the
-          receipts button so the receipts panel's anchor never moves. Hidden until a
-          solar screen ships. */}
-      <div class="solblock legend-solar" id="solBlock" role="region" aria-label="Rooftop solar, whole ward" hidden>
-        <div class="k legend-head"><span id="solHead">Rooftop solar · whole ward</span><button class="solbtn" id="solToggle" type="button" aria-expanded="false" aria-controls="solBody">Show ▾</button></div>
-        <div class="solbody" id="solBody" hidden>
-          <div class="big" id="solKwp">—<span class="u">MWp</span></div>
-          <div class="conf screening" id="solConf"></div>
-          <p class="solfloor" id="solFloor"></p>
-          <div class="mrow">
-            <div><div class="k">Annual yield</div><div class="val" id="solKwh">—</div></div>
-            <div><div class="k">Worth at tariff</div><div class="val sun" id="solRs">—</div></div>
-            <div><div class="k" id="solBigK">Roofs ≥ 3 kWp</div><div class="val" id="solBig">—</div></div>
-            <div><div class="k">Losing ≥ 5 %, of those</div><div class="val sun" id="solSh">—</div></div>
-          </div>
-        </div>
-      </div>
-      {/* The area's air quality, painted by air-panel.ts cardHtml. Placed like the
-          solar block: above the colour key while the Air pane is open, above the
-          attribution otherwise. Hidden until a Kolkata payload (or its failure) lands. */}
-      <div class="aqblock legend-air" id="aqiBlock" role="region" aria-label="Air quality" hidden></div>
-      <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
-      <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
     </div>
       {/* S4 */}
   <div class="svmodal" id="svModal" hidden>
@@ -571,6 +469,11 @@ const newCity = scope.area.hasData
     </p>
     <p class="notyet-links"><a href={DEFAULT_AREA_PATH}>Open a validated area →</a></p>
   </section>
+    </Fragment>}
+    {/* S7: the receipts button and its panel (v1 has them on data areas only). Track B (S7.3) re-homes them. */}
+    {scope.area.hasData && <Fragment>
+      <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
+      <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
     </Fragment>}
   </div>
   <LayersPopover current={scope.key} mapillary={mapillary} hasData={scope.area.hasData} />

@@ -626,6 +626,13 @@ export function mountHeatMap(): () => void {
     sunTextEl.textContent = sun.placement.up
       ? `sun ${Math.round(sun.placement.azimuthDeg)}° · ${Math.round(sun.placement.elevationDeg)}° up · sets ${hhmm(day.sunset)}`
       : `sun below horizon · rises ${hhmm(day.sunrise)}`;
+    /* OBOS v2 (spec C10): the same placement and day, as data, so the v2 Sun card never
+       parses the sentence above. Additive: nothing reads these in v1. */
+    sunLineEl.dataset.up = sun.placement.up ? '1' : '0';
+    sunLineEl.dataset.az = String(Math.round(sun.placement.azimuthDeg));
+    sunLineEl.dataset.el = String(Math.round(sun.placement.elevationDeg));
+    sunLineEl.dataset.sets = hhmm(day.sunset);
+    sunLineEl.dataset.rises = hhmm(day.sunrise);
     sunNoteEl?.setAttribute('title',
       'Solar geometry only, in local solar time. The surface-temperature model uses a '
       + 'single ward-wide sun term, not per-building shadow: adding shade was tested over '
@@ -2992,6 +2999,12 @@ export function mountHeatMap(): () => void {
   const istLike = (iso: string) => wardHm.format(new Date(Date.parse(iso))).replace('GMT+5:30', 'IST');
 
   function paintWeatherLine(L: M.Ambient | null): void {
+    /* OBOS v2 (spec C9): the observation this line paints, and its station's reports,
+       for the v2 Weather screen. Additive: nothing listens in v1. */
+    const wxCity = splitKey(state.ward).city;
+    document.dispatchEvent(new CustomEvent('obos:observed', { detail: { observed, reports: observed
+      ? (metarCache[wxCity]?.reports ?? []).filter((m) => m.station === observed!.station.icao).sort((a, b) => Date.parse(a.time) - Date.parse(b.time))
+      : [] } }));
     const line = el('wxLine');
     setText('liveSrc', observed ? `Air now · ${observed.station.name} (${Math.round(observed.km)} km)`
       : L ? 'Air now · Met Norway forecast' : 'Air now · no reading');
@@ -3152,7 +3165,7 @@ export function mountHeatMap(): () => void {
   cleanup.push(() => clearInterval(metarTick));
 
   /* ── readouts ── */
-  const lstColor = (t: number) => t >= 40 ? 'var(--red)' : t >= 37 ? '#d46b4a' : t >= 33 ? 'var(--bronze)' : 'var(--cyan)';
+  const lstColor = (t: number) => t >= 40 ? 'var(--red)' : t >= 37 ? 'var(--orange)' : t >= 33 ? 'var(--bronze)' : 'var(--cyan)';
 
   /**
    * Show how much to trust the number on screen. Night is calibratable against
