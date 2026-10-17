@@ -1,6 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 import { PW_ORIGIN, PW_PORT, V2_STORAGE_STATE } from './tests/e2e/fixtures/ui-v2-state';
 
+/** Chromium args for the perf runs (BRIEF.md, founder rule 17 Oct: NO window ever appears on his screen). The off-screen
+    variant (--window-position=-32000,-32000 --no-startup-window ...) was tried on 17 Oct and macOS CLAMPED the window back onto
+    the display (CDP Browser.getWindowBounds: left 0, top 30), so the committed default is the brief's fallback, new headless on
+    Metal. The JSON is labelled "headless". One list, shared with the glass spec. */
+const PERF_METAL = ['--headless=new', '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'];
+
 export default defineConfig({
   testDir: './tests/e2e',
   // macOS may create AppleDouble sidecars beside copied test files. They are
@@ -147,9 +153,12 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         storageState: V2_STORAGE_STATE,
         /* HEADED: a headless Chromium has no display vsync (the perf gate read 1.2 ms frames, 210 fps, for
-           everything), so Glass would look free. Brainstorm 02 measured vsync-on, headed. */
+           everything), so Glass would look free. Brainstorm 02 measured vsync-on, headed.
+           FOUNDER RULE (17 Oct): NO WINDOW EVER APPEARS ON HIS SCREEN. Playwright's headless:false plus --headless=new gives
+           Chromium's new headless mode (no window at all) with the real Metal GPU path. Every other project stays headless.
+           The perf spec asserts the frame rate stayed at display rate and labels its JSON "headless". */
         headless: false,
-        launchOptions: { args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] },
+        launchOptions: { args: [...PERF_METAL] },
       },
     }]),
     /* A1 S2.9: the split changes nothing (v2 markup, computed style, pixels). Local only; runs only with V2_SPLIT set. */
