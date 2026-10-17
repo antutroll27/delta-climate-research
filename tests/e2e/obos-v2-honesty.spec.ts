@@ -110,8 +110,12 @@ test.describe('@v2 honesty', () => {
     const row = await page.locator(`${CARD} .surface-k`).evaluate((e) => (e.closest('.row') as HTMLElement).getBoundingClientRect().bottom);
     const lst = await page.locator('#lst').evaluate((e) => { const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; });
     const conf = await page.locator('#conf').evaluate((e) => e.getBoundingClientRect().top);
-    expect(lst.top - row, 'gap above the hero').toBeGreaterThanOrEqual(16);
-    expect(conf - lst.bottom, 'gap below the hero').toBeGreaterThanOrEqual(14);
+    /* A-S3 audit F9: pinned to the approved preview (19.6 / 19.6 px measured) and to the declared margin, so a regressed gap cannot pass */
+    expect(await page.locator('#lst').evaluate((e) => getComputedStyle(e).margin)).toBe('16px 0px 14px');
+    expect(lst.top - row, 'gap above the hero').toBeGreaterThanOrEqual(19);
+    expect(lst.top - row, 'gap above the hero').toBeLessThanOrEqual(21);
+    expect(conf - lst.bottom, 'gap below the hero').toBeGreaterThanOrEqual(19);
+    expect(conf - lst.bottom, 'gap below the hero').toBeLessThanOrEqual(21);
   });
 
   test('@v2 [H] the temperature card shows on Overview, Heat and Scenarios only; Heat adds its legend and method cards', async ({ page }) => {
