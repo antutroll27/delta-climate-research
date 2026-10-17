@@ -7,15 +7,22 @@ const SLICE = process.env.OBOS_V2_SLICE ?? 's1';
 const OUT = `/Volumes/OBOSLab/obos-v2/audits/perf-${SLICE}${process.env.OBOS_PERF_THEME ? `-${process.env.OBOS_PERF_THEME}` : ''}.json`;
 const SECS = Number(process.env.OBOS_PERF_SECS ?? 5), REPS = Number(process.env.OBOS_PERF_REPS ?? 3);
 const METAL = ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'];
-type Mode = 'v1' | 'plates' | 'flat' | 'live';
+type Mode = 'v1' | 'bare' | 'plates' | 'flat' | 'live';
 
-/* The v2 surfaces at 1440x900 (brainstorm 02 §1 geometry), as REAL v2 elements so the
-   shipped token CSS decides fill and filter. Rerun in S9 against the full chrome
-   (OBOS_V2_SLICE=s9 with DUMMY=0). */
-const BOXES: ReadonlyArray<[string, number, number, number, number]> = [
-  ['rail', 16, 16, 220, 430], ['side-panel', 248, 16, 300, 788], ['card', 564, 16, 300, 190], ['compass', 564, 216, 68, 68],
-  ['card', 16, 640, 220, 110], ['card', 16, 460, 220, 170], ['card', 1104, 68, 320, 400], ['card', 1104, 478, 320, 300], ['bar', 600, 830, 440, 56],
+/* THE APPROVED SHELL'S OWN SURFACES at 1440x900 (S1 audit F1): the 14 blurred boxes of the preview's Overview
+   (present mode), each as a REAL v2 element so the shipped token CSS decides fill, filter and radius. They cover
+   792k px2; the nine boxes this gate began with covered 703k and measured live Glass ~2 ms low. Source:
+   /Volumes/OBOSLab/obos-v2/audits/s1a/preview-rects.json. Rerun in S9 against the full chrome (OBOS_V2_SLICE=s9, DUMMY=0).
+   Tuple: [class, x, y, w, h, border-radius]. */
+const BOXES: ReadonlyArray<[string, number, number, number, number, string]> = [
+  ['toolbar', 1210, 12, 214, 41, '14px'], ['rail', 16, 16, 220, 498, '22px'], ['card', 568, 16, 300, 189, '22px'],
+  ['card compass', 568, 215, 56, 56, '50%'], ['card', 568, 495, 214, 117, '16px'], ['card', 568, 619, 214, 197, '16px'],
+  ['toast', 884, 16, 197, 38, '99px'], ['toast', 884, 62, 229, 38, '99px'], ['side-panel', 252, 16, 300, 788, '22px'],
+  ['card', 1104, 68, 320, 633, '22px'], ['card', 1104, 711, 320, 189, '22px'], ['bar', 641, 831, 374, 55, '20px'],
+  ['place', 1131, 16, 69, 30, '99px'], ['attrib', 1076, 864, 352, 24, '11px'],
 ];
+/* text rastered inside each surface, so the blur has real content to sample and clip */
+const SURFACE_HTML = '<div class="micro">Air now · Dum Dum airport</div><p class="hero">31.4<span class="u">°C</span></p><p class="lede">Ballygunge · KMC Ward 68 · ground 38.2 °C · rooftop 44.1 °C</p><dl class="stats"><div><dt class="micro">Above 40 °C</dt><dd>21%</dd></div><div><dt class="micro">Δ vs green</dt><dd>+2.4 °C</dd></div></dl>';
 
 interface Cfg { readonly cores?: number; readonly stress?: number }
 
@@ -37,18 +44,6 @@ async function boot(browser: Browser, ui: 'v1' | 'v2', dsf: number, cfg: Cfg): P
   await expect(page.locator('#simBackend')).not.toHaveText('SELECTING ENGINE', { timeout: 90_000 });
   await page.waitForFunction(() => !!(window as unknown as { __obosMap?: unknown }).__obosMap, null, { timeout: 90_000 });
   await page.waitForTimeout(6000);
-  if (ui === 'v2' && process.env.DUMMY !== '0') {
-    await page.evaluate((boxes) => {
-      const root = document.querySelector('main.obos-v2')!;
-      for (const [cls, l, t, w, h] of boxes) {
-        const d = document.createElement('div');
-        d.className = cls; d.setAttribute('data-perf-dummy', '');
-        Object.assign(d.style, { position: 'absolute', left: `${l}px`, top: `${t}px`, width: `${w}px`, height: `${h}px`, zIndex: '40' });
-        d.innerHTML = '<b style="font-size:40px;font-weight:200">31.4°</b><br>Ballygunge · KMC Ward 68';
-        root.appendChild(d);
-      }
-    }, BOXES);
-  }
   /* a weaker GPU, simulated the way brainstorm 02 did: the map renders at a higher pixel ratio */
   if (cfg.stress) await page.evaluate((k) => (window as unknown as { __obosMap: { setPixelRatio(n: number): void } }).__obosMap.setPixelRatio(k), cfg.stress);
   await page.evaluate(() => {
@@ -61,6 +56,19 @@ async function boot(browser: Browser, ui: 'v1' | 'v2', dsf: number, cfg: Cfg): P
   await page.waitForTimeout(1000);
   return page;
 }
+
+/** the 14 surfaces as live v2 elements; none with DUMMY=0 (the S9 rerun measures the real chrome) */
+const addDummies = (page: Page): Promise<void> => page.evaluate(([boxes, html]) => {
+  const root = document.querySelector('main.obos-v2')!;
+  for (const [cls, l, t, w, h, radius] of boxes) {
+    const d = document.createElement('div');
+    d.className = cls; d.setAttribute('data-perf-dummy', '');
+    Object.assign(d.style, { position: 'absolute', left: `${l}px`, top: `${t}px`, width: `${w}px`, height: `${h}px`, zIndex: '40', overflow: 'hidden', borderRadius: radius });
+    d.innerHTML = html;
+    root.appendChild(d);
+  }
+}, [BOXES, SURFACE_HTML] as const);
+const removeDummies = (page: Page): Promise<void> => page.evaluate(() => { document.querySelectorAll('[data-perf-dummy]').forEach((e) => e.remove()); });
 
 interface Shipped { glass: string | null; cards: string | null; tier: string | null; theme: string | null; blurred: number }
 const shipped = (page: Page): Promise<Shipped> => page.evaluate(() => {
@@ -100,7 +108,7 @@ async function bench(browser: Browser, dsf: number, cfg: Cfg): Promise<{ sum: Re
   const t0 = Date.now();
   browser.on('disconnected', () => console.log(`[browser] disconnected after ${Date.now() - t0} ms`));
   const fills: Mode[] = ['plates', 'flat', 'live'];
-  const res = new Map<Mode, Run[]>((['v1', ...fills] as Mode[]).map((m) => [m, []]));
+  const res = new Map<Mode, Run[]>((['v1', 'bare', ...fills] as Mode[]).map((m) => [m, []]));
   let asShipped: Shipped | null = null; let gpu = '?'; let pr = dsf;
   for (let r = 0; r < REPS; r++) {
     for (const ui of (r % 2 ? ['v2', 'v1'] : ['v1', 'v2']) as Array<'v1' | 'v2'>) {
@@ -111,8 +119,14 @@ async function bench(browser: Browser, dsf: number, cfg: Cfg): Promise<{ sum: Re
         asShipped ??= await shipped(page);
         gpu = await page.evaluate(() => (window as unknown as { __deltaRenderQualityController?: { current?: { gpuLabel?: string } } }).__deltaRenderQualityController?.current?.gpuLabel ?? '?');
         pr = await page.evaluate(() => devicePixelRatio);
-        for (const m of r % 2 ? [...fills].reverse() : fills) {
-          await setFill(page, m);
+        /* BARE: the same v2 page with no surfaces at all. It is the honest baseline for the chrome: v1's map is
+           938x764 (a sidebar layout) with 11 blurred surfaces of its own, v2's is the full 1440x900, so v1 is a
+           different workload and is kept in the JSON for reference only. */
+        const order: Mode[] = r % 2 ? [...fills].reverse() : fills;
+        for (const m of r % 2 ? [...order, 'bare' as Mode] : ['bare' as Mode, ...order]) {
+          if (m === 'bare') await removeDummies(page);
+          else if (!(await page.locator('[data-perf-dummy]').count()) && process.env.DUMMY !== '0') await addDummies(page);
+          if (m !== 'bare') await setFill(page, m); else await setFill(page, 'flat');
           const want = await shipped(page);
           await page.waitForTimeout(500);
           res.get(m)!.push(await measure(browser, page, want));
@@ -134,12 +148,16 @@ for (const dsf of [1, 2]) {
     console.log(JSON.stringify({ dsf, asShipped, sum }));
     /* the shipped decision on a tier-2 desktop is Glass, live (spec §2.3) */
     expect(asShipped, 'v2 on a tier-2 desktop boots as Glass, live').toMatchObject({ tier: 'full', cards: 'glass', glass: 'live' });
-    expect(sum.live.blurred, 'every dummy surface is blurred under live Glass').toBe(BOXES.length);
+    /* S1 audit F1(4): an occluded or throttled headed window reads low fps for everything and would pass vacuously */
+    expect(sum.v1.fps, 'the headed window was occluded or throttled').toBeGreaterThan(50);
+    expect(sum.live.blurred, 'every dummy surface is blurred under live Glass').toBe(process.env.DUMMY === '0' ? sum.live.blurred : BOXES.length);
     expect(sum.flat.blurred + sum.plates.blurred, 'nothing is blurred in flat or Plates').toBe(0);
     for (const m of ['plates', 'flat', 'live'] as const) expect(sum[m].flipped, `${m}: the fill changed during a measured run (governor demotion)`).toBe(0);
     for (const m of ['plates', 'flat'] as const) {
       expect(sum[m].p50, `${m} p50 vs v1`).toBeLessThanOrEqual(sum.v1.p50 * 1.05);
       expect(sum[m].p95, `${m} p95 vs v1`).toBeLessThanOrEqual(sum.v1.p95 * 1.10);
+      expect(sum[m].p50, `${m} p50 vs bare v2`).toBeLessThanOrEqual(sum.bare.p50 * 1.05);
+      expect(sum[m].p95, `${m} p95 vs bare v2`).toBeLessThanOrEqual(sum.bare.p95 * 1.10);
     }
     expect(sum.live.p50 - sum.flat.p50, 'live Glass beyond the founder-accepted cost').toBeLessThanOrEqual(6.0);
   });
