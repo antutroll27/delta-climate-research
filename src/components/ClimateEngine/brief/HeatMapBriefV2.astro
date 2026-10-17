@@ -1,0 +1,102 @@
+---
+/**
+ * THE PAIRED SCENARIO BRIEF IN THE v2 SHELL (OBOS v2 D7, plan S9.3). Owner: Track C (plan amendment A1).
+ *
+ * A DOCUMENT, NOT A CONSOLE. paired-brief.ts reproduces the record in the client and writes it into the nodes below by
+ * `data-*`; every `data-value`, `data-role` and `data-action` of HeatMapBrief.astro is here (the contract test fails if one
+ * goes missing) and every sentence of v1's brief is kept word for word. The page scrolls and prints: screens/brief.css makes
+ * the root a block, print/brief.css turns it to ink on paper and drops the chrome and the print button.
+ *
+ *   · the root also carries `data-compare-root`. That attribute is not the Compare bench here (paired-controller.ts is never
+ *     loaded on this route): it is the marker mountShellV2 reads to bind only the FRAME (menu pin, theme and card style,
+ *     popovers), because every other binder assumes the area stage. A request asks for the cleaner `[data-brief-root]` match;
+ *   · all figures are modelled, so every mark is outlined;
+ *   · no style element and no script element (template scripts never run; scoped CSS would stamp data-astro-cid).
+ */
+import RailV2 from '../v2/RailV2.astro';
+import ToolbarV2 from '../v2/ToolbarV2.astro';
+import Sym from '../v2/Sym.astro';
+import '../../../styles/obos-v2/tokens.css';
+import '../../../styles/obos-v2/atoms.css';
+import '../../../styles/obos-v2/shell.css';
+import '../../../styles/obos-v2/screens.css';
+import '../../../styles/obos-v2/phone.css';
+import '../../../styles/obos-v2/print.css';
+import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
+---
+<main id="main" class="heat-brief obos-v2" data-brief-root data-compare-root aria-busy="true" style={symbolCssVars()}>
+  <RailV2 current="compare" hasData={true} areaName="Compare" />
+  <ToolbarV2 />
+
+  <div class="brf-sheet">
+    <div class="brf-side">
+      <section class="card brf-intro">
+        <p class="micro">Urban Heat Explorer / Screening record</p>
+        <h1 class="name-xl">Paired scenario brief</h1>
+        <p class="body-s">A controlled, modelled comparison of the same intervention package in two study areas, which need not be equal: each side's figures, its cost included, are taken over the area named under its name. This is not a ward ranking or an investment-priority recommendation.</p>
+        <div class="foot brf-status" role="status" aria-live="polite" data-role="status">Preparing a client-side reproduction of this record.</div>
+      </section>
+
+      <section class="card brf-scenario" aria-labelledby="brf-scenario-h">
+        <div class="row"><h2 class="micro" id="brf-scenario-h">Scenario</h2><span class="kind modelled">modelled</span></div>
+        <ul class="sym-list">
+          <li><span class="sym-tile sm"><Sym shape="quarter" c="green" kind="modelled" size={18} /></span><div><div class="sym-hd"><b>Tree corridors</b></div><div class="sym-sub" data-value="trees">—</div></div></li>
+          <li><span class="sym-tile sm"><Sym shape="square" c="ink" kind="modelled" size={16} /></span><div><div class="sym-hd"><b>Cool roofs</b></div><div class="sym-sub" data-value="roofs">—</div></div></li>
+          <li><span class="sym-tile sm"><Sym shape="bar" c="green" kind="modelled" size={16} /></span><div><div class="sym-hd"><b>Green façades</b></div><div class="sym-sub" data-value="facades">—</div></div></li>
+        </ul>
+        <dl class="brf-k"><dt>Phase</dt><dd data-value="phase">—</dd><dt>Contract</dt><dd>paired-coverage-v1</dd></dl>
+      </section>
+
+      <section class="card brf-integrity" aria-labelledby="brf-integrity-h">
+        <h2 class="micro" id="brf-integrity-h">Integrity and limits</h2>
+        <ul class="method">
+          <li><span class="micro">Forcing</span><span class="foot" data-value="forcing">Awaiting record</span></li>
+          <li><span class="micro">Grid</span><span class="foot" data-value="grid">—</span></li>
+          <li><span class="micro">Data</span><span class="foot">ward-geometry-v1</span></li>
+          <li><span class="micro">Backend</span><span class="foot" data-value="backend">Selecting execution host</span></li>
+          <li><span class="micro">Publication</span><span class="foot">Screening-grade, modelled heat field</span></li>
+        </ul>
+        <p class="foot brf-note" data-value="boundary-credit" hidden></p>
+        <p class="foot brf-note">The current release uses an explicitly labelled interim fallback reference to verify the architecture. It is not an observed regional heat-day record. Before publication, replace it with a cited reference location, date, source, and actual 13:00/22:00 conditions.</p>
+      </section>
+    </div>
+
+    <div class="brf-main">
+      <section class="card brf-evidence" aria-labelledby="brf-evidence-h">
+        <div class="row"><h2 class="micro" id="brf-evidence-h">Paired evidence</h2><span class="kind modelled">modelled</span></div>
+        <table class="brf-t">
+          <thead><tr><th scope="col">Measure</th><th scope="col" data-value="a-name">A</th><th scope="col" data-value="b-name">B</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Figures taken over</th><td class="small" data-value="a-over">—</td><td class="small" data-value="b-over">—</td></tr>
+            <tr><th scope="row">Baseline surface mean</th><td data-value="a-baseline">—</td><td data-value="b-baseline">—</td></tr>
+            <tr><th scope="row">Scenario surface mean</th><td data-value="a-scenario">—</td><td data-value="b-scenario">—</td></tr>
+            <tr class="hl"><th scope="row">Surface cooling from baseline</th><td data-value="a-cooling">—</td><td data-value="b-cooling">—</td></tr>
+            <tr><th scope="row">Indicative capital</th><td data-value="a-cost">—</td><td data-value="b-cost">—</td></tr>
+          </tbody>
+        </table>
+        <div class="pills brf-acts">
+          <a class="pill" href="/heat-map/compare/" data-role="compare-link"><span aria-hidden="true">←</span> Back to Compare</a>
+          <button type="button" class="pill" data-action="print">Print brief</button>
+        </div>
+      </section>
+    </div>
+  </div>
+  <div class="key-pop card" id="v2Key" role="dialog" aria-label="How to read the marks" tabindex="-1" data-open="false" data-hud>
+    <div class="row"><h2 class="name-xl"><b>How</b><span> to read the marks</span></h2><button class="sp-close" type="button" data-pop-close aria-label="Close the key">×</button></div>
+    <div class="key-cols">
+      <div><h3>Colour<span> · what is measured</span></h3><ul>
+        <li><span class="ramp" style="width:44px;height:8px"></span><span><b>Heat ramp</b> · temperature only</span></li>
+        <li><Sym shape="disc" c="green" size={14} /><span><b>Green</b> · trees, green cover</span></li>
+        <li><Sym shape="disc" c="ink" size={14} /><span><b>Ink</b> · buildings, people, money</span></li></ul></div>
+      <div><h3>Shape<span> · what kind of place</span></h3><ul>
+        <li><Sym shape="square" c="ink" size={14} /><span><b>Square</b> · a roof, a building</span></li>
+        <li><Sym shape="quarter" c="ink" size={14} /><span><b>Quarter</b> · canopy, park</span></li>
+        <li><Sym shape="bar" c="ink" size={14} /><span><b>Bar</b> · a street</span></li></ul></div>
+      <div><h3>Fill<span> · how we know</span></h3><ul>
+        <li><Sym shape="disc" c="ink" size={14} /><span><b>Solid</b> · measured or observed</span></li>
+        <li><Sym shape="disc" c="ink" kind="modelled" size={14} /><span><b>Outlined</b> · modelled or estimated (the scenario package)</span></li>
+        <li><span class="kind modelled">modelled</span></li></ul>
+      <p class="foot">Everything on this page is modelled. Red and orange belong to the heat ramp.</p></div>
+    </div>
+  </div>
+</main>
