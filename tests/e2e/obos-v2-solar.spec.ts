@@ -4,6 +4,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { openV2 } from './obos-v2-helpers';
 
 const BALLYGUNGE = '/heat-map/in/kolkata/ballygunge/';
+/** The icon, not the item's centre: in icons mode the centre is clipped away (S2 audit F10, as obos-v2-shell.spec.ts does). */
+const openSolar = (page: Page): Promise<void> => page.locator('.nav-item[data-section="solar"]').click({ position: { x: 30, y: 22 } });
 const read = async (dl: { path(): Promise<string | null> }): Promise<string> => readFile((await dl.path()) as string, 'utf8');
 
 /** Click the ranked roofs in turn until one opens the card with a payback door (a roof under 1 kW has none). */
@@ -17,10 +19,12 @@ async function selectRoofWithPayback(page: Page): Promise<string> {
 
 test.describe('@v2 solar', () => {
   test.setTimeout(180_000);
+  /* an action that cannot be performed fails in 30 s with its call log, not after the whole test budget */
+  test.beforeEach(({ page }) => { page.setDefaultTimeout(30_000); });
 
   test('@v2 [H] Solar section: list in the side panel, headline with its floor, tariff persists, roof CSV downloads, Enter and Space select a roof', async ({ page }) => {
     await openV2(page);
-    await page.locator('.nav-item[data-section="solar"]').click();
+    await openSolar(page);
     await expect(page.locator('[data-side-pane="solar"] #solList tr[data-idx]').first()).toBeVisible({ timeout: 60_000 });
     await expect(page.locator('#solList tr[data-idx]')).toHaveCount(10);
     await expect(page.locator('#solPaneKwp')).toContainText('MWp');
@@ -67,7 +71,7 @@ test.describe('@v2 solar', () => {
   test('@v2 [H] payback: Use my bill sizes the system; the year CSV carries the tag; the brief prints alone; Esc closes only the sheet', async ({ page }) => {
     await page.addInitScript(() => { (window as unknown as { __printed: number }).__printed = 0; window.print = () => { (window as unknown as { __printed: number }).__printed += 1; }; });
     await openV2(page);
-    await page.locator('.nav-item[data-section="solar"]').click();
+    await openSolar(page);
     await expect(page.locator('#solList tr[data-idx]').first()).toBeVisible({ timeout: 60_000 });
     const idx = await selectRoofWithPayback(page);
     await page.locator('#bcPay').click();
@@ -157,8 +161,8 @@ test.describe('@v2 solar', () => {
     const v1YearDl = await v1Year;
     const v1YearCsv = await read(v1YearDl);
     /* v2: the same ward, the same first roof, the same defaults */
-    await openV2(page);
-    await page.locator('.nav-item[data-section="solar"]').click();
+    await openV2(page, `${BALLYGUNGE}?ui=v2`);
+    await openSolar(page);
     await expect(page.locator('#solList tr[data-idx]').first()).toBeVisible({ timeout: 60_000 });
     const v2Roofs = page.waitForEvent('download');
     await page.locator('#solCsv').click();

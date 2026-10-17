@@ -1,1 +1,72 @@
-/* OBOS v2 — screens/solar.css (spec §4.6). Owner: Track B (plan A1). */
+/* OBOS v2 — screens/solar.css (spec §4.6, §3.10). Owner: Track B (plan A1; S6.1 and S6.2 Step 4).
+   Ported from the preview's screens/solar.html `<style>` for the classes the markup uses. NO HEX HERE (tokens.css owns them).
+   v1's stylesheet reaches this page but is firewalled behind `:where(html:not([data-ui=v2]))` (S1), so NONE of v1's rules for .roofs, .sp-*, .sb-*,
+   .solpay, .solbrief, .bc-brief or .bc-tier style the v2 tree: every layout below is written here, from v2 tokens. The straw colour is a symbol colour,
+   not a text colour: figures are --ink-1 (spec: `.val.sun` becomes plain ink). */
+
+/* ───────────── the side panel: summary, tariff, the ten best roofs, the download ───────────── */
+html[data-ui="v2"] .obos-v2 .sl-sum { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .sl-sum b { color: var(--ink-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .sl-sum code { font: inherit; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .sp-body .pane-note { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .sl-note { margin-top: 6px; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .sl-tariff { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-top: 14px; padding: 10px 10px 10px 12px;
+  border-radius: 16px; background: var(--tile); }
+html[data-ui="v2"] .obos-v2 .sl-tariff label { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; font-weight: 600; }
+html[data-ui="v2"] .obos-v2 .sl-tin { display: inline-flex; align-items: baseline; gap: 3px; padding: 4px 10px 4px 9px; border-radius: 12px; background: var(--well-2); font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .sl-tin .sym-cur { font-size: 15px; font-weight: 700; }
+html[data-ui="v2"] .obos-v2 .sl-tin input { width: 3.6em; min-height: 24px; border: 0; background: transparent; padding: 0; font-size: 22px; font-weight: 300; letter-spacing: -0.02em;
+  color: var(--ink-1); font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .sl-tin .u { font-size: 12px; font-weight: 300; color: var(--unit); }
+html[data-ui="v2"] .obos-v2 .sl-listh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 18px; }
+
+/* the roof table keeps its table semantics; each row is restyled as the preview's .pick-row. The app writes six cells per row
+   (#, kWp, kWh/yr, range, shaded, m²) and no class on the row but .big, so the layout is by cell position and the units come from CSS. */
+html[data-ui="v2"] .obos-v2 .roofs-scroll { overflow: visible; margin-top: 4px; }
+html[data-ui="v2"] .obos-v2 table.roofs { display: block; width: 100%; border-collapse: separate; font: inherit; }
+html[data-ui="v2"] .obos-v2 table.roofs thead { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 table.roofs tbody { display: block; }
+html[data-ui="v2"] .obos-v2 table.roofs tr[data-idx] { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 10px; row-gap: 1px;
+  padding: 7px 9px; border-radius: 14px; cursor: pointer; min-height: 44px; align-items: baseline; color: var(--ink-1); transition: background-color .3s var(--ease), color .3s var(--ease); }
+html[data-ui="v2"] .obos-v2 table.roofs tr[data-idx]:hover { background: var(--well); }
+html[data-ui="v2"] .obos-v2 table.roofs tr[data-idx]:focus-visible { outline-offset: -2px; border-radius: 14px; }
+html[data-ui="v2"] .obos-v2 table.roofs tr[data-idx][aria-selected="true"], html[data-ui="v2"] .obos-v2 table.roofs tr[data-idx].on { background: var(--ink-1); color: var(--on-ink); }
+html[data-ui="v2"] .obos-v2 table.roofs tr[data-idx] td { display: block; min-width: 0; padding: 0; border: 0; text-align: left; white-space: nowrap; color: inherit; font-size: 13px; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 table.roofs td:nth-child(1) { grid-column: 1; grid-row: 1; font-weight: 700; letter-spacing: -0.01em; }
+html[data-ui="v2"] .obos-v2 table.roofs td:nth-child(2) { grid-column: 2; grid-row: 1; font-weight: 500; }
+html[data-ui="v2"] .obos-v2 table.roofs td:nth-child(3) { grid-column: 3; grid-row: 1; text-align: right; font-weight: 500; }
+html[data-ui="v2"] .obos-v2 table.roofs td:nth-child(4) { grid-column: 3; grid-row: 2; text-align: right; }
+html[data-ui="v2"] .obos-v2 table.roofs td:nth-child(5) { grid-column: 1; grid-row: 2; }
+html[data-ui="v2"] .obos-v2 table.roofs td:nth-child(6) { grid-column: 2; grid-row: 2; }
+html[data-ui="v2"] .obos-v2 table.roofs tr[data-idx] td:nth-child(n + 4) { font-size: 11px; font-weight: 400; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 table.roofs td:nth-child(2)::after { content: " kWp"; font-size: 11px; font-weight: 400; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 table.roofs td:nth-child(3)::after { content: " kWh/yr"; font-size: 11px; font-weight: 400; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 table.roofs td:nth-child(5)::before { content: "shade "; }
+html[data-ui="v2"] .obos-v2 table.roofs td:nth-child(6)::after { content: " m²"; }
+html[data-ui="v2"] .obos-v2 table.roofs tr[data-idx][aria-selected="true"] :is(td:nth-child(n + 4), td::after),
+html[data-ui="v2"] .obos-v2 table.roofs tr[data-idx].on :is(td:nth-child(n + 4), td::after) { color: color-mix(in oklch, var(--on-ink) 78%, transparent); }
+
+html[data-ui="v2"] .obos-v2 .sl-csv { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 40px; margin-top: 14px; border: 0; border-radius: 14px;
+  background: var(--ink-1); color: var(--on-ink); font: 600 13px/1 var(--sans); text-decoration: none; cursor: pointer; }
+html[data-ui="v2"] .obos-v2 .sl-csv[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .sl-csv svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ───────────── the ward's solar card: the headline, and its strict-mask floor in the same row ───────────── */
+html[data-ui="v2"] .obos-v2 .sl-ward .bleed-room { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+html[data-ui="v2"] .obos-v2 .sl-ward .name-xl { margin-top: 0; }
+html[data-ui="v2"] .obos-v2 .sl-ward .interval { margin-top: 14px; gap: 4px 12px; }
+html[data-ui="v2"] .obos-v2 .sl-ward .hero { font-size: 44px; }
+/* the floor goes directly under the headline (order 1) at full width and wraps: it is a sentence, not a pill; the confidence line follows */
+html[data-ui="v2"] .obos-v2 .sl-ward .sl-floor { order: 1; flex: 1 1 100%; white-space: normal; border-radius: 14px; padding: 6px 10px; line-height: 1.4; font-size: 12px; font-weight: 500;
+  color: var(--ink-1); margin: 0; }
+html[data-ui="v2"] .obos-v2 .sl-ward .sl-conf { order: 2; flex: 1 1 100%; margin: 0; padding: 0; border: 0; background: transparent; border-radius: 0; display: block; cursor: default;
+  font-size: 12px; line-height: 1.4; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .sl-ward .sl-conf b { font: inherit; font-weight: 600; color: var(--ink-1); letter-spacing: 0; }
+html[data-ui="v2"] .obos-v2 .sl-ward .sl-conf:empty, html[data-ui="v2"] .obos-v2 .sl-ward .sl-floor:empty { display: none; }
+html[data-ui="v2"] .obos-v2 .sl-ward .sl-sure { margin-top: 10px; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .sl-ward .stats { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 .sl-ward .stats dd small { display: block; margin: 2px 0 0; font-family: var(--sans); font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .sl-ward[hidden] { display: none; }
+/* the ward estimate card: with no cost basis the app hides the sentence, and a header over nothing is not drawn */
+html[data-ui="v2"] .obos-v2[data-section="solar"] #legend [data-v2-card="ward-payback"]:has(> #solPanePay[hidden]) { display: none; }
+html[data-ui="v2"] .obos-v2 .sl-assume { margin-top: 10px; font-size: 11px; line-height: 1.5; color: var(--ink-2); }

@@ -1,6 +1,36 @@
 ---
-// src/components/ClimateEngine/v2/SolarCards.astro — OBOS v2 spec §4.6.
-// A1 SLOT (S2.8): renders nothing until its owner fills it. Owner: Track B, plan S6.1.
+// src/components/ClimateEngine/v2/SolarCards.astro — OBOS v2 spec §4.6 [H]. Owner: Track B (plan S6.1).
+// The ward's solar headline and its payback line. The strict-mask floor (#solPaneFloor) is a sibling of the headline (#solPaneKwp) inside
+// the one .interval row, so it is never under a fold (spec R6, H13). Every figure is painted by the app (paintSolarWard); this file holds
+// no number and no currency.
+// The plan's markup also carried v1's `solblock`, `big`, `k`, `val`, `mrow`, `conf screening`, `solfloor` and `bc-tier` class names. v2 has no rule for
+// them (v1's sheet is firewalled off this tree) and the v2 atoms (.hero, .stats, .kind, .floor) do the same work, so they are left off: nothing
+// queries them, and a later v2 rule on .conf, .big, .k or .val (Track A's temp card) could not catch these cards by accident.
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+import Sym from './Sym.astro';
 interface Props { scope: ResolvedScope }
 ---
+<section class="card sl-ward" id="solPaneBlock" data-sections="solar" aria-labelledby="solPaneHead">
+  <span class="bleed" aria-hidden="true"><Sym shape="ward" c="solar" kind="modelled" size={88} /></span>
+  <div class="bleed-room">
+    <span class="micro" id="solPaneHead">Rooftop solar · installable, whole ward</span>
+    <h3 class="name-xl"><b>Installable</b><span> capacity</span></h3>
+    <span id="solPaneTier" class="kind modelled">screened</span>
+  </div>
+  <div class="interval">
+    <div class="hero thin num" id="solPaneKwp">—<span class="u">MWp</span></div>
+    <div class="sl-conf" id="solPaneConf"></div>
+    <p class="floor sl-floor" id="solPaneFloor"></p>
+  </div>
+  <p class="foot sl-sure" id="solPaneSure"></p>
+  <dl class="stats">
+    <div><dt class="micro">Annual yield</dt><dd id="solPaneKwh">—</dd></div>
+    <div><dt class="micro">Worth at tariff</dt><dd id="solPaneRs">—</dd></div>
+    <div><dt class="micro" id="solPaneBigK">Roofs ≥ 3 kWp</dt><dd id="solPaneBig">—</dd></div>
+    <div><dt class="micro">Losing ≥ 5 %, of those</dt><dd id="solPaneSh">—</dd></div>
+  </dl>
+</section>
+<section class="card" data-v2-card="ward-payback" data-sections="solar" aria-label="Ward payback estimate">
+  <div class="row"><span class="micro">Ward estimate</span><span class="kind modelled">estimate</span></div>
+  <p class="foot sl-assume" id="solPanePay" hidden></p>
+</section>

@@ -1,7 +1,45 @@
 ---
-// src/components/ClimateEngine/v2/SolarSide.astro — OBOS v2 spec §4.6. Owner: Track B. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
-// A1 SLOT (plan S6.1): keeps data-side-pane="solar" on its root when filled.
+// src/components/ClimateEngine/v2/SolarSide.astro — OBOS v2 spec §4.6. Owner: Track B (plan S6.1; A1 §3.5).
+// The side panel's Solar body. Its ids are the ones the app paints (heat-map-app.ts :1297–1340, :1409–1427): copied from the v1 stage's
+// pane-body (:297–343) with their text verbatim. #solPaneBlock and #solPanePay live in SolarCards.astro, so no id is in the tree twice.
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
 ---
-<div class="sp-body" data-side-pane="solar"></div>
+<div class="sp-body" data-side-pane="solar">
+  <div class="sp-head">
+    <div>
+      <h2>Solar · <span id="solPaneArea">{scope.area.name}</span></h2>
+      <p class="sp-sub">Rooftop solar · installable</p>
+    </div>
+    <button class="sp-close" type="button" data-side-close aria-label="Close the solar panel">×</button>
+  </div>
+  <div class="sp-scroll">
+    {scope.area.hasData ? (
+    <Fragment>
+      <p class="sl-sum" id="solPaneSum">Loading the rooftop-solar screen…</p>
+      <div class="sl-tariff">
+        <label for="solTariff"><span class="micro">Tariff · assumed</span>Change it</label>
+        <span class="sl-tin"><span class="sym-cur" id="solCur" aria-hidden="true"></span><input id="solTariff" type="number" inputmode="decimal" min="0" step="0.25" value="8.00" aria-describedby="solTariffNote"><span class="u">/ kWh</span></span>
+      </div>
+      {/* THE UTILITY IS NAMED ONLY WHERE ITS TARIFF WAS SOURCED. CESC is Kolkata's DISCOM; Bengaluru's is BESCOM, whose slabs are not sourced,
+          so the other city asserts no rate rather than guessing one. (v1 stage :318–328, verbatim.)
+          ponytail: a city-id test, because one city has the datum and one does not. It becomes a registry field the moment a second tariff is sourced. */}
+      <p class="foot sl-note" id="solTariffNote">{scope.city.id === 'kolkata'
+        ? 'CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.'
+        : 'No local tariff is sourced for this city yet, so the box above is an assumption you should change. Not a rate we assert.'}</p>
+      <div class="sl-listh"><span class="micro">Best roofs by annual yield</span><span class="foot">kWh/yr</span></div>
+      <div class="roofs-scroll">
+        <table class="roofs" aria-label="The ten best roofs by annual yield; each row selects its building on the map">
+          <thead><tr><th scope="col">#</th><th scope="col">kWp</th><th scope="col">kWh/yr</th><th scope="col">range</th><th scope="col">shaded</th><th scope="col">m²</th></tr></thead>
+          <tbody id="solList"></tbody>
+        </table>
+      </div>
+      <p class="foot sl-note">Yield uses NASA POWER irradiance and a Mumbai packing factor; shading is computed from this ward's own geometry and canopy, and the mask rule is its largest uncertainty — "at least" is the strict-mask floor. Screening only, not bankable.</p>
+      <a class="sl-csv" id="solCsv" href="#" download><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>Download roof list · CSV</a>
+    </Fragment>
+    ) : (
+    <p class="pane-note">No solar screen ships for {scope.area.name}. The screen needs footprints, heights and canopy, and this area ships none.</p>
+    )}
+  </div>
+</div>
