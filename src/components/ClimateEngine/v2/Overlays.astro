@@ -3,6 +3,11 @@
 import Sym from './Sym.astro';
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
+/* S2 audit F1: the chip lists only sources that area really draws. A DataMeet ward boundary exists only on the areas that ship one,
+   and the app writes its credit (with the licence link) into MapLibre's control, which the credits popover mirrors; an area with no
+   map says only "Credits". */
+const chipText = scope.area.hasData ? '© OpenStreetMap · OpenMapTiles · OpenFreeMap · Overture · Credits' : 'Credits';
 ---
 <div class="key-pop card" id="v2Key" role="dialog" aria-label="How to read the marks" tabindex="-1" data-open="false" data-hud>
   <div class="row"><h2 class="name-xl"><b>How</b><span> to read the marks</span></h2><button class="sp-close" type="button" data-pop-close aria-label="Close the key">×</button></div>
@@ -30,17 +35,18 @@ interface Props { scope: ResolvedScope }
   </div>
 </div>
 
-<div class="st-attrib" data-hud><button class="attrib" type="button" data-pop-open="credits" aria-expanded="false" aria-controls="v2Credits">© OpenStreetMap · OpenFreeMap · Overture · DataMeet · Credits</button></div>
+<div class="st-attrib" data-hud><button class="attrib" type="button" data-pop-open="credits" aria-expanded="false" aria-controls="v2Credits">{chipText}</button></div>
 <div class="credits-pop card" id="v2Credits" role="dialog" aria-label="Data and credits" tabindex="-1" data-open="false" data-hud>
   <div class="row"><span class="micro">Data and credits</span><button class="sp-close" type="button" data-pop-close aria-label="Close credits">×</button></div>
   <ul>
-    <li>Basemap © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> · <a href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">OpenFreeMap</a><small>ODbL</small></li>
+    <li>Basemap © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> · <a href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">OpenFreeMap</a> · <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">© OpenMapTiles</a><small>ODbL</small></li>
     <li>Footprints © <a href="https://overturemaps.org" target="_blank" rel="noopener noreferrer">Overture Maps Foundation</a><small>ODbL</small></li>
     <li>Heights Google Open Buildings 2.5D<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
     <li>Water © OpenStreetMap<small>ODbL</small></li>
     <li>Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span></li>
     <li>Live weather © Met Norway<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
     <li><span id="attrWard" hidden></span></li>
+    <li data-v2-map-attrib hidden></li>
     <li>Cloud deck drawn at 320 m, real base ~700 m</li>
     <li data-v2-street-credit hidden>Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener noreferrer">Mapillary</a> · community-captured<small>CC BY-SA</small></li>
     <li class="foot">left-drag orbit · right-drag pan · scroll zoom</li>

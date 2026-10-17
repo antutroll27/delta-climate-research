@@ -106,9 +106,27 @@ test.describe('@v2 shell', () => {
     await open.click();
     await expect(page.locator('#v2Layers')).toBeVisible();
     await expect(page.locator('#v2Layers #modechip button[data-m="relief"]')).toBeVisible();
+    /* S2 audit F3: "and stops there" must be tested, not assumed. A bubbling listener on window sees an Escape only if the shell's
+       capture handler let it through; the app's own onPickKey (deselect, close brief, close street view) listens there too. */
+    await page.evaluate(() => { const w = window as unknown as { __escLeaked: boolean }; w.__escLeaked = false; window.addEventListener('keydown', (e) => { if (e.key === 'Escape') w.__escLeaked = true; }); });
+    const leaked = (): Promise<boolean> => page.evaluate(() => (window as unknown as { __escLeaked: boolean }).__escLeaked);
     await page.keyboard.press('Escape');
     await expect(page.locator('#v2Layers')).toBeHidden();
     await expect(open).toBeFocused();
+    expect(await leaked(), 'the Esc that closed the popover must not reach the app').toBe(false);
+    await page.keyboard.press('Escape');
+    expect(await leaked(), 'with nothing open the app still gets its Esc').toBe(true);
+  });
+
+  test('@v2 a popover left behind by the keyboard closes without stealing focus (S2 audit F4)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openV2(page);
+    await page.locator('[data-pop-open="key"]').click();
+    await expect(page.locator('#v2Key')).toBeVisible();
+    await page.locator('.nav-item[data-section="heat"]').focus();
+    await expect(page.locator('#v2Key'), 'focus left the Key: it closes').toBeHidden();
+    await expect(page.locator('.nav-item[data-section="heat"]'), 'and focus stays where the reader put it').toBeFocused();
+    await expect(page.locator('[data-pop-open="key"]')).toHaveAttribute('aria-expanded', 'false');
   });
 
   test('@v2 the clock: 12/24 h persists; the age button re-reads exactly once', async ({ page }) => {
@@ -142,6 +160,61 @@ test.describe('@v2 shell', () => {
     for (const h of hrefs) expect(h).toMatch(/^https:\/\//);
     await expect(page.locator('#attrWard')).toContainText('DataMeet', { timeout: 30_000 });
     await expect(page.locator('#terrLab')).toHaveText(/indicative/);
+    /* S2 audit F1: v1's MapLibre control carried the OpenMapTiles credit and the LINKED DataMeet licence; the v2 popover mirrors it */
+    await expect(pop).toContainText('OpenMapTiles');
+    await expect(pop.locator('a[href*="openmaptiles.org"]').first()).toBeVisible();
+    await expect(pop.locator('[data-v2-map-attrib] a[href*="by-sa/2.5/in"]')).toHaveCount(1, { timeout: 30_000 });
+    const chip = page.locator('.st-attrib .attrib');
+    await expect(chip, 'the chip is always visible').toBeVisible();
+    await expect(chip).toHaveText('© OpenStreetMap · OpenMapTiles · OpenFreeMap · Overture · Credits');
+  });
+
+  test('@v2 [H] credits follow v1 per area: no DataMeet where no DataMeet boundary is drawn; no map, only "Credits" (S2 audit F1, F11)', async ({ page }) => {
+    await openV2(page, '/heat-map/in/kolkata/baruipur/');
+    const chip = page.locator('.st-attrib .attrib');
+    await expect(chip).toBeVisible();
+    await expect(chip).not.toContainText('DataMeet');
+    await expect(chip).toContainText('OpenMapTiles');
+    await page.locator('[data-pop-open="credits"]').click();
+    const pop = page.locator('#v2Credits');
+    await expect(pop).toBeVisible();
+    await expect(pop).toContainText('OpenMapTiles');
+    await expect(pop).not.toContainText('DataMeet');
+    await expect(pop.locator('[data-v2-map-attrib] a[href*="by-sa"]')).toHaveCount(0);
+    await expect(page.locator('li:has(> #attrWard)'), 'the empty ward row draws no stray divider').toBeHidden();
+    await page.goto('/heat-map/ae/dubai/al-quoz/');
+    await expect(page.locator('html')).toHaveAttribute('data-ui', 'v2');
+    await expect(page.locator('.st-attrib .attrib'), 'no map, no source list; the chip stays').toHaveText('Credits');
+    await expect(page.locator('.st-attrib .attrib')).toBeVisible();
+  });
+
+  test('@v2 no data (Al Quoz): no compass, no measured/modelled legend, no coordinate (S2 audit F8)', async ({ page }) => {
+    const errors: string[] = []; page.on('pageerror', (e) => errors.push(e.message));
+    await openV2(page, '/heat-map/ae/dubai/al-quoz/');
+    await expect(page.locator('.tc')).toBeVisible();
+    await expect(page.locator('#compass')).toHaveCount(0);
+    await expect(page.locator('.tc-legend')).toHaveCount(0);
+    await expect(page.locator('#coord')).toHaveCount(0);
+    await page.waitForTimeout(1500);
+    expect(errors).toEqual([]);
+  });
+
+  test('@v2 compass: four ticks that turn with the dial and never touch N or S (S2 audit F6)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openV2(page, '/heat-map/in/kolkata/ballygunge/?lab=1');
+    await expect(page.locator('#compassDial .compass-tick'), 'the approved design has four, and they are the dial\'s').toHaveCount(4);
+    for (const b of [0, 90, 45, -90]) {
+      await page.evaluate((bearing) => (window as unknown as { __obosMap: { jumpTo(o: { bearing: number }): void } }).__obosMap.jumpTo({ bearing }), b);
+      await expect.poll(() => page.locator('#compassDial').getAttribute('transform')).toBe(`rotate(${-b} 24 24)`);
+      const hits = await page.evaluate(() => {
+        /* a text element's box includes the font's ascent and descent; the cap's ink is the middle ~70 % of it */
+        const ink = (id: string): DOMRect => { const r = document.getElementById(id)!.getBoundingClientRect(); const cut = r.height * 0.15; return new DOMRect(r.x, r.y + cut, r.width, r.height - 2 * cut); };
+        const hit = (a: DOMRect, b: DOMRect): boolean => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+        const letters = [ink('compassN'), ink('compassS')];
+        return [...document.querySelectorAll('#compassDial .compass-tick')].map((t) => { const r = t.getBoundingClientRect(); return letters.some((l) => hit(r, l)); });
+      });
+      expect(hits, `bearing ${b}: a tick touches a letter`).toEqual([false, false, false, false]);
+    }
   });
 
   test('@v2 toasts: the tip dismisses for the session; the key popover explains the marks', async ({ page }) => {
@@ -168,5 +241,21 @@ test.describe('@v2 shell', () => {
       await expect(page.locator('#aqiBlock')).toBeVisible({ visible: shown });
     }
     await expect(page.locator('#solBlock')).toBeHidden();
+  });
+
+  test('@v2 at 1400 px with labels and the Explore panel, the toasts sit under the compass, clear of the right column (S2 audit F7)', async ({ page }) => {
+    await page.addInitScript(() => { try { sessionStorage.removeItem('delta:hm-tip'); } catch { /* none */ } });
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await openV2(page);
+    const root = page.locator('main.obos-v2');
+    await expect(root).toHaveAttribute('data-menu-eff', 'labels');
+    await expect(root).toHaveAttribute('data-side-shown', '1');
+    await expect(page.locator('#tiphint')).toBeVisible();
+    const pill = await page.locator('#tiphint').boundingBox();
+    const col = await page.locator('#legend').boundingBox();
+    const compass = await page.locator('#compass').boundingBox();
+    expect(pill && col && compass).toBeTruthy();
+    expect(pill!.x + pill!.width, 'the pill ends before the right column starts').toBeLessThanOrEqual(col!.x);
+    expect(pill!.y, 'and sits below the compass').toBeGreaterThanOrEqual(compass!.y + compass!.height);
   });
 });

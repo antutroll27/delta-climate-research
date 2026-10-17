@@ -94,6 +94,15 @@ export function bindLayers(ctx: ShellCtx): LayerStack {
     const t = e.target as Node;
     if (!top.el.contains(t) && !(top.opener?.contains(t) ?? false)) api.closeTop();
   });
+  /* S2 audit F4: Tab (or a click on something else) away from an open popover closes it without moving focus, so a later Esc
+     is never spent on a popover the reader has left, and never yanks focus back to its opener. */
+  on(cleanup, document, 'focusin', (e) => {
+    const top = stack[stack.length - 1];
+    const t = e.target as Node;
+    if (!top || top.el.dataset.modal === 'true' || top.el.contains(t) || (top.opener?.contains(t) ?? false)) return;
+    stack.pop();
+    top.el.dataset.open = 'false'; top.opener?.setAttribute('aria-expanded', 'false'); top.onClose?.();
+  });
   on(cleanup, window, 'keydown', (e) => {
     if ((e as KeyboardEvent).key !== 'Escape' || !stack.length) return;
     api.closeTop(); e.preventDefault(); e.stopImmediatePropagation();
@@ -118,6 +127,18 @@ export function bindFlash(ctx: ShellCtx): void {
   const street = (): void => { if (credit) credit.hidden = !document.querySelector('#streetchip button[data-s="1"].on'); };
   observe(cleanup, $(root, '#streetchip'), { attributes: true, subtree: true, attributeFilter: ['class'] }, street);
   street();
+  /* S2 audit F1: MapLibre's own attribution control is hidden, so its text is mirrored here, links and all. The app REBUILDS the
+     control in setMapCredit (the open area's boundary credit), which is why the whole #mlmap subtree is observed. Today it carries the
+     DataMeet licence link and OpenFreeMap's OpenMapTiles line; any later source credit shows up with no edit. */
+  const mirror = $(root, '[data-v2-map-attrib]');
+  const copy = (): void => {
+    if (!mirror) return;
+    const src = document.querySelector('.maplibregl-ctrl-attrib-inner');
+    mirror.replaceChildren(...(src ? [...src.childNodes].map((n) => n.cloneNode(true)) : []));
+    mirror.hidden = !src?.textContent?.trim();
+  };
+  observe(cleanup, $(root, '#mlmap'), { childList: true, subtree: true, characterData: true }, copy);
+  copy();
 }
 
 /** Resolve once the instrument has picked its engine (the map and its handlers are up). */

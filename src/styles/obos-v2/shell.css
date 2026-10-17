@@ -188,6 +188,11 @@ html[data-ui="v2"] .obos-v2[data-side-shown="1"]:not([data-side-current="explore
   html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"] .toasts { left: 712px; }
   html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"][data-menu-eff="labels"] .toasts { left: 864px; }
 }
+/* S2 audit F7: from 1366 to 1499 px the labelled menu plus the Explore panel push the pills onto the right column (the 217 px
+   pill ended 71 px inside it at 1366). There they drop under the compass instead: the title column's own left, below the compass tile. */
+@media (min-width: 1366px) and (max-width: 1499px) {
+  html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"][data-menu-eff="labels"] .toasts { left: 568px; top: 282px; }
+}
 html[data-ui="v2"] .obos-v2 .toasts > * { pointer-events: auto; }
 html[data-ui="v2"] .obos-v2 .toast { display: inline-flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 99px; font-size: 12.5px; color: var(--ink-1); white-space: nowrap; }
 html[data-ui="v2"] .obos-v2 .toast .t-eyebrow { font: 700 9.5px/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); }
@@ -223,7 +228,7 @@ html[data-ui="v2"] .obos-v2 .credits-pop li { font-size: 12px; line-height: 1.45
 html[data-ui="v2"] .obos-v2 .credits-pop li:first-child { border-top: 0; }
 html[data-ui="v2"] .obos-v2 .credits-pop li small { display: block; color: var(--ink-3); font-size: 11px; }
 html[data-ui="v2"] .obos-v2 .credits-pop a { color: inherit; }
-html[data-ui="v2"] .obos-v2 .credits-pop li[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .credits-pop li[hidden], html[data-ui="v2"] .obos-v2 .credits-pop li:has(> #attrWard[hidden]) { display: none; }
 html[data-ui="v2"] .obos-v2 .credits-pop ul { margin-top: 8px; }
 
 /* touch: every button in the v2 root reaches 44 px, except the clock's meridiem marks, symbols and inline links (spec §7) */
