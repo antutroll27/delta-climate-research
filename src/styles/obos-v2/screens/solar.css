@@ -18,6 +18,8 @@ html[data-ui="v2"] .obos-v2 .sl-tin .sym-cur { font-size: 15px; font-weight: 700
 html[data-ui="v2"] .obos-v2 .sl-tin input { width: 3.6em; min-height: 24px; border: 0; background: transparent; padding: 0; font-size: 22px; font-weight: 300; letter-spacing: -0.02em;
   color: var(--ink-1); font-variant-numeric: tabular-nums; }
 html[data-ui="v2"] .obos-v2 .sl-tin .u { font-size: 12px; font-weight: 300; color: var(--ink-3); }
+/* a ward with no solar screen: the app hides #solCsv, so the tariff tool and the empty list go and the note stands alone (B-S6 audit F7) */
+html[data-ui="v2"] .obos-v2 [data-side-pane="solar"]:has(#solCsv[hidden]) :is(.sl-tariff, #solTariffNote, .sl-listh, .roofs-scroll, .sl-note) { display: none; }
 html[data-ui="v2"] .obos-v2 .sl-listh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 18px; }
 
 /* the roof table keeps its table semantics; each row is restyled as the preview's .pick-row. The app writes six cells per row
