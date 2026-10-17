@@ -11,12 +11,13 @@ const STYLES = 'src/styles/obos-v2';
 const SHEETS = ['tokens.css', 'atoms.css', 'shell.css', 'screens.css', 'phone.css', 'print.css'];
 const COMPONENTS = 'src/components/ClimateEngine/v2';
 const SCRIPTS = 'src/scripts/climate-engine/v2';
-const HEX = /#[0-9a-fA-F]{3,8}\b/g;
+/* hex AND functional colours (S1 audit F5): rgb(a), hsl(a), oklch, oklab, lch, lab, color(). color-mix(... var() ...) does not match. */
+const HEX = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lch|lab|color)\([^()]*\)/g;
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/<!--[\s\S]*?-->/g, '');
 
 test('every v2 sheet exists', () => { for (const f of SHEETS) assert.ok(existsSync(join(STYLES, f)), f); });
 
-test('hex only in tokens.css (sheets) and symbols.ts (marks), each spelled once', () => {
+test('colour literals only in tokens.css (sheets) and symbols.ts (marks), each spelled once', () => {
   const offences = [];
   for (const f of SHEETS.filter((x) => x !== 'tokens.css')) {
     const h = strip(readFileSync(join(STYLES, f), 'utf8')).match(HEX) ?? [];
@@ -32,11 +33,19 @@ test('hex only in tokens.css (sheets) and symbols.ts (marks), each spelled once'
     if (h.length) offences.push(`${f}: ${h.join(' ')}`);
   }
   for (const f of [join(STYLES, 'tokens.css'), join(SCRIPTS, 'symbols.ts')]) {
-    const h = (strip(readFileSync(f, 'utf8')).match(HEX) ?? []).map((x) => x.toLowerCase());
+    const h = (strip(readFileSync(f, 'utf8')).match(HEX) ?? []).map((x) => x.toLowerCase().replace(/\s+/g, ''));
     const twice = [...new Set(h.filter((x, i) => h.indexOf(x) !== i))];
     if (twice.length) offences.push(`${f} spells ${twice.join(' ')} more than once`);
   }
   assert.deepEqual(offences, []);
+});
+
+/* S1 audit F8: the AA token values are pinned now, not at S8. Light-Glass grey units and labels must stay #5C5B58 (4.67:1 on the worst ground). */
+test('Light --ink-3 and --unit are #5C5B58 (AA, spec §7.1)', () => {
+  const css = strip(readFileSync(join(STYLES, 'tokens.css'), 'utf8'));
+  assert.match(css, /--hx-quiet-light: #5C5B58;/i);
+  const light = css.slice(css.indexOf('[data-theme="light"] {'), css.indexOf('[data-theme="dark"] {'));
+  assert.match(light, /--ink-3: var\(--hx-quiet-light\); --unit: var\(--hx-quiet-light\);/);
 });
 
 const hsl = (hex) => {

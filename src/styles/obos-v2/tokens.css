@@ -35,6 +35,8 @@ html[data-ui="v2"] .obos-v2 {
   --hx-stone: #ECE8E1; --hx-char-1: #141614; --hx-char-2: #363936; --hx-char-3: #4A4D49; --hx-char-u: #5A5D59;
   --hx-quiet-light: #5C5B58; --hx-dock-light: #F8F8F6;
   --hx-focus-light: #1f63d6; --hx-focus-dark: #8ab4ff;
+  /* the teal hairlines and the ramp's hairline, each spelled once (S1 audit F5) */
+  --hx-teal-a08: rgba(111, 202, 214, 0.08); --hx-teal-a14: rgba(111, 202, 214, 0.14); --hx-teal-a16: rgba(111, 202, 214, 0.16); --hairline: oklch(0 0 0 / 0.05);
 }
 
 /* ── Light (twin light glass; ink-3 and unit raised to #5C5B58 for AA, spec §7.1) ── */
@@ -63,9 +65,9 @@ html[data-ui="v2"] .obos-v2[data-theme="dark"] {
   color-scheme: dark;
   --card: var(--hx-teal-0);
   --glass-fill: rgba(5, 23, 25, 0.80); --glass-fill-strong: rgba(5, 23, 25, 0.84); --glass-fallback: rgba(6, 27, 29, 0.96);
-  --glass-border: rgba(111, 202, 214, 0.14); --glass-hi: inset 0 1px 0 rgba(111, 202, 214, 0.08);
+  --glass-border: var(--hx-teal-a14); --glass-hi: inset 0 1px 0 var(--hx-teal-a08);
   --glass-blur: blur(22px) saturate(1.25) brightness(0.72);
-  --well: rgba(111, 202, 214, 0.09); --well-2: rgba(111, 202, 214, 0.16); --line: rgba(111, 202, 214, 0.14);
+  --well: rgba(111, 202, 214, 0.09); --well-2: var(--hx-teal-a16); --line: var(--hx-teal-a14);
   --ink-1: var(--hx-snow-1); --ink-2: var(--hx-snow-2); --ink-3: var(--hx-snow-3); --unit: var(--hx-snow-u);
   --on-ink: var(--hx-teal-0); --focus-accent: var(--hx-focus-dark);
   --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 24px 48px -24px oklch(0 0 0 / 0.6);
@@ -74,9 +76,9 @@ html[data-ui="v2"] .obos-v2[data-theme="dark"] {
   --compass-s: rgba(236, 237, 240, 0.4); --compass-line: rgba(111, 202, 214, 0.45);
   --sym-green: var(--sym-green-dark);
   --plate: var(--hx-teal-0); --plate-ink-1: var(--hx-snow-1); --plate-ink-2: var(--hx-snow-2); --plate-ink-3: var(--hx-snow-3); --plate-unit: var(--hx-snow-u);
-  --plate-well: var(--hx-teal-1); --plate-well-2: var(--hx-teal-2); --plate-line: rgba(111, 202, 214, 0.16);
+  --plate-well: var(--hx-teal-1); --plate-well-2: var(--hx-teal-2); --plate-line: var(--hx-teal-a16);
   --plate-on-ink: var(--hx-teal-0); --plate-tile: var(--hx-teal-1);
-  --plate-shadow: inset 0 1px 0 rgba(111, 202, 214, 0.08), 0 1px 2px rgba(0, 0, 0, 0.4), 0 28px 56px -24px rgba(0, 0, 0, 0.7);
+  --plate-shadow: inset 0 1px 0 var(--hx-teal-a08), 0 1px 2px rgba(0, 0, 0, 0.4), 0 28px 56px -24px rgba(0, 0, 0, 0.7);
 }
 
 /* ── Plates re-ink their own surfaces (the ONE plate definition, sys.css :73–91, :402–408) ── */
