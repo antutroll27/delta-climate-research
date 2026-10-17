@@ -409,6 +409,23 @@ test.describe('@v2 compare', () => {
     await expect(page.locator('[data-input="trees"]')).toHaveValue('40');
   });
 
+  test('@v2 C audit F4: print hides the chrome by a rule, not a list - an element added to the brief root later (S8) cannot print', async ({ page }) => {
+    await openV2(page, '/heat-map/brief/?a=ballygunge&b=baruipur&trees=40');
+    await expect(page.locator('main.obos-v2[data-brief-root]')).toHaveAttribute('aria-busy', 'false', { timeout: 120_000 });
+    await page.evaluate(() => {
+      const root = document.querySelector('main.obos-v2[data-brief-root]');
+      const el = document.createElement('div'); el.className = 'future-drawer'; el.textContent = 'a drawer S8 adds';
+      el.style.cssText = 'position:fixed;left:0;top:0;width:100px;height:100px';
+      root?.append(el);
+    });
+    await expect(page.locator('.future-drawer')).toBeVisible();
+    await page.emulateMedia({ media: 'print' });
+    await expect(page.locator('.future-drawer'), 'anything outside the sheet is chrome').toBeHidden();
+    await expect(page.locator('.brf-sheet')).toBeVisible();
+    await expect(page.locator('.brf-acts'), 'the in-sheet buttons are chrome too').toBeHidden();
+    await expect(page.locator('.brf-evidence')).toBeVisible();
+  });
+
   test('@v2 print on the brief: window.print is what the button calls', async ({ page }) => {
     await page.addInitScript(() => { (window as unknown as { __printed: number }).__printed = 0; window.print = () => { (window as unknown as { __printed: number }).__printed += 1; }; });
     await page.goto('/heat-map/brief/');

@@ -10,7 +10,10 @@
     --line: color-mix(in srgb, var(--print-ink) 30%, var(--print-paper)); --well: var(--print-paper); --on-ink: var(--print-paper);
     background: var(--print-paper) !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
     border: 1px solid var(--line); break-inside: avoid; }
-  html[data-ui="v2"] .obos-v2.heat-brief :is(.rail, .toolbar, .key-pop, .brf-acts) { display: none !important; }
+  /* PRINT ISOLATION IS A RULE, NOT A LIST (C audit F4): everything in the brief root that is not the sheet is chrome, so an element a
+     later slice adds to the root (S8's drawer, scrim, toasts) cannot print. Only the in-sheet buttons need naming. */
+  html[data-ui="v2"] .obos-v2.heat-brief > :not(.brf-sheet) { display: none !important; }
+  html[data-ui="v2"] .obos-v2.heat-brief .brf-acts { display: none !important; }
   html[data-ui="v2"] .obos-v2.heat-brief .brf-org { display: block; margin-bottom: 2mm; }
   html[data-ui="v2"] .obos-v2.heat-brief [data-action="print"] { display: none; }
   html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { display: block; max-width: none; padding: 0; }
