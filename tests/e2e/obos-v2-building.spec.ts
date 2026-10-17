@@ -131,7 +131,9 @@ test.describe('@v2 building card', () => {
   test('@v2 [H] a landmark (Bengaluru): its published height AND its source are on the card', async ({ page }) => {
     await openV2(page, '/heat-map/in/bengaluru/mg-road/');
     /* landmark chips are pinned to roofs, so they exist only in the 3-D relief view (the app hides them in 2-D isotherm; tier 0 may start there) */
-    await page.locator('[data-m="relief"]').first().evaluate((b) => (b as HTMLElement).click());
+    await page.locator('[data-pop-open="layers"]').click();
+    await page.locator('.layers-pop [data-m="relief"]').click();
+    await page.keyboard.press('Escape');
     const chip = page.locator('#lmlabs .lmlab:not([hidden])').first();
     await expect(chip).toBeVisible({ timeout: 60_000 });
     await chip.click();

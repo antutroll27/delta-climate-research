@@ -1,26 +1,6 @@
 ---
-// src/components/ClimateEngine/v2/ParkA2.astro — OBOS v2 spec §3.8, §4.1, §4.8. Owner: Track A. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
-// Parked: only the no-data card, until S5.2 (ScenarioCards). S3 and S4 re-homed everything else: TempCard, HeatCards, MapStack, MapChips, StreetViewModal.
-import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
+// src/components/ClimateEngine/v2/ParkA2.astro — OBOS v2 spec §3.8, §4.1, §4.8. Owner: Track A. EMPTY since S5.2: everything it parked has a home
+// (TempCard, HeatCards, MapStack, MapChips, StreetViewModal, ExploreSide, ScenarioCards). S8 removes the empty Park files.
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 interface Props { scope: ResolvedScope }
-const { scope } = Astro.props;
 ---
-    {/* S5 */}
-    {!scope.area.hasData && <Fragment>
-  <section class="notyet" aria-labelledby="notyet-h">
-    <p class="notyet-tier">{scope.tier} tier · {scope.city.koppen} climate</p>
-    <h1 class="notyet-h" id="notyet-h">{scope.area.name}</h1>
-    <p class="notyet-sub">{scope.area.descriptor} · {scope.city.name}, {scope.country.name}</p>
-    {/* What is missing, stated, rather than a spinner or an apology. The gap between
-        this tier and a validated one is the thing the twin is asking to be funded to
-        close, so naming it is the page's whole content. */}
-    <p class="notyet-body">
-      This area is registered in the twin and has a permanent address, but no measured
-      heat artefacts ship for it yet — no footprints, no surface temperature, no
-      canopy. Nothing here would be a reading, so nothing is drawn. The instrument
-      runs where the observations do.
-    </p>
-    <p class="notyet-links"><a href={DEFAULT_AREA_PATH}>Open a validated area →</a></p>
-  </section>
-    </Fragment>}

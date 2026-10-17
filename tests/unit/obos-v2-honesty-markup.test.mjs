@@ -266,6 +266,26 @@ test('S5.1: v2 restyles the v1 select control without a second copy: the scoped 
   assert.ok(!/#[0-9a-f]{3,8}\b|rgba?\(/i.test(css), 'explore.css spells a colour literal');
 });
 
+test('H16/S5.2: Scenarios keeps v1\'s statement (renamed to v2\'s place) and the withdrawal date from its source', () => {
+  const sc = V2('ScenarioCards.astro');
+  const v1 = /<p class="pane-note">(Not built yet\.[\s\S]*?)<\/p>/.exec(STAGE)?.[1].replace(/\s+/g, ' ').trim();
+  assert.ok(v1, 'v1\'s Scenarios text moved');
+  assert.ok(sc.includes(v1.replace('under Map', 'under Overview')), 'the statement is not v1\'s, bar the one renamed place (spec §4.7, founder sign-off)');
+  assert.ok(sc.includes('The scoring model it would draw on is already here'));
+  assert.ok(sc.includes('Withdrawn on 17 Sep 2026. No score is shown until it returns.'));
+  assert.ok(sc.includes('data-sections="scenarios"'));
+});
+
+test('S5.2: the no-artefacts card is v1\'s .notyet, word for word, inside the right column on Dubai only', () => {
+  const sc = V2('ScenarioCards.astro');
+  const v1 = /<section class="notyet"[\s\S]*?<\/section>/.exec(STAGE)?.[0];
+  assert.ok(v1);
+  const norm = (t) => t.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/<[^>]+>/g, '|').replace(/\s+/g, ' ').replace(/\|( \|)+/g, '|').trim();
+  for (const part of norm(v1).split('|').map((x) => x.trim()).filter((x) => x.length > 12)) assert.ok(norm(sc).includes(part), `not-yet text missing: ${part}`);
+  assert.match(sc, /scope\.area\.hasData \? \([\s\S]*?\) : \([\s\S]*class="card notyet"/, 'the card shows on no-data areas only');
+  assert.ok(!V2('ParkA2.astro').includes('notyet'), 'the parked copy must be gone');
+});
+
 test('S5: the Explore text for every area is derived, never an empty slab: ExploreSide always has the head and a scroller', () => {
   const ex = V2('ExploreSide.astro');
   assert.ok(ex.includes('<div class="sp-head">') && ex.includes('<div class="sp-scroll">'));

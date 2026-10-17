@@ -1,6 +1,35 @@
 ---
-// src/components/ClimateEngine/v2/ScenarioCards.astro — OBOS v2 spec §4.7.
-// A1 SLOT (S2.8): renders nothing until its owner fills it. Owner: Track A, plan S5.2.
+// src/components/ClimateEngine/v2/ScenarioCards.astro — OBOS v2 spec §4.7, §4.10 [H]. Owner: Track A (plan S5.2).
+// Data areas: the Scenarios card, v1's statement (stage :375–380) with ONE renamed place ("under Map" is "under Overview" here: spec §4.7, founder sign-off, §11.2),
+//   and the withdrawn Resilience Score (InterventionPane.astro: WITHDRAWN 2026-09-17). No ladder, no step values: the app computes none.
+// No-data areas: v1's .notyet card, verbatim (stage :830–844); there is no instrument there, so this column is v2's alone.
+import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
 ---
+{scope.area.hasData ? (
+<article class="card" data-v2-card="scenario" data-sections="scenarios">
+  <div class="row"><span class="micro">Scenarios</span><span class="kind modelled">modelled</span></div>
+  <p class="body-s">Not built yet. The toolbox under Overview runs one scenario at a time and keeps none of them: there is nowhere to save an intervention set, name it, or put two of them side by side.</p>
+  <p class="body-s">The scoring model it would draw on is already here — <code>src/scripts/climate-engine/dc-urs-scenario.ts</code> — which is why this pane says so instead of rendering an empty panel.</p>
+  <div class="tile"><div class="row"><b>Resilience Score</b><span class="chip ink">Coming soon</span></div>
+    <p class="foot">Withdrawn on 17 Sep 2026. No score is shown until it returns.</p></div>
+</article>
+) : (
+<section class="card notyet" data-sections="overview" aria-labelledby="notyet-h">
+  <p class="notyet-tier">{scope.tier} tier · {scope.city.koppen} climate</p>
+  <h1 class="notyet-h" id="notyet-h">{scope.area.name}</h1>
+  <p class="notyet-sub">{scope.area.descriptor} · {scope.city.name}, {scope.country.name}</p>
+  {/* What is missing, stated, rather than a spinner or an apology. The gap between
+      this tier and a validated one is the thing the twin is asking to be funded to
+      close, so naming it is the page's whole content. */}
+  <p class="notyet-body">
+    This area is registered in the twin and has a permanent address, but no measured
+    heat artefacts ship for it yet — no footprints, no surface temperature, no
+    canopy. Nothing here would be a reading, so nothing is drawn. The instrument
+    runs where the observations do.
+  </p>
+  <p class="notyet-links"><a href={DEFAULT_AREA_PATH}>Open a validated area →</a></p>
+</section>
+)}
