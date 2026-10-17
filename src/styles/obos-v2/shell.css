@@ -60,3 +60,52 @@ html[data-ui="v2"] .obos-v2 .pl-g svg { display: block; width: 14px; height: aut
 html[data-ui="v2"] .obos-v2 .place[aria-pressed="true"] .pl-g { background: color-mix(in oklch, var(--on-ink) 16%, transparent); }
 html[data-ui="v2"] .obos-v2 .key-btn { height: 30px; padding: 0 12px 0 6px; gap: 6px; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 .key-btn[aria-expanded="true"] { background: var(--ink-1); color: var(--on-ink); }
+
+/* ── the title column: credit-card title card + compass (spec §3.4; sys.css :280–312, :664–672 later block) ── */
+html[data-ui="v2"] .obos-v2 .st-title { position: absolute; z-index: 20; top: 16px; left: 100px; width: 300px; display: flex; flex-direction: column; gap: 10px; transition: transform .45s var(--ease); }
+html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .st-title { transform: translateX(148px); }
+/* a side panel steps the column aside (twin rule); Explore keeps it, to the panel's right */
+html[data-ui="v2"] .obos-v2[data-side-shown="1"] .st-title { opacity: 0; pointer-events: none; visibility: hidden; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"] .st-title { opacity: 1; pointer-events: auto; visibility: visible; transform: translateX(316px); }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"][data-menu-eff="labels"] .st-title { transform: translateX(468px); }
+@media (min-width: 700px) and (max-width: 1365px) { html[data-ui="v2"] .obos-v2 .st-title { width: 280px; } }
+
+html[data-ui="v2"] .obos-v2 .tc { container-type: inline-size; position: relative; overflow: hidden; aspect-ratio: 85.6 / 54; padding: 0 !important; }
+html[data-ui="v2"] .obos-v2 .tc > * { margin: 0; position: absolute; z-index: 2; }
+html[data-ui="v2"] .obos-v2 .tc [hidden] { display: none !important; }
+html[data-ui="v2"] .obos-v2 .tc .tc-brand { left: 5.56cqw; top: 5cqw; font-size: 6.11cqw; line-height: 1; letter-spacing: -0.02em; font-weight: 700; white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .tc .tc-brand em { font-weight: 200; font-style: normal; }
+html[data-ui="v2"] .obos-v2 .tc .tc-tag { left: 5.56cqw; top: 12.8cqw; max-width: 36cqw; font-size: max(10.5px, 3.47cqw); line-height: 1.3; font-weight: 400; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .tc .tc-grade { right: 5cqw; top: 4.44cqw; font-size: max(10px, 3.06cqw); font-weight: 700; padding: 0.3em 0.75em; border-radius: 999px; background: var(--ink-1); color: var(--on-ink); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .tc .tc-park { z-index: 1; right: -6cqw; top: 13.5cqw; width: 56cqw; height: auto; }
+/* the ward is the place, not a reading: an ink stamp of its true outline (north up), bleeding off the edge */
+html[data-ui="v2"] .obos-v2 .tc .tc-park .ward-fill { fill: color-mix(in oklch, var(--ink-1) 86%, transparent); }
+html[data-ui="v2"] .obos-v2 .tc .tc-park[data-outline="polygon"] { width: auto; height: 68cqw; top: 15cqw; right: 6cqw; }
+html[data-ui="v2"] .obos-v2 .tc .tc-park[data-outline="square"] { width: 38cqw; height: 38cqw; top: 15cqw; right: -5cqw; }
+html[data-ui="v2"] .obos-v2 .tc .tc-legend { left: 5.56cqw; bottom: 21.1cqw; display: flex; gap: 2.8cqw; font-size: max(10px, 3.06cqw); color: var(--ink-2); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .tc .tc-legend i { display: inline-block; width: 0.75em; height: 0.75em; border-radius: 50%; margin-right: 0.35em; vertical-align: -0.02em; }
+html[data-ui="v2"] .obos-v2 .tc .tc-legend i.solid { background: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .tc .tc-legend i.outlined { background: transparent; border: 1.5px dashed var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .tc .tc-area { left: 5.56cqw; bottom: 4.44cqw; line-height: 0.9; white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .tc .tc-n { font-size: 14.4cqw; font-weight: 200; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .tc .tc-n b { font-weight: 700; }
+html[data-ui="v2"] .obos-v2 .tc .tc-u { font-size: max(11px, 4.17cqw); font-weight: 300; margin-left: 0.15em; color: var(--ink-2); }
+/* OBOS: the coordinate sits in the left column (a ward is tall, not wide like a park) */
+html[data-ui="v2"] .obos-v2 .tc .tc-coord { left: 5.56cqw; right: auto; bottom: auto; top: 31cqw; font-size: max(10px, 3.06cqw); font-weight: 400; letter-spacing: 0.04em; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* the compass (twin Compass.tsx in OBOS's colours): cyan ring, red N, red/grey needle, the amber sun ON the ring.
+   Drawn in the app's own 48-unit geometry (app:485–525), so strokes are in those units. */
+html[data-ui="v2"] .obos-v2 .compass { align-self: flex-start; display: grid; place-items: center; width: 56px; height: 56px; padding: 0; border-radius: 50% !important; color: var(--ink-1); cursor: pointer; overflow: visible; }
+html[data-ui="v2"] .obos-v2 .compass svg { display: block; width: 50px; height: 50px; overflow: visible; shape-rendering: geometricPrecision; }
+html[data-ui="v2"] .obos-v2 .compass .compass-ring { fill: none; stroke: var(--compass-line); stroke-width: 0.8; }
+html[data-ui="v2"] .obos-v2 .compass .compass-tick { stroke: var(--compass-line); stroke-width: 1.15; stroke-linecap: round; }
+html[data-ui="v2"] .obos-v2 .compass .compass-n-tip { fill: var(--compass-red); }
+html[data-ui="v2"] .obos-v2 .compass .compass-s-tail { fill: var(--compass-s); }
+html[data-ui="v2"] .obos-v2 .compass .compass-hub { fill: var(--card); stroke: var(--ink-2); stroke-width: 0.5; }
+html[data-ui="v2"] .obos-v2 .compass .compass-n { fill: var(--compass-red); font: 700 5.3px/1 var(--sans); }
+html[data-ui="v2"] .obos-v2 .compass .compass-s { fill: var(--ink-3); font: 600 4.5px/1 var(--sans); }
+html[data-ui="v2"] .obos-v2 .compass .compass-sun-key { fill: var(--card); stroke: var(--ink-1); stroke-width: 0.5; }
+html[data-ui="v2"] .obos-v2 .compass .compass-sun { fill: var(--compass-sun); }
+html[data-ui="v2"] .obos-v2 .compass .c-sun.is-below { display: none; }
+html[data-ui="v2"] .obos-v2 .compass #compassDial { transition: none; }

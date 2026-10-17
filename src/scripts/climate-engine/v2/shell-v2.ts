@@ -56,6 +56,16 @@ export function bindPrefs(ctx: ShellCtx): void {
   sync();
 }
 
+/** The title card holds a block per sibling area; the one matching the stage's data-area shows (spec §1.6, C7). */
+export function bindPerArea(ctx: ShellCtx): void {
+  const { root, cleanup } = ctx;
+  const sync = (): void => { const a = root.dataset.area; for (const el of $$<HTMLElement>(root, '[data-v2-for]')) el.hidden = el.dataset.v2For !== a; };
+  const mo = new MutationObserver(sync);
+  mo.observe(root, { attributes: true, attributeFilter: ['data-area'] });
+  cleanup.push(() => mo.disconnect());
+  sync();
+}
+
 /** Sections and the menu (spec §3.1–3.3). The menu's labels/icons state and the side panel are independent. */
 export function bindSections(ctx: ShellCtx): Sections {
   const { root, cleanup } = ctx;
@@ -109,6 +119,7 @@ export function mountShellV2(): (() => void) | null {
   const ctx: ShellCtx = { root, cleanup, glassRefresh: () => {} };
   ctx.sections = bindSections(ctx);
   bindPrefs(ctx);
+  bindPerArea(ctx);
   /* bindGlass is async: if the page was left before it resolved, undo what it registered. */
   void bindGlass(root, cleanup).then((g) => { ctx.glassRefresh = g.refresh; if (disposed) dispose(); });
   return () => { disposed = true; dispose(); };

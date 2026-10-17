@@ -1,0 +1,25 @@
+---
+// src/components/ClimateEngine/v2/TitleCard.astro — OBOS v2 spec §3.4
+import { areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
+import { resolve, type ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+import { renderableWardById as wardById, formatLatLon } from '../../../data/wards.ts';
+import { areaFacts, formatHa } from '../../../scripts/climate-engine/v2/area-facts.ts';
+interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
+const ward = wardById(scope.area.id);
+const sibs = areaKeysInCity(scope.key).map(resolve).map((s) => ({ key: s.key, kind: s.area.descriptor.split(' · ')[0], facts: areaFacts(s.area.id) }));
+/* the figure as the preview sets it: the integer in bold, the decimal thin ("92" + ".6") */
+const ha = (n: number): { int: string; rest: string } => { const t = formatHa(n); const i = t.indexOf('.'); return i < 0 ? { int: t, rest: '' } : { int: t.slice(0, i), rest: t.slice(i) }; };
+---
+<article class="card tc" aria-label="This study area">
+  <h1 class="tc-brand" id="pname" set:html={ward?.name ?? scope.area.name}></h1>
+  <p class="tc-tag">{scope.city.name} · <span id="pzone">{scope.area.descriptor}</span></p>
+  {sibs.map((s) => <span class="tc-grade" data-v2-for={s.key} hidden={s.key !== scope.key}>{s.kind}</span>)}
+  {sibs.map((s) => s.facts && (
+    <svg class="tc-park" data-v2-for={s.key} data-outline={s.facts.kind} viewBox={s.facts.viewBox} aria-hidden="true" {...(s.key !== scope.key ? { hidden: true } : {})}><path class="ward-fill" d={s.facts.path} /></svg>))}
+  <p class="tc-legend" aria-hidden="true"><span><i class="solid"></i>measured</span><span><i class="outlined"></i>modelled</span></p>
+  {sibs.map((s) => s.facts && (
+    <p class="tc-area" data-v2-for={s.key} hidden={s.key !== scope.key}><span class="tc-n num"><b>{ha(s.facts.areaHa).int}</b>{ha(s.facts.areaHa).rest}</span><span class="tc-u">ha</span>
+      <span class="sr-only">{s.facts.kind === 'polygon' ? ' inside the ward boundary' : ' study square'}</span></p>))}
+  <p class="tc-coord num" id="coord">{ward ? formatLatLon(ward.lat, ward.lon, ' · ', 3) : '—'}</p>
+</article>

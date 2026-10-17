@@ -73,4 +73,16 @@ test.describe('@v2 shell', () => {
     await page.locator('[data-pref="theme"][data-v="light"]').click();
     await expect(page.locator('#envchip button[data-e="dark"]')).toHaveClass(/\bon\b/);  // independent now
   });
+
+  test('@v2 title card follows an in-place ward switch; compass resets north', async ({ page }) => {
+    await openV2(page, '/heat-map/in/kolkata/ballygunge/?lab=1');
+    await expect(page.locator('.tc-area:not([hidden]) .tc-n')).toHaveText(/^\d/);
+    const before = await page.locator('.tc-area:not([hidden]) .tc-n').textContent();
+    await page.evaluate(() => document.dispatchEvent(new CustomEvent('obos:open-area', { detail: { key: 'in/kolkata/baruipur' } })));
+    await expect(page.locator('#pname')).toContainText(/Baruipur/i, { timeout: 30_000 });
+    await expect(page.locator('.tc-area:not([hidden]) .tc-n')).not.toHaveText(before ?? '');
+    await page.evaluate(() => (window as unknown as { __obosMap?: { setBearing(b: number): void } }).__obosMap?.setBearing(90));
+    await page.locator('#compass').click();
+    await expect.poll(() => page.locator('#compassDial').getAttribute('transform'), { timeout: 5000 }).toMatch(/rotate\(-?0(\.0+)? 24 24\)/);
+  });
 });
