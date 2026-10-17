@@ -1,1 +1,41 @@
-/* OBOS v2 — screens/weather.css (spec §4.5). Owner: Track B (plan A1). */
+/* OBOS v2 — screens/weather.css (spec §4.5). Owner: Track B (plan A1; S7.2 Step 7). NO HEX HERE (tokens.css owns them).
+   Ported from the preview's screens/weather.html `<style>` (.wx-*, .hrs, .rule) onto v2 tokens. The card's chip and marks are set by weather-v2.ts from the
+   ACTUAL source (an outlined mark and a "forecast" chip for Met Norway); the rain ring is the data's own: a filled water disc for a wet report, an open ring for a dry one. */
+html[data-ui="v2"] .obos-v2 [data-v2-card="weather-now"] .name { margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="weather-now"] .name:empty, html[data-ui="v2"] .obos-v2 [data-v2-card] .foot:empty { display: none; }
+html[data-ui="v2"] .obos-v2 .wx-row { position: relative; padding: 12px 64px 12px 0; border-top: 1px solid var(--line); min-height: 76px; margin-top: 4px; }
+html[data-ui="v2"] .obos-v2 .wx-row + .wx-row { margin-top: 0; }
+html[data-ui="v2"] .obos-v2 .wx-row > .wx-sym { position: absolute; right: 0; top: 14px; }
+html[data-ui="v2"] .obos-v2 .wx-lab { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .wx-row .hero { margin-top: 6px; }
+html[data-ui="v2"] .obos-v2 .wx-row .foot { margin-top: 5px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="weather-now"] .stats dd.foot { margin: 1px 0 0; font-size: 11px; font-weight: 400; }
+html[data-ui="v2"] .obos-v2 .wx-line { display: block; margin-top: 12px; padding: 10px 12px; border-radius: 14px; background: var(--tile); font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .wx-line[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .wx-line b { color: var(--ink-1); font-weight: 600; }
+/* the app's pictograph is a colour emoji: a hue outside the palette, and the sentence already says the same in words, so it is not drawn */
+html[data-ui="v2"] .obos-v2 .wx-line .wx-ico { display: none; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="weather-now"] details.disc[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="weather-now"] details.disc { margin-top: 12px; }
+html[data-ui="v2"] .obos-v2 .wx-raw { font: 500 12px/1.5 var(--sans); letter-spacing: .03em; font-variant-numeric: tabular-nums; color: var(--ink-1); background: var(--well); border-radius: 10px; padding: 8px 10px; overflow-wrap: anywhere; }
+html[data-ui="v2"] .obos-v2 .wx-decode { margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 .wx-decode li { display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding: 3px 0; font-size: 11.5px; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .wx-decode li code { font: 700 11px/1.5 var(--sans); letter-spacing: .02em; color: var(--ink-1); overflow-wrap: anywhere; }
+/* the reports the heat model reads: one cell each, a wet/dry ring under the temperature */
+html[data-ui="v2"] .obos-v2 .hrs { display: grid; grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); gap: 3px; margin-top: 12px; }
+html[data-ui="v2"] .obos-v2 .hrs:empty { display: none; }
+html[data-ui="v2"] .obos-v2 .hrs li { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 0 7px; border-radius: 10px; background: var(--tile); }
+html[data-ui="v2"] .obos-v2 .hrs li:last-child { background: var(--ink-1); color: var(--on-ink); }
+html[data-ui="v2"] .obos-v2 .hrs .t { font-size: 14px; font-weight: 300; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+html[data-ui="v2"] .obos-v2 .hrs .t sup { font-size: 8px; font-weight: 400; margin-left: 1px; }
+html[data-ui="v2"] .obos-v2 .hrs .ring { width: 9px; height: 9px; border-radius: 50%; box-shadow: inset 0 0 0 1.25px currentColor; opacity: .75; }
+html[data-ui="v2"] .obos-v2 .hrs li.wet .ring { background: var(--sym-water); box-shadow: inset 0 0 0 1.25px currentColor; opacity: 1; }
+html[data-ui="v2"] .obos-v2 .hrs .h { font-size: 9.5px; font-weight: 500; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .hrs li:last-child .h { color: color-mix(in oklch, var(--on-ink) 75%, transparent); }
+html[data-ui="v2"] .obos-v2 .rule { margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 .rule li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .rule li:first-child { border-top: 0; }
+html[data-ui="v2"] .obos-v2 .rule b { color: var(--ink-1); font-weight: 600; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="wx-model"] .tile .hero { margin-top: 6px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="wx-model"] .tile .foot { margin-top: 4px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="rain"] .name { margin-top: 8px; }
