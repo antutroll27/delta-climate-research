@@ -114,8 +114,13 @@ test.describe('@v2 shell', () => {
   test('@v2 the clock: 12/24 h persists; the age button re-reads exactly once', async ({ page }) => {
     await openV2(page);
     await expect(page.locator('#clockw')).toBeVisible({ timeout: 30_000 });
+    /* the stack shows the meridiem pair OR the mode, never both (v1's rule) */
+    await expect(page.locator('#clock24')).toBeHidden();
+    await expect(page.locator('#clockAm')).toBeVisible();
     await page.locator('#clockFace').click();
     await expect(page.locator('#clockFace')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#clock24')).toBeVisible();
+    await expect(page.locator('#clockAm')).toBeHidden();
     let reads = 0;
     page.on('request', (r) => { if (/\/api\/live\?/.test(r.url())) reads++; });
     await page.locator('#clockAge').click();

@@ -249,3 +249,13 @@ html[data-ui="v2"] .obos-v2[data-section="scenarios"] #legend [data-sections~="s
 html[data-ui="v2"] .obos-v2[data-section="methods"] #legend [data-sections~="methods"]:not([hidden]) { display: block; }
 html[data-ui="v2"] .obos-v2 #solBlock { display: none !important; }
 html[data-ui="v2"] .obos-v2 #legend { display: flex; flex-direction: column; gap: 10px; }
+
+/* the clock shows EITHER the meridiem pair or the mode, never both (v1 stage :1391–1394, same selectors) */
+html[data-ui="v2"] .obos-v2 .clockw .k-h24 { display: none; }
+html[data-ui="v2"] .obos-v2 .clockw[data-h12="false"] #clockAm, html[data-ui="v2"] .obos-v2 .clockw[data-h12="false"] #clockPm { display: none; }
+html[data-ui="v2"] .obos-v2 .clockw[data-h12="false"] .k-h24 { display: block; }
+/* the Key button inverts when open: its mark follows */
+html[data-ui="v2"] .obos-v2 .key-btn[aria-expanded="true"] svg.sym .f { fill: var(--on-ink); }
+/* MapLibre's own attribution control is replaced by the attribution button and the credits popover (every licence line, with links);
+   v1 hides it on phones the same way (stage :2791) */
+html[data-ui="v2"] .obos-v2 .maplibregl-ctrl-bottom-right { display: none; }
