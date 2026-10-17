@@ -85,4 +85,42 @@ test.describe('@v2 shell', () => {
     await page.locator('#compass').click();
     await expect.poll(() => page.locator('#compassDial').getAttribute('transform'), { timeout: 5000 }).toMatch(/rotate\(-?0(\.0+)? 24 24\)/);
   });
+
+  test('@v2 the Trees tab and the tree layer row are one control', async ({ page }) => {
+    await openV2(page);
+    const tab = page.locator('[data-v2-proxy="vegchip:v"]');
+    await expect(page.locator('#vegw')).toBeVisible({ timeout: 30_000 });
+    await expect(tab).toHaveAttribute('aria-pressed', 'true');
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-pressed', 'false');
+    await page.locator('[data-pop-open="layers"]').click();
+    await expect(page.locator('input[data-layer="green/trees"]')).not.toBeChecked();
+    await page.locator('input[data-layer="green/trees"]').check();
+    await expect(tab).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-layers-count]')).toHaveText(/^\d\/\d$/);
+  });
+
+  test('@v2 Layers popover: Esc closes only it and focus returns to its tab', async ({ page }) => {
+    await openV2(page);
+    const open = page.locator('[data-pop-open="layers"]');
+    await open.click();
+    await expect(page.locator('#v2Layers')).toBeVisible();
+    await expect(page.locator('#v2Layers #modechip button[data-m="relief"]')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#v2Layers')).toBeHidden();
+    await expect(open).toBeFocused();
+  });
+
+  test('@v2 the clock: 12/24 h persists; the age button re-reads exactly once', async ({ page }) => {
+    await openV2(page);
+    await expect(page.locator('#clockw')).toBeVisible({ timeout: 30_000 });
+    await page.locator('#clockFace').click();
+    await expect(page.locator('#clockFace')).toHaveAttribute('aria-pressed', 'true');
+    let reads = 0;
+    page.on('request', (r) => { if (/\/api\/live\?/.test(r.url())) reads++; });
+    await page.locator('#clockAge').click();
+    await expect.poll(() => reads, { timeout: 10_000 }).toBe(1);
+    await page.reload();
+    await expect(page.locator('#clockFace')).toHaveAttribute('aria-pressed', 'true', { timeout: 30_000 });
+  });
 });

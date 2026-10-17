@@ -4,13 +4,99 @@
  * after mountHeatMap. Returns a disposer.
  */
 import { bindGlass } from './glass.ts';
-import { $, $$, on, store, type Cleanup } from './dom.ts';
+import { $, $$, observe, on, store, type Cleanup } from './dom.ts';
 import { onMenuClick, sectionOf, type NavState, type SectionId } from './sections.ts';
 import { effectiveMenu, V2_KEYS, type MenuState } from './ui-flag.ts';
 import { ICON } from '../../../components/ClimateEngine/v2/icons.ts';
 
 export interface Sections { readonly go: (id: SectionId, side?: boolean) => void; readonly paint: () => void }
-export interface ShellCtx { readonly root: HTMLElement; readonly cleanup: Cleanup; glassRefresh: () => void; sections?: Sections }
+/* ── layers: popovers, the drawer (S8) — ONE Esc stack, topmost only (spec §3.11) ── */
+export interface LayerStack { open(el: HTMLElement, opener: HTMLElement | null, onClose?: () => void): void; closeTop(): boolean; isOpen(el: HTMLElement): boolean }
+export interface ShellCtx { readonly root: HTMLElement; readonly cleanup: Cleanup; glassRefresh: () => void; sections?: Sections; layers?: LayerStack }
+
+/** aria-pressed mirrors v1's `.on` classes (the app writes the class; the shell tells assistive tech). */
+export function bindPressedMirror(ctx: ShellCtx): void {
+  const { root, cleanup } = ctx;
+  const groups = ['#segPhase', '#segPath', '#modechip', '#tintchip', '#envchip', '#vegchip', '#streetchip', '#strip'];
+  const sync = (): void => {
+    for (const g of groups) for (const b of $$<HTMLElement>(root, `${g} button, ${g} .ward`)) b.setAttribute('aria-pressed', String(b.classList.contains('on')));
+  };
+  for (const g of groups) observe(cleanup, $(root, g), { attributes: true, subtree: true, attributeFilter: ['class'] }, sync);
+  /* the strip's tiles are divs the app clicks (app:3836): give them the keyboard */
+  on(cleanup, $(root, '#strip'), 'keydown', (e) => {
+    const k = (e as KeyboardEvent).key;
+    const w = (e.target as Element).closest<HTMLElement>('.ward');
+    if (w && (k === 'Enter' || k === ' ')) { e.preventDefault(); w.click(); }
+  });
+  sync();
+}
+
+/** Trees and Street tabs proxy the app's own chips; the Layers count is derived from the tree's checkboxes. */
+export function bindProxies(ctx: ShellCtx): void {
+  const { root, cleanup } = ctx;
+  const count = (): void => {
+    const all = $$<HTMLInputElement>(root, 'input[data-layer]');
+    const el = $(root, '[data-layers-count]');
+    if (el) el.textContent = `${all.filter((i) => i.checked).length}/${all.length}`;
+  };
+  for (const p of $$<HTMLButtonElement>(root, '[data-v2-proxy]')) {
+    const [chip, key] = (p.dataset.v2Proxy ?? '').split(':');
+    const current = (): string | undefined => $$<HTMLElement>(root, `#${chip} button`).find((b) => b.classList.contains('on'))?.dataset[key];
+    const sync = (): void => { p.setAttribute('aria-pressed', String(current() === '1')); count(); };
+    on(cleanup, p, 'click', () => { $<HTMLButtonElement>(root, `#${chip} button[data-${key}="${current() === '1' ? '0' : '1'}"]`)?.click(); });
+    observe(cleanup, $(root, `#${chip}`), { attributes: true, subtree: true, attributeFilter: ['class'] }, sync);
+    sync();
+  }
+  on(cleanup, root, 'change', (e) => { if ((e.target as Element).matches('input[data-layer]')) count(); });
+  count();
+}
+
+interface Layer { readonly el: HTMLElement; readonly opener: HTMLElement | null; readonly onClose?: () => void }
+
+/** One Esc stack for every popover (and, in S8, the phone drawer): Esc closes the topmost, returns focus to its opener, and stops there. */
+export function bindLayers(ctx: ShellCtx): LayerStack {
+  const { root, cleanup } = ctx;
+  const stack: Layer[] = [];
+  const api: LayerStack = {
+    open(el, opener, onClose) {
+      if (stack.some((l) => l.el === el)) return;
+      el.dataset.open = 'true'; opener?.setAttribute('aria-expanded', 'true');
+      stack.push({ el, opener, onClose });
+      (el.querySelector<HTMLElement>('[data-autofocus]') ?? el).focus();
+    },
+    closeTop() {
+      const l = stack.pop(); if (!l) return false;
+      l.el.dataset.open = 'false'; l.opener?.setAttribute('aria-expanded', 'false'); l.onClose?.(); l.opener?.focus();
+      return true;
+    },
+    isOpen: (el) => stack.some((l) => l.el === el),
+  };
+  const byName = (n: string | undefined): HTMLElement | null =>
+    n === 'layers' ? $(root, '#v2Layers') : n === 'credits' ? $(root, '#v2Credits') : n === 'key' ? $(root, '#v2Key') : null;
+  on(cleanup, root, 'click', (e) => {
+    const t = e.target as Element;
+    const opener = t.closest<HTMLElement>('[data-pop-open]');
+    if (opener) {
+      const el = byName(opener.dataset.popOpen);
+      if (!el) return;
+      if (api.isOpen(el)) { while (stack.length && stack[stack.length - 1].el !== el) api.closeTop(); api.closeTop(); }
+      else api.open(el, opener);
+      return;
+    }
+    if (t.closest('[data-pop-close]') && stack.length) { api.closeTop(); }
+  });
+  on(cleanup, document, 'pointerdown', (e) => {
+    const top = stack[stack.length - 1];
+    if (!top || top.el.dataset.modal === 'true') return;
+    const t = e.target as Node;
+    if (!top.el.contains(t) && !(top.opener?.contains(t) ?? false)) api.closeTop();
+  });
+  on(cleanup, window, 'keydown', (e) => {
+    if ((e as KeyboardEvent).key !== 'Escape' || !stack.length) return;
+    api.closeTop(); e.preventDefault(); e.stopImmediatePropagation();
+  }, { capture: true });
+  return api;
+}
 
 /** Resolve once the instrument has picked its engine (the map and its handlers are up). */
 function whenInstrumentReady(ctx: ShellCtx, fn: () => void): void {
@@ -120,6 +206,9 @@ export function mountShellV2(): (() => void) | null {
   ctx.sections = bindSections(ctx);
   bindPrefs(ctx);
   bindPerArea(ctx);
+  bindPressedMirror(ctx);
+  bindProxies(ctx);
+  ctx.layers = bindLayers(ctx);
   /* bindGlass is async: if the page was left before it resolved, undo what it registered. */
   void bindGlass(root, cleanup).then((g) => { ctx.glassRefresh = g.refresh; if (disposed) dispose(); });
   return () => { disposed = true; dispose(); };

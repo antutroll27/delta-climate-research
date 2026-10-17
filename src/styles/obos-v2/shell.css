@@ -109,3 +109,67 @@ html[data-ui="v2"] .obos-v2 .compass .compass-sun-key { fill: var(--card); strok
 html[data-ui="v2"] .obos-v2 .compass .compass-sun { fill: var(--compass-sun); }
 html[data-ui="v2"] .obos-v2 .compass .c-sun.is-below { display: none; }
 html[data-ui="v2"] .obos-v2 .compass #compassDial { transition: none; }
+
+/* ── the dock: place chips, then the clock bar with the layer tabs (spec §3.6; sys.css :365–398, :549–566, :646–652) ── */
+html[data-ui="v2"] .obos-v2 .st-dock { position: absolute; z-index: 30; left: 16px; right: calc(16px + 320px + 16px); bottom: 14px; display: flex; justify-content: center; pointer-events: none; }
+html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .st-dock { left: 252px; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"] .st-dock { left: 416px; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-menu-eff="labels"] .st-dock { left: 568px; }
+html[data-ui="v2"] .obos-v2 .st-dock > * { pointer-events: auto; }
+html[data-ui="v2"] .obos-v2 .dock { display: flex; flex-direction: column; gap: 8px; align-items: center; min-width: 0; max-width: 100%; }
+html[data-ui="v2"] .obos-v2 .places { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"] .st-dock .places { display: none; }
+html[data-ui="v2"] .obos-v2 .place-city { border: 0; height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 99px; font-size: 12px; font-weight: 700; color: var(--ink-1); text-decoration: none; }
+html[data-ui="v2"] .obos-v2 .place-city span { font-weight: 200; }
+html[data-ui="v2"] .obos-v2 .place.two { height: 38px; padding-right: 12px; }
+html[data-ui="v2"] .obos-v2 .place.two .pl-t { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; }
+html[data-ui="v2"] .obos-v2 .place.two .pl-sub { font: 600 8.5px/1.2 var(--sans); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .place.two[aria-pressed="true"] .pl-sub { color: color-mix(in oklch, var(--on-ink) 70%, transparent); }
+html[data-ui="v2"] .obos-v2 #strip { display: contents; }
+html[data-ui="v2"] .obos-v2 #strip .ward.on { background: var(--ink-1); color: var(--on-ink); border-color: transparent; }
+html[data-ui="v2"] .obos-v2 #strip .ward .big span { font-size: 0.85em; }
+html[data-ui="v2"] .obos-v2 .bar { display: flex; align-items: center; gap: 12px; padding: 5px 8px 5px 16px; border-radius: 20px; }
+html[data-ui="v2"] .obos-v2 .vsep { width: 1px; align-self: stretch; background: var(--line); margin: 4px 0; }
+html[data-ui="v2"] .obos-v2 .tabs { display: flex; gap: 2px; }
+html[data-ui="v2"] .obos-v2 .vegw[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .vegw { display: contents; }
+html[data-ui="v2"] .obos-v2 .tab { border: 0; background: transparent; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 7px 4px; border-radius: 13px; cursor: pointer; color: var(--ink-3); min-width: 50px; min-height: 24px; }
+html[data-ui="v2"] .obos-v2 .tab svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+html[data-ui="v2"] .obos-v2 .tab span { font-size: 10.5px; font-weight: 500; }
+html[data-ui="v2"] .obos-v2 .tab[aria-pressed="true"] { color: var(--on-ink); background: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .tab .tab-n { font-size: 9px; font-weight: 600; letter-spacing: .04em; opacity: .8; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-menu-eff="labels"] .tab { min-width: 44px; padding: 5px 4px 4px; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-menu-eff="labels"] .bar { gap: 8px; padding-left: 12px; }
+@media (min-width: 700px) and (max-width: 1365px) {
+  html[data-ui="v2"] .obos-v2 .st-dock { right: calc(16px + 300px + 16px); }
+  html[data-ui="v2"] .obos-v2[data-side-shown="1"] .tab { min-width: 44px; padding: 5px 4px 4px; }
+  html[data-ui="v2"] .obos-v2[data-side-shown="1"] .bar { gap: 8px; padding-left: 12px; }
+}
+
+/* the ward clock (the time slider's replacement; sys.css :549–566) */
+html[data-ui="v2"] .obos-v2 .clockw { display: flex; align-items: center; gap: 12px; padding-right: 4px; }
+html[data-ui="v2"] .obos-v2 .clockw[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .k-face { display: flex; align-items: center; gap: 9px; border: 0; background: transparent; padding: 0; cursor: pointer; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .k-stack { display: flex; flex-direction: column; gap: 1px; font: 600 9px/1.15 var(--sans); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .k-stack .k-day { color: var(--ink-1); margin-bottom: 1px; }
+html[data-ui="v2"] .obos-v2 .k-stack .k-mer { opacity: 0.42; }
+html[data-ui="v2"] .obos-v2 .k-stack .k-mer.on, html[data-ui="v2"] .obos-v2 .k-stack .k-h24 { opacity: 1; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .k-time { font-size: 32px; font-weight: 200; letter-spacing: -0.035em; line-height: 1; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .k-age { display: flex; flex-direction: column; align-items: stretch; gap: 4px; border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; min-width: 86px; min-height: 24px; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .k-age-lab { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .k-bar { display: block; height: 2px; border-radius: 2px; background: var(--line); overflow: hidden; }
+html[data-ui="v2"] .obos-v2 .k-bar i { display: block; height: 100%; background: var(--ink-1); transform-origin: left center; transition: transform .6s var(--ease); }
+html[data-ui="v2"] .obos-v2 .clockw[data-age="stale"] .k-bar i { background: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .k-map { font: 600 9.5px/1.2 var(--sans); letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-1); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .k-map[hidden] { display: none; }
+
+/* ── the Layers popover (spec §3.7; sys.css :602–624, :607–619) ── */
+html[data-ui="v2"] .obos-v2 .layers-pop, html[data-ui="v2"] .obos-v2 .credits-pop { position: absolute; z-index: 82; width: 340px; max-height: calc(100% - 140px); overflow-y: auto; scrollbar-width: none; }
+html[data-ui="v2"] .obos-v2 .layers-pop { bottom: 92px; left: 50%; transform: translateX(-50%); }
+html[data-ui="v2"] .obos-v2 .layers-pop[data-open="false"] { display: none; }
+html[data-ui="v2"] .obos-v2 .layers-pop[data-open="true"] { display: block; }
+html[data-ui="v2"] .obos-v2 .lp-sec { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 .lp-sec:first-of-type { margin-top: 10px; }
+html[data-ui="v2"] .obos-v2 .lp-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 6px; }
+html[data-ui="v2"] .obos-v2 .lp-row .seg { justify-self: start; }
+html[data-ui="v2"] .obos-v2 .seg button.on, html[data-ui="v2"] .obos-v2 .seg button[aria-pressed="true"] { background: var(--ink-1); color: var(--on-ink); }

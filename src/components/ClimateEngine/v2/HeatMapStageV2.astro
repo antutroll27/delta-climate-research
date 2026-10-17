@@ -11,6 +11,8 @@ import RailV2 from './RailV2.astro';
 import Sym from './Sym.astro';
 import TitleCard from './TitleCard.astro';
 import CompassV2 from './CompassV2.astro';
+import DockV2 from './DockV2.astro';
+import LayersPopover from './LayersPopover.astro';
 /* THE FOUR SHELL COMPONENTS, COMPOSED. Until this task each was imported by
    nothing: the rail, the scope switcher and the layer tree were built and proven
    against their own sources, and the toolbox had been moved out of this file with
@@ -19,7 +21,6 @@ import CompassV2 from './CompassV2.astro';
    ward strip. The toolbox's rules stay in the is:global block below because
    heat-map-app.ts classes its markup at runtime; see its own header. */
 import ScopeSwitcher from '../shell/ScopeSwitcher.astro';
-import LayerTree from '../shell/LayerTree.astro';
 import InterventionPane from '../shell/InterventionPane.astro';
 import '../../../styles/obos-v2/tokens.css';
 import '../../../styles/obos-v2/atoms.css';
@@ -28,7 +29,7 @@ import '../../../styles/obos-v2/screens.css';
 import '../../../styles/obos-v2/phone.css';
 import '../../../styles/obos-v2/print.css';
 import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
-import { areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
+import { AREA_KEYS, areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
 import { isAirCity } from '../../../lib/aqi/stations.ts';
 import { UNCOVERED_NOTE } from '../../../scripts/climate-engine/air/air-panel.ts';
 import { areaPath, DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
@@ -129,6 +130,11 @@ const strip = siblings.flatMap((sib) => {
   }];
 });
 
+/* THE OTHER CITY, for the dock's cross-city chip (spec §3.6): the first data-shipping area of another registered city.
+   null when none, and the chip is then not drawn. */
+const otherArea = AREA_KEYS.map(resolve).find((s) => s.city.id !== scope.city.id && s.area.hasData);
+const otherCity = otherArea ? { href: areaPath(otherArea.key), name: otherArea.city.name } : null;
+
 /* The ward's own data record. `/api/wards/[id]` is generated one route per BARE id
    from src/data/wards.ts, so the key would 404 — and this link is a download, so
    the browser would save the 404 body under a plausible filename rather than show
@@ -178,7 +184,7 @@ const newCity = scope.area.hasData
   </aside>
   <div class="st-title" id="v2Title" data-hud><TitleCard scope={scope} /><CompassV2 /></div>
   <div class="mapstack" id="v2MapStack" data-hud></div>
-  <div class="st-dock" id="v2Dock"></div>
+  <div class="st-dock" id="v2Dock">{scope.area.hasData && <DockV2 currentKey={scope.key} strip={strip} otherCity={otherCity} />}</div>
   <div class="toasts" id="v2Toasts" data-hud></div>
   <div data-v2-parking>
     {/* S0 PARKING. Copied verbatim from HeatMapStage.astro so the contract holds;
@@ -209,8 +215,6 @@ const newCity = scope.area.hasData
     <ScopeSwitcher current={scope.key} />
     {/* S5 */}
     {scope.area.hasData ? <InterventionPane scope={scope} /> : null}
-    {/* S2 */}
-    <LayerTree current={scope.key} mapillary={mapillary} />
     {/* S7 */}
           {scope.area.publishes ? (
           <Fragment>
@@ -317,68 +321,6 @@ const newCity = scope.area.hasData
       <span id="sunLineText"></span>
       <span class="sunline-note" id="sunLineNote" tabindex="0" role="note">geometry only</span>
     </p>
-    <!-- Live-reading freshness.
-         NOT A CLOCK FOR THE MAP. The simulation is steady-state at one of two
-         representative phases; it has no 14:32. This dial describes the DATA —
-         the hour met.no's reading is valid for, and how long ago that was — which
-         matters because that reading sets the sim's boundary conditions and was,
-         until now, fetched once per ward per session and never refreshed. A tab
-         left open overnight showed a pulsing green "live" dot over yesterday's
-         weather. Click to re-read. -->
-    <!-- TWO CONTROLS, NOT ONE. The tile used to be a single button whose click
-         forced a live re-read — and that click is the ONLY re-read in the app
-         (fetchLive runs on ward load and from here; the 60s timer just
-         repaints). Handing the whole tile to a format toggle would leave a dial
-         that reports data is 14 hours stale and offers no way to fix it. So the
-         face toggles the format and the age line re-reads, each saying which. -->
-    <div class="clockw" id="clockw" hidden>
-      <!-- Stacked state indicator, the Braun/Rams idiom: BOTH halves of the day
-           are always present and only the emphasis moves, so you read "PM out of
-           AM/PM" rather than trusting a single changing label.
-
-           The day above them is not decoration. These digits are the WARD's
-           clock, not the viewer's — from London at 18:30 GMT this reads 00:00,
-           and nothing said it was already tomorrow in Kolkata. This dial exists
-           because a tab left open overnight showed a live dot over yesterday's
-           weather; without the day it still could not name which day. -->
-      <button class="k-face" id="clockFace" type="button" aria-pressed="false">
-        <span class="k-stack" aria-hidden="true">
-          <span class="k-day" id="clockDay">—</span>
-          <!-- In 24-hour mode the meridiem is meaningless, so the pair is
-               replaced by the mode itself rather than left dimmed and lying. -->
-          <span class="k-mer" id="clockAm">AM</span>
-          <span class="k-mer" id="clockPm">PM</span>
-          <span class="k-mer k-h24" id="clock24">24H</span>
-        </span>
-        <span class="k-time" id="clockTime">--:--</span>
-      </button>
-      <button class="k-age" id="clockAge" type="button">
-        <span class="k-sub"><span class="k-age-lab" id="clockAgeLab">—</span></span>
-        <!-- Freshness survives the move to digits as a draining rule along the
-             bottom edge: the digits say WHEN, the bar says HOW STALE, and the bar
-             is the only thing that animates (one transform, no layout). -->
-        <span class="k-bar" aria-hidden="true"><i id="clockBar"></i></span>
-      </button>
-    </div>
-
-    <!-- Vegetation toggle: distinct widget directly below the clock. Shown when the
-         ward's rasters resolve -- NOT when the weather arrives, which is a
-         different fetch that these controls do not depend on. Binary on/off in
-         the .modechip idiom. -->
-    <div class="vegw" id="vegw" hidden>
-      <span class="veg-lab">Trees</span>
-      <div class="modechip" id="vegchip" title="Show or hide the modelled tree canopy">
-        <button class="on" data-v="1" type="button">On</button>
-        <button data-v="0" type="button">Off</button>
-      </div>
-    </div>
-
-    <!-- Street-view toggle: same widget idiom as Trees, stacked directly below it. -->
-    <div class="vegw" id="svw" hidden>
-      <span class="veg-lab">Street</span>
-      <div class="modechip" id="streetchip" title="Show Mapillary street-level coverage; click a point for the real photo"><button class="on" data-s="0">Off</button><button data-s="1">On</button></div>
-    </div>
-
     <!-- First-run affordance: the buildings became clickable and nothing said so. -->
     <div class="tiphint" id="tiphint" hidden>
       <span>Click any building for its data</span>
@@ -506,11 +448,6 @@ const newCity = scope.area.hasData
       </div>
     </div>
       {/* S4 */}
-    <div class="chiprow">
-      <div class="modechip" id="modechip"><button class="on" data-m="relief">3D Relief</button><button data-m="iso">2D Isotherm</button></div>
-      <div class="modechip" id="envchip"><button class="on" data-e="dark">Dark map</button><button data-e="studio">Clay studio</button></div>
-      <div class="modechip" id="tintchip" title="Building colour: continuous ramp, or snapped to the 5 legend classes"><button class="on" data-t="1">Gradient</button><button data-t="2">5-Class</button></div>
-    </div>
       {/* S3 */}
     <aside class="panel right">
       {/* AIR FIRST (founder decision 1, 2026-10-07). The surface figure used to be the
@@ -615,15 +552,6 @@ const newCity = scope.area.hasData
       <div class="svmodal-credit">Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener">Mapillary</a> · community-captured (CC BY-SA)</div>
     </div>
   </div>
-  <div class="strip" id="strip">
-    {strip.map((row) => (
-      <div class:list={['ward', { on: row.key === scope.key }]} data-w={row.id}>
-        <span class="sw" style={row.swatch}></span>
-        <div><div class="nm">{row.name}</div><div class="ty">{row.kind}</div></div>
-        <div class="big" id={`big-${row.id}`}>—<span>°C surface</span></div>
-      </div>
-    ))}
-  </div>
     </Fragment>}
     {/* S5 */}
     {!scope.area.hasData && <Fragment>
@@ -644,6 +572,7 @@ const newCity = scope.area.hasData
   </section>
     </Fragment>}
   </div>
+  <LayersPopover current={scope.key} mapillary={mapillary} hasData={scope.area.hasData} />
   {/* S6: direct children of .stage (app:1077). UNCONDITIONAL, as in v1 (stage :847–962 sit outside the data gate). */}
   <section class="solpay" id="solPay" hidden role="dialog" aria-modal="true" aria-labelledby="spHead">
     <header class="sp-head">
