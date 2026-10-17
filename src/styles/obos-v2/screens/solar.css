@@ -72,19 +72,19 @@ html[data-ui="v2"] .obos-v2[data-section="solar"] #legend [data-v2-card="ward-pa
 html[data-ui="v2"] .obos-v2 .sl-assume { margin-top: 10px; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
 
 /* ───────────── the payback sheet (#solPay), spec §3.10: a right-anchored .sheet card over the column ───────────── */
-html[data-ui="v2"] .obos-v2 #solPay { position: absolute; inset: auto; right: 16px; top: 68px; bottom: 46px; width: 360px; max-height: none; overflow-y: auto; z-index: 91;
+html[data-ui="v2"] .obos-v2 #solPay { position: absolute; inset: auto; right: 16px; top: 64px; bottom: 16px; width: 360px; max-height: none; overflow-y: auto; z-index: 91;
   padding: 0; border-radius: 22px; font: 400 13px/1.45 var(--sans); display: flex; flex-direction: column; scrollbar-width: none; overscroll-behavior: contain; }
 html[data-ui="v2"] .obos-v2 #solPay::-webkit-scrollbar { display: none; }
 html[data-ui="v2"] .obos-v2 #solPay[hidden] { display: none; }
 /* the head stays in view: the app focuses #spClose (the last control) on open, which scrolls a tall sheet to its foot, and the tag must not scroll away */
 html[data-ui="v2"] .obos-v2 #solPay .sp-head { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin: 0;
-  padding: 16px 16px 10px; border: 0; background: var(--card); }
+  padding: 14px 16px 8px; border: 0; background: var(--card); }
 html[data-ui="v2"] .obos-v2 #solPay .sp-head h2 { font: 500 16px/1.2 var(--sans); letter-spacing: -0.01em; margin: 0; }
 html[data-ui="v2"] .obos-v2 #solPay #spTag { align-self: flex-start; margin: 2px 0 0; border: 0; padding: 1px 7px 1px 5px; font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-2); line-height: 1.6; }
-html[data-ui="v2"] .obos-v2 #solPay .sp-sec { display: flex; flex-direction: column; gap: 4px; margin: 0 16px; padding: 10px 0; border: 0; border-top: 1px solid var(--line); min-width: 0; }
+html[data-ui="v2"] .obos-v2 #solPay .sp-sec { display: flex; flex-direction: column; gap: 3px; margin: 0 16px; padding: 8px 0; border: 0; border-top: 1px solid var(--line); min-width: 0; }
 html[data-ui="v2"] .obos-v2 #solPay .sp-head + .sp-sec { margin-top: 0; }
-html[data-ui="v2"] .obos-v2 #solPay .sp-sec > label.sp-k:not(:first-child) { margin-top: 10px; }
-html[data-ui="v2"] .obos-v2 #solPay #spBill { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+html[data-ui="v2"] .obos-v2 #solPay .sp-sec > label.sp-k:not(:first-child) { margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 #solPay #spBill { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
 html[data-ui="v2"] .obos-v2 #solPay .sp-k { font: var(--micro-weight) var(--micro-size)/1.35 var(--sans); letter-spacing: var(--micro-ls); text-transform: uppercase; color: var(--ink-3); padding: 0; }
 html[data-ui="v2"] .obos-v2 #solPay .sp-note { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
 html[data-ui="v2"] .obos-v2 #solPay .sp-note.sp-warn { margin-top: 6px; padding: 9px 11px; border-radius: 12px; background: var(--well); color: var(--ink-1); }
@@ -98,13 +98,13 @@ html[data-ui="v2"] .obos-v2 #solPay :is(.sp-pair input, #spTariff, #spUnits, #sp
 html[data-ui="v2"] .obos-v2 #solPay #spSizeNum { width: 5.5em; }
 html[data-ui="v2"] .obos-v2 #solPay .sp-pair { display: flex; align-items: center; gap: 6px; }
 html[data-ui="v2"] .obos-v2 #solPay input[aria-invalid="true"] { border-color: var(--ink-1); box-shadow: inset 0 0 0 1px var(--ink-1); }
-html[data-ui="v2"] .obos-v2 #solPay .sp-res { display: flex; flex-direction: column; gap: 10px; }
+html[data-ui="v2"] .obos-v2 #solPay .sp-res { display: flex; flex-direction: column; gap: 8px; }
 html[data-ui="v2"] .obos-v2 #solPay .sp-big { display: block; margin-top: 4px; font: 300 28px/1.05 var(--sans); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 #solPay .sp-big.is-words { font: 400 13px/1.4 var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 #solPay .sp-assume { margin: 2px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
-html[data-ui="v2"] .obos-v2 #solPay .sp-btns { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 16px 16px; }
-html[data-ui="v2"] .obos-v2 #solPay .sp-btns :is(.bc-brief, .sb-x) { position: static; display: inline-flex; align-items: center; justify-content: center; margin: 0; min-height: 30px; padding: 0 12px; border: 0;
-  border-radius: 99px; background: var(--well); color: var(--ink-1); font: 500 12px/1 var(--sans); letter-spacing: 0; text-transform: none; text-decoration: none; cursor: pointer; white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 #solPay .sp-btns { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 16px 14px; }
+html[data-ui="v2"] .obos-v2 #solPay .sp-btns :is(.bc-brief, .sb-x) { position: static; display: inline-flex; align-items: center; justify-content: center; margin: 0; min-height: 30px; padding: 0 10px; border: 0;
+  border-radius: 99px; background: var(--well); color: var(--ink-1); font: 500 11.5px/1 var(--sans); letter-spacing: 0; text-transform: none; text-decoration: none; cursor: pointer; white-space: nowrap; }
 html[data-ui="v2"] .obos-v2 #solPay .sp-btns #spPrint { background: var(--ink-1); color: var(--on-ink); }
 html[data-ui="v2"] .obos-v2 #solPay .sp-btns .sb-x { margin-left: auto; }
 @media (max-width: 700px) {
