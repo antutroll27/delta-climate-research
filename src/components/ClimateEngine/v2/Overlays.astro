@@ -2,6 +2,7 @@
 // src/components/ClimateEngine/v2/Overlays.astro — OBOS v2 spec §3.10
 import Sym from './Sym.astro';
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+import { SENTINEL_CREDIT } from '../../../scripts/climate-engine/v2/credits.ts';
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
 /* S2 audit F1: the chip lists only sources that area really draws. A DataMeet ward boundary exists only on the areas that ship one,
@@ -43,6 +44,7 @@ const chipText = scope.area.hasData ? '© OpenStreetMap · OpenMapTiles · OpenF
     <li>Footprints © <a href="https://overturemaps.org" target="_blank" rel="noopener noreferrer">Overture Maps Foundation</a><small>ODbL</small></li>
     <li>Heights Google Open Buildings 2.5D<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
     <li>Water © OpenStreetMap<small>ODbL</small></li>
+    {scope.area.hasData && <li>Surface vegetation and albedo · {SENTINEL_CREDIT.lead}<small><a href={SENTINEL_CREDIT.url ?? undefined} target="_blank" rel="noopener noreferrer">{SENTINEL_CREDIT.licence}</a></small></li>}
     <li>Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span></li>
     <li>Live weather © Met Norway<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
     <li><span id="attrWard" hidden></span></li>

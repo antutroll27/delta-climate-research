@@ -201,6 +201,10 @@ test.describe('@v2 shell', () => {
     await expect(pop).toContainText('OpenMapTiles');
     await expect(pop.locator('a[href*="openmaptiles.org"]').first()).toBeVisible();
     await expect(pop.locator('[data-v2-map-attrib] a[href*="by-sa/2.5/in"]')).toHaveCount(1, { timeout: 30_000 });
+    /* C audit F2: the measured Sentinel-2 surface is a model input, so it is credited (years from the pipeline's provenance), with its licence linked */
+    await expect(pop).toContainText('Water \u00a9 OpenStreetMap');
+    await expect(pop).toContainText('Contains modified Copernicus Sentinel data 2021\u20132025');
+    await expect(pop.locator('a[href*="Sentinel_Data_Legal_Notice"]')).toHaveCount(1);
     const chip = page.locator('.st-attrib .attrib');
     await expect(chip, 'the chip is always visible').toBeVisible();
     await expect(chip).toHaveText('© OpenStreetMap · OpenMapTiles · OpenFreeMap · Overture · Credits');
@@ -222,6 +226,8 @@ test.describe('@v2 shell', () => {
     await page.goto('/heat-map/ae/dubai/al-quoz/');
     await expect(page.locator('html')).toHaveAttribute('data-ui', 'v2');
     await expect(page.locator('.st-attrib .attrib'), 'no map, no source list; the chip stays').toHaveText('Credits');
+    await page.locator('[data-pop-open="credits"]').click();
+    await expect(page.locator('#v2Credits'), 'no model runs on Al Quoz, so no Sentinel-2 surface is credited').not.toContainText('Sentinel');
     await expect(page.locator('.st-attrib .attrib')).toBeVisible();
   });
 
