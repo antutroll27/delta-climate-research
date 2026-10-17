@@ -20,7 +20,7 @@ export function checkedRows(): readonly Row[] {
 export function caveatRows(): readonly Row[] {
   const [a, b] = TRANSITION_HOURS;
   return [
-    { k: 'Dawn', v: `In the Now view from solar ${hm(a)} to ${hm(b)} the chip reads "${transitionChip()}": that window scored ${TRANSITION_RMSE_K} K out-of-sample, because the surface is still releasing stored heat while the sun is already loading it.` },
+    { k: 'Dawn', v: `In the Now view from solar ${hm(a)} to ${hm(b)} the chip reads "${transitionChip()}": OBOS keeps ${TRANSITION_RMSE_K} K for that window, the larger of its out-of-sample measurements of the morning ECOSTRESS stratum, because the surface is still releasing stored heat while the sun is already loading it.` },
     ...SEASONAL_CAVEATS.map((c) => ({ k: 'Season', v: `When it applies, the reading adds: "${seasonalCaveatLine(c)}".` })),
   ];
 }

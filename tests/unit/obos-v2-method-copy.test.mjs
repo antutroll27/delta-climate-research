@@ -21,6 +21,9 @@ test('the dawn caveat quotes the chip the app prints, from the same constants', 
   assert.ok(dawn.v.includes(`${String(TRANSITION_HOURS[0]).padStart(2, '0')}:00`));
   assert.ok(dawn.v.includes(`${TRANSITION_RMSE_K} K`));
   assert.ok(dawn.v.includes(transitionChip()));
+  /* A-S3 audit F5: 7.54 K is a kept, cautious figure from the 2 Aug morning ECOSTRESS stratum, not "the window's score" (today's artefact reads 6.29 K) */
+  assert.ok(dawn.v.includes(`OBOS keeps ${TRANSITION_RMSE_K} K for that window, the larger of its out-of-sample measurements of the morning ECOSTRESS stratum, because`));
+  assert.ok(!/scored/.test(dawn.v), 'the dawn row claims the window "scored" a figure it was not measured on');
 });
 
 test('one season row per published caveat, worded by seasonalCaveatLine', () => {
