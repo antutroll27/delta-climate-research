@@ -178,7 +178,7 @@ const newCity = scope.area.hasData
     <SolarSide scope={scope} />
     <AirSide scope={scope} />
   </aside>
-  <div class="st-title" id="v2Title" data-hud><TitleCard scope={scope} /><CompassV2 /></div>
+  <div class="st-title" id="v2Title" data-hud><TitleCard scope={scope} />{scope.area.hasData && <CompassV2 />}</div>
   <div class="mapstack" id="v2MapStack" data-hud><MapStack scope={scope} /></div>
   <div class="st-dock" id="v2Dock">{scope.area.hasData && <DockV2 currentKey={scope.key} strip={strip} otherCity={otherCity} />}</div>
   <ToastsV2 newCity={newCity} hasData={scope.area.hasData} />

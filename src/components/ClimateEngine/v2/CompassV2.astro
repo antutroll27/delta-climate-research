@@ -4,9 +4,14 @@
 <button class="card compass" id="compass" type="button" title="Face north" aria-label="Reset the map to face north">
   <svg viewBox="0 0 48 48" aria-hidden="true">
     <circle class="compass-ring" cx="24" cy="24" r="21.2" />
-    <line class="compass-tick" x1="43.6" y1="24" x2="40.6" y2="24" />
-    <line class="compass-tick" x1="4.4" y1="24" x2="7.4" y2="24" />
     <g id="compassDial">
+      {/* S2 audit F6: the approved design's four ticks, now the DIAL's, so they mark true N/E/S/W and turn with the letters (the app
+          counter-rotates N and S about fixed anchors, so a fixed tick would meet E or W at +-90). They sit just OUTSIDE the ring,
+          clear of the letters: N ends at r 20.2, and S is centred ON the ring at r 21.2, so an inside tick would have to cross a letter. */}
+      <line class="compass-tick" x1="24" y1="0.6" x2="24" y2="-1.2" />
+      <line class="compass-tick" x1="47.4" y1="24" x2="49.2" y2="24" />
+      <line class="compass-tick" x1="24" y1="47.4" x2="24" y2="49.2" />
+      <line class="compass-tick" x1="0.6" y1="24" x2="-1.2" y2="24" />
       <path class="compass-n-tip" d="M24 10 L26.6 24 L21.4 24 Z" />
       <path class="compass-s-tail" d="M24 38 L21.4 24 L26.6 24 Z" />
       <circle class="compass-hub" cx="24" cy="24" r="1.4" />
