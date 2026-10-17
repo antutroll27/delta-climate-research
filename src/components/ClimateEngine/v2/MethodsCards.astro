@@ -12,6 +12,8 @@ interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
 const records = allWardRecords();
 const sibs = areaKeysInCity(scope.key).map(resolve).map((s) => ({ key: s.key, name: s.area.name, publishes: s.area.publishes, rec: records.find((r) => r.id === s.area.id) ?? null }));
+/* GROUPING (B-S7 audit F9): counts are grouped en-GB, never en-IN (the "no currency written by hand" guard bans the locale). That prints the same digits as v1's
+   browser-locale grouping while every count is below 100,000 (the largest today is 7,931); a record that passes 100,000 would group differently from v1 (lakh style). */
 const km2 = (m2: number) => (m2 / 1e6).toFixed(2);
 const km = (m: number) => (m / 1000).toFixed(1);
 const first = sibs.find((s) => s.rec)?.rec ?? null;
