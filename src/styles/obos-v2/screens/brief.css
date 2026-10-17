@@ -13,6 +13,8 @@ html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { display: grid; grid-template
 html[data-ui="v2"] .obos-v2.heat-brief .brf-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 html[data-ui="v2"] .obos-v2.heat-brief .brf-main { min-width: 0; }
 html[data-ui="v2"] .obos-v2.heat-brief .brf-intro > .micro { margin-bottom: 8px; }
+/* The issuer line is for paper: v1 printed "Delta Climate Research" in the header, and the rail with its logo does not print (C audit F3). */
+html[data-ui="v2"] .obos-v2.heat-brief .brf-org { display: none; }
 html[data-ui="v2"] .obos-v2.heat-brief .brf-intro .body-s { margin-top: 10px; }
 html[data-ui="v2"] .obos-v2.heat-brief .brf-status { margin-top: 12px; padding: 8px 10px; border-radius: 10px; background: var(--well); color: var(--ink-2); }
 html[data-ui="v2"] .obos-v2.heat-brief h2.micro { margin: 0; }

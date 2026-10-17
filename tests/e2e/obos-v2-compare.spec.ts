@@ -387,8 +387,11 @@ test.describe('@v2 compare', () => {
     await expect(root).toContainText('It is not an observed regional heat-day record.');
     /* it is a document: the page scrolls and the root is a block */
     expect(await root.evaluate((el) => getComputedStyle(el).position)).not.toBe('fixed');
+    await expect(page.locator('.brf-org'), 'the issuer line is for paper only').toBeHidden();
     /* print: ink on paper, no chrome, no print button */
     await page.emulateMedia({ media: 'print' });
+    await expect(page.locator('.brf-org'), 'C audit F3: the printed brief says who issued it').toHaveText('Delta Climate Research');
+    await expect(page.locator('.brf-org')).toBeVisible();
     await expect(page.locator('[data-action="print"]')).toBeHidden();
     await expect(page.locator('nav.rail')).toBeHidden();
     await expect(page.locator('.toolbar')).toBeHidden();
