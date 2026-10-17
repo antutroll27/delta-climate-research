@@ -241,10 +241,14 @@ export function bindSections(ctx: ShellCtx): Sections {
 
 export function mountShellV2(): (() => void) | null {
   const root = document.querySelector<HTMLElement>('main.obos-v2');
-  if (!root) return null;
+  /* ONE BINDING PER ROOT. Under the ClientRouter every page script's astro:page-load listener outlives its page, so the area
+     page's boot (and Compare's, on the brief) also reaches a later v2 root; a second binding makes every toggle fire twice
+     (dead menu pin, a second model worker on the brief). The mark is the root's own, so it dies with the swapped-out document. */
+  if (!root || root.dataset.v2Bound === '1') return null;
+  root.dataset.v2Bound = '1';
   const cleanup: Cleanup = [];
   let disposed = false;
-  const dispose = (): void => { for (const off of cleanup.splice(0)) off(); };
+  const dispose = (): void => { for (const off of cleanup.splice(0)) off(); delete root.dataset.v2Bound; };
   const ctx: ShellCtx = { root, cleanup, glassRefresh: () => {} };
   /* Compare and its paired brief bind only the frame (plan S9.2 Step 4; c-02 gave the brief its own marker, [data-brief-root]). */
   const compare = root.matches('[data-compare-root], [data-brief-root]');

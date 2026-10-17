@@ -19,6 +19,24 @@ test.describe('@v2 shell', () => {
     await expect(page.locator('a.nav-item[data-rail="analysis"]')).toHaveAttribute('href', /\/heat-map\/compare\/\?/);
   });
 
+  test('@v2 c-03: the frame is bound once per root (a second mountShellV2 on the same root is refused, and the pin flips once)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openV2(page);
+    const root = page.locator('main.obos-v2');
+    /* Under the ClientRouter an earlier page's astro:page-load listener outlives its page and reaches a later v2 root (C audit F1).
+       Call the real module again, from the page, exactly as such a listener would. */
+    const second = await page.evaluate(async () => {
+      const url = performance.getEntriesByType('resource').map((e) => e.name).find((n) => /\/_astro\/shell-v2\.[^/]*\.js/.test(n));
+      if (!url) return 'no shell-v2 chunk in the resource list';
+      const m = await import(/* @vite-ignore */ url) as { mountShellV2: () => unknown };
+      return m.mountShellV2() === null ? 'refused' : 'bound again';
+    });
+    expect(second).toBe('refused');
+    const was = await root.getAttribute('data-menu');
+    await page.locator('[data-menu-pin]').click({ position: { x: 30, y: 22 } });
+    await expect(root, 'a double binding toggles twice and lands back where it started').not.toHaveAttribute('data-menu', was ?? '');
+  });
+
   test('@v2 menu labels and side panel are independent: all four combinations', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openV2(page);

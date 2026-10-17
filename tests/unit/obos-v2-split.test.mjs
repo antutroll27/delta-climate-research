@@ -58,6 +58,14 @@ test('mountShellV2 calls the thirteen binders in the plan\'s order, gated for Co
   assert.match(body, /const compare = root\.matches\('\[data-compare-root\], \[data-brief-root\]'\);/);   // c-02: the brief is frame-only by its own marker
 });
 
+test('mountShellV2 binds ONCE per root (c-03): the guard returns null for a bound root, and dispose releases it', () => {
+  const src = readFileSync('src/scripts/climate-engine/v2/shell-v2.ts', 'utf8');
+  const body = src.slice(src.indexOf('export function mountShellV2'));
+  assert.match(body, /if \(!root \|\| root\.dataset\.v2Bound === '1'\) return null;\s*root\.dataset\.v2Bound = '1';/, 'mountShellV2 must refuse a root it already bound');
+  assert.match(body, /const dispose = \(\): void => \{[^}]*delete root\.dataset\.v2Bound;/, 'dispose must release the root so a later boot can bind it again');
+  assert.ok(body.indexOf("root.dataset.v2Bound = '1'") < body.indexOf('const ctx: ShellCtx'), 'the mark is set before any binder runs');
+});
+
 test('the built CSS inlined every partial (no manifest @import survives into dist)', () => {
   assert.ok(existsSync('dist/_astro'), 'run npm run build first');
   for (const f of readdirSync('dist/_astro').filter((x) => x.endsWith('.css'))) {
