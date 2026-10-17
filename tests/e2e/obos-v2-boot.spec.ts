@@ -67,5 +67,26 @@ test.describe('@v2 boot', () => {
     const blurred = await page.evaluate(() => [...document.querySelectorAll('main.obos-v2 *')]
       .filter((e) => { const v = getComputedStyle(e).backdropFilter; return v && v !== 'none'; }).length);
     expect(blurred).toBe(0);
+    /* The assertion above is only as strong as the surfaces it can see: the shell has none yet. So prove the
+       CSS itself: a real v2 surface blurs ONLY under glass + live, in both themes (spec §2.2, the S1 audit item). */
+    const matrix = await page.evaluate(() => {
+      const root = document.querySelector<HTMLElement>('main.obos-v2')!;
+      const probe = document.createElement('div');
+      probe.className = 'card'; probe.setAttribute('data-perf-dummy', '');
+      root.appendChild(probe);
+      const out: string[] = [];
+      for (const theme of ['dark', 'light']) for (const cards of ['glass', 'plates']) for (const glass of ['flat', 'live']) {
+        root.dataset.theme = theme; root.dataset.cards = cards; root.dataset.glass = glass;
+        const cs = getComputedStyle(probe);
+        const bf = cs.backdropFilter || cs.getPropertyValue('-webkit-backdrop-filter') || 'none';
+        out.push(`${theme}|${cards}|${glass}|${bf === 'none' ? 'none' : 'blur'}`);
+      }
+      probe.remove();
+      return out;
+    });
+    for (const row of matrix) {
+      const [, cards, glass, bf] = row.split('|');
+      expect(bf, row).toBe(cards === 'glass' && glass === 'live' ? 'blur' : 'none');
+    }
   });
 });
