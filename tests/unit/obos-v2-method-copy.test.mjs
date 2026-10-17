@@ -9,7 +9,7 @@ test('every figure in "How this was checked" is the accuracy.ts export', () => {
   const rows = checkedRows();
   const n = ACCURACY.night, p = ACCURACY.peak;
   assert.deepEqual(rows.map((r) => r.k), ['Night', 'Day', 'Band']);
-  assert.equal(rows[0].v, `±${n.bandK.toFixed(1)} °C over ${n.n} ward-scenes of NASA ECOSTRESS. Error ${n.modelRmseK} K against a best possible ${n.ceilingRmseK} K.`);
+  assert.equal(rows[0].v, `±${n.bandK.toFixed(1)} °C over ${n.n} ward-scenes of NASA ECOSTRESS. In-sample error ${n.modelRmseK} K against a best possible ${n.ceilingRmseK} K.`);
   assert.equal(rows[1].v, `±${p.bandK.toFixed(1)} °C, indicative only: n = ${p.n}, an earlier evidence set.`);
   assert.equal(rows[2].v, `Covers the leave-one-overpass-out error (${n.looOverpassRmseK} K at night), not the in-sample fit.`);
 });
