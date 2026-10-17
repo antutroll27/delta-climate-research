@@ -1454,7 +1454,8 @@ export function mountHeatMap(): () => void {
      unit, a ring label on the tag at 3.64:1. They are placed clear of these boxes, and
      hidden when nowhere is clear. Read at most every 250 ms: the HUD moves on a pane
      toggle or a resize, not per frame, and placeCard runs per frame. */
-  const HUD_KEEP_OUT = '.rail-r > *, #clockw, #vegw, #svw, .chiprow, .synthetic, .stamp-slot, #sunLine, #compass';
+  /* [data-hud]: every OBOS v2 chrome box (spec §1.6); no v1 element carries it. */
+  const HUD_KEEP_OUT = '.rail-r > *, #clockw, #vegw, #svw, .chiprow, .synthetic, .stamp-slot, #sunLine, #compass, [data-hud]';
   let hudRects: DOMRect[] = [], hudReadAt = -Infinity;
   function hudKeepOut(): DOMRect[] {
     const now = performance.now();
@@ -1788,7 +1789,8 @@ export function mountHeatMap(): () => void {
    */
   /* `#pname,#pzone,.compass` added after the 2026-09-13 live audit caught
      "M. Chinnaswamy Stadium" across the MG Road title and "Tower C" on the compass. */
-  const LM_KEEP_OUT = '.top,.stamp-slot,.vegw,.chiprow,.rail-r,.legend,.strip,.bcard,.tiphint,.cooltag,#pname,#pzone,.compass';
+  /* [data-hud]: every OBOS v2 chrome box (spec §1.6); no v1 element carries it. */
+  const LM_KEEP_OUT = '.top,.stamp-slot,.vegw,.chiprow,.rail-r,.legend,.strip,.bcard,.tiphint,.cooltag,#pname,#pzone,.compass,[data-hud]';
 
   /** Paint the card's landmark block, and mark which chip the open card is about. */
   function paintLandmark(lm: LandmarkPick | null): void {
