@@ -133,10 +133,12 @@ const VIEWS: readonly View[] = [
 ];
 
 async function capture(browser: Browser, v: View): Promise<{ lines: string[]; png: Buffer }> {
-  /* browser.newContext() does not inherit the project's `use`, so baseURL is passed here. */
+  /* browser.newContext() DOES inherit the project's `storageState` (C audit M4 proved it; it does not inherit baseURL, so that is passed).
+     This project sets none, so these are v1 today; the empty state is explicit so a later config change cannot turn the v1 proof into a v2 one. */
+  const NO_FLAG = { cookies: [], origins: [] };
   const ctx = await browser.newContext(v.mobile
-    ? { baseURL: PW_ORIGIN, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 }
-    : { baseURL: PW_ORIGIN, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    ? { baseURL: PW_ORIGIN, storageState: NO_FLAG, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 }
+    : { baseURL: PW_ORIGIN, storageState: NO_FLAG, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   await open(page, v.path);
   if (v.clay) {
