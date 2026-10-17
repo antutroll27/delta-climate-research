@@ -7,6 +7,7 @@ import { bindGlass } from './glass.ts';
 import { bindMirrors, bindWardCard } from './heat-v2.ts';
 import { bindSunCard } from './sun-card.ts';
 import { bindWeather } from './weather-v2.ts';
+import { bindSolar } from './solar-v2.ts';
 import { bindPhone } from './phone-v2.ts';
 import type { LayerStack, Sections, ShellCtx } from './shell-ctx.ts';
 
@@ -263,6 +264,7 @@ export function mountShellV2(): (() => void) | null {
     bindSunCard(root, cleanup);                  // Track A, S4.1 (sun-card.ts)
     bindWardCard(ctx);                           // Track A, S4.2 (heat-v2.ts)
     bindWeather(ctx);                            // Track B, S7.2 (weather-v2.ts)
+    bindSolar(ctx);                              // Track B (solar-v2.ts)
   }
   /* bindGlass is async: if the page was left before it resolved, undo what it registered. */
   void bindGlass(root, cleanup).then((g) => { ctx.glassRefresh = g.refresh; if (disposed) dispose(); });

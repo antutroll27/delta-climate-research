@@ -47,12 +47,12 @@ test('no v2 component carries a <style> (Astro would stamp scope attributes)', (
   for (const f of files) assert.ok(!/<style[\s>]/.test(readFileSync(f, 'utf8')), `${f} has a <style>; v2 CSS lives in src/styles/obos-v2/`);
 });
 
-test('mountShellV2 calls the thirteen binders in the plan\'s order, gated for Compare (plan S9.2 Step 4)', () => {
+test('mountShellV2 calls the fourteen binders in the plan\'s order, gated for Compare (plan S9.2 Step 4)', () => {
   const src = readFileSync('src/scripts/climate-engine/v2/shell-v2.ts', 'utf8');
   const body = src.slice(src.indexOf('export function mountShellV2'));
   let at = -1;
   for (const b of ['bindSections(', 'bindPrefs(', 'bindPerArea(', 'bindPressedMirror(', 'bindProxies(', 'bindLayers(', 'bindPhone(',
-    'bindFlash(', 'bindMirrors(', 'bindSunCard(', 'bindWardCard(', 'bindWeather(', 'bindGlass(']) {
+    'bindFlash(', 'bindMirrors(', 'bindSunCard(', 'bindWardCard(', 'bindWeather(', 'bindSolar(', 'bindGlass(']) {
     const i = body.indexOf(b); assert.ok(i > at, `${b} missing or out of order`); at = i;
   }
   assert.match(body, /const compare = root\.matches\('\[data-compare-root\], \[data-brief-root\]'\);/);   // c-02: the brief is frame-only by its own marker
@@ -64,6 +64,17 @@ test('mountShellV2 binds ONCE per root (c-03): the guard returns null for a boun
   assert.match(body, /if \(!root \|\| root\.dataset\.v2Bound === '1'\) return null;\s*root\.dataset\.v2Bound = '1';/, 'mountShellV2 must refuse a root it already bound');
   assert.match(body, /const dispose = \(\): void => \{[^}]*delete root\.dataset\.v2Bound;/, 'dispose must release the root so a later boot can bind it again');
   assert.ok(body.indexOf("root.dataset.v2Bound = '1'") < body.indexOf('const ctx: ShellCtx'), 'the mark is set before any binder runs');
+});
+
+test('b-01: the solar and brief-link binders live in Track B\'s solar-v2.ts, not hidden in weather-v2.ts', () => {
+  const solar = readFileSync('src/scripts/climate-engine/v2/solar-v2.ts', 'utf8');
+  assert.match(solar, /export function bindSolar\(ctx: ShellCtx\): void/);
+  assert.match(solar, /function bindSolarRows\(/);
+  assert.match(solar, /function bindBriefLink\(/);
+  const weather = readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8');
+  assert.ok(!/bindSolarRows|bindBriefLink|TODO\(request b-01\)/.test(weather), 'weather-v2.ts carries neither binder nor the TODO any more');
+  const shell = readFileSync('src/scripts/climate-engine/v2/shell-v2.ts', 'utf8');
+  assert.match(shell, /import \{ bindSolar \} from '\.\/solar-v2\.ts';/);
 });
 
 test('the built CSS inlined every partial (no manifest @import survives into dist)', () => {
