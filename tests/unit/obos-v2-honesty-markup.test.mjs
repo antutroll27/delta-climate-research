@@ -64,3 +64,21 @@ test('hero: a generous gap above and below the surface number (founder, 16 px / 
 test('v2 CSS paints no warm hue by hand: the heat classes ride on tokens only', () => {
   for (const f of ['overview.css', 'heat.css']) assert.ok(!/#[0-9a-f]{3,8}\b|rgba?\(/i.test(strip(CSS(f))), `${f} spells a colour literal`);
 });
+
+/* ── S3.3: the Heat cards ── */
+test('H9/H6: the legend card carries #patternNote, the colour-mode line and the surface-not-air foot', () => {
+  const heat = V2('HeatCards.astro');
+  assert.ok(heat.includes('id="patternNote"'));
+  const tint = /id="tintchip" title="([^"]+)"/.exec(STAGE)?.[1];
+  assert.ok(tint, 'v1\'s #tintchip title moved');
+  assert.ok(heat.includes(tint), 'the colour-mode line is not v1\'s #tintchip title');
+  assert.ok(heat.includes('Satellite-checked surface temperature, not air temperature.'));
+});
+
+test('H23: the method card prints method-copy rows, and "checked", never "validated"', () => {
+  const heat = V2('HeatCards.astro');
+  assert.ok(heat.includes('checkedRows()') && heat.includes('caveatRows()'));
+  assert.ok(heat.includes('How this was checked') && heat.includes('Caveats OBOS adds when they apply'));
+  for (const f of ['HeatCards.astro', 'TempCard.astro']) assert.ok(!/validated/i.test(V2(f)), `${f} says "validated"`);
+  assert.ok(!/validated/i.test(readFileSync('src/scripts/climate-engine/v2/method-copy.ts', 'utf8')), 'method-copy says "validated"');
+});

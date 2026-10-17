@@ -88,12 +88,21 @@ test.describe('@v2 honesty', () => {
     expect(conf - lst.bottom, 'gap below the hero').toBeGreaterThanOrEqual(14);
   });
 
-  test('@v2 [H] the temperature card shows on Overview, Heat and Scenarios only', async ({ page }) => {
+  test('@v2 [H] the temperature card shows on Overview, Heat and Scenarios only; Heat adds its legend and method cards', async ({ page }) => {
     await stubWeather(page, '2026-10-07T06:05:00Z');
     await openV2(page);
     for (const [s, shown] of [['overview', true], ['heat', true], ['scenarios', true], ['air', false], ['solar', false], ['weather', false], ['methods', false]] as const) {
       await go(page, s);
       await expect(page.locator(CARD)).toBeVisible({ visible: shown });
     }
+    await go(page, 'heat');
+    await expect(page.locator('#patternNote')).toHaveText(/^Block pattern illustrative · r \d\.\d\d$/);
+    await expect(page.locator('[data-v2-card="heat-legend"]')).toContainText('Satellite-checked surface temperature, not air temperature.');
+    const method = page.locator('[data-v2-card="method"]');
+    await expect(method.locator('summary').first()).toHaveText(/How this was checked/);
+    await method.locator('summary').first().click();
+    await expect(method).toContainText('ward-scenes of NASA ECOSTRESS');
+    await go(page, 'overview');
+    await expect(page.locator('[data-v2-card="heat-legend"]')).toBeHidden();
   });
 });

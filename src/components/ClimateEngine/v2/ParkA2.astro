@@ -1,7 +1,7 @@
 ---
 // src/components/ClimateEngine/v2/ParkA2.astro — OBOS v2 spec §3.8, §4.1, §4.8. Owner: Track A. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
-// Parked: the crumb, the rig, the data fragment (loadchip, sun line, ring labels, cool tag, landmarks, selection, #patternNote, street modal) and the no-data card, until S3–S5.
-// S3.2 re-homed the right aside and the legend into TempCard; #patternNote leaves in S3.3 (HeatCards).
+// Parked: the crumb, the rig, the data fragment (loadchip, sun line, ring labels, cool tag, landmarks, selection, street modal) and the no-data card, until S3–S5.
+// S3 re-homed the right aside and the legend: TempCard (S3.2), HeatCards with #patternNote (S3.3).
 import ConstructionStamp from '../../states/ConstructionStamp.astro';
 import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
@@ -74,7 +74,6 @@ const { scope } = Astro.props;
       {/* S4 */}
       {/* S3 */}
       {/* S3/S7 */}
-    <p class="pattern-note" id="patternNote"></p>
       {/* S4 */}
   <div class="svmodal" id="svModal" hidden>
     <div class="svmodal-card">
