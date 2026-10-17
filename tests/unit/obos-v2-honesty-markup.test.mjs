@@ -113,3 +113,59 @@ test('the breadcrumb is sentence case and the Less/More toggle keeps its accessi
 test('the loading chip shows only while loading or failed (the app toggles .on and .fail)', () => {
   assert.match(strip(CSS('mapstack.css')), /#loadchip:not\(\.on\):not\(\.fail\) \{ display: none; \}/);
 });
+
+/* ── S4.3: the building card (A1 §2.4: these pins moved here from Track B's S6.1 test) ── */
+const bcardOf = (src, open) => { const i = src.indexOf(open); return src.slice(i, src.indexOf('<div class="place">', i) > i ? src.indexOf('<div class="place">', i) : undefined); };
+const textsOf = (html) => [...html.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').matchAll(/>([^<>{}]+)</g)].map((m) => m[1].replace(/\s+/g, ' ').trim()).filter(Boolean);
+const attrsOf = (html) => [...html.matchAll(/\b(?:aria-label|title)="([^"]+)"/g)].map((m) => m[1]);
+
+test('H11: v1\'s building-card wording survives, every text node and every label, word for word', () => {
+  const v1 = bcardOf(STAGE, '<div class="bcard" id="bcard"');
+  const v2 = V2('BuildingCardV2.astro');
+  const v2blob = ` ${textsOf(v2).join(' | ')} | ${attrsOf(v2).join(' | ')} `;
+  const missing = [...textsOf(v1), ...attrsOf(v1)].filter((t) => !v2blob.includes(t));
+  assert.deepEqual(missing, [], 'text v1 prints that the v2 card lost');
+});
+
+test('H13: the strict floor sits beside the headline, in one .interval row (both ids)', () => {
+  const v2 = V2('BuildingCardV2.astro');
+  assert.match(v2, /<div class="interval">[^]*?id="bcSolKwp"[^]*?id="bcSolFloor"[^]*?<\/div>/);
+  const row = /<div class="interval">([^]*?)<\/div>/.exec(v2)[1];
+  assert.ok(row.includes('id="bcSolKwp"') && row.includes('id="bcSolFloor"'), 'headline and floor must share the row');
+});
+
+test('H14/H15: no "validated" and no banned money word on the building card; the estimate wording is v1\'s', () => {
+  const v2 = V2('BuildingCardV2.astro');
+  assert.ok(!/validated(?! rooftops)/i.test(v2.replace('Never compared with real rooftops yet. The validation study is under way.', '')), 'a solar claim says "validated"');
+  assert.ok(!/guarantee|ROI of|returns/i.test(v2), 'a banned money word');
+  assert.ok(v2.includes('Screening estimate · not bankable · canopy Meta/WRI CHM v2 · 0.5 m grid · NASA POWER irradiance'));
+  assert.ok(v2.includes('Work out payback') && v2.includes('Print the installer brief'));
+});
+
+test('the card is a dialog the app\'s selection logic can still drive: every bc* id once, and the app\'s hidden/placement contract holds', () => {
+  const v2 = V2('BuildingCardV2.astro');
+  const ids = [...v2.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(new Set(ids).size, ids.length, 'duplicate ids in the building card');
+  for (const id of ['bcard', 'bcId', 'bcLL', 'bcH', 'bcF', 'bcA', 'bcV', 'bcAl', 'bcT', 'bcLm', 'bcLmName', 'bcLmH', 'bcLmSrc', 'bcSol', 'bcSolTier', 'bcSolKwp', 'bcSolKwh',
+    'bcSolLoss', 'bcSolFloor', 'bcSolRaised', 'bcSolRs', 'bcSolNote', 'bcSure', 'bcSureRoof', 'bcSureCanopy', 'bcSureIrr', 'bcSureValid', 'bcBrief', 'bcPay', 'svThumb', 'bcRings', 'bcIns', 'bcSrc', 'bcX']) {
+    assert.ok(ids.includes(id), `#${id} missing`);
+  }
+  assert.match(v2, /<div class="bcard card" id="bcard" hidden role="dialog" aria-label="Selected building">/);
+  assert.equal((v2.match(/data-limit="/g) ?? []).length, 10, 'the five rungs and their five buttons');
+});
+
+test('the map-borne chips and the street-view modal left parking for their own regions', () => {
+  const chips = V2('MapChips.astro'), sv = V2('StreetViewModal.astro'), park = V2('ParkA2.astro');
+  for (const id of ['bsel', 'ringNear', 'ringFar', 'coolTag', 'coolTagIn', 'coolTagM', 'lmlabs']) { assert.ok(chips.includes(`id="${id}"`), `#${id} not in MapChips`); assert.ok(!park.includes(`id="${id}"`), `#${id} still parked`); }
+  for (const id of ['svModal', 'svClose', 'svViewer']) { assert.ok(sv.includes(`id="${id}"`), `#${id} not in StreetViewModal`); assert.ok(!park.includes(`id="${id}"`), `#${id} still parked`); }
+  assert.ok(sv.includes('Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener noreferrer">Mapillary</a> · community-captured (CC BY-SA)'), 'the credit is v1\'s text with a real link');
+});
+
+test('the card override is CSS-only: v2 neutralises the app\'s inline placement and nothing is written in a script', () => {
+  const css = strip(CSS('building.css'));
+  assert.match(css, /#bcard \{[^}]*transform: none !important; opacity: 1 !important;/);
+  assert.match(css, /#bcard \.bcard-in \{[^}]*max-height: none !important;/);
+  assert.match(css, /#legend:has\(> #bcard:not\(\[hidden\]\)\) > :not\(#bcard\) \{ display: none !important; \}/);
+  assert.match(css, /#bcard \.lead \{ display: none; \}/);
+  assert.ok(!/#[0-9a-f]{3,8}\b|rgba?\(/i.test(css), 'building.css spells a colour literal');
+});

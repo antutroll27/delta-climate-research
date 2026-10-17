@@ -1,51 +1,61 @@
 ---
 // src/components/ClimateEngine/v2/BuildingCardV2.astro — OBOS v2 spec §4.8 (keeps every bc* id).
-// A1 (S2.8): v1's #bcard, VERBATIM, hoisted out of parking into the right column. Owner: Track A, plan S4.3 (restructures it in place).
+// Owner: Track A (plan S4.3). v1's #bcard: every id and every word, in the right column. Restructured only into two sections (the building; rooftop solar)
+// and so the strict floor (#bcSolFloor) sits in the same row as the solar headline (#bcSolKwp), H13.
+import Sym from './Sym.astro';
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 interface Props { scope: ResolvedScope }
 ---
-<div class="bcard" id="bcard" hidden role="dialog" aria-label="Selected building">
+<div class="bcard card" id="bcard" hidden role="dialog" aria-label="Selected building">
   <span class="lead"></span>
   <div class="bcard-in">
-    <div class="bc-h"><span>Building</span><span id="bcId">—</span></div>
-    <dl>
-      <dt>Coordinates</dt><dd id="bcLL">—</dd>
-      <dt>Height</dt><dd id="bcH">—</dd>
-      <dt>Floors ≈</dt><dd id="bcF">—</dd>
-      <dt>Footprint</dt><dd id="bcA">—</dd>
-      <dt>Vegetation</dt><dd id="bcV">—</dd>
-      <dt>Albedo</dt><dd id="bcAl">—</dd>
-      <dt>Surface</dt><dd id="bcT">—</dd>
-    </dl>
-    {/* LANDMARK — shown only when the selected building is one of the ward's
-        named buildings, and then it prints the published height AND where
-        that height came from. The source row is not decoration: a height
-        with no stated source is not drawn as a landmark at all, so this row
-        is the reason the rest of the block is allowed to exist.
-
-        ABOVE the rooftop-solar block and ruled off in cyan rather than the
-        screening amber, because this is the best-evidenced number on the
-        card and must never read as a sibling of the estimate below it. */}
-    <div class="bc-lm" id="bcLm" hidden>
-      <div class="bc-h"><span>Landmark</span></div>
-      <p class="bc-lm-name" id="bcLmName">—</p>
+    <section class="bc-part bc-building">
+      <span class="bleed" aria-hidden="true"><Sym shape="square" c="ink" size={64} /></span>
+      <span class="micro">Selected building</span>
+      <div class="bc-h"><span>Building</span><span id="bcId">—</span></div>
       <dl>
-        <dt>Published height</dt><dd id="bcLmH">—</dd>
-        <dt>Source</dt><dd id="bcLmSrc">—</dd>
+        <dt>Coordinates</dt><dd id="bcLL">—</dd>
+        <dt>Height</dt><dd id="bcH">—</dd>
+        <dt>Floors ≈</dt><dd id="bcF">—</dd>
+        <dt>Footprint</dt><dd id="bcA">—</dd>
+        <dt>Vegetation</dt><dd id="bcV">—</dd>
+        <dt>Albedo</dt><dd id="bcAl">—</dd>
+        <dt>Surface</dt><dd id="bcT">—</dd>
       </dl>
-    </div>
+      {/* LANDMARK — shown only when the selected building is one of the ward's
+          named buildings, and then it prints the published height AND where
+          that height came from. The source row is not decoration: a height
+          with no stated source is not drawn as a landmark at all, so this row
+          is the reason the rest of the block is allowed to exist.
+
+          ABOVE the rooftop-solar block and ruled off in cyan rather than the
+          screening amber, because this is the best-evidenced number on the
+          card and must never read as a sibling of the estimate below it. */}
+      <div class="bc-lm" id="bcLm" hidden>
+        <div class="bc-h"><span>Landmark</span></div>
+        <p class="bc-lm-name" id="bcLmName">—</p>
+        <dl>
+          <dt>Published height</dt><dd id="bcLmH">—</dd>
+          <dt>Source</dt><dd id="bcLmSrc">—</dd>
+        </dl>
+      </div>
+      <div class="sv-thumb" id="svThumb" hidden></div>
+      <p class="bc-rings" id="bcRings"></p>
+      <p class="bc-ins" id="bcIns"></p>
+      <p class="bc-prov" id="bcSrc"></p>
+    </section>
     {/* ROOFTOP SOLAR — a screening estimate ABOUT the building, under the
         measured rows and in a different ink. Painted by paintSolarCard from
         the ward's solar file; hidden when none ships. "At least" is the
         strict-mask floor: the mask rule is the largest lever in the estimate,
         so the headline never prints without it (spec §2.4). */}
-    <div class="bc-sol" id="bcSol" hidden>
-      <div class="bc-h"><span>Rooftop solar</span><span id="bcSolTier" class="bc-tier">screened</span></div>
+    <section class="bc-sol bc-part" id="bcSol" hidden>
+      <div class="bc-h"><span class="bleed" aria-hidden="true"><Sym shape="square" c="solar" kind="modelled" size={40} /></span><span>Rooftop solar</span><span id="bcSolTier" class="bc-tier">screened</span></div>
       <dl>
-        <dt>Installable</dt><dd id="bcSolKwp" class="sun">—</dd>
+        {/* H13: the strict-mask floor is printed BESIDE the headline, in one row, never under a fold */}
+        <div class="interval"><dt>Installable</dt><dd id="bcSolKwp" class="sun">—</dd><dt>At least</dt><dd id="bcSolFloor">—</dd></div>
         <dt>Yield</dt><dd id="bcSolKwh">—</dd>
         <dt>Shaded</dt><dd id="bcSolLoss">—</dd>
-        <dt>At least</dt><dd id="bcSolFloor">—</dd>
         <dt>Raised 2 m</dt><dd id="bcSolRaised">—</dd>
         <dt>Worth</dt><dd id="bcSolRs">—</dd>
       </dl>
@@ -74,11 +84,7 @@ interface Props { scope: ResolvedScope }
           paintSolarCard: hidden when the city has no sourced cost basis, disabled
           with its own reason when the roof takes under 1 kW. */}
       <button class="bc-brief" id="bcPay" type="button" hidden>Work out payback</button>
-    </div>
-    <div class="sv-thumb" id="svThumb" hidden></div>
-    <p class="bc-rings" id="bcRings"></p>
-    <p class="bc-ins" id="bcIns"></p>
-    <p class="bc-prov" id="bcSrc"></p>
+    </section>
     <button class="bc-x" id="bcX" type="button" aria-label="Close building details">Close ✕</button>
   </div>
 </div>

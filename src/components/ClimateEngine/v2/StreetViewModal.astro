@@ -1,6 +1,16 @@
 ---
-// src/components/ClimateEngine/v2/StreetViewModal.astro — OBOS v2 spec §3.10. Owner: Track A. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
-// A1 SLOT: renders nothing until its owner fills it (plan S4.3).
+// src/components/ClimateEngine/v2/StreetViewModal.astro — OBOS v2 spec §3.10. Owner: Track A (plan S4.3). v1's #svModal verbatim (the credit gains rel="noreferrer");
+// the Mapillary viewer mounts into #svViewer. Centred card at z 92 in screens/building.css. Not in the CI subset: it needs a token.
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
 ---
+{scope.area.hasData && (
+<div class="svmodal" id="svModal" hidden>
+  <div class="svmodal-card">
+    <button class="svmodal-x" id="svClose" type="button" aria-label="Close street view">✕</button>
+    <div id="svViewer" class="svmodal-viewer"></div>
+    <div class="svmodal-credit">Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener noreferrer">Mapillary</a> · community-captured (CC BY-SA)</div>
+  </div>
+</div>
+)}

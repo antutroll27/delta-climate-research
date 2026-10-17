@@ -50,3 +50,94 @@ test.describe('@v2 map stack', () => {
     expect(sun!.x + sun!.width).toBeLessThanOrEqual(col!.x);
   });
 });
+
+test.describe('@v2 building card', () => {
+  test.setTimeout(180_000);
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  /** the app selects a building from the roof list (a hidden parked pane until Track B's Solar screen); a row click is the same code path as a map click */
+  const pick = async (page: import('@playwright/test').Page, row = 0) => {
+    await expect(page.locator('#solList tr[data-idx]').nth(row)).toBeAttached({ timeout: 60_000 });
+    await page.locator('#solList tr[data-idx]').nth(row).dispatchEvent('click');
+  };
+
+  test('@v2 [H] a roof row selects its building: card in the right column, surface row, rings, greenery, Esc closes', async ({ page }) => {
+    await stubWeather(page, '2026-10-07T06:05:00Z');
+    await openV2(page);
+    await pick(page);
+    const card = page.locator('#bcard');
+    await expect(card).toBeVisible();
+    const box = await card.boundingBox(), col = await page.locator('#legend').boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(col!.x - 1);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(col!.x + col!.width + 1);
+    await expect(page.locator('[data-v2-card="temp"]')).toBeHidden();       // the card replaces the column's other cards
+    await expect(page.locator('#bcT')).not.toHaveText('—');
+    await expect(page.locator('#bcRings')).toContainText('how far you could walk from this building in 1 and 5 minutes');
+    await expect(page.locator('#bcIns')).not.toBeEmpty();
+    await expect(page.locator('#bcSolKwp')).toBeVisible();
+    const kwp = await page.locator('#bcSolKwp').boundingBox(), floor = await page.locator('#bcSolFloor').boundingBox();
+    expect(Math.abs(kwp!.y - floor!.y), 'H13: the strict floor sits beside the headline').toBeLessThanOrEqual(8);
+    /* the ring labels and the greenery tag are placed clear of every HUD box (the app's keep-out, spec E1/E2) */
+    await page.waitForTimeout(1500);                                         // the entrance animation and the app's 250 ms HUD read settle
+    for (const sel of ['#ringNear', '#ringFar', '#coolTag']) {
+      const shown = await page.locator(sel).evaluate((e) => !(e as HTMLElement).hidden && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none');
+      if (!shown) continue;                                                  // hidden when nowhere is clear: allowed
+      const b = (await page.locator(sel).boundingBox())!;
+      for (const hud of await page.locator('[data-hud]:visible').all()) {
+        const h = await hud.boundingBox();
+        if (!h || h.width === 0) continue;
+        const overlap = b.x < h.x + h.width && b.x + b.width > h.x && b.y < h.y + h.height && b.y + b.height > h.y;
+        const id = await hud.evaluate((e) => `${e.tagName}#${e.id}.${e.className}`);
+        expect(overlap, `${sel} ${JSON.stringify(b)} sits on HUD ${id} ${JSON.stringify(h)}`).toBe(false);
+      }
+    }
+    await page.keyboard.press('Escape');
+    await expect(card).toBeHidden();
+    await expect(page.locator('[data-v2-card="temp"]')).toBeVisible();
+  });
+
+  test('@v2 the close button and a second building both work; no page errors over a selection and an orbit', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    await openV2(page);
+    await pick(page, 0);
+    await expect(page.locator('#bcard')).toBeVisible();
+    const first = await page.locator('#bcId').textContent();
+    await pick(page, 1);
+    await expect(page.locator('#bcId')).not.toHaveText(first ?? '');
+    await page.waitForTimeout(4000);                                          // the app places the card every frame; a clash would throw here
+    await page.locator('#bcX').click();
+    await expect(page.locator('#bcard')).toBeHidden();
+    expect(errors.filter((e) => !/mapillary|favicon|Failed to load resource/i.test(e))).toEqual([]);
+  });
+
+  test('@v2 payback opens over the card; Esc closes only the sheet', async ({ page }) => {
+    await openV2(page);
+    /* the app shows #bcPay only where a payback can be computed: take the first of five roofs that offers it */
+    let shown = false;
+    for (let i = 0; i < 5 && !shown; i++) {
+      await pick(page, i);
+      shown = await page.locator('#bcPay').isVisible();
+    }
+    expect(shown, 'none of the first five roofs offers a payback').toBe(true);
+    await page.locator('#bcPay').click();
+    await expect(page.locator('#solPay')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#solPay')).toBeHidden();
+    await expect(page.locator('#bcard')).toBeVisible();
+  });
+
+  test('@v2 [H] a landmark (Bengaluru): its published height AND its source are on the card', async ({ page }) => {
+    await openV2(page, '/heat-map/in/bengaluru/mg-road/');
+    /* landmark chips are pinned to roofs, so they exist only in the 3-D relief view (the app hides them in 2-D isotherm; tier 0 may start there) */
+    await page.locator('[data-m="relief"]').first().evaluate((b) => (b as HTMLElement).click());
+    const chip = page.locator('#lmlabs .lmlab:not([hidden])').first();
+    await expect(chip).toBeVisible({ timeout: 60_000 });
+    await chip.click();
+    await expect(page.locator('#tiphint')).toBeHidden();                       // finding a landmark retires the first-run hint (app)
+    await expect(page.locator('#bcLm')).toBeVisible();
+    await expect(page.locator('#bcLmH')).not.toHaveText('—');
+    await expect(page.locator('#bcLmSrc')).not.toHaveText('—');
+  });
+});

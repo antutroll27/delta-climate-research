@@ -1,70 +1,11 @@
 ---
 // src/components/ClimateEngine/v2/ParkA2.astro — OBOS v2 spec §3.8, §4.1, §4.8. Owner: Track A. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
-// Parked: the crumb, the rig, the data fragment (loadchip, sun line, ring labels, cool tag, landmarks, selection, street modal) and the no-data card, until S3–S5.
-// S3 re-homed the right aside and the legend: TempCard (S3.2), HeatCards with #patternNote (S3.3).
+// Parked: only the no-data card, until S5.2 (ScenarioCards). S3 and S4 re-homed everything else: TempCard, HeatCards, MapStack, MapChips, StreetViewModal.
 import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
 ---
-    {/* S4 */}
-    {scope.area.hasData && <Fragment>
-      {/* S2/S4 */}
-
-    <!-- Walk-time ring labels. Text is STATIC: the app only toggles `hidden` and
-         writes a transform, so nothing rewrites strings on every repaint.
-         Two lines each — the headline is the human unit (minutes), the second
-         line is the caveat, because a circle drawn on a map reads as "you can
-         reach all of this" and a straight-line radius is not that. -->
-    <!-- Ring labels are RULER MARKINGS, not findings: one quiet mono line, in
-         the ring's own colour, sitting on the circumference like a contour
-         label. The old data-chip styling promised a per-building measurement
-         and delivered a constant — the reader who commissioned the rings
-         misread them twice for exactly that reason. -->
-    <div class="ringlab" id="ringNear" hidden>1 min · 80 m</div>
-    <div class="ringlab" id="ringFar" hidden>5 min · 400 m</div>
-
-    <!-- The finding: nearest greenery, the number that changes with every
-         click. Data-chip anatomy (big value, small label) in the cooling
-         green so it belongs to the patches it stands on. -->
-    <!-- Two nodes on purpose: the OUTER one is written by the render loop every
-         repaint (translate3d onto the cooling patch), the INNER one owns the
-         pop-in. Animating one element with both would have the frame loop
-         stamping over the animation's transform sixty times a second. Same
-         split as .bcard / .bcard-in. -->
-    <div class="cooltag" id="coolTag" hidden>
-      <div class="cooltag-in" id="coolTagIn">
-        <b id="coolTagM">—</b><span>Nearest greenery</span>
-      </div>
-    </div>
-
-    <!-- LANDMARK LABELS. The named buildings of a ward that ships an authored
-         model — 0 in Indiranagar (a genuinely low-rise ward), 12 in MG Road, 35
-         in Whitefield. These are the only buildings whose height the instrument
-         asserts BY NAME, so every chip here has a citation behind it and one
-         without a stated source is never drawn at all.
-
-         Chips are created per ward by heat-map-app.ts and only TRANSFORMED per
-         repaint — the text never changes once written. They are real buttons
-         because the city is a <canvas>: this is the only way to reach a landmark
-         from the keyboard. -->
-    <div class="lmlabs" id="lmlabs" hidden></div>
-
-    <!-- Click-to-inspect. Positioned from the building's own ward-metre centroid
-         every time MapLibre repaints, so it tracks orbit, pan, zoom and flyTo. -->
-    <div class="bsel" id="bsel" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-      {/* S4 */}
-      {/* S3 */}
-      {/* S3/S7 */}
-      {/* S4 */}
-  <div class="svmodal" id="svModal" hidden>
-    <div class="svmodal-card">
-      <button class="svmodal-x" id="svClose" type="button" aria-label="Close street view">✕</button>
-      <div id="svViewer" class="svmodal-viewer"></div>
-      <div class="svmodal-credit">Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener">Mapillary</a> · community-captured (CC BY-SA)</div>
-    </div>
-  </div>
-    </Fragment>}
     {/* S5 */}
     {!scope.area.hasData && <Fragment>
   <section class="notyet" aria-labelledby="notyet-h">
