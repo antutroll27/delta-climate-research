@@ -25,9 +25,12 @@ test.describe('@v2 shell', () => {
     const root = page.locator('main.obos-v2');
     const pin = page.locator('[data-menu-pin]');
     const overview = page.locator('.nav-item[data-section="overview"]');
+    // Click the ICON, not the centre: in icons mode the rail is clip-path-clipped to 72 px (F10), so the centre of the 204 px item is
+    // deliberately not hit-testable once the .45 s transition passes it; the icon (x 28) is visible and clickable in both modes.
+    const ICON = { position: { x: 30, y: 22 } };
     for (const [menu, side] of [['labels', '1'], ['icons', '1'], ['icons', '0'], ['labels', '0']]) {
-      if ((await root.getAttribute('data-menu')) !== menu) await pin.click();
-      if ((await root.getAttribute('data-side-shown')) !== side) await overview.click();
+      if ((await root.getAttribute('data-menu')) !== menu) await pin.click(ICON);
+      if ((await root.getAttribute('data-side-shown')) !== side) await overview.click(ICON);
       await expect(root).toHaveAttribute('data-menu-eff', menu);
       await expect(root).toHaveAttribute('data-side-shown', side);
       await expect(page.locator('aside.side-panel')).toBeVisible({ visible: side === '1' });
@@ -37,8 +40,8 @@ test.describe('@v2 shell', () => {
   test('@v2 menu and side preferences survive a reload, applied before paint', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openV2(page);
-    await page.locator('[data-menu-pin]').click();
-    await page.locator('.nav-item[data-section="overview"]').click();
+    await page.locator('[data-menu-pin]').click({ position: { x: 30, y: 22 } });
+    await page.locator('.nav-item[data-section="overview"]').click({ position: { x: 30, y: 22 } });   // the icon: the item's centre is clipped away in icons mode (F10)
     const want = [await page.locator('main.obos-v2').getAttribute('data-menu'), await page.locator('main.obos-v2').getAttribute('data-side')];
     await page.reload();
     const first = await page.evaluate(() => { const r = document.querySelector('main.obos-v2'); return [r?.getAttribute('data-menu'), r?.getAttribute('data-side')]; });
