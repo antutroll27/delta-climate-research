@@ -14,9 +14,11 @@ html[data-ui="v2"] .obos-v2 #bcard .bc-part { position: relative; overflow: hidd
 html[data-ui="v2"] .obos-v2 #bcard .bc-sol { border-top: 1px solid var(--line); padding-top: 12px; }
 html[data-ui="v2"] .obos-v2 #bcard .bc-sol[hidden] { display: none; }
 /* the bleeding marks: a solid ink square for the building, an outlined solar square for the solar section */
-html[data-ui="v2"] .obos-v2 #bcard .bleed { position: absolute; right: -14px; top: -14px; width: 64px; height: 64px; pointer-events: none; opacity: .9; }
+html[data-ui="v2"] .obos-v2 #bcard .bleed { position: absolute; z-index: 0; right: -14px; top: -14px; width: 64px; height: 64px; pointer-events: none; opacity: .16; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-part > :not(.bleed) { position: relative; z-index: 1; }   /* the mark sits behind every word */
 html[data-ui="v2"] .obos-v2 #bcard .bleed svg { width: 100%; height: 100%; }
-html[data-ui="v2"] .obos-v2 #bcard .bc-sol .bleed { width: 40px; height: 40px; right: -8px; top: 0; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-sol .bleed { width: 40px; height: 40px; right: -8px; top: 0; opacity: .3; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-h > :not(.bleed) { position: relative; z-index: 1; }
 
 /* head and rows: the app writes the values, v2 sets the type */
 html[data-ui="v2"] .obos-v2 #bcard .bc-h { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 2px 0 8px;
