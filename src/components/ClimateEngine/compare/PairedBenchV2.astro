@@ -29,6 +29,7 @@ import '../../../styles/obos-v2/screens.css';
 import '../../../styles/obos-v2/phone.css';
 import '../../../styles/obos-v2/print.css';
 import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
+import { SENTINEL_CREDIT, WATER_CREDIT } from '../../../scripts/climate-engine/v2/credits.ts';
 ---
 <main id="main" class="heat-compare obos-v2" data-compare-root data-console data-renderer="canvas" aria-busy="true" style={symbolCssVars()}>
   <h1 class="sr-only" id="compare-title">Same policy. Different fabric.</h1>
@@ -206,8 +207,10 @@ import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
       <li>Footprints © <a href="https://overturemaps.org" target="_blank" rel="noopener noreferrer">Overture Maps Foundation</a><small>ODbL</small></li>
       <li>Heights Google Open Buildings 2.5D<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
       <li>Roads © OpenStreetMap<small>ODbL</small></li>
+      <li>{WATER_CREDIT.lead}<small>{WATER_CREDIT.licence}</small></li>
+      <li>Surface vegetation and albedo · {SENTINEL_CREDIT.lead}<small><a href={SENTINEL_CREDIT.url ?? undefined} target="_blank" rel="noopener noreferrer">{SENTINEL_CREDIT.licence}</a></small></li>
       <li>Where a ward has an official boundary (KMC Ward 68), the boundary is © DataMeet (Municipal_Spatial_Data), CC BY-SA 2.5 India, <a href="https://creativecommons.org/licenses/by-sa/2.5/in/" target="_blank" rel="noopener noreferrer">creativecommons.org/licenses/by-sa/2.5/in</a>.</li>
-      <li class="foot">Compare draws no basemap: both wards are rendered from one model run.</li>
+      <li class="foot">Compare draws no basemap: both wards are rendered from one model run over these sources.</li>
     </ul>
   </div>
 </main>

@@ -136,6 +136,15 @@ test('Compare: the Key and Credits popovers exist with the ids bindLayers opens,
   assert.ok(!/OpenFreeMap|OpenMapTiles/.test(v2), 'Compare draws no OpenFreeMap basemap');
 });
 
+test('Compare: the credits name every model input (C audit F2): footprints, heights, roads, WATER, the Sentinel-2 SURFACE and the boundary', () => {
+  const v2 = readFileSync(V2F, 'utf8');
+  const c = v2.slice(v2.indexOf('id="v2Credits"'));
+  for (const t of ['Footprints', 'Heights Google Open Buildings 2.5D', 'Roads \u00a9 OpenStreetMap', 'DataMeet']) assert.ok(text(c).includes(t), t);
+  assert.ok(/WATER_CREDIT\.lead/.test(c), 'water (OSM) is read by rasterWardBase: credit it from the shared constant');
+  assert.ok(/SENTINEL_CREDIT\.lead/.test(c) && /SENTINEL_CREDIT\.url/.test(c), 'the Sentinel-2 surface is read by loadAreaSurface: credit it, linked, from the shared constant');
+  assert.ok(c.includes('Compare draws no basemap: both wards are rendered from one model run over these sources.'), 'the closing line names what it covers');
+});
+
 for (const [page, tag] of [['compare', 'PairedBenchV2'], ['brief', 'HeatMapBriefV2']]) {
   test(`${page}.astro wraps the v2 tree exactly as the area page does (UiPrepaint, v1, template, UiSwap) and boots v2 under the flag`, () => {
     const src = readFileSync(`src/pages/heat-map/${page}.astro`, 'utf8');

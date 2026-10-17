@@ -221,6 +221,10 @@ test.describe('@v2 compare', () => {
     const credits = page.locator('#v2Credits');
     await expect(credits).toHaveAttribute('data-open', 'true');
     await expect(credits.locator('a[href="https://creativecommons.org/licenses/by-sa/2.5/in/"]')).toHaveCount(1);
+    /* C audit F2: water (OSM) and the Sentinel-2 surface are model inputs here too */
+    await expect(credits).toContainText('Water \u00a9 OpenStreetMap');
+    await expect(credits).toContainText('Contains modified Copernicus Sentinel data 2021\u20132025');
+    await expect(credits.locator('a[href*="Sentinel_Data_Legal_Notice"]')).toHaveCount(1);
     await expect(credits).not.toContainText(/OpenFreeMap|OpenMapTiles/);
     await page.keyboard.press('Escape');
     await expect(credits).toHaveAttribute('data-open', 'false');
