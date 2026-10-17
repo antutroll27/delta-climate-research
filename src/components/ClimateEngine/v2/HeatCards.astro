@@ -5,6 +5,7 @@ import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolv
 import Sym from './Sym.astro';
 import { checkedRows, caveatRows } from '../../../scripts/climate-engine/v2/method-copy.ts';
 interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
 ---
 <article class="card" data-v2-card="heat-legend" data-sections="heat">
   <div class="row"><span class="micro">What the colours mean</span><span class="kind modelled">modelled</span></div>
@@ -17,7 +18,7 @@ interface Props { scope: ResolvedScope }
   <details class="disc"><summary>How this was checked <span class="chev" aria-hidden="true">›</span></summary>
     <div class="body"><ul class="method">{checkedRows().map((r) => <li><span class="micro">{r.k}</span><span class="foot">{r.v}</span></li>)}</ul></div></details>
   <details class="disc"><summary>Caveats OBOS adds when they apply <span class="chev" aria-hidden="true">›</span></summary>
-    <div class="body"><ul class="method">{caveatRows().map((r) => <li><span class="micro">{r.k}</span><span class="foot">{r.v}</span></li>)}</ul></div></details>
+    <div class="body"><ul class="method">{caveatRows(scope.area.id).map((r) => <li><span class="micro">{r.k}</span><span class="foot">{r.v}</span></li>)}</ul></div></details>
   <details class="disc" open><summary>What is measured, what is modelled <span class="chev" aria-hidden="true">›</span></summary>
     <div class="body"><ul class="sym-list">
       <li><span class="sym-tile sm"><Sym shape="ward" c="ink" size={20} /></span><div><div class="sym-hd"><b>Measured</b> · ward boundary, footprints, satellite scenes</div><div class="sym-sub">Solid marks</div></div></li>

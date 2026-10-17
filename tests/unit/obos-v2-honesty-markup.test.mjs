@@ -77,7 +77,7 @@ test('H9/H6: the legend card carries #patternNote, the colour-mode line and the 
 
 test('H23: the method card prints method-copy rows, and "checked", never "validated"', () => {
   const heat = V2('HeatCards.astro');
-  assert.ok(heat.includes('checkedRows()') && heat.includes('caveatRows()'));
+  assert.ok(heat.includes('checkedRows()') && heat.includes('caveatRows(scope.area.id)'));
   assert.ok(heat.includes('How this was checked') && heat.includes('Caveats OBOS adds when they apply'));
   for (const f of ['HeatCards.astro', 'TempCard.astro']) assert.ok(!/validated/i.test(V2(f)), `${f} says "validated"`);
   assert.ok(!/validated/i.test(readFileSync('src/scripts/climate-engine/v2/method-copy.ts', 'utf8')), 'method-copy says "validated"');

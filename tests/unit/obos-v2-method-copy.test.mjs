@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ACCURACY, TRANSITION_HOURS, TRANSITION_RMSE_K, SEASONAL_CAVEATS, seasonalCaveatLine } from '../../src/scripts/climate-engine/accuracy.ts';
+import { ACCURACY, TRANSITION_HOURS, TRANSITION_RMSE_K, SEASONAL_CAVEATS, SEASONAL_WARDS, seasonalCaveatLine } from '../../src/scripts/climate-engine/accuracy.ts';
 import { checkedRows, caveatRows, transitionChip } from '../../src/scripts/climate-engine/v2/method-copy.ts';
 
 test('every figure in "How this was checked" is the accuracy.ts export', () => {
@@ -30,6 +30,16 @@ test('one season row per published caveat, worded by seasonalCaveatLine', () => 
   const season = caveatRows().filter((r) => r.k === 'Season');
   assert.equal(season.length, SEASONAL_CAVEATS.length);
   SEASONAL_CAVEATS.forEach((c, i) => assert.ok(season[i].v.includes(seasonalCaveatLine(c))));
+});
+
+/* A-S3 audit F7: a season row is shown only where seasonalCaveat() can ever apply (SEASONAL_WARDS); Bengaluru has none */
+test('F7: season rows only for a ward the seasonal measurement covers', () => {
+  for (const w of SEASONAL_WARDS) assert.equal(caveatRows(w).filter((r) => r.k === 'Season').length, SEASONAL_CAVEATS.length, w);
+  assert.equal(caveatRows('mg-road').filter((r) => r.k === 'Season').length, 0, 'Bengaluru has no seasonal caveat');
+  assert.equal(caveatRows('mg-road').length, 1, 'only the dawn row remains');
+  assert.equal(caveatRows().filter((r) => r.k === 'Season').length, SEASONAL_CAVEATS.length, 'no area given: all rows (the Data & methods page)');
+  const heat = readFileSync('src/components/ClimateEngine/v2/HeatCards.astro', 'utf8');
+  assert.ok(heat.includes('caveatRows(scope.area.id)'), 'HeatCards must pass the area id');
 });
 
 /* The transition chip is the app's own sentence (heat-map-app.ts applyConfidence). If the app's wording moves, this copy must follow. */
