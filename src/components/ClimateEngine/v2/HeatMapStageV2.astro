@@ -13,6 +13,7 @@ import TitleCard from './TitleCard.astro';
 import CompassV2 from './CompassV2.astro';
 import DockV2 from './DockV2.astro';
 import LayersPopover from './LayersPopover.astro';
+import Overlays from './Overlays.astro';
 /* THE FOUR SHELL COMPONENTS, COMPOSED. Until this task each was imported by
    nothing: the rail, the scope switcher and the layer tree were built and proven
    against their own sources, and the toolbox had been moved out of this file with
@@ -185,7 +186,29 @@ const newCity = scope.area.hasData
   <div class="st-title" id="v2Title" data-hud><TitleCard scope={scope} /><CompassV2 /></div>
   <div class="mapstack" id="v2MapStack" data-hud></div>
   <div class="st-dock" id="v2Dock">{scope.area.hasData && <DockV2 currentKey={scope.key} strip={strip} otherCity={otherCity} />}</div>
-  <div class="toasts" id="v2Toasts" data-hud></div>
+  <div class="toasts" id="v2Toasts" data-hud>
+  {newCity && (
+    <div class="newcity toast" id="newCity" data-city={newCity.id} data-since={newCity.since} hidden>
+      {/* NO aria-label. The visible text already reads "New city Bengaluru", and a
+          label of "Bengaluru — newly added city" replaced it with a string those
+          visible words are not contained in — Label in Name (WCAG 2.5.3), so
+          "click New city" matched nothing by speech. The eyebrow is CLIPPED rather
+          than display:none on phones, so the name keeps "New city" there too. */}
+      <a href={newCity.href}>
+        <span class="t-eyebrow">New city</span>
+        <span class="t-go">{newCity.name} <span aria-hidden="true">→</span></span>
+      </a>
+      <button type="button" id="newCityHide" class="t-x" aria-label="Dismiss">×</button>
+    </div>
+  )}
+  {scope.area.hasData && <Fragment>
+    <!-- First-run affordance: the buildings became clickable and nothing said so. -->
+    <div class="tiphint toast" id="tiphint" hidden>
+      <span>Click any building for its data</span>
+      <button type="button" id="tipX" class="t-x" aria-label="Dismiss hint">✕</button>
+    </div>
+  </Fragment>}
+  </div>
   <div data-v2-parking>
     {/* S0 PARKING. Copied verbatim from HeatMapStage.astro so the contract holds;
         each block leaves this box in the slice named beside it. */}
@@ -298,21 +321,6 @@ const newCity = scope.area.hasData
     <div class="stamp-slot"><ConstructionStamp /></div>
     <div class="loadchip" id="loadchip"></div>
 
-    {newCity && (
-      <div class="newcity" id="newCity" data-city={newCity.id} data-since={newCity.since} hidden>
-        {/* NO aria-label. The visible text already reads "New city Bengaluru", and a
-            label of "Bengaluru — newly added city" replaced it with a string those
-            visible words are not contained in — Label in Name (WCAG 2.5.3), so
-            "click New city" matched nothing by speech. The eyebrow is CLIPPED rather
-            than display:none on phones, so the name keeps "New city" there too. */}
-        <a href={newCity.href}>
-          <span class="nc-eyebrow">New city</span>
-          <span class="nc-name">{newCity.name} <span aria-hidden="true">→</span></span>
-        </a>
-        <button type="button" id="newCityHide" aria-label="Dismiss">×</button>
-      </div>
-    )}
-
     <!-- Sun reading. A SIBLING of the compass, never a child: the compass is a
          button whose whole box resets the bearing, and text inside it would become
          part of that click target. Always visible rather than a hover tooltip, so
@@ -321,12 +329,6 @@ const newCity = scope.area.hasData
       <span id="sunLineText"></span>
       <span class="sunline-note" id="sunLineNote" tabindex="0" role="note">geometry only</span>
     </p>
-    <!-- First-run affordance: the buildings became clickable and nothing said so. -->
-    <div class="tiphint" id="tiphint" hidden>
-      <span>Click any building for its data</span>
-      <button type="button" id="tipX" aria-label="Dismiss hint">✕</button>
-    </div>
-
     <!-- Walk-time ring labels. Text is STATIC: the app only toggles `hidden` and
          writes a transform, so nothing rewrites strings on every repaint.
          Two lines each — the headline is the human unit (minutes), the second
@@ -540,7 +542,6 @@ const newCity = scope.area.hasData
           solar block: above the colour key while the Air pane is open, above the
           attribution otherwise. Hidden until a Kolkata payload (or its failure) lands. */}
       <div class="aqblock legend-air" id="aqiBlock" role="region" aria-label="Air quality" hidden></div>
-      <div class="attr">Basemap © OpenStreetMap · OpenFreeMap · Footprints © Overture Maps Foundation (ODbL) · Heights Google Open Buildings 2.5D (CC BY 4.0) · Water © OpenStreetMap (ODbL) · Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span> · Live weather © Met Norway (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · <span id="attrWard" hidden></span>Cloud deck drawn at 320 m, real base ~700 m · left-drag orbit · right-drag pan · scroll zoom</div>
       <button class="srcbtn" id="srcBtn" type="button" aria-expanded="false" aria-controls="srcPanel">Data receipts ↗</button>
       <div class="srcpanel" id="srcPanel" role="dialog" aria-label="Per-layer data provenance" hidden></div>
     </div>
@@ -573,6 +574,7 @@ const newCity = scope.area.hasData
     </Fragment>}
   </div>
   <LayersPopover current={scope.key} mapillary={mapillary} hasData={scope.area.hasData} />
+  <Overlays scope={scope} />
   {/* S6: direct children of .stage (app:1077). UNCONDITIONAL, as in v1 (stage :847–962 sit outside the data gate). */}
   <section class="solpay" id="solPay" hidden role="dialog" aria-modal="true" aria-labelledby="spHead">
     <header class="sp-head">

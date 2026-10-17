@@ -1,0 +1,50 @@
+---
+// src/components/ClimateEngine/v2/Overlays.astro — OBOS v2 spec §3.10
+import Sym from './Sym.astro';
+import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+interface Props { scope: ResolvedScope }
+---
+<div class="key-pop card" id="v2Key" role="dialog" aria-label="How to read the marks" tabindex="-1" data-open="false" data-hud>
+  <div class="row"><h2 class="name-xl"><b>How</b><span> to read the marks</span></h2><button class="sp-close" type="button" data-pop-close aria-label="Close the key">×</button></div>
+  <div class="key-cols">
+    <div><h3>Colour<span> · what is measured</span></h3><ul>
+      <li><span class="ramp" style="width:44px;height:8px"></span><span><b>Heat ramp</b> · temperature only</span></li>
+      <li><span class="aq-dots"><Sym shape="disc" c="aq-good" size={9} /><Sym shape="disc" c="aq-satisfactory" size={9} /><Sym shape="disc" c="aq-moderate" size={9} /><Sym shape="disc" c="aq-poor" size={9} /><Sym shape="disc" c="aq-very-poor" size={9} /><Sym shape="disc" c="aq-severe" size={9} /></span><span><b>India AQI bands</b> · air quality (CPCB's own colours)</span></li>
+      <li><Sym shape="disc" c="solar" size={14} /><span><b>Straw</b> · sunlight, rooftop PV</span></li>
+      <li><Sym shape="disc" c="water" size={14} /><span><b>Blue</b> · water, rain, humidity</span></li>
+      <li><Sym shape="disc" c="green" size={14} /><span><b>Green</b> · trees, green cover</span></li>
+      <li><Sym shape="disc" c="ink" size={14} /><span><b>Ink</b> · buildings, people, money</span></li></ul></div>
+    <div><h3>Shape<span> · what kind of place</span></h3><ul>
+      <li><Sym shape="disc" c="ink" size={14} /><span><b>Disc</b> · a point site: station, airport</span></li>
+      <li><Sym shape="square" c="ink" size={14} /><span><b>Square</b> · a roof, a building</span></li>
+      <li><Sym shape="quarter" c="ink" size={14} /><span><b>Quarter</b> · canopy, park</span></li>
+      <li><Sym shape="bowl" c="ink" size={14} /><span><b>Bowl</b> · water, low ground</span></li>
+      <li><Sym shape="bar" c="ink" size={14} /><span><b>Bar</b> · a street</span></li>
+      <li><Sym shape="dome" c="ink" size={14} /><span><b>Dome</b> · a reference to compare with</span></li>
+      <li><Sym shape="ward" c="ink" size={14} /><span><b>Tile</b> · the ward as a whole</span></li></ul></div>
+    <div><h3>Fill<span> · how we know</span></h3><ul>
+      <li><Sym shape="disc" c="ink" size={14} /><span><b>Solid</b> · measured or observed (CPCB monitor, METAR, satellite, survey)</span></li>
+      <li><Sym shape="disc" c="ink" kind="modelled" size={14} /><span><b>Outlined</b> · modelled or estimated (the heat field, PV yield, scenarios)</span></li>
+      <li><span class="kind measured">observed</span></li><li><span class="kind modelled">modelled</span></li></ul>
+      <p class="foot">Red and orange belong to the heat ramp, and to India's AQI bands where an AQI band is shown.</p></div>
+  </div>
+</div>
+
+<div class="st-attrib" data-hud><button class="attrib" type="button" data-pop-open="credits" aria-expanded="false" aria-controls="v2Credits">© OpenStreetMap · OpenFreeMap · Overture · DataMeet · Credits</button></div>
+<div class="credits-pop card" id="v2Credits" role="dialog" aria-label="Data and credits" tabindex="-1" data-open="false" data-hud>
+  <div class="row"><span class="micro">Data and credits</span><button class="sp-close" type="button" data-pop-close aria-label="Close credits">×</button></div>
+  <ul>
+    <li>Basemap © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> · <a href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">OpenFreeMap</a><small>ODbL</small></li>
+    <li>Footprints © <a href="https://overturemaps.org" target="_blank" rel="noopener noreferrer">Overture Maps Foundation</a><small>ODbL</small></li>
+    <li>Heights Google Open Buildings 2.5D<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
+    <li>Water © OpenStreetMap<small>ODbL</small></li>
+    <li>Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span></li>
+    <li>Live weather © Met Norway<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
+    <li><span id="attrWard" hidden></span></li>
+    <li>Cloud deck drawn at 320 m, real base ~700 m</li>
+    <li data-v2-street-credit hidden>Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener noreferrer">Mapillary</a> · community-captured<small>CC BY-SA</small></li>
+    <li class="foot">left-drag orbit · right-drag pan · scroll zoom</li>
+  </ul>
+</div>
+
+<p class="flash glass" data-v2-flash role="status" aria-live="polite"></p>

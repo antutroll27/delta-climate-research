@@ -98,6 +98,25 @@ export function bindLayers(ctx: ShellCtx): LayerStack {
   return api;
 }
 
+/** Short confirmations ("Facing north", "Re-reading…") and the street-imagery credit, which shows only while the street layer is on. */
+export function bindFlash(ctx: ShellCtx): void {
+  const { root, cleanup } = ctx;
+  const f = $(root, '[data-v2-flash]');
+  let t = 0;
+  const flash = (msg: string): void => {
+    if (!f) return;
+    f.textContent = msg; f.dataset.on = 'true'; clearTimeout(t);
+    t = window.setTimeout(() => { f.dataset.on = 'false'; }, 1800);
+  };
+  on(cleanup, $(root, '#compass'), 'click', () => flash('Facing north'));
+  on(cleanup, $(root, '#clockAge'), 'click', () => flash('Re-reading the live reading…'));
+  cleanup.push(() => clearTimeout(t));
+  const credit = $(root, '[data-v2-street-credit]');
+  const street = (): void => { if (credit) credit.hidden = !document.querySelector('#streetchip button[data-s="1"].on'); };
+  observe(cleanup, $(root, '#streetchip'), { attributes: true, subtree: true, attributeFilter: ['class'] }, street);
+  street();
+}
+
 /** Resolve once the instrument has picked its engine (the map and its handlers are up). */
 function whenInstrumentReady(ctx: ShellCtx, fn: () => void): void {
   const be = document.getElementById('simBackend');
@@ -209,6 +228,7 @@ export function mountShellV2(): (() => void) | null {
   bindPressedMirror(ctx);
   bindProxies(ctx);
   ctx.layers = bindLayers(ctx);
+  bindFlash(ctx);
   /* bindGlass is async: if the page was left before it resolved, undo what it registered. */
   void bindGlass(root, cleanup).then((g) => { ctx.glassRefresh = g.refresh; if (disposed) dispose(); });
   return () => { disposed = true; dispose(); };

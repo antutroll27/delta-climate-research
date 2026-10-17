@@ -123,4 +123,33 @@ test.describe('@v2 shell', () => {
     await page.reload();
     await expect(page.locator('#clockFace')).toHaveAttribute('aria-pressed', 'true', { timeout: 30_000 });
   });
+
+  test('@v2 [H] credits: every licence is a real link; DataMeet credit present for Ward 68', async ({ page }) => {
+    await openV2(page);
+    await page.locator('[data-pop-open="credits"]').click();
+    const pop = page.locator('#v2Credits');
+    await expect(pop).toBeVisible();
+    for (const t of ['OpenStreetMap', 'OpenFreeMap', 'Overture Maps Foundation', 'Google Open Buildings 2.5D', 'SRTM', 'Met Norway', 'Cloud deck drawn at 320 m, real base ~700 m']) {
+      await expect(pop).toContainText(t);
+    }
+    const hrefs = await pop.locator('a').evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).href));
+    expect(hrefs.length).toBeGreaterThanOrEqual(4);
+    for (const h of hrefs) expect(h).toMatch(/^https:\/\//);
+    await expect(page.locator('#attrWard')).toContainText('DataMeet', { timeout: 30_000 });
+    await expect(page.locator('#terrLab')).toHaveText(/indicative/);
+  });
+
+  test('@v2 toasts: the tip dismisses for the session; the key popover explains the marks', async ({ page }) => {
+    await page.addInitScript(() => { try { sessionStorage.removeItem('delta:hm-tip'); } catch { /* none */ } });
+    await openV2(page);
+    await expect(page.locator('#tiphint')).toBeVisible();
+    await page.locator('#tipX').click();
+    await expect(page.locator('#tiphint')).toBeHidden();
+    await page.reload();
+    await expect(page.locator('#tiphint')).toBeHidden();
+    await page.locator('[data-pop-open="key"]').click();
+    await expect(page.locator('#v2Key')).toContainText('Red and orange belong to the heat ramp, and to India\'s AQI bands where an AQI band is shown.');
+    const box = await page.locator('#tipX').boundingBox().catch(() => null);
+    if (box) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(24);
+  });
 });

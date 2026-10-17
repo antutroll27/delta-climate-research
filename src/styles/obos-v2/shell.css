@@ -173,3 +173,58 @@ html[data-ui="v2"] .obos-v2 .lp-sec:first-of-type { margin-top: 10px; }
 html[data-ui="v2"] .obos-v2 .lp-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 6px; }
 html[data-ui="v2"] .obos-v2 .lp-row .seg { justify-self: start; }
 html[data-ui="v2"] .obos-v2 .seg button.on, html[data-ui="v2"] .obos-v2 .seg button[aria-pressed="true"] { background: var(--ink-1); color: var(--on-ink); }
+
+/* ── toasts: twin pills right of the title card, dismissible (sys.css :636–642). Desktop and laptop only; Overview only.
+   left = the title column's right edge + 16 px. The column sits at 100 px, +148 px with labels, +316/+468 px when the Explore panel shows. ── */
+html[data-ui="v2"] .obos-v2 .toasts { position: absolute; z-index: 32; top: 16px; left: 416px; display: none; flex-direction: column; gap: 8px; align-items: flex-start; pointer-events: none; }
+html[data-ui="v2"] .obos-v2[data-section="overview"] .toasts { display: flex; }
+html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .toasts { left: 564px; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"] .toasts { left: 732px; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"][data-menu-eff="labels"] .toasts { left: 884px; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"]:not([data-side-current="explore"]) .toasts { display: none; }
+@media (min-width: 700px) and (max-width: 1365px) {
+  html[data-ui="v2"] .obos-v2 .toasts { left: 396px; }
+  html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .toasts { left: 544px; }
+  html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"] .toasts { left: 712px; }
+  html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"][data-menu-eff="labels"] .toasts { left: 864px; }
+}
+html[data-ui="v2"] .obos-v2 .toasts > * { pointer-events: auto; }
+html[data-ui="v2"] .obos-v2 .toast { display: inline-flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 99px; font-size: 12.5px; color: var(--ink-1); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .toast .t-eyebrow { font: 700 9.5px/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .toast a { display: inline-flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+html[data-ui="v2"] .obos-v2 .toast a, html[data-ui="v2"] .obos-v2 .toast .t-go { font-weight: 600; }
+html[data-ui="v2"] .obos-v2 .toast .t-x { width: 24px; height: 24px; min-width: 24px; min-height: 24px; border-radius: 50%; border: 0; background: var(--well); color: var(--ink-2); cursor: pointer; display: grid; place-items: center; }
+html[data-ui="v2"] .obos-v2 .toast[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .flash { position: absolute; z-index: 90; left: 50%; bottom: 96px; transform: translateX(-50%); padding: 8px 14px; border-radius: 99px; font-size: 12.5px; color: var(--ink-1); display: none; white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .flash[data-on="true"] { display: block; animation: obos-v2-fade-up .3s var(--ease) both; }
+@keyframes obos-v2-fade-up { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* ── the key popover (preview index.html :48–56) ── */
+html[data-ui="v2"] .obos-v2 .key-pop { position: absolute; z-index: 80; left: 50%; top: 64px; transform: translateX(-50%); width: 560px; max-width: calc(100% - 16px); }
+html[data-ui="v2"] .obos-v2 .key-pop[data-open="false"] { display: none; }
+html[data-ui="v2"] .obos-v2 .key-pop[data-open="true"] { display: block; }
+html[data-ui="v2"] .obos-v2 .key-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 12px; }
+html[data-ui="v2"] .obos-v2 .key-cols h3 { font-size: 12.5px; font-weight: 700; margin-bottom: 6px; }
+html[data-ui="v2"] .obos-v2 .key-cols h3 span { font-weight: 200; }
+html[data-ui="v2"] .obos-v2 .key-cols li { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-2); padding: 3px 0; line-height: 1.25; }
+html[data-ui="v2"] .obos-v2 .key-cols li b { color: var(--ink-1); font-weight: 600; }
+html[data-ui="v2"] .obos-v2 .key-cols .foot { margin-top: 6px; }
+html[data-ui="v2"] .obos-v2 .aq-dots { display: inline-flex; gap: 2px; }
+
+/* ── the attribution button and the credits popover (sys.css :398–399, :602–624) ── */
+html[data-ui="v2"] .obos-v2 .st-attrib { position: absolute; z-index: 20; right: 12px; bottom: 12px; }
+html[data-ui="v2"] .obos-v2 .attrib { font: 400 11px/14px var(--sans); letter-spacing: 0.01em; color: var(--ink-1); padding: 4px 10px; min-height: 24px; min-width: 24px; border-radius: 11px; white-space: nowrap; cursor: pointer; }
+html[data-ui="v2"] .obos-v2 .credits-pop { right: 16px; bottom: 44px; }
+html[data-ui="v2"] .obos-v2 .credits-pop[data-open="false"] { display: none; }
+html[data-ui="v2"] .obos-v2 .credits-pop[data-open="true"] { display: block; }
+html[data-ui="v2"] .obos-v2 .credits-pop li { font-size: 12px; line-height: 1.45; padding: 5px 0; border-top: 1px solid var(--line); color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .credits-pop li:first-child { border-top: 0; }
+html[data-ui="v2"] .obos-v2 .credits-pop li small { display: block; color: var(--ink-3); font-size: 11px; }
+html[data-ui="v2"] .obos-v2 .credits-pop a { color: inherit; }
+html[data-ui="v2"] .obos-v2 .credits-pop li[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .credits-pop ul { margin-top: 8px; }
+
+/* touch: every button in the v2 root reaches 44 px, except the clock's meridiem marks, symbols and inline links (spec §7) */
+@media (pointer: coarse) {
+  html[data-ui="v2"] .obos-v2 button:not(.k-mer, .sym, .t-x, .sp-close) { min-height: 44px; }
+}
