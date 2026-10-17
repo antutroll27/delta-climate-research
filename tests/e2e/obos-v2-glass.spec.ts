@@ -73,8 +73,8 @@ const removeDummies = (page: Page): Promise<void> => page.evaluate(() => { docum
 interface Shipped { glass: string | null; cards: string | null; tier: string | null; theme: string | null; blurred: number }
 const shipped = (page: Page): Promise<Shipped> => page.evaluate(() => {
   const r = document.querySelector<HTMLElement>('main.obos-v2');
-  /* how many v2 surfaces the compositor is actually asked to blur right now */
-  const blurred = r ? [...r.querySelectorAll('[data-perf-dummy]')].filter((e) => { const v = getComputedStyle(e).backdropFilter; return !!v && v !== 'none'; }).length : 0;
+  /* how many v2 surfaces (the dummies, and from S2 the real chrome) the compositor is actually asked to blur right now */
+  const blurred = r ? [...r.querySelectorAll('*')].filter((e) => { const v = getComputedStyle(e).backdropFilter; return !!v && v !== 'none'; }).length : 0;
   return { glass: r?.dataset.glass ?? null, cards: r?.dataset.cards ?? null, tier: r?.dataset.tier ?? null, theme: r?.dataset.theme ?? null, blurred };
 });
 const setFill = (page: Page, mode: Mode): Promise<void> => page.evaluate((m) => {
@@ -150,7 +150,10 @@ for (const dsf of [1, 2]) {
     expect(asShipped, 'v2 on a tier-2 desktop boots as Glass, live').toMatchObject({ tier: 'full', cards: 'glass', glass: 'live' });
     /* S1 audit F1(4): an occluded or throttled headed window reads low fps for everything and would pass vacuously */
     expect(sum.v1.fps, 'the headed window was occluded or throttled').toBeGreaterThan(50);
-    expect(sum.live.blurred, 'every dummy surface is blurred under live Glass').toBe(process.env.DUMMY === '0' ? sum.live.blurred : BOXES.length);
+    /* From S2 the shell is real: with the 14 dummies ON TOP of it every surface would blur twice, so the S2+ measurement is DUMMY=0
+       (the real chrome alone). The dummies remain for a chrome-less tree. */
+    if (process.env.DUMMY === '0') expect(sum.live.blurred, 'the real chrome blurs under live Glass').toBeGreaterThan(8);
+    else expect(sum.live.blurred, 'every dummy surface is blurred under live Glass').toBeGreaterThanOrEqual(BOXES.length);
     expect(sum.flat.blurred + sum.plates.blurred, 'nothing is blurred in flat or Plates').toBe(0);
     for (const m of ['plates', 'flat', 'live'] as const) expect(sum[m].flipped, `${m}: the fill changed during a measured run (governor demotion)`).toBe(0);
     for (const m of ['plates', 'flat'] as const) {
