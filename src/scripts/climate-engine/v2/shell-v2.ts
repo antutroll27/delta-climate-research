@@ -246,8 +246,8 @@ export function mountShellV2(): (() => void) | null {
   let disposed = false;
   const dispose = (): void => { for (const off of cleanup.splice(0)) off(); };
   const ctx: ShellCtx = { root, cleanup, glassRefresh: () => {} };
-  /* Compare binds only the frame (plan S9.2 Step 4, pre-wired by A1 so Track C never edits this file). */
-  const compare = root.matches('[data-compare-root]');
+  /* Compare and its paired brief bind only the frame (plan S9.2 Step 4; c-02 gave the brief its own marker, [data-brief-root]). */
+  const compare = root.matches('[data-compare-root], [data-brief-root]');
   ctx.sections = bindSections(ctx);
   bindPrefs(ctx);
   if (!compare) { bindPerArea(ctx); bindPressedMirror(ctx); bindProxies(ctx); }

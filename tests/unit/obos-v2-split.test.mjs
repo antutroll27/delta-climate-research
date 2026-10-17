@@ -55,7 +55,7 @@ test('mountShellV2 calls the thirteen binders in the plan\'s order, gated for Co
     'bindFlash(', 'bindMirrors(', 'bindSunCard(', 'bindWardCard(', 'bindWeather(', 'bindGlass(']) {
     const i = body.indexOf(b); assert.ok(i > at, `${b} missing or out of order`); at = i;
   }
-  assert.match(body, /const compare = root\.matches\('\[data-compare-root\]'\);/);
+  assert.match(body, /const compare = root\.matches\('\[data-compare-root\], \[data-brief-root\]'\);/);   // c-02: the brief is frame-only by its own marker
 });
 
 test('the built CSS inlined every partial (no manifest @import survives into dist)', () => {
