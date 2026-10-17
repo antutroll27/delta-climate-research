@@ -88,5 +88,12 @@ test.describe('@v2 boot', () => {
       const [, cards, glass, bf] = row.split('|');
       expect(bf, row).toBe(cards === 'glass' && glass === 'live' ? 'blur' : 'none');
     }
+    /* The digits subset really is the fallback where Helvetica Neue is absent (Windows, Android): ask for the
+       family directly. Digits and the listed symbols load a woff2 per weight; a letter is outside the unicode-range. */
+    const loaded = await page.evaluate(async () => {
+      const n = async (weight: number, text: string): Promise<number> => (await document.fonts.load(`${weight} 40px "OBOS Num"`, text)).length;
+      return { w300: await n(300, '31.4°'), w400: await n(400, '+12,5%'), w500: await n(500, '−4 – 6:30/7'), letter: await n(400, 'ABC') };
+    });
+    expect(loaded).toEqual({ w300: 1, w400: 1, w500: 1, letter: 0 });
   });
 });
