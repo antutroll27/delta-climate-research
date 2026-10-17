@@ -44,4 +44,33 @@ test.describe('@v2 shell', () => {
     const first = await page.evaluate(() => { const r = document.querySelector('main.obos-v2'); return [r?.getAttribute('data-menu'), r?.getAttribute('data-side')]; });
     expect(first).toEqual(want);
   });
+
+  test('@v2 theme and cards persist and apply pre-paint; theme is CSS-only', async ({ page }) => {
+    await openV2(page);
+    const root = page.locator('main.obos-v2');
+    await expect(root).toHaveAttribute('data-theme', 'dark');            // D5
+    let styleLoads = 0;
+    page.on('request', (r) => { if (/style.*\.json|tiles.openfreemap/.test(r.url())) styleLoads++; });
+    await page.locator('[data-pref="theme"][data-v="light"]').click();
+    await expect(root).toHaveAttribute('data-theme', 'light');
+    await page.locator('[data-pref="cards"][data-v="glass"]').click();
+    await expect(root).toHaveAttribute('data-cards', 'glass');
+    await page.reload();
+    const first = await page.evaluate(() => { const r = document.querySelector('main.obos-v2'); return [r?.getAttribute('data-theme'), r?.getAttribute('data-cards')]; });
+    expect(first).toEqual(['light', 'glass']);
+    expect(styleLoads, 'flipping the theme alone must not reload the basemap').toBeLessThan(50);
+  });
+
+  test('@v2 first visit pairs the map look with the theme until the look is chosen (D1)', async ({ page }) => {
+    await openV2(page);
+    await page.locator('[data-pref="theme"][data-v="light"]').click();
+    await expect(page.locator('#envchip button[data-e="studio"]')).toHaveClass(/\bon\b/, { timeout: 20_000 });
+    await page.locator('[data-pop-open="layers"]').click();
+    await page.locator('#envchip button[data-e="dark"]').click();               // an explicit choice
+    expect(await page.evaluate(() => localStorage.getItem('obos:v2:look-chosen'))).toBe('1');
+    await page.keyboard.press('Escape');
+    await page.locator('[data-pref="theme"][data-v="dark"]').click();
+    await page.locator('[data-pref="theme"][data-v="light"]').click();
+    await expect(page.locator('#envchip button[data-e="dark"]')).toHaveClass(/\bon\b/);  // independent now
+  });
 });

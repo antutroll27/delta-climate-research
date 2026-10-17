@@ -46,3 +46,17 @@ html[data-ui="v2"] .obos-v2:not([data-side-shown="1"]) .side-panel { display: no
 @media (min-width: 700px) and (max-width: 1365px) {
   html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-menu="labels"][data-menu-eff="icons"] .rail-pin { display: none; }
 }
+
+/* ── the display toolbar (twin: top right, Light|Dark + Glass|Plates, and the Key) (sys.css :252) ── */
+html[data-ui="v2"] .obos-v2 .toolbar { position: absolute; z-index: 50; top: 12px; right: 16px; display: flex; align-items: center; gap: 6px; padding: 4px; border-radius: 14px; }
+html[data-ui="v2"] .obos-v2 .toolbar .seg { background: var(--well); }
+/* the place pill (also the Key button): sys.css :371–378 */
+html[data-ui="v2"] .obos-v2 .place { border: 0; height: 30px; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px 0 4px; border-radius: 99px; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--ink-2); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .place small { font-weight: 300; color: var(--ink-3); margin-left: 1px; }
+html[data-ui="v2"] .obos-v2 .place[aria-pressed="true"] { background: var(--ink-1); color: var(--on-ink); border-color: transparent; }
+html[data-ui="v2"] .obos-v2 .place[aria-pressed="true"] small { color: color-mix(in oklch, var(--on-ink) 70%, transparent); }
+html[data-ui="v2"] .obos-v2 .pl-g { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in oklch, var(--ink-1) 9%, transparent); }
+html[data-ui="v2"] .obos-v2 .pl-g svg { display: block; width: 14px; height: auto; max-height: 14px; overflow: visible; }
+html[data-ui="v2"] .obos-v2 .place[aria-pressed="true"] .pl-g { background: color-mix(in oklch, var(--on-ink) 16%, transparent); }
+html[data-ui="v2"] .obos-v2 .key-btn { height: 30px; padding: 0 12px 0 6px; gap: 6px; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .key-btn[aria-expanded="true"] { background: var(--ink-1); color: var(--on-ink); }
