@@ -39,9 +39,26 @@ export function bindSolarRows(ctx: ShellCtx): void {
   observe(cleanup, sheet, { attributes: true, attributeFilter: ['hidden'] }, () => { if (sheet && !sheet.hasAttribute('hidden')) sheet.scrollTop = 0; });
 }
 
+/**
+ * THE WARD BRIEF LINK (B-S7 audit F1). A bare /heat-map/brief/ opens the default Kolkata pair. The app already writes the right query (the ward, the toolbox
+ * and the phase) on the rail's Compare link and updates it on every switch and slider change, so this mirrors that href with /brief/ for /compare/.
+ */
+export function bindBriefLink(ctx: ShellCtx): void {
+  const { root, cleanup } = ctx;
+  const cmp = document.querySelector<HTMLAnchorElement>('a[data-rail="analysis"]');
+  const sync = (): void => {
+    const b = $<HTMLAnchorElement>(root, '[data-v2-brief]');
+    if (b && cmp?.getAttribute('href')) b.href = cmp.href.replace('/heat-map/compare/', '/heat-map/brief/');
+  };
+  observe(cleanup, cmp, { attributes: true, attributeFilter: ['href'] }, sync);
+  sync();
+}
+
 export function bindWeather(ctx: ShellCtx): void {
   const { root, cleanup } = ctx;
+  /* TODO(request b-01): bindSolarRows and bindBriefLink belong in a Track-B-owned solar-v2.ts called from mountShellV2; until the integrator wires it, bindWeather carries them. */
   bindSolarRows(ctx);
+  bindBriefLink(ctx);
   const set = (k: string, v: string): void => { for (const e of $$<HTMLElement>(root, `[data-wx="${k}"]`)) e.textContent = v; };
   const setKind = (e: HTMLElement | null, kind: 'measured' | 'modelled', text: string): void => {
     if (!e) return;
