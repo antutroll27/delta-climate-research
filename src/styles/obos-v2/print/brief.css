@@ -1,1 +1,19 @@
-/* OBOS v2 — print/brief.css (spec S9 print). Owner: Track C (plan A1). */
+/* OBOS v2 — print/brief.css (spec S9 print, plan S9.3 Step 2). Owner: Track C (plan amendment A1).
+   The brief prints as ink on paper in every theme and in both card styles: the chrome and the buttons are dropped, the cards lose their
+   fill and shadow, and each block keeps together across a page break. Colour comes from --print-ink / --print-paper (tokens.css).
+   !important only where a screen rule of equal specificity (Glass live, Plates) would otherwise win on source order. */
+@media print {
+  html[data-ui="v2"] .obos-v2.heat-brief { background: var(--print-paper); color: var(--print-ink); min-height: 0;
+    --card: var(--print-paper); --ink-1: var(--print-ink); --ink-2: var(--print-ink); --ink-3: var(--print-ink); --unit: var(--print-ink);
+    --line: color-mix(in srgb, var(--print-ink) 30%, var(--print-paper)); --well: var(--print-paper); --on-ink: var(--print-paper); }
+  html[data-ui="v2"] .obos-v2.heat-brief[data-cards] .card { --card: var(--print-paper); --ink-1: var(--print-ink); --ink-2: var(--print-ink); --ink-3: var(--print-ink); --unit: var(--print-ink);
+    --line: color-mix(in srgb, var(--print-ink) 30%, var(--print-paper)); --well: var(--print-paper); --on-ink: var(--print-paper);
+    background: var(--print-paper) !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+    border: 1px solid var(--line); break-inside: avoid; }
+  html[data-ui="v2"] .obos-v2.heat-brief :is(.rail, .toolbar, .key-pop, .brf-acts) { display: none !important; }
+  html[data-ui="v2"] .obos-v2.heat-brief [data-action="print"] { display: none; }
+  html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { display: block; max-width: none; padding: 0; }
+  html[data-ui="v2"] .obos-v2.heat-brief .brf-side, html[data-ui="v2"] .obos-v2.heat-brief .brf-main { display: block; }
+  html[data-ui="v2"] .obos-v2.heat-brief .card { margin: 0 0 6mm; }
+  html[data-ui="v2"] .obos-v2.heat-brief .brf-status { background: var(--print-paper); border: 1px solid var(--line); }
+}

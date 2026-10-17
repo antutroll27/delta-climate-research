@@ -1,1 +1,143 @@
-/* OBOS v2 — screens/compare.css (spec S9). Owner: Track C (plan A1). */
+/* OBOS v2 — screens/compare.css (spec S9, plan S9.2 Step 5). Owner: Track C (plan amendment A1).
+   Every selector is under html[data-ui="v2"] .obos-v2.heat-compare. NO colour literal here (tokens.css owns them).
+   Geometry: the rail and the Compare panel are the shell's own (shell.css); the two maps sit in the space between the panel and the
+   right column. --cmp-l follows the menu state exactly as the panel does, and --cmp-r is the column (320 px, or 300 px at laptop
+   width) plus its two gutters. The canvases take their size from their card's width through a fixed aspect-ratio (4:5), so a change of menu state
+   rescales both uniformly: a bitmap painted for the old size is never stretched on one axis (the controller repaints only on a
+   window resize or a new run). */
+
+html[data-ui="v2"] .obos-v2.heat-compare { --cmp-l: 416px; --cmp-r: 352px; }
+html[data-ui="v2"] .obos-v2.heat-compare[data-menu-eff="labels"] { --cmp-l: 568px; }
+@media (min-width: 700px) and (max-width: 1365px) { html[data-ui="v2"] .obos-v2.heat-compare { --cmp-r: 332px; } }
+
+/* ── the Compare panel: always shown on this route. The menu has nothing that could bring it back (the Compare item is the current page),
+   so it ignores the stored "side closed" preference an area page may have left. ── */
+html[data-ui="v2"] .obos-v2.heat-compare[data-compare-root] .side-panel { display: flex; bottom: 16px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-handle,
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-tabs { display: none; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-panel[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-gap { margin-top: 16px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-note { margin-top: 8px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-acts { margin-top: 10px; }
+html[data-ui="v2"] .obos-v2.heat-compare .pill[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2.heat-compare .pill:is(a) { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+html[data-ui="v2"] .obos-v2.heat-compare .pill:disabled { opacity: .4; cursor: not-allowed; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-ab { display: inline-grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--ink-1); color: var(--on-ink); font-size: 11px; font-weight: 700; }
+
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-pair { display: grid; gap: 6px; margin-top: 6px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-pick { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 10px 8px 8px;
+  border-radius: 14px; background: var(--well); }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-pick-body { display: grid; gap: 2px; min-width: 0; }
+html[data-ui="v2"] .obos-v2.heat-compare select { width: 100%; min-height: 24px; border: 0; border-radius: 8px; padding: 2px 4px; background: transparent; color: var(--ink-1);
+  font-size: 14px; font-weight: 600; cursor: pointer; }
+html[data-ui="v2"] .obos-v2.heat-compare select option { color: var(--ink-1); background: var(--card); }
+
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-pkg { margin-top: 4px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-pkg li { border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-pkg li:first-child { border-top: 0; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-range { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 9px 0 8px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-range-t b { display: block; font-size: 13px; font-weight: 600; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-range-t .foot { display: block; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-v { font-size: 22px; font-weight: 300; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-range input[type="range"] { grid-column: 2 / 4; width: 100%; margin: 2px 0 0; accent-color: var(--ink-1); }
+
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-phase { border: 0; margin: 12px 0 0; padding: 0; min-width: 0; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-phase legend { padding: 0; margin-bottom: 6px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-phase .seg label { position: relative; flex: 1; display: block; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-phase .seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-phase .seg span { display: block; padding: 5px 9px; border-radius: 11px; font-size: 11.5px; font-weight: 500; text-align: center; color: var(--ink-2); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-phase .seg input:checked + span { background: var(--ink-1); color: var(--on-ink); }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-phase .seg input:focus-visible + span { outline: 2px solid var(--focus-accent); outline-offset: 2px; }
+
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-share { display: grid; gap: 4px; margin-top: 10px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-share[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-share input { width: 100%; border: 0; border-radius: 8px; padding: 6px 8px; background: var(--well); color: var(--ink-1); font-size: 11px; }
+
+/* ── the stage: status and view controls on top, the two maps, the scale ── */
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-stage { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-stage > * { pointer-events: auto; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-stagebar { position: absolute; top: 16px; left: var(--cmp-l); right: var(--cmp-r); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  padding: 8px 8px 8px 16px; border-radius: 20px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-status { flex: 1 1 100%; min-width: 0; font-size: 11.5px; line-height: 1.35; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-views { flex: none; align-items: center; margin-left: auto; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-views button:disabled { opacity: .4; cursor: not-allowed; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-renderer { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-renderer i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+html[data-ui="v2"] .obos-v2.heat-compare[data-renderer="three"] .cmp-renderer i { background: var(--ink-1); }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-renderer b { font: inherit; }
+
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-maps { position: absolute; top: 100px; bottom: 80px; left: var(--cmp-l); right: var(--cmp-r); display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-content: center; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-maps::-webkit-scrollbar { display: none; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-map { display: flex; flex-direction: column; margin: 0; padding: 0; overflow: hidden; align-self: start; min-width: 0; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-map-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 12px 14px 10px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-map-head h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-map-head strong { font-size: 20px; font-weight: 300; letter-spacing: -0.02em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-surface { position: relative; aspect-ratio: 4 / 5; overflow: hidden; background: var(--hx-teal-0); }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-surface canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: pan-y; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-surface canvas[data-interacting="true"] { cursor: grabbing; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-surface > [data-map-field] { z-index: 0; opacity: 1; transition: opacity .24s var(--ease); }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-surface > .heat-compare__three { z-index: 1; opacity: 0; pointer-events: none; transition: opacity .24s var(--ease); }
+html[data-ui="v2"] .obos-v2.heat-compare[data-renderer="three"] .cmp-surface > [data-map-field] { opacity: 0; pointer-events: none; }
+html[data-ui="v2"] .obos-v2.heat-compare[data-renderer="three"] .cmp-surface > .heat-compare__three { opacity: 1; pointer-events: auto; }
+/* the map is always dark (the canvas paints its own ground), so its overlays use the named dark neutrals in both themes */
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-tools { position: absolute; z-index: 3; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; pointer-events: none; }
+html[data-ui="v2"] .obos-v2.heat-compare :is(.cmp-tools span, .cmp-tools button, .cmp-probe) { background: var(--hx-teal-dock); color: var(--hx-snow-1); border: 1px solid var(--hx-teal-a16);
+  border-radius: 8px; padding: 4px 7px; font: 600 9.5px/1.3 var(--sans); letter-spacing: 0.06em; text-transform: uppercase; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-tools span { max-width: 12rem; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-tools button { pointer-events: auto; cursor: pointer; white-space: nowrap; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-probe { position: absolute; z-index: 3; top: 8px; right: 8px; pointer-events: none; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-probe[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-map figcaption { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 8px 14px; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-pattern { min-height: 3.8em; padding: 0 14px 12px; color: var(--ink-2); }
+
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-legend { position: absolute; left: var(--cmp-l); right: var(--cmp-r); bottom: 12px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center; gap: 4px 10px; padding: 8px 14px; border-radius: 16px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-legend .ramp { height: 8px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-legend b { grid-column: 1 / -1; text-align: center; }
+
+/* ── the right column: the evidence table, then integrity and limits ── */
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-col { position: absolute; z-index: 20; top: 68px; right: 16px; bottom: 46px; width: 320px; display: flex; flex-direction: column; gap: 10px;
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; border-radius: 22px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-col::-webkit-scrollbar { display: none; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-col .card { flex: none; }
+@media (min-width: 700px) and (max-width: 1365px) { html[data-ui="v2"] .obos-v2.heat-compare .cmp-col { width: 300px; } }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-ev { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-ev thead th { text-align: right; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding: 0 0 6px; overflow-wrap: anywhere; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-ev thead th:first-child { text-align: left; width: 42%; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-ev td { padding: 7px 0; border-top: 1px solid var(--line); text-align: right; font-weight: 500; vertical-align: top; overflow-wrap: anywhere; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-ev tbody th { padding: 7px 8px 7px 0; border-top: 1px solid var(--line); text-align: left; font-weight: 400; color: var(--ink-2); vertical-align: top; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-ev tr.key :is(th, td) { font-weight: 700; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-delivery { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-delivery > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-delivery .foot { color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-method { margin-top: 8px; }
+
+/* ── a phone: the page scrolls, the panel becomes the v1 bottom sheet (collapsed, half, full), the rail's column is kept clear.
+   The rail's own phone behaviour (a drawer) is S8's; until then its icon column ends at 88 px and fixed. ── */
+@media (max-width: 699px) {
+  html[data-ui="v2"] .obos-v2.heat-compare { --cmp-rail: 96px; overflow-x: hidden; overflow-y: auto; }
+  html[data-ui="v2"] .obos-v2.heat-compare :is(.rail, .toolbar) { position: fixed; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-stage { position: static; z-index: auto; pointer-events: auto; padding: 72px 12px 24px var(--cmp-rail); }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-stagebar { position: static; flex-wrap: wrap; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-views { width: 100%; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-maps { position: static; grid-template-columns: 1fr; margin-top: 12px; overflow: visible; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-legend { position: static; margin-top: 12px; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-col { position: static; width: auto; margin: 0 12px 120px var(--cmp-rail); overflow: visible; }
+  html[data-ui="v2"] .obos-v2.heat-compare[data-compare-root] .side-panel { position: fixed; z-index: 30; top: auto; left: var(--cmp-rail); right: 8px; bottom: 8px; width: auto;
+    max-height: calc(100dvh - 16px); }
+  html[data-ui="v2"] .obos-v2.heat-compare .side-panel[data-sheet="half"] { max-height: min(58dvh, 30rem); }
+  html[data-ui="v2"] .obos-v2.heat-compare[data-compare-root] .side-panel[data-sheet="full"] { top: 8px; z-index: 60; }
+  html[data-ui="v2"] .obos-v2.heat-compare .side-panel .sp-head { display: none; }
+  html[data-ui="v2"] .obos-v2.heat-compare .side-panel[data-sheet="collapsed"] .sp-scroll { display: none; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-handle { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border: 0;
+    background: transparent; color: var(--ink-1); text-align: left; cursor: pointer; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-handle b { display: block; font-size: 13px; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-handle small { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin-top: 2px; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-handle-line { width: 26px; height: 4px; border-radius: 99px; background: var(--ink-3); }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-tabs { display: flex; margin-bottom: 10px; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-tabs button { flex: 1; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-tabs button[aria-selected="true"] { background: var(--ink-1); color: var(--on-ink); }
+}

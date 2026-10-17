@@ -1,6 +1,9 @@
 ---
 import Base from '../../layouts/Base.astro';
 import PairedBench from '../../components/ClimateEngine/compare/PairedBench.astro';
+import PairedBenchV2 from '../../components/ClimateEngine/compare/PairedBenchV2.astro';
+import UiPrepaint from '../../components/ClimateEngine/v2/UiPrepaint.astro';
+import UiSwap from '../../components/ClimateEngine/v2/UiSwap.astro';
 ---
 <Base
   title="Compare Urban Heat Scenarios — Delta Climate Research"
@@ -8,7 +11,10 @@ import PairedBench from '../../components/ClimateEngine/compare/PairedBench.astr
   noindex={true}
   nativeScroll={true}
 >
+  <UiPrepaint />
   <PairedBench />
+  <template id="obos-v2-tree"><PairedBenchV2 /></template>
+  <UiSwap />
 </Base>
 
 <script>
@@ -26,22 +32,34 @@ import PairedBench from '../../components/ClimateEngine/compare/PairedBench.astr
   let dispose: (() => void) | null = null;
   let disposeShell: (() => void) | null = null;
   let bootGeneration = 0;
+  let disposeV2: (() => void) | null = null;
+  /* OBOS v2 (spec §1.7, plan S9.2): only under the flag, imported dynamically so v1 never fetches it. On this route
+     mountShellV2 binds the frame only (it reads data-compare-root); it runs AFTER the two mounts above, like the area page. */
+  const bootV2 = async (generation: number) => {
+    if (document.documentElement.getAttribute('data-ui') !== 'v2' || disposeV2) return;
+    const { mountShellV2 } = await import('../../scripts/climate-engine/v2/shell-v2');
+    if (generation === bootGeneration && !disposeV2) disposeV2 = mountShellV2();
+  };
   const boot = async () => {
     const generation = ++bootGeneration;
-    if (!document.querySelector('[data-compare-root]') || dispose) return;
-    const [{ mountPairedBench }, { mountConsoleShell }] = await Promise.all([
-      import('../../scripts/climate-engine/compare/paired-controller'),
-      import('../../scripts/climate-engine/shell/console-shell'),
-    ]);
-    if (generation === bootGeneration && document.querySelector('[data-compare-root]') && !dispose) {
-      dispose = mountPairedBench();
-      if (!disposeShell) disposeShell = mountConsoleShell();
+    if (!document.querySelector('[data-compare-root]')) return;
+    if (!dispose) {
+      const [{ mountPairedBench }, { mountConsoleShell }] = await Promise.all([
+        import('../../scripts/climate-engine/compare/paired-controller'),
+        import('../../scripts/climate-engine/shell/console-shell'),
+      ]);
+      if (generation === bootGeneration && document.querySelector('[data-compare-root]') && !dispose) {
+        dispose = mountPairedBench();
+        if (!disposeShell) disposeShell = mountConsoleShell();
+      }
     }
+    await bootV2(generation);
   };
   void boot();
   document.addEventListener('astro:page-load', () => { void boot(); });
   document.addEventListener('astro:before-swap', () => {
     dispose?.(); dispose = null;
     disposeShell?.(); disposeShell = null;
+    disposeV2?.(); disposeV2 = null;
   });
 </script>

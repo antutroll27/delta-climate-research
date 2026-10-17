@@ -1,1 +1,37 @@
-/* OBOS v2 — screens/brief.css (spec S9). Owner: Track C (plan A1). */
+/* OBOS v2 — screens/brief.css (spec S9, plan S9.3 Step 2). Owner: Track C (plan amendment A1).
+   The paired brief is a DOCUMENT, not a console: the root is a block that scrolls with the page (plan S9.3 puts this rule in tokens.css;
+   it carries no colour, so under plan amendment A1 it lives here). The rail and the display toolbar stay put while it scrolls.
+   Every selector is under html[data-ui="v2"] .obos-v2.heat-brief. NO colour literal here. */
+
+html[data-ui="v2"]:has(.obos-v2.heat-brief) body { overflow: auto; }
+html[data-ui="v2"] .obos-v2.heat-brief { position: relative; inset: auto; overflow: visible; min-height: 100vh; --brf-l: 100px; }
+html[data-ui="v2"] .obos-v2.heat-brief[data-menu-eff="labels"] { --brf-l: 252px; }
+html[data-ui="v2"] .obos-v2.heat-brief :is(.rail, .toolbar) { position: fixed; }
+
+html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; max-width: 1080px;
+  padding: 72px 16px 48px var(--brf-l); }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-main { min-width: 0; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-intro > .micro { margin-bottom: 8px; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-intro .body-s { margin-top: 10px; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-status { margin-top: 12px; padding: 8px 10px; border-radius: 10px; background: var(--well); color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2.heat-brief h2.micro { margin: 0; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-scenario .sym-list { margin-top: 4px; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-k { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; margin-top: 8px; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-k dt { font-size: 12px; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-k dd { font-size: 12.5px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-integrity .method { margin-top: 6px; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-note { margin-top: 8px; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-note[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-t { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-t thead th { text-align: right; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding: 0 0 6px; overflow-wrap: anywhere; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-t thead th:first-child { text-align: left; width: 40%; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-t td { padding: 7px 0; border-top: 1px solid var(--line); text-align: right; font-weight: 500; vertical-align: top; overflow-wrap: anywhere; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-t td.small { font-size: 11px; font-weight: 400; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-t tbody th { padding: 7px 8px 7px 0; border-top: 1px solid var(--line); text-align: left; font-weight: 400; color: var(--ink-2); vertical-align: top; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-t tr.hl :is(th, td) { font-weight: 700; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-acts { margin-top: 14px; }
+html[data-ui="v2"] .obos-v2.heat-brief .pill:is(a) { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; height: 30px; padding: 0 14px; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-acts button.pill { height: 30px; padding: 0 14px; }
+@media (max-width: 1060px) { html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 699px) { html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { padding: 72px 12px 40px 88px; } }
