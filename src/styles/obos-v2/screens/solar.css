@@ -73,8 +73,8 @@ html[data-ui="v2"] .obos-v2 .sl-assume { margin-top: 10px; font-size: 11px; line
 
 /* ───────────── the payback sheet (#solPay), spec §3.10: a right-anchored .sheet card over the column ───────────── */
 html[data-ui="v2"] .obos-v2 #solPay { position: absolute; inset: auto; right: 16px; top: 64px; bottom: 16px; width: 360px; max-height: none; overflow-y: auto; z-index: 91;
-  padding: 0; border-radius: 22px; font: 400 13px/1.45 var(--sans); display: flex; flex-direction: column; scrollbar-width: none; overscroll-behavior: contain; }
-html[data-ui="v2"] .obos-v2 #solPay::-webkit-scrollbar { display: none; }
+  padding: 0; border-radius: 22px; font: 400 13px/1.45 var(--sans); display: flex; flex-direction: column; scrollbar-width: thin; overscroll-behavior: contain;
+  scroll-padding: 64px 0 52px; }
 html[data-ui="v2"] .obos-v2 #solPay[hidden] { display: none; }
 /* the head stays in view: the app focuses #spClose (the last control) on open, which scrolls a tall sheet to its foot, and the tag must not scroll away */
 html[data-ui="v2"] .obos-v2 #solPay .sp-head { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin: 0;
@@ -102,7 +102,8 @@ html[data-ui="v2"] .obos-v2 #solPay .sp-res { display: flex; flex-direction: col
 html[data-ui="v2"] .obos-v2 #solPay .sp-big { display: block; margin-top: 4px; font: 300 28px/1.05 var(--sans); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 #solPay .sp-big.is-words { font: 400 13px/1.4 var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 #solPay .sp-assume { margin: 2px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-2); }
-html[data-ui="v2"] .obos-v2 #solPay .sp-btns { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 16px 14px; }
+/* the button row is sticky: the app focuses #spClose on open, so with Close in view at scrollTop 0 the focus scrolls nothing (B-S6 audit F1) */
+html[data-ui="v2"] .obos-v2 #solPay .sp-btns { position: sticky; bottom: 0; z-index: 1; margin-top: auto; background: var(--card); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 16px 14px; }
 html[data-ui="v2"] .obos-v2 #solPay .sp-btns :is(.bc-brief, .sb-x) { position: static; display: inline-flex; align-items: center; justify-content: center; margin: 0; min-height: 30px; padding: 0 10px; border: 0;
   border-radius: 99px; background: var(--well); color: var(--ink-1); font: 500 11.5px/1 var(--sans); letter-spacing: 0; text-transform: none; text-decoration: none; cursor: pointer; white-space: nowrap; }
 html[data-ui="v2"] .obos-v2 #solPay .sp-btns #spPrint { background: var(--ink-1); color: var(--on-ink); }
