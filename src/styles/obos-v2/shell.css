@@ -1,1 +1,48 @@
-/* OBOS v2 — shell (§3 shell regions). Filled by a later slice. */
+/* OBOS v2 — shell (§3 shell regions). Ported from the approved preview (21-obos-twin-system/system.css) with the plan's S2 selector rewrites.
+   Every selector is under html[data-ui="v2"] .obos-v2. NO HEX HERE (tokens.css owns them). Flat CSS: no native nesting reaches the browser. */
+
+/* ── the section rail: 220 px with labels, 72 px of icons, clip-path never layout (spec §3.1; sys.css :254–277) ── */
+html[data-ui="v2"] .obos-v2 .rail { position: absolute; z-index: 46; left: 16px; top: 16px; width: 220px; padding: 8px; border-radius: 22px; display: flex; flex-direction: column; gap: 4px;
+  clip-path: inset(0 148px 0 0 round 22px); transition: clip-path .45s var(--ease); }
+html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .rail { clip-path: inset(0 0 0 0 round 22px); }
+html[data-ui="v2"] .obos-v2 .rail-brand { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 0 0 16px; font-size: 15px; letter-spacing: -0.02em; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .rail-brand b { font-weight: 700; }
+html[data-ui="v2"] .obos-v2 .rail-brand .rail-logo { width: 26px; height: 26px; flex: none; object-fit: contain; }
+html[data-ui="v2"] .obos-v2 .rail-brand .wm { opacity: 0; transition: opacity .3s var(--ease); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .rail-brand .wm { opacity: 1; }
+html[data-ui="v2"] .obos-v2 .nav-list { display: flex; flex-direction: column; gap: 4px; }
+html[data-ui="v2"] .obos-v2 .nav-item { position: relative; display: flex; align-items: center; gap: 14px; width: 100%; height: 44px; padding: 0 12px 0 18px; border: 0; background: transparent;
+  color: var(--ink-2); cursor: pointer; border-radius: 14px; text-align: left; text-decoration: none; font: 500 13px/1.2 var(--sans); }
+html[data-ui="v2"] .obos-v2 .nav-item svg { position: relative; z-index: 1; width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+html[data-ui="v2"] .obos-v2 .nav-label { position: relative; z-index: 1; white-space: nowrap; opacity: 0; transition: opacity .3s var(--ease); }
+html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .nav-label { opacity: 1; }
+html[data-ui="v2"] .obos-v2 .nav-item:hover { color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .nav-item::before, html[data-ui="v2"] .obos-v2 .nav-item::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; border-radius: 14px; background: var(--ink-1); opacity: 0; transition: opacity .3s var(--ease); }
+html[data-ui="v2"] .obos-v2 .nav-item::before { width: 56px; }
+html[data-ui="v2"] .obos-v2 .nav-item::after { right: 0; }
+html[data-ui="v2"] .obos-v2 .nav-item[aria-current="true"], html[data-ui="v2"] .obos-v2 .nav-item[aria-current="page"] { color: var(--on-ink); }
+html[data-ui="v2"] .obos-v2 .nav-item[aria-current="true"]::before, html[data-ui="v2"] .obos-v2 .nav-item[aria-current="page"]::before { opacity: 1; }
+html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .nav-item[aria-current="true"]::after, html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .nav-item[aria-current="page"]::after { opacity: 1; }
+html[data-ui="v2"] .obos-v2 .rail-pin { margin-top: 4px; border-top: 1px solid var(--line) !important; border-radius: 0 0 14px 14px !important; }
+html[data-ui="v2"] .obos-v2 .nav-item:focus-visible { outline-offset: -2px; }
+html[data-ui="v2"] .obos-v2 .nav-item[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+/* ── the side panel beside the rail (twin's Sensors panel; sys.css :332–343). Both menu and panel may be open. ── */
+html[data-ui="v2"] .obos-v2 .side-panel[hidden] { display: none !important; }
+html[data-ui="v2"] .obos-v2 .side-panel { position: absolute; z-index: 24; left: 100px; top: 16px; bottom: 96px; width: 300px; display: flex; flex-direction: column; overflow: hidden; border-radius: 22px; }
+html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .side-panel { left: 252px; }
+html[data-ui="v2"] .obos-v2 .side-panel .sp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 16px 16px 10px; border-bottom: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 .side-panel .sp-head h2 { font-size: 18px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.15; }
+html[data-ui="v2"] .obos-v2 .side-panel .sp-sub { font-size: 11.5px; line-height: 1.4; color: var(--ink-3); margin-top: 3px; }
+html[data-ui="v2"] .obos-v2 .sp-close { flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%; background: var(--well); color: var(--ink-2); display: grid; place-items: center; cursor: pointer; }
+html[data-ui="v2"] .obos-v2 .side-panel .sp-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 16px; scrollbar-width: none; }
+html[data-ui="v2"] .obos-v2 .side-panel .sp-scroll::-webkit-scrollbar { display: none; }
+html[data-ui="v2"] .obos-v2 .side-panel .sp-body { display: none; flex-direction: column; min-height: 0; flex: 1; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"] [data-side-pane="explore"],
+html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="solar"] [data-side-pane="solar"],
+html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="air"] [data-side-pane="air"] { display: flex; }
+html[data-ui="v2"] .obos-v2:not([data-side-shown="1"]) .side-panel { display: none; }
+/* laptop: with a side panel open the rail shows icons (twin rule): the pin has nothing to do (sys.css :500) */
+@media (min-width: 700px) and (max-width: 1365px) {
+  html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-menu="labels"][data-menu-eff="icons"] .rail-pin { display: none; }
+}

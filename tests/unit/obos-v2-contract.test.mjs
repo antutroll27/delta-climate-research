@@ -65,8 +65,7 @@ for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-
     assert.ok(area, 'v1 root has no data-area');
     assert.match(v2, new RegExp(`<main id="main" class="stage obos-v2"[^>]*\\bdata-console\\b[^>]*data-area="${area}"`));
     if (v1.includes('id="mlmap"')) {
-      /* S2 appends 'data-rail="analysis"' to this list when the menu lands. */
-      for (const hook of ['data-w="', 'id="segPhase"', 'data-p="now"', 'data-m="relief"', 'data-e="studio"', 'data-t="2"', 'data-v="1"', 'data-s="1"', 'data-layer="', 'data-entry-close', 'data-rn-dismiss']) {
+      for (const hook of ['data-rail="analysis"', 'data-w="', 'id="segPhase"', 'data-p="now"', 'data-m="relief"', 'data-e="studio"', 'data-t="2"', 'data-v="1"', 'data-s="1"', 'data-layer="', 'data-entry-close', 'data-rn-dismiss']) {
         assert.ok(v2.includes(hook), `v2 tree lacks the hook ${hook}`);
       }
     }
