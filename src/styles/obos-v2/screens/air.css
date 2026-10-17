@@ -1,1 +1,86 @@
-/* OBOS v2 — screens/air.css (spec §4.4). Owner: Track B (plan A1). */
+/* OBOS v2 — screens/air.css (spec §4.4). Owner: Track B (plan A1; S7.1 Step 3). NO HEX HERE (tokens.css owns them).
+   The painter (air/air-panel.ts) is the only writer of what these rules style: .aqblock .k .chip .hero .num .cat .dot .meta .aq-pm .aq-us .aq-city
+   .aq-why .empty, and in the pane .pane-h .pane-note table.pol .si .chart .tip .aq-legend .aq-sr. v1's rules for them are firewalled off this tree
+   (`:where(html:not([data-ui=v2]))`), so they are written here from v2 tokens, ported from v1 (stage :2425–2507) and the preview's screens/air.html.
+   COLOUR: a band colour reaches the page only through the painter's inline `var(--c-*)` (bridged to --aq-* in tokens.css), always beside the band word.
+   Nothing here uses a heat-ramp colour (v1 painted the PM2.5 line and the focus rings cyan): ink and the focus accent instead. */
+
+/* ── the card (#aqiBlock, Overview and Air) and the pane's own copy of it (.aqblock) ── */
+html[data-ui="v2"] .obos-v2 #aqiBlock[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane .aqblock) > * + * { margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .legend-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .legend-head > span:first-child { font: var(--micro-weight) var(--micro-size)/1.35 var(--sans); letter-spacing: var(--micro-ls); text-transform: uppercase; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .chip { display: inline-flex; align-items: center; gap: 6px; height: auto; min-height: 22px; padding: 1px 8px; border: 0; border-radius: 99px; background: var(--well);
+  font: 500 11px/1.4 var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink-2); white-space: nowrap; }
+/* Live: a measured kind: a solid dot and a keyline */
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .chip.live { background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-1); font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .chip.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-1); flex: none; }
+/* Not Live: ink, not the old Swiss red (spec §2.4; founder open item 3) */
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .chip.old { background: var(--ink-1); color: var(--on-ink); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .chip.old .sep { margin: 0 .45em; opacity: .8; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .chip.old b { font-weight: 700; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .chip.off { background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-3); }
+
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .hero { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 12px 0 0; font-size: 15px; letter-spacing: 0; line-height: 1.1; white-space: normal; }
+/* the numeral is ink, as the approved preview draws it; the band colour rides the dot beside the band word (the painter's inline colour would put light
+   yellow text on stone in Light, under the contrast floor) */
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .num { font-size: 56px; font-weight: 200; letter-spacing: -0.035em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--ink-1) !important; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .num.muted { color: var(--ink-1) !important; opacity: .7; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .cat { display: inline-flex; align-items: center; gap: 7px; font-size: 16px; font-weight: 700; letter-spacing: -0.015em; }
+/* the band dot keeps the painter's inline colour; light fills carry an ink keyline (spec §2.5) */
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ink-1) 40%, transparent); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .meta { font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .meta b { font-weight: 600; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .empty { font-size: 13px; line-height: 1.5; color: var(--ink-1); }
+
+/* the notes: the PM2.5 figure, the US line, the city line, and "Why do other apps show a different number?" — each a <details>, closed until asked */
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) :is(.aq-pm, .aq-us, .aq-city, .aq-why) summary { list-style: none; cursor: pointer; display: block; min-height: 24px; font-size: 12px; line-height: 1.6; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) :is(.aq-pm, .aq-us, .aq-city, .aq-why) summary::-webkit-details-marker { display: none; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) :is(.aq-pm, .aq-us, .aq-city, .aq-why) summary:hover { color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .aq-pm summary b { font-weight: 600; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) :is(.aq-pm, .aq-us, .aq-city) p { margin: 4px 0 4px; font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .aq-us-i { display: inline-grid; place-items: center; width: 1.4em; height: 1.4em; margin-left: .5em; vertical-align: .05em; border: 1px solid currentColor; border-radius: 50%;
+  font: italic 600 9px/1 var(--sans); text-transform: none; letter-spacing: 0; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .aq-city ul { margin: 4px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .aq-city li { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .aq-city li span:last-child { color: var(--ink-1); font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .aq-why { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .aq-why summary { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-weight: 600; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .aq-why summary::after { content: " +"; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .aq-why[open] summary::after { content: " \2013"; }
+html[data-ui="v2"] .obos-v2 :is(#aqiBlock, #airPane) .aq-why p { margin: 6px 0 2px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+
+/* ── the pane beside the menu ── */
+html[data-ui="v2"] .obos-v2 #airPane .pane-h { margin: 0; font: var(--micro-weight) var(--micro-size)/1.35 var(--sans); letter-spacing: var(--micro-ls); text-transform: uppercase; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 #airPane .pane-h:not(:first-child) { margin-top: 18px; }
+html[data-ui="v2"] .obos-v2 #airPane .aqblock { margin-top: 10px; }
+html[data-ui="v2"] .obos-v2 #airPane .pane-note, html[data-ui="v2"] .obos-v2 #airPane .pane-body > .pane-note { margin-top: 8px; font-size: 11.5px; line-height: 1.5; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 #airPane table.pol { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 12px; }
+html[data-ui="v2"] .obos-v2 #airPane table.pol th { text-align: left; padding: 0 0 6px; border-bottom: 1px solid var(--line); font: var(--micro-weight) 9.5px/1.3 var(--sans); letter-spacing: var(--micro-ls); text-transform: uppercase; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 #airPane table.pol td { padding: 6px 0; border-bottom: 1px solid var(--line); color: var(--ink-1); vertical-align: middle; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 #airPane table.pol td.n { color: var(--ink-2); padding-left: 8px; }
+html[data-ui="v2"] .obos-v2 #airPane table.pol .lv { font-size: 13px; }
+html[data-ui="v2"] .obos-v2 #airPane .unit { font-size: 10px; color: var(--ink-3); letter-spacing: 0; text-transform: none; }
+html[data-ui="v2"] .obos-v2 #airPane .si { display: flex; align-items: center; gap: 6px; }
+/* the sub-index bars carry no band word, so they carry no band colour (B-S7 audit F5); the 30-day bars keep theirs: .aq-legend names every band */
+html[data-ui="v2"] .obos-v2 #airPane .si i { background: var(--ink-3) !important; }
+html[data-ui="v2"] .obos-v2 #airPane .si i { display: block; height: 6px; border-radius: 0 3px 3px 0; min-width: 2px; box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ink-1) 35%, transparent); }
+html[data-ui="v2"] .obos-v2 #airPane table.pol tr.aq-top .si { font-weight: 700; }
+html[data-ui="v2"] .obos-v2 #airPane table.pol + .pane-note { margin-top: 6px; }
+html[data-ui="v2"] .obos-v2 #airPane .chart { position: relative; margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 #airPane .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+/* the 24-h line and its end mark are ink (v1: cyan); the bars keep their band fill with a keyline */
+html[data-ui="v2"] .obos-v2 #airPane .chart:not(.aq-bars) svg path { stroke: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 #airPane .chart:not(.aq-bars) svg circle { fill: var(--ink-1); stroke: var(--card); }
+html[data-ui="v2"] .obos-v2 #airPane .aq-bars svg path { stroke: color-mix(in oklch, var(--ink-1) 35%, transparent); stroke-width: .75; }
+html[data-ui="v2"] .obos-v2 #airPane .tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 11px; line-height: 1.45; color: var(--ink-1);
+  white-space: nowrap; transform: translate(-50%, -110%); opacity: 0; transition: opacity .12s ease; box-shadow: var(--shadow); }
+html[data-ui="v2"] .obos-v2 #airPane .tip.on { opacity: 1; }
+html[data-ui="v2"] .obos-v2 #airPane .aq-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 11px; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 #airPane .aq-legend span { display: inline-flex; align-items: center; gap: 5px; }
+/* keyboard: each bar's hit-rect takes focus and shows its tooltip; a stroke is what every engine draws on SVG */
+html[data-ui="v2"] .obos-v2 #airPane .aq-bars rect.hit { outline: none; }
+html[data-ui="v2"] .obos-v2 #airPane .aq-bars rect.hit:focus-visible { stroke: var(--focus-accent); stroke-width: 1.5; }
+/* visually hidden, still read: the 30-day list behind the chart and the #airStatus line */
+html[data-ui="v2"] .obos-v2 .aq-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { html[data-ui="v2"] .obos-v2 #airPane .tip { transition: none; } }

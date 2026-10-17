@@ -1,6 +1,51 @@
 ---
-// src/components/ClimateEngine/v2/WeatherCards.astro — OBOS v2 spec §4.5.
-// A1 SLOT (S2.8): renders nothing until its owner fills it. Owner: Track B, plan S7.2.
-import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
-interface Props { scope: ResolvedScope }
+// src/components/ClimateEngine/v2/WeatherCards.astro — OBOS v2 spec §4.5 [H]. Owner: Track B (plan S7.2 Step 5).
+// Nothing here is a figure of its own: weather-v2.ts writes every [data-wx] node from the app's own observation (E5) and mirrors the app's ids.
+// THE SOURCE RULE (founder, 17 Oct; spec correction after the A-S3 audit): the kind chip and the solid/outlined mark follow the ACTUAL source.
+// The server-rendered default is the unproven state ("no reading", outlined); only a fresh airport report turns it to "observed" and solid.
+import Sym from './Sym.astro';
+import { METAR_STALE_MIN } from '../../../lib/weather/observed.ts';
 ---
+<article class="card" data-v2-card="weather-now" data-sections="weather">
+  <div class="row"><span class="micro">Weather now</span><span class="kind modelled" data-wx="chip">no reading</span></div>
+  <p class="name" data-wx="where"></p>
+  <p class="foot" data-wx="when"></p>
+  <div class="wx-row">
+    <span class="wx-sym" data-wx-src="observed" hidden><Sym shape="disc" c="ink" kind="measured" size={40} /></span>
+    <span class="wx-sym" data-wx-src="forecast"><Sym shape="disc" c="ink" kind="modelled" size={40} /></span>
+    <div class="wx-lab">Air temperature</div>
+    <p class="hero"><span data-wx="t">—</span><span class="u">°C</span></p>
+    <p class="foot" data-wx="tfoot"></p>
+  </div>
+  <div class="wx-row">
+    <span class="wx-sym"><Sym shape="disc" c="ink" kind="modelled" size={40} /></span>
+    <div class="wx-lab">Feels like <span class="kind modelled">calculated</span></div>
+    <p class="hero thin"><span data-wx-mirror="liveFeel">—</span><span class="u">°C</span></p>
+  </div>
+  <dl class="stats">
+    <div><dt class="micro">Humidity</dt><dd><span data-wx-mirror="liveRH">—</span> <small>% RH</small></dd><dd class="foot" data-wx="dew"></dd></div>
+    <div><dt class="micro">Wind</dt><dd><span data-wx-mirror="liveWind">—</span> <small>m/s</small></dd><dd class="foot" data-wx="wdir"></dd></div>
+    <div><dt class="micro">Sky</dt><dd data-wx="sky">—</dd></div>
+    <div><dt class="micro">Visibility</dt><dd data-wx="vis">—</dd><dd class="foot" data-wx="qnh"></dd></div>
+  </dl>
+  <p class="wx-line foot" data-wx-mirror-html="wxLine" hidden></p>
+  <details class="disc" data-wx="filed" hidden><summary>The report as filed<span class="chev" aria-hidden="true">›</span></summary>
+    <div class="body"><p class="wx-raw" data-wx="raw"></p><ul class="wx-decode" data-wx="decode"></ul>
+      <p class="foot">Airport reports via aviationweather.gov, every 30 minutes. OBOS parses the text itself and drops any group it does not recognise.</p></div></details>
+</article>
+<article class="card" data-v2-card="rain" data-sections="weather">
+  <div class="row"><span class="micro" data-wx="rain-h">Rain memory</span><span class="kind measured" data-wx="rain-chip" hidden></span></div>
+  <p class="name" data-wx="rain-sum"></p>
+  <ol class="hrs" data-wx="rain-cells"></ol>
+  <p class="foot">Open ring: no rain or drizzle in that report. The heat model reads these reports to decide whether the ground is still wet.</p>
+</article>
+<article class="card" data-v2-card="wx-model" data-sections="weather">
+  <span class="micro">What the heat model does with it</span>
+  <ul class="rule">
+    <li><Sym shape="disc" c="wind" size={18} /><span><b>The airport sets "now".</b> Air temperature, humidity, wind and cloud from the newest report drive the modelled surface.</span></li>
+    <li><Sym shape="disc" c="wind" kind="modelled" size={18} /><span><b>Older than {METAR_STALE_MIN} minutes</b>, and the Met Norway forecast stands in, carrying any rain the airport reported.</span></li>
+    <li><Sym shape="bowl" c="water" size={18} /><span><b>Rain at the airport is applied to the ward</b>, and the weather line says conditions over the ward may differ.</span></li>
+  </ul>
+  <div class="tile"><div class="wx-lab">Ground &amp; rooftop surface <span class="kind modelled">modelled</span></div>
+    <p class="hero md"><span data-wx-mirror-lst>—</span></p><p class="foot"><span data-wx-mirror="lstPhase"></span>. A surface, not the air.</p></div>
+</article>

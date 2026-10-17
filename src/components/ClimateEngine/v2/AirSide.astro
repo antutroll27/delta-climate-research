@@ -1,7 +1,26 @@
 ---
-// src/components/ClimateEngine/v2/AirSide.astro — OBOS v2 spec §4.4. Owner: Track B. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
-// A1 SLOT (plan S7.1): keeps data-side-pane="air" on its root when filled.
+// src/components/ClimateEngine/v2/AirSide.astro — OBOS v2 spec §4.4. Owner: Track B (plan S7.1; A1 §3.5).
+// The side panel's Air body. #airPane and #airStatus are cut verbatim from the v1 stage (:354–357, :364); air-panel.ts is the only writer
+// of every sentence in them (paneHtml, loadingPaneHtml, uncoveredPaneHtml, statusText), so this file holds no air-quality word of its own.
+// The plan's sub-line ("One government monitor, read through CPCB · India's National AQI") is NOT drawn: it is true only where the pane reads
+// CPCB's own figure. The painter's `origin` can be OBOS's calculation from OpenAQ, and the painter's heading does not name the source, so a
+// static line here would assert a source the state may not have. The painter's own .meta and method lines say what applies. [H] Opus decides at the S7 audit.
+import { isAirCity } from '../../../lib/aqi/stations.ts';
+import { UNCOVERED_NOTE } from '../../../scripts/climate-engine/air/air-panel.ts';
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
 ---
-<div class="sp-body" data-side-pane="air"></div>
+<div class="sp-body" data-side-pane="air">
+  <div class="sp-head">
+    <div><h2>Air quality</h2></div>
+    <button class="sp-close" type="button" data-side-close aria-label="Close the air quality panel">×</button>
+  </div>
+  <div class="sp-scroll">
+    <section class="pane-body" id="airPane" aria-labelledby="pane-air-h">
+      <p class="pane-h" id="pane-air-h">Air · <span id="airPaneArea">{scope.area.name}</span></p>
+      <p class="pane-note" id="airPaneBody">{isAirCity(scope.key) ? 'Loading air quality…' : UNCOVERED_NOTE}</p>
+    </section>
+    <p class="aq-sr" id="airStatus" role="status" aria-live="polite"></p>
+  </div>
+</div>
