@@ -120,11 +120,13 @@ const bcardOf = (src, open) => { const i = src.indexOf(open); return src.slice(i
 const textsOf = (html) => [...html.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').matchAll(/>([^<>{}]+)</g)].map((m) => m[1].replace(/\s+/g, ' ').trim()).filter(Boolean);
 const attrsOf = (html) => [...html.matchAll(/\b(?:aria-label|title)="([^"]+)"/g)].map((m) => m[1]);
 
-test('H11: v1\'s building-card wording survives, every text node and every label, word for word', () => {
+test('H11: v1\'s building-card wording survives, every text node and every label, word for word and as many times (A-S4 audit F5)', () => {
   const v1 = bcardOf(STAGE, '<div class="bcard" id="bcard"');
   const v2 = V2('BuildingCardV2.astro');
-  const v2blob = ` ${textsOf(v2).join(' | ')} | ${attrsOf(v2).join(' | ')} `;
-  const missing = [...textsOf(v1), ...attrsOf(v1)].filter((t) => !v2blob.includes(t));
+  /* count-aware and exact: a short v1 label ("Building") cannot hide inside a longer one ("Building height unverified…") */
+  const count = (xs) => xs.reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map());
+  const have = count([...textsOf(v2), ...attrsOf(v2)]);
+  const missing = [...count([...textsOf(v1), ...attrsOf(v1)])].filter(([t, n]) => (have.get(t) ?? 0) < n).map(([t]) => t);
   assert.deepEqual(missing, [], 'text v1 prints that the v2 card lost');
 });
 
