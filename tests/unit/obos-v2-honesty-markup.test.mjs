@@ -308,7 +308,7 @@ test('S5: the Explore text for every area is derived, never an empty slab: Explo
 test('A-S3 F3 closed: no stopgap click survives in Track A\'s honesty spec (phase() is a real click on a visible control)', () => {
   const spec = readFileSync('tests/e2e/obos-v2-honesty.spec.ts', 'utf8');
   assert.ok(!/evaluate\([^)]*\.click\(\)/.test(spec), 'an evaluate(... .click()) remains in obos-v2-honesty.spec.ts');
-  assert.match(spec, /const phase = \(page: Page, p: string\): Promise<void> => page\.locator\(`#segPhase button\[data-p="\$\{p\}"\]`\)\.click\(\);/);
+  assert.match(spec, /const phase = async \(page: Page, p: string\): Promise<void> => \{[\s\S]*?closest\('\[data-v2-parking\]'\)[\s\S]*?await b\.click\(\);/);
 });
 
 /* ── A-S4 audit F3: the Under Construction stamp is a visible chip in the ward card's header ── */
