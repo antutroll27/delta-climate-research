@@ -351,3 +351,7 @@ test('A-S5 F1: syncHero drops the ± part of the chip text; the card alone carri
 test('A-S5 F4: the "live map\'s own" subtitle renders only where there is a map', () => {
   assert.match(V2('ExploreSide.astro'), /\{scope\.area\.hasData && <p class="sp-sub">Every result is the live map’s own\.<\/p>\}/);
 });
+
+test('A-S5 F6: on Scenarios the scenario card is ordered first in the column (CSS order, Track A\'s own partial)', () => {
+  assert.match(strip(CSS('scenarios.css')), /\[data-section="scenarios"\] #legend \[data-v2-card="scenario"\] \{ order: -1; \}/);
+});

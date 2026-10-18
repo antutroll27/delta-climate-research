@@ -18,3 +18,6 @@ html[data-ui="v2"] .obos-v2 .notyet-sub { margin-top: 6px; font-size: 13px; colo
 html[data-ui="v2"] .obos-v2 .notyet-body { margin-top: 14px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
 html[data-ui="v2"] .obos-v2 .notyet-links { margin-top: 16px; }
 html[data-ui="v2"] .obos-v2 .notyet-links a { display: inline-flex; align-items: center; min-height: 32px; padding: 0 14px; border-radius: 99px; background: var(--ink-1); color: var(--on-ink); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+
+/* A-S5 audit F6: on Scenarios the screen's own card comes first (the live result of the current package follows it), so it is never below the fold */
+html[data-ui="v2"] .obos-v2[data-section="scenarios"] #legend [data-v2-card="scenario"] { order: -1; }

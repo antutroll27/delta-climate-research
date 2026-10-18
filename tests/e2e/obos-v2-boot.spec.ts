@@ -136,4 +136,19 @@ test.describe('@v2 boot', () => {
     await page.locator('.nav-item[data-section="overview"]').click({ position: { x: 30, y: 22 } });
     await expect(card).toBeHidden();
   });
+
+  /* A-S5 audit F6: the screen's own card is the first thing on it, wholly above the fold, at the two common laptop sizes */
+  for (const [w, h] of [[1440, 900], [1366, 768]] as const) {
+    test(`@v2 Scenarios at ${w} x ${h}: the Scenarios card is first and wholly inside the column, the live result follows`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await openV2(page);
+      await page.locator('.nav-item[data-section="scenarios"]').click({ position: { x: 30, y: 22 } });
+      const card = page.locator('[data-v2-card="scenario"]');
+      await expect(card).toBeVisible();
+      const col = (await page.locator('#legend').boundingBox())!, box = (await card.boundingBox())!, temp = (await page.locator('[data-v2-card="temp"]').boundingBox())!;
+      expect(box.y, 'first in the column').toBeLessThan(temp.y);
+      expect(box.y + box.height, 'wholly above the fold').toBeLessThanOrEqual(col.y + col.height);
+      await expect(page.locator('[data-v2-card="scenario"] .foot')).toBeInViewport();
+    });
+  }
 });
