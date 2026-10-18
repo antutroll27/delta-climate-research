@@ -21,7 +21,7 @@ const { scope } = Astro.props;
         <p class="foot" data-v2-mirror="conf"></p>
       </div>
     )}
-    <section class="ov-grp ov-loc v1-bridge" aria-label="Location"><ScopeSwitcher current={scope.key} /></section>
+    <div class="ov-grp ov-loc v1-bridge"><ScopeSwitcher current={scope.key} /></div>   {/* S8 (axe landmark-unique): ScopeSwitcher is already the "Location" region, labelled by its own heading */}
     {scope.area.hasData
       ? <section class="ov-grp ov-tools">
           <div class="row"><h3 class="micro">Green infrastructure toolbox</h3><span class="kind modelled">modelled</span></div>
