@@ -21,3 +21,7 @@ html[data-ui="v2"] .obos-v2 .notyet-links a { display: inline-flex; align-items:
 
 /* A-S5 audit F6: on Scenarios the screen's own card comes first (the live result of the current package follows it), so it is never below the fold */
 html[data-ui="v2"] .obos-v2[data-section="scenarios"] #legend [data-v2-card="scenario"] { order: -1; }
+
+/* A-S5 audit F8: on the no-artefacts page the credit-card title has no outline, coordinate, legend or compass, and the not-yet card already carries the name: hide the empty card
+   (it stays in the tree: #pname, #pzone and #coord are bound ids) */
+html[data-ui="v2"] .obos-v2:has(.notyet) #v2Title { display: none; }

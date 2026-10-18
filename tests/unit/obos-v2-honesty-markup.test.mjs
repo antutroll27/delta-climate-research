@@ -355,3 +355,7 @@ test('A-S5 F4: the "live map\'s own" subtitle renders only where there is a map'
 test('A-S5 F6: on Scenarios the scenario card is ordered first in the column (CSS order, Track A\'s own partial)', () => {
   assert.match(strip(CSS('scenarios.css')), /\[data-section="scenarios"\] #legend \[data-v2-card="scenario"\] \{ order: -1; \}/);
 });
+
+test('A-S5 F8: the empty title card is hidden on the no-artefacts page by CSS (the ids stay in the tree), keyed on the not-yet card', () => {
+  assert.match(strip(CSS('scenarios.css')), /\.obos-v2:has\(\.notyet\) #v2Title \{ display: none; \}/);
+});

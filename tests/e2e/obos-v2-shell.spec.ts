@@ -210,7 +210,10 @@ test.describe('@v2 shell', () => {
   test('@v2 no data (Al Quoz): no compass, no measured/modelled legend, no coordinate (S2 audit F8)', async ({ page }) => {
     const errors: string[] = []; page.on('pageerror', (e) => errors.push(e.message));
     await openV2(page, '/heat-map/ae/dubai/al-quoz/');
-    await expect(page.locator('.tc')).toBeVisible();
+    /* A-S5 audit F8: the credit-card title body is empty here (no outline, coordinate, legend or compass) and the not-yet card already carries the name:
+       the empty card is hidden (it stays in the tree: #pname/#pzone/#coord are bound ids) */
+    await expect(page.locator('.tc')).toBeHidden();
+    await expect(page.locator('.notyet h1')).toHaveText('Al Quoz');
     await expect(page.locator('#compass')).toHaveCount(0);
     await expect(page.locator('.tc-legend')).toHaveCount(0);
     await expect(page.locator('#coord'), 'the app binds #coord (the unit contract counts it), so it stays in the tree, hidden and empty').toBeHidden();
