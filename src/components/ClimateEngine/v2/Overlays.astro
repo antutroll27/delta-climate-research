@@ -40,18 +40,20 @@ const chipText = scope.area.hasData ? '© OpenStreetMap · OpenMapTiles · OpenF
 <div class="credits-pop card" id="v2Credits" role="dialog" aria-label="Data and credits" tabindex="-1" data-open="false" data-hud>
   <div class="row"><span class="micro">Data and credits</span><button class="sp-close" type="button" data-pop-close aria-label="Close credits">×</button></div>
   <ul>
-    <li>Basemap © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> · <a href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">OpenFreeMap</a> · <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">© OpenMapTiles</a><small>ODbL</small></li>
-    <li>Footprints © <a href="https://overturemaps.org" target="_blank" rel="noopener noreferrer">Overture Maps Foundation</a><small>ODbL</small></li>
-    <li>Heights Google Open Buildings 2.5D<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
-    <li>Water © OpenStreetMap<small>ODbL</small></li>
-    {scope.area.hasData && <li>Surface vegetation and albedo · {SENTINEL_CREDIT.lead}<small><a href={SENTINEL_CREDIT.url ?? undefined} target="_blank" rel="noopener noreferrer">{SENTINEL_CREDIT.licence}</a></small></li>}
-    <li>Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span></li>
-    <li>Live weather © Met Norway<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
-    <li><span id="attrWard" hidden></span></li>
-    <li data-v2-map-attrib hidden></li>
-    <li>Cloud deck drawn at 320 m, real base ~700 m</li>
-    <li data-v2-street-credit hidden>Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener noreferrer">Mapillary</a> · community-captured<small>CC BY-SA</small></li>
-    <li class="foot">left-drag orbit · right-drag pan · scroll zoom</li>
+    {scope.area.hasData ? (<Fragment>
+      <li>Basemap © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> · <a href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">OpenFreeMap</a> · <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">© OpenMapTiles</a><small>ODbL</small></li>
+      <li>Footprints © <a href="https://overturemaps.org" target="_blank" rel="noopener noreferrer">Overture Maps Foundation</a><small>ODbL</small></li>
+      <li>Heights Google Open Buildings 2.5D<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
+      <li>Water © OpenStreetMap<small>ODbL</small></li>
+      <li>Surface vegetation and albedo · {SENTINEL_CREDIT.lead}<small><a href={SENTINEL_CREDIT.url ?? undefined} target="_blank" rel="noopener noreferrer">{SENTINEL_CREDIT.licence}</a></small></li>
+      <li>Ground SRTM via AWS terrain tiles, <span id="terrLab">indicative</span></li>
+      <li>Live weather © Met Norway<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
+      <li><span id="attrWard" hidden></span></li>
+      <li data-v2-map-attrib hidden></li>
+      <li>Cloud deck drawn at 320 m, real base ~700 m</li>
+      <li data-v2-street-credit hidden>Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener noreferrer">Mapillary</a> · community-captured<small>CC BY-SA</small></li>
+      <li class="foot">left-drag orbit · right-drag pan · scroll zoom</li>
+    </Fragment>) : (<li>Nothing is mapped for this area yet.</li>)}
   </ul>
 </div>
 

@@ -229,7 +229,10 @@ test.describe('@v2 shell', () => {
     await expect(page.locator('html')).toHaveAttribute('data-ui', 'v2');
     await expect(page.locator('.st-attrib .attrib'), 'no map, no source list; the chip stays').toHaveText('Credits');
     await page.locator('[data-pop-open="credits"]').click();
-    await expect(page.locator('#v2Credits'), 'no model runs on Al Quoz, so no Sentinel-2 surface is credited').not.toContainText('Sentinel');
+    const alq = page.locator('#v2Credits');
+    await expect(alq).toBeVisible();
+    await expect(alq, 'a-02 (A-S5 ruling): the popover says what the page says').toContainText('Nothing is mapped for this area yet.');
+    for (const w of ['Cloud deck', 'Overture', 'OpenFreeMap', 'SRTM', 'Met Norway', 'Sentinel']) await expect(alq, `no model runs on Al Quoz: ${w} is not credited`).not.toContainText(w);
     await expect(page.locator('.st-attrib .attrib')).toBeVisible();
   });
 

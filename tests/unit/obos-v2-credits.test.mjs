@@ -25,8 +25,10 @@ test('the water credit is OpenStreetMap under ODbL, as in v1\'s attribution line
   assert.ok(v1.includes('Water © OpenStreetMap (ODbL)'), 'v1 still says it this way');
 });
 
-test('the area page credits Sentinel-2 where the area has a model, and uses the shared constant', () => {
+test('the area page credits Sentinel-2 where the area has a model (inside the hasData branch), and uses the shared constant', () => {
   const o = readFileSync('src/components/ClimateEngine/v2/Overlays.astro', 'utf8');
-  assert.match(o, /SENTINEL_CREDIT/);
-  assert.match(o, /scope\.area\.hasData &&[^\n]*SENTINEL_CREDIT|hasData[\s\S]{0,200}SENTINEL_CREDIT/);
+  const data = o.indexOf('scope.area.hasData ? (<Fragment>');
+  const sentinel = o.indexOf('SENTINEL_CREDIT.lead');
+  const none = o.indexOf('Nothing is mapped for this area yet.');
+  assert.ok(data > 0 && sentinel > data && none > sentinel, 'Sentinel-2 sits inside the data branch; the no-data branch says only that nothing is mapped (a-02)');
 });
