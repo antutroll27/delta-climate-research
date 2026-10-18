@@ -60,8 +60,7 @@ html[data-ui="v2"] .obos-v2 .crumb > span:not(.crumb-g) { flex: none; }
 html[data-ui="v2"] .obos-v2 .crumb .sep { color: var(--ink-3); font-weight: 200; margin: 0; }
 html[data-ui="v2"] .obos-v2 .crumb-g { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-right: 2px; color: var(--ink-1); flex: none; }
 html[data-ui="v2"] .obos-v2 .crumb-g svg { height: 15px; width: auto; max-width: 15px; display: block; }
-html[data-ui="v2"] .obos-v2 .crumb-g .cgw { display: contents; }
-html[data-ui="v2"] .obos-v2 .crumb-g .cgw[hidden] { display: none; }   /* an SVG has no .hidden property, so the per-area switch hides the wrapper */
+html[data-ui="v2"] .obos-v2 .crumb-g svg[hidden] { display: none; }   /* the per-area switch sets the hidden ATTRIBUTE (a-01); an SVG's display is ours to say */
 /* the toggle is a 24 px chevron (its text stays for screen readers via aria-label); up = open, down = collapsed */
 html[data-ui="v2"] .obos-v2 .wc-more { flex: none; width: 24px; height: 24px; min-height: 24px; padding: 0; border: 0; border-radius: 99px; background: var(--well); color: var(--ink-2);
   font-size: 0; display: inline-grid; place-items: center; cursor: pointer; }

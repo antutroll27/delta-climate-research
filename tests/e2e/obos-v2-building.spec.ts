@@ -17,8 +17,10 @@ test.describe('@v2 map stack', () => {
     const rows = card.locator('.wc-prov li');
     await expect(rows).toHaveText(['Live basemap, real footprints & Google heights', 'Heat field · modelled', 'Block detail · illustrative']);
     await expect(card.locator('[data-v2-crumb]')).toContainText('India');
-    await expect(card.locator('[data-v2-crumb] .crumb-g .cgw:not([hidden]) svg')).toBeVisible();
-    await expect(card.locator('[data-v2-crumb] .crumb-g .cgw:not([hidden])')).toHaveAttribute('data-v2-for', 'in/kolkata/ballygunge');
+    /* a-01: the glyph is the SVG itself, switched by the hidden attribute (no wrapper span) */
+    await expect(card.locator('[data-v2-crumb] .crumb-g svg.cg:not([hidden])')).toBeVisible();
+    await expect(card.locator('[data-v2-crumb] .crumb-g svg.cg:not([hidden])')).toHaveAttribute('data-v2-for', 'in/kolkata/ballygunge');
+    await expect(card.locator('[data-v2-crumb] .cgw'), 'no wrapper span: toggleAttribute is the only mechanism').toHaveCount(0);
     /* Less / More */
     const more = card.locator('[data-v2-more]');
     await expect(more).toHaveAttribute('aria-expanded', 'true');
@@ -37,9 +39,11 @@ test.describe('@v2 map stack', () => {
     /* an in-place ward switch moves the crumb and its outline */
     await page.evaluate(() => document.dispatchEvent(new CustomEvent('obos:open-area', { detail: { key: 'in/kolkata/baruipur' } })));
     await expect(page.locator('#crumbArea')).toHaveText('Baruipur', { timeout: 30_000 });
-    await expect(card.locator('[data-v2-crumb] .crumb-g .cgw:not([hidden])')).toHaveAttribute('data-v2-for', 'in/kolkata/baruipur');
+    await expect(card.locator('[data-v2-crumb] .crumb-g svg.cg:not([hidden])')).toHaveAttribute('data-v2-for', 'in/kolkata/baruipur');
+    await expect(page.locator('svg.tc-park:not([hidden])'), 'the title card outline followed too').toHaveAttribute('data-v2-for', 'in/kolkata/baruipur');
+    expect(await page.evaluate(() => [...document.querySelectorAll('svg[data-v2-for]')].filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.getAttribute('data-v2-for'))), 'both outlines, and only the open ward\'s, are drawn').toEqual(['in/kolkata/baruipur', 'in/kolkata/baruipur']);
     /* A-S4 audit F10: Baruipur has no ward polygon, so its glyph is the study square, drawn OUTLINED (not a measured boundary) */
-    await expect(card.locator('[data-v2-crumb] .crumb-g .cgw:not([hidden]) path')).toHaveAttribute('fill', 'none');
+    await expect(card.locator('[data-v2-crumb] .crumb-g svg.cg:not([hidden]) path')).toHaveAttribute('fill', 'none');
   });
 
   test('@v2 the stack keeps clear of the dock and the right column at 1440 x 900 (Sun above Ward)', async ({ page }) => {
