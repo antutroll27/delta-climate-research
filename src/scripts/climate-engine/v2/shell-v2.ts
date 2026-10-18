@@ -189,7 +189,7 @@ export function bindPrefs(ctx: ShellCtx): void {
 /** The title card holds a block per sibling area; the one matching the stage's data-area shows (spec §1.6, C7). */
 export function bindPerArea(ctx: ShellCtx): void {
   const { root, cleanup } = ctx;
-  const sync = (): void => { const a = root.dataset.area; for (const el of $$<HTMLElement>(root, '[data-v2-for]')) el.hidden = el.dataset.v2For !== a; };
+  const sync = (): void => { const a = root.dataset.area; for (const el of $$<HTMLElement | SVGElement>(root, '[data-v2-for]')) el.toggleAttribute('hidden', el.dataset.v2For !== a); };   // a-01: an SVG has no .hidden property
   const mo = new MutationObserver(sync);
   mo.observe(root, { attributes: true, attributeFilter: ['data-area'] });
   cleanup.push(() => mo.disconnect());

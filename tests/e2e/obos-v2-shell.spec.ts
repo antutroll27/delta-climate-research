@@ -118,6 +118,8 @@ test.describe('@v2 shell', () => {
     await page.evaluate(() => document.dispatchEvent(new CustomEvent('obos:open-area', { detail: { key: 'in/kolkata/baruipur' } })));
     await expect(page.locator('#pname')).toContainText(/Baruipur/i, { timeout: 30_000 });
     await expect(page.locator('.tc-area:not([hidden]) .tc-n')).not.toHaveText(before ?? '');
+    /* a-01 (A-S4 ruling): an SVG has no .hidden property, so the ward outline must be switched by the attribute */
+    await expect(page.locator('svg.tc-park:not([hidden])')).toHaveAttribute('data-v2-for', 'in/kolkata/baruipur');
     await page.evaluate(() => (window as unknown as { __obosMap?: { setBearing(b: number): void } }).__obosMap?.setBearing(90));
     await page.locator('#compass').click();
     await expect.poll(() => page.locator('#compassDial').getAttribute('transform'), { timeout: 5000 }).toMatch(/rotate\(-?0(\.0+)? 24 24\)/);
