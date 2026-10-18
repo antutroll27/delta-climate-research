@@ -21,6 +21,14 @@ test.describe('@v2 data and methods', () => {
     await expect(page.locator('[data-v2-for="in/kolkata/ballygunge"][data-v2-record]')).toContainText('km²');
     await expect(page.locator('[data-v2-card="how-sure"]')).toContainText('±3.0 °C');
     await expect(page.locator('[data-v2-card="how-sure"]')).not.toContainText(/validated/i);
+    /* S8 (item 5): the ledger prints TWO accuracy bands, the night one and the 13:00 peak one, each NAMED by its phase: they are method figures (two validation sets), not a
+       reading. No other ± is anywhere on the page, the receipts panel (open) and the ward record included. */
+    const ledger = await page.locator('[data-v2-card="how-sure"] li').evaluateAll((els) => els.filter((e) => /±/.test(e.textContent ?? ''))
+      .map((e) => [e.querySelector('.micro')?.textContent?.trim(), ((e.textContent ?? '').match(/±/g) ?? []).length]));
+    expect(ledger, 'each ± line of the ledger names its phase, once').toEqual([['Night', 1], ['13:00 peak', 1]]);
+    expect(await page.evaluate(() => ((document.body.innerText).match(/±/g) ?? []).length), 'no ± on the Data & methods page but the ledger\'s two').toBe(2);
+    await expect(page.locator('[data-v2-card="how-sure"] li:has(.micro:text-is("Night"))')).toContainText(/±3\.0 °C/);
+    await expect(page.locator('[data-v2-card="how-sure"] li:has(.micro:text-is("13:00 peak"))')).toContainText(/±4\.5 °C/);
     /* B-S7 audit F1: the brief opens THIS ward (the app's own Compare query, with /brief/ for /compare/), not the default pair */
     const brief = page.getByRole('link', { name: 'Open the ward brief →' });
     await expect(brief).toHaveAttribute('href', /^\/heat-map\/brief\/\?.*\ba=ballygunge\b/);
