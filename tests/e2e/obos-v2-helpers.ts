@@ -183,10 +183,24 @@ export async function contrastFailures(page: Page): Promise<Finding[]> {
       const a = L(f), b = L(g);
       return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
     };
-    const parse = (s: string): number[] => (s.match(/[\d.]+/g) || []).map(Number).slice(0, 3);
+    /* S8 CHANGE 1 of 5 (the only edits to this function): v2 writes its inks as oklch(), which getComputedStyle returns AS oklch(), and `parse` above read its three numbers as
+       rgb (0.985, 0.001, 90): a near-white ink scored 1.06:1 against a dark ground. A colour is now resolved by painting it, over the ground it sits on, into one canvas pixel,
+       which also composites an ink with alpha (a 78% ink on a card is judged as the grey a reader sees, not as the opaque colour). */
+    const px = document.createElement('canvas'); px.width = px.height = 1;
+    const pctx = px.getContext('2d', { willReadFrequently: true });
+    if (!pctx) throw new Error('no 2d context for the colour read');
+    const rgbOver = (css: string, ground: number[]): number[] => {
+      pctx.clearRect(0, 0, 1, 1);
+      pctx.fillStyle = `rgb(${ground.join(',')})`; pctx.fillRect(0, 0, 1, 1);
+      pctx.fillStyle = '#000'; pctx.fillStyle = css;                   // an unparseable value leaves #000: caught below by the keyword check
+      pctx.fillRect(0, 0, 1, 1);
+      const d = pctx.getImageData(0, 0, 1, 1).data;
+      return [d[0], d[1], d[2]];
+    };
 
     const out: Finding[] = [];
     let moved = 0;
+    let scored = 0;      // S8 CHANGE 3 of 5: how many text nodes were actually scored, so a sweep that skipped everything cannot read as clean
     for (const el of Array.from(document.querySelectorAll('*'))) {
       /* Leaf text only. An element with children would be measured again through
          each of them, and its own box spans grounds its text never touches. */
@@ -198,6 +212,15 @@ export async function contrastFailures(page: Page): Promise<Finding[]> {
       if (r.top < 0 || r.bottom > window.innerHeight || r.left < 0 || r.right > window.innerWidth) continue;
       const cs = getComputedStyle(el);
       if (cs.visibility === 'hidden' || cs.opacity === '0') continue;
+      /* S8 CHANGE 4 of 5: the words inside a CLOSED <details> are not on screen (Chromium keeps their boxes but paints nothing), so what sat under them was scored: the dark
+         map in one run (a pass by luck) and the bright one in another (a failure of nothing). Only a closed disclosure's <summary> is read. */
+      let shut = false;
+      for (let d = el.closest('details'); d; d = d.parentElement?.closest('details') ?? null) if (!d.open && !el.closest('summary')?.parentElement?.isSameNode(d)) { shut = true; break; }
+      if (shut) continue;
+      /* S8 CHANGE 5 of 5: the right column fades its last 28 px to transparent while more is below (heat.css, the scroll cue): a word under the fade is half there by design and is
+         read when it has scrolled clear, which the sweep's 50% and 100% offsets do. */
+      const fade = el.closest('[data-v2-scroll="1"]');
+      if (fade && r.bottom > fade.getBoundingClientRect().bottom - 28) continue;
 
       /* OCCLUSION. The ground is sampled inside the element's own box, which is
          only its ground if nothing opaque sits on top — and the building card is
@@ -269,9 +292,12 @@ export async function contrastFailures(page: Page): Promise<Finding[]> {
       const nowBox = [r.left, r.top, r.width, r.height].map((v) => Math.round(v)).join(',');
       if (before !== undefined && before !== nowBox) { moved += 1; continue; }
 
-      const x0 = Math.round(r.left), y0 = Math.round(r.top);
-      const x1 = Math.min(cv.width, Math.round(r.right));
-      const y1 = Math.min(cv.height, Math.round(r.bottom));
+      /* S8 CHANGE 2 of 5: a glyph smaller than 10 px (the compass's N, 5.5 px), or bold capitals under 12 px (a chip's 8.5 px kind line), cover most of their own box, so the mode of the box is the GLYPH, not its
+         ground (it read the red N against a pink that is half red, and a 5.5:1 chip label against a grey that is half ink). The ground of such a box is read over its box grown by 3 px each way, where the glyph is the minority again. */
+      const grow = r.width < 10 || r.height < 10 || parseFloat(cs.fontSize) < 12 ? 3 : 0;
+      const x0 = Math.round(r.left) - grow, y0 = Math.round(r.top) - grow;
+      const x1 = Math.min(cv.width, Math.round(r.right) + grow);
+      const y1 = Math.min(cv.height, Math.round(r.bottom) + grow);
       const bins = new Map<number, { n: number; c: number[] }>();
       for (let y = Math.max(0, y0); y < y1; y++) {
         for (let x = Math.max(0, x0); x < x1; x++) {
@@ -293,13 +319,14 @@ export async function contrastFailures(page: Page): Promise<Finding[]> {
          them on `color` reported BOTH at 1.00:1 against the dial — two of the
          worst numbers in the whole run, and neither was real. */
       const painted = el.namespaceURI === 'http://www.w3.org/2000/svg' ? cs.fill : cs.color;
-      const fg = parse(painted);
-      if (fg.length < 3) continue;              // `none`, a url(#gradient), a keyword
+      if (!/^(rgb|oklch|oklab|color|hsl|lab|lch|#)/i.test(painted.trim())) continue;   // `none`, a url(#gradient), a keyword
+      const fg = rgbOver(painted, ground);
       const px = parseFloat(cs.fontSize);
       const weight = Number(cs.fontWeight) || 400;
       const large = px >= 24 || (px >= 18.66 && weight >= 700);
       const floor = large ? 3 : 4.5;
       const cr = ratio(fg, ground);
+      scored += 1;
       if (cr >= floor) continue;
 
       const path: string[] = [];
@@ -315,6 +342,7 @@ export async function contrastFailures(page: Page): Promise<Finding[]> {
         air: el.closest('#aqiBlock, #airPane') !== null,
       });
     }
+    (window as unknown as { __contrastScored?: number }).__contrastScored = scored;
     return { findings: out.sort((a, b) => a.ratio - b.ratio), moved };
   }, shot);
   /* Said out loud, because a skip that silently ate every failure would look
@@ -332,6 +360,8 @@ export function report(label: string, findings: Finding[]): string {
  * ONE SCREEN, SWEPT WHOLE. contrastFailures scores only what is inside the viewport, so a column that scrolls (the right column, the side panel, the phone sheet
  * and the drawer) is swept at its top, its middle and its foot: every word on the screen is on screen once. A finding repeated at two offsets is reported once.
  */
+/** how many text nodes each swept screen scored at its top (the vacuity guard in obos-v2-contrast.spec.ts reads it) */
+export const SCORED = new Map<string, number>();
 export async function sweepScreen(page: Page, label: string): Promise<string[]> {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -343,7 +373,9 @@ export async function sweepScreen(page: Page, label: string): Promise<string[]> 
       out.push(`${label} · ${tag}: ${f.ratio}:1 (needs ${f.floor}) ${f.px}px ${f.color} on ${f.ground} "${f.text}" ${f.path}`);
     }
   };
+  const scoredNow = (): Promise<number> => page.evaluate(() => (window as unknown as { __contrastScored?: number }).__contrastScored ?? 0);
   add('top', await contrastFailures(page));
+  SCORED.set(label, await scoredNow());
   for (const sel of ['#legend', '.side-panel .sp-scroll', '#v2Sheet', '#v2Drawer']) {
     const room = await page.evaluate((s) => { const e = document.querySelector<HTMLElement>(s); return !e || e.getClientRects().length === 0 ? 0 : e.scrollHeight - e.clientHeight; }, sel);
     if (room < 24) continue;

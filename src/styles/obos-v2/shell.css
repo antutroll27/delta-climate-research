@@ -103,7 +103,7 @@ html[data-ui="v2"] .obos-v2 .compass .compass-tick { stroke: var(--compass-line)
 html[data-ui="v2"] .obos-v2 .compass .compass-n-tip { fill: var(--compass-red); }
 html[data-ui="v2"] .obos-v2 .compass .compass-s-tail { fill: var(--compass-s); }
 html[data-ui="v2"] .obos-v2 .compass .compass-hub { fill: var(--card); stroke: var(--ink-2); stroke-width: 0.5; }
-html[data-ui="v2"] .obos-v2 .compass .compass-n { fill: var(--compass-red); font: 700 5.3px/1 var(--sans); }
+html[data-ui="v2"] .obos-v2 .compass .compass-n { fill: var(--compass-n-ink); font: 700 5.3px/1 var(--sans); }
 html[data-ui="v2"] .obos-v2 .compass .compass-s { fill: var(--ink-3); font: 600 4.5px/1 var(--sans); }
 html[data-ui="v2"] .obos-v2 .compass .compass-sun-key { fill: var(--card); stroke: var(--ink-1); stroke-width: 0.5; }
 html[data-ui="v2"] .obos-v2 .compass .compass-sun { fill: var(--compass-sun); }
@@ -173,6 +173,8 @@ html[data-ui="v2"] .obos-v2 .lp-sec:first-of-type { margin-top: 10px; }
 html[data-ui="v2"] .obos-v2 .lp-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 6px; }
 html[data-ui="v2"] .obos-v2 .lp-row .seg { justify-self: start; }
 html[data-ui="v2"] .obos-v2 .seg button.on, html[data-ui="v2"] .obos-v2 .seg button[aria-pressed="true"] { background: var(--ink-1); color: var(--on-ink); }
+/* the layer tree's "unavailable because..." line is v1's bronze (a heat-ramp colour, and 2.5:1 on Light): in v2 it is quiet ink, the reason a layer is off (S8 contrast sweep) */
+html[data-ui="v2"] .obos-v2 .tree-why { color: var(--ink-2); }
 
 /* ── toasts: twin pills right of the title card, dismissible (sys.css :636–642). Desktop and laptop only; Overview only.
    left = the title column's right edge + 16 px. The column sits at 100 px, +148 px with labels, +316/+468 px when the Explore panel shows. ── */

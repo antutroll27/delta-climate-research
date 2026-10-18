@@ -57,6 +57,8 @@ html[data-ui="v2"] .obos-v2[data-theme="light"] {
   --shadow-float: 0 1px 2px oklch(0.2 0.01 90 / 0.08), 0 30px 60px -22px oklch(0.15 0.01 90 / 0.38);
   --tile: rgba(20, 22, 20, 0.045); --dock-solid: var(--hx-dock-light);
   --compass-s: rgba(20, 40, 42, 0.38); --compass-line: rgba(13, 107, 125, 0.42);
+  /* the compass's N is red by convention; the tile's red (#eb4a4f) is 3.0:1 on stone, so on Light the LETTER takes a deeper red (4.7:1 on stone, 5.5:1 on white). The needle keeps the tile's red. */
+  --compass-n-ink: #C4262C;
   --sym-green: var(--sym-green-light);
   --plate: var(--hx-stone); --plate-ink-1: var(--hx-char-1); --plate-ink-2: var(--hx-char-2); --plate-ink-3: var(--hx-char-3); --plate-unit: var(--hx-char-u);
   --plate-well: rgba(20, 22, 20, 0.07); --plate-well-2: rgba(20, 22, 20, 0.12); --plate-line: rgba(20, 22, 20, 0.13);
@@ -78,6 +80,8 @@ html[data-ui="v2"] .obos-v2[data-theme="dark"] {
   --shadow-float: 0 1px 2px oklch(0 0 0 / 0.4), 0 30px 60px -22px oklch(0 0 0 / 0.7);
   --tile: rgba(111, 202, 214, 0.06); --dock-solid: var(--hx-teal-dock);
   --compass-s: rgba(236, 237, 240, 0.4); --compass-line: rgba(111, 202, 214, 0.45);
+  /* dark glass over a bright map is lighter than Plates' teal, where the tile's red measures 3.4:1: the letter takes a lighter red (4.7:1 there, 6 on Plates) */
+  --compass-n-ink: #FF7478;
   --sym-green: var(--sym-green-dark);
   --plate: var(--hx-teal-0); --plate-ink-1: var(--hx-snow-1); --plate-ink-2: var(--hx-snow-2); --plate-ink-3: var(--hx-snow-3); --plate-unit: var(--hx-snow-u);
   --plate-well: var(--hx-teal-1); --plate-well-2: var(--hx-teal-2); --plate-line: var(--hx-teal-a16);

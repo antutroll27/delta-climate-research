@@ -74,7 +74,7 @@ const hsl = (hex) => {
 test('warm reds and oranges belong only to the heat ramp, the AQI bands and the compass conventions; no violet in tokens', () => {
   const css = strip(readFileSync(join(STYLES, 'tokens.css'), 'utf8'));
   const decl = [...css.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})\b/g)];
-  const ALLOWED_WARM = new Set(['--heat-3', '--heat-4', '--heat-5', '--compass-red', '--compass-sun']);
+  const ALLOWED_WARM = new Set(['--heat-3', '--heat-4', '--heat-5', '--compass-red', '--compass-n-ink', '--compass-sun']);   // S8: --compass-n-ink is the compass N's deeper red on Light (AA)
   const bad = [];
   for (const [, name, hex] of decl) {
     const { h, s, l } = hsl(hex);
