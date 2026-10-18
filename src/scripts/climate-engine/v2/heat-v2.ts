@@ -93,6 +93,11 @@ export function bindWardCard(ctx: ShellCtx): void {
     more?.setAttribute('aria-label', open ? 'Show less about this ward' : 'Show more about this ward');
     if (more) more.textContent = open ? 'Less' : 'More';
   };
-  set(window.matchMedia('(min-width: 1366px)').matches);
-  on(cleanup, more, 'click', () => set(card?.dataset.more !== 'true'));
+  /* A-S4 audit F1: the stack grows up from the dock, so it opens only where there is HEIGHT as well as width (at 1366 x 768 a toast sat on the Sun card).
+     It follows the viewport until the reader folds or unfolds it himself. */
+  const roomy = window.matchMedia('(min-width: 1366px) and (min-height: 860px)');
+  let chosen = false;
+  set(roomy.matches);
+  on(cleanup, roomy, 'change', () => { if (!chosen) set(roomy.matches); });
+  on(cleanup, more, 'click', () => { chosen = true; set(card?.dataset.more !== 'true'); });
 }

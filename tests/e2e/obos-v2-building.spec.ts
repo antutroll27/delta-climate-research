@@ -51,6 +51,41 @@ test.describe('@v2 map stack', () => {
   });
 });
 
+/* A-S4 audit F1: the map stack grows up from the dock; nothing may sit on it at any common laptop size, with the side panel shown or closed. */
+test.describe('@v2 map stack: no collisions', () => {
+  test.setTimeout(240_000);
+  const SIZES: ReadonlyArray<readonly [number, number]> = [[1366, 768], [1366, 640], [1280, 720], [1440, 900]];
+  for (const [w, h] of SIZES) {
+    test(`@v2 nothing overlaps the Sun and Ward cards at ${w} x ${h}, side panel shown and closed`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await stubWeather(page, '2026-10-07T06:05:00Z');
+      await openV2(page);
+      for (const side of ['shown', 'closed'] as const) {
+        const root = page.locator('main.obos-v2');
+        if ((await root.getAttribute('data-side-shown')) === (side === 'shown' ? '0' : '1')) await page.locator('.nav-item[data-section="overview"]').click({ position: { x: 30, y: 22 } });
+        await expect(root).toHaveAttribute('data-side-shown', side === 'shown' ? '1' : '0');
+        await page.waitForTimeout(700);                                      // the title column's 0.45 s transition
+        const boxes = async (sel: string): Promise<Array<{ n: string; x: number; y: number; w: number; h: number }>> => {
+          const out: Array<{ n: string; x: number; y: number; w: number; h: number }> = [];
+          for (const el of await page.locator(sel).all()) {
+            if (!(await el.isVisible())) continue;
+            const b = await el.boundingBox();
+            if (b && b.width > 0 && b.height > 0) out.push({ n: sel, x: b.x, y: b.y, w: b.width, h: b.height });
+          }
+          return out;
+        };
+        const stack = [...await boxes('#v2SunCard'), ...await boxes('#v2WardCard')];
+        const others = [...await boxes('#v2Title .tc'), ...await boxes('#compass'), ...await boxes('#v2Toasts > *'), ...await boxes('#v2Dock > *'), ...await boxes('#legend')];
+        expect(stack.length, 'the Sun and Ward cards are both drawn').toBe(2);
+        for (const a of stack) for (const b of others) {
+          const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)), iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+          expect(ix * iy, `${a.n} x ${b.n} at ${w}x${h}, side ${side}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`).toBe(0);
+        }
+      }
+    });
+  }
+});
+
 test.describe('@v2 building card', () => {
   test.setTimeout(180_000);
   test.use({ viewport: { width: 1440, height: 900 } });
