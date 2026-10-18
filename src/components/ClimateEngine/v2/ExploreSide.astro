@@ -16,8 +16,8 @@ const { scope } = Astro.props;
   <div class="sp-scroll">
     {scope.area.hasData && (
       <div class="ov-hero" aria-hidden="true">
-        <span class="micro">Surface · <span data-v2-mirror="phase"></span></span>
-        <p class="hero md num" data-v2-mirror="lst"></p>
+        <span class="micro"><span data-v2-mirror="area"></span> · surface · <span data-v2-mirror="phase"></span></span>
+        <p class="hero md num"><span data-v2-mirror="lst"></span><span class="u">°C</span></p>
         <p class="foot" data-v2-mirror="conf"></p>
       </div>
     )}

@@ -52,7 +52,7 @@ export function bindScrollCue(ctx: ShellCtx): void {
 /** Plan S3.2 Step 7. Reads what the app wrote into #lst, #lstPhase and #conf and mirrors it; derives nothing (brainstorm 03 R7). */
 export function bindMirrors(ctx: ShellCtx): void {
   const { root, cleanup } = ctx;
-  const lst = $(root, '#lst'), phase = $(root, '#lstPhase'), conf = $(root, '#conf');
+  const lst = $(root, '#lst'), phase = $(root, '#lstPhase'), conf = $(root, '#conf'), area = $(root, '#crumbArea');
   /* the ward mark takes #lst's own class colour, so the two cannot disagree (spec §4.1.5); painted at mount (A-S3 audit F2) and on every change */
   const sym = $(root, '[data-v2-lstsym]');
   const syncMark = (): void => { if (sym && lst) sym.style.color = lst.style.color || ''; };
@@ -70,6 +70,7 @@ export function bindMirrors(ctx: ShellCtx): void {
   const syncHero = (): void => {
     const copy = lst?.cloneNode(true) as HTMLElement | undefined;
     copy?.querySelector('.band')?.remove();
+    copy?.querySelector('.u')?.remove();                       // the unit is drawn small by the hero's own .u
     const v = copy?.textContent?.trim() ?? '';
     for (const m of $$(root, '[data-v2-mirror="lst"]')) m.textContent = v;
     /* ONE ± ON THE PAGE (founder's rule; A-S5 audit F1): the card's chip carries the ±, so the hero repeats the chip without it:
@@ -77,8 +78,9 @@ export function bindMirrors(ctx: ShellCtx): void {
     const chip = (conf?.textContent ?? '').split(' · ').filter((s) => !s.includes('±')).join(' · ');
     for (const m of $$(root, '[data-v2-mirror="conf"]')) m.textContent = chip;
     for (const m of $$(root, '[data-v2-mirror="phase"]')) m.textContent = phase?.textContent ?? '';
+    for (const m of $$(root, '[data-v2-mirror="area"]')) m.textContent = area?.textContent ?? '';   // the app's own breadcrumb, so an in-place switch follows
   };
-  for (const n of [lst, conf, phase]) observe(cleanup, n, { childList: true, characterData: true, subtree: true }, syncHero);
+  for (const n of [lst, conf, phase, area]) observe(cleanup, n, { childList: true, characterData: true, subtree: true }, syncHero);
   syncPhase(); syncHero();
 }
 

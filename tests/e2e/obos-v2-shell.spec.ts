@@ -314,7 +314,9 @@ test.describe('@v2 shell', () => {
     await pane.locator('#ivFacades').fill('15');
     await expect(pane.locator('#v4')).toHaveText('15');
     await expect.poll(() => page.locator('#lst').textContent(), { timeout: 30_000 }).not.toBe(before);
-    await expect(page.locator('[data-v2-mirror="lst"]')).toHaveText(/^\d+\.\d.?C$/);
+    await expect(page.locator('.ov-hero [data-v2-mirror="lst"]')).toHaveText(/^\d+\.\d$/);
+    await expect(page.locator('.ov-hero .hero .u')).toHaveText('°C');                       // A-S5 audit F7: the unit is set small, as on the card and in the preview
+    await expect(page.locator('.ov-hero [data-v2-mirror="area"]')).toHaveText(await page.locator('#crumbArea').innerText());   // and the label names the area, from the app's own crumb
     await expect(page.locator('.ov-hero')).toHaveAttribute('aria-hidden', 'true');                // a read-only mirror: the real readout is the temperature card
   });
 
@@ -358,6 +360,7 @@ test.describe('@v2 shell', () => {
     await expect(page.locator('main.obos-v2')).toHaveAttribute('data-area', 'in/kolkata/barrackpore', { timeout: 30_000 });
     await expect(page.locator('#crumbArea')).toHaveText('Barrackpore');
     await expect(page.locator('select[data-scope="area"]')).toHaveValue('in/kolkata/barrackpore');
+    await expect(page.locator('.ov-hero [data-v2-mirror="area"]')).toHaveText('Barrackpore');      // the hero label follows an in-place switch
     /* close, then the menu brings it back */
     await page.locator('[data-side-pane="explore"] [data-side-close]').click();
     await expect(page.locator('main.obos-v2')).toHaveAttribute('data-side-shown', '0');

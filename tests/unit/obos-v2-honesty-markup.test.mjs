@@ -359,3 +359,11 @@ test('A-S5 F6: on Scenarios the scenario card is ordered first in the column (CS
 test('A-S5 F8: the empty title card is hidden on the no-artefacts page by CSS (the ids stay in the tree), keyed on the not-yet card', () => {
   assert.match(strip(CSS('scenarios.css')), /\.obos-v2:has\(\.notyet\) #v2Title \{ display: none; \}/);
 });
+
+test('A-S5 F7: the Explore hero names the area (mirrored from the app\'s #crumbArea) and sets the unit small', () => {
+  const ex = V2('ExploreSide.astro');
+  assert.ok(ex.includes('<span data-v2-mirror="area"></span> · surface · <span data-v2-mirror="phase"></span>'));
+  assert.ok(ex.includes('<p class="hero md num"><span data-v2-mirror="lst"></span><span class="u">°C</span></p>'));
+  const src = readFileSync('src/scripts/climate-engine/v2/heat-v2.ts', 'utf8');
+  assert.ok(src.includes("'#crumbArea'") && src.includes('[data-v2-mirror="area"]'));
+});
