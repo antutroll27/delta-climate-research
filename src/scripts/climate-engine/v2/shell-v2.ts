@@ -134,7 +134,11 @@ export function bindFlash(ctx: ShellCtx): void {
   observe(cleanup, chip, { attributes: true, attributeFilter: ['class'], childList: true, characterData: true, subtree: true }, () => {
     if (!chip?.classList.contains('fail')) { said = ''; return; }
     const msg = chip.textContent?.trim() ?? '';
-    if (msg && msg !== said) { said = msg; flash(msg, 4200); }
+    if (msg && msg !== said) {
+      said = msg; flash(msg, 4200);
+      /* a ward card folded to its header (the laptop and phone default) hides the chip: the refusal unfolds it */
+      $<HTMLButtonElement>(root, '[data-v2-more][aria-expanded="false"]')?.click();
+    }
   });
   const credit = $(root, '[data-v2-street-credit]');
   const street = (): void => { if (credit) credit.hidden = !document.querySelector('#streetchip button[data-s="1"].on'); };
