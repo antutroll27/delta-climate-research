@@ -340,18 +340,20 @@ test.describe('@v2 compare', () => {
     await expect(page.locator('[data-value="b-name"]').first()).toHaveText('Indiranagar');
   });
 
-  test('@v2 on a phone the workspace is a bottom sheet that clears the rail, opens to half and full, and holds the Evidence tab', async ({ browser }) => {
+  test('@v2 on a phone the workspace is a bottom sheet that has the page width (the rail is the drawer), opens to half and full, and holds the Evidence tab', async ({ browser }) => {
     const ctx = await browser.newContext({ baseURL: PW_ORIGIN, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
       storageState: { cookies: [], origins: [{ origin: PW_ORIGIN, localStorage: [{ name: 'obos:ui', value: 'v2' }] }] } });
     const page = await ctx.newPage();
     await page.goto('/heat-map/compare/');
     await expect(page.locator('main.obos-v2')).toHaveAttribute('aria-busy', 'false', { timeout: 120_000 });
-    const rail = await page.locator('nav.rail').boundingBox();
+    /* S8: the rail is the phone drawer's now (C11), so the sheet no longer has to clear an icon column: it has the screen's width, 8 px in from each edge */
+    await expect(page.locator('#v2Drawer nav.rail'), 'the rail lives in the drawer on a phone').toHaveCount(1);
+    await expect(page.locator('#v2Drawer')).toBeHidden();
     const sheet = page.locator('.heat-compare__controls');
     const box = await sheet.boundingBox();
-    if (!rail || !box) throw new Error('no box');
-    expect(rail.x + rail.width, 'the rail is 220 px wide, clipped to its 72 px icon column').toBeGreaterThan(0);
-    expect(box.x, 'the sheet sits on the rail icons').toBeGreaterThan(rail.x + 72);
+    if (!box) throw new Error('no box');
+    expect(box.x, 'the sheet runs from the page margin, not from beside a rail').toBeLessThanOrEqual(16);
+    expect(box.x + box.width).toBeLessThanOrEqual(390.5);
     await expect(sheet).toHaveAttribute('data-sheet', 'collapsed');
     await expect(page.locator('[data-input="trees"]')).toBeHidden();
     await page.locator('[data-action="sheet-toggle"]').click();
