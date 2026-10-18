@@ -299,7 +299,12 @@ test.describe('@v2 shell', () => {
     await expect(pane.locator('#scoreNum')).toBeHidden();
     /* sliders: the readouts follow and the reading moves (the app's scenario logic, not ours) */
     const before = await page.locator('#lst').textContent();
-    await pane.locator('#ivTrees').fill('50');
+    /* A-S5 audit F2: a REAL drag, thumb to thumb, as a reader does it (mutation M2, pointer-events: none on the sliders, must fail); fill() stays for the other two */
+    const tree = pane.locator('#ivTrees'), tb = (await tree.boundingBox())!;
+    await page.mouse.move(tb.x + 9, tb.y + tb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(tb.x + tb.width - 9, tb.y + tb.height / 2, { steps: 10 });
+    await page.mouse.up();
     await expect(pane.locator('#v1')).toHaveText('50');
     await pane.locator('#ivRoof').fill('100');
     await expect(pane.locator('#v2')).toHaveText('100%');
