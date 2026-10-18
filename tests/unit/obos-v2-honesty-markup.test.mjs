@@ -193,12 +193,12 @@ test('F2: bindMirrors paints the ward mark at mount (named callback, called once
 });
 
 /* ── A-S3 audit F4: a scroll cue on the right column ── */
-test('F4: heat.css fades the column while data-v2-more is 1 (keyword colours only), and heat-v2.ts maintains the flag', () => {
+test('F4: heat.css fades the column while data-v2-scroll is 1 (keyword colours only), and heat-v2.ts maintains the flag', () => {
   const css = strip(CSS('heat.css'));
-  assert.match(css, /#legend\.heat-panel\[data-v2-more="1"\] \{[^}]*mask-image: linear-gradient\(to bottom, black calc\(100% - 28px\), transparent\)/);
+  assert.match(css, /#legend\.heat-panel\[data-v2-scroll="1"\] \{[^}]*mask-image: linear-gradient\(to bottom, black calc\(100% - 28px\), transparent\)/);
   assert.ok(!/#[0-9a-f]{3,8}\b|rgba?\(/i.test(css), 'heat.css spells a colour literal');
   const src = readFileSync('src/scripts/climate-engine/v2/heat-v2.ts', 'utf8');
-  assert.ok(src.includes('dataset.v2More') && src.includes("'scroll'"), 'the flag is not maintained on scroll');
+  assert.ok(src.includes('dataset.v2Scroll') && src.includes("'scroll'"), 'the flag is not maintained on scroll');
 });
 
 /* ── A-S3 audit F10: both colour keys read Comfortable → Extreme, the direction of the ramp above them ── */
@@ -328,4 +328,16 @@ test('F7: the "vs ward mean" figure is ink with a ramp-coloured underline mark, 
   assert.match(css, /#bcard \.bc-ins :is\(\.hot, \.cool\) \{[^}]*color: var\(--ink-1\)[^}]*box-shadow: inset 0 -2px 0 var\(--heat-5\)/);
   assert.match(css, /#bcard \.bc-ins \.cool \{[^}]*box-shadow: inset 0 -2px 0 var\(--heat-1\)/);
   assert.ok(!/\.bc-ins \.(hot|cool) \{ color: var\(--heat/.test(css), 'a ramp colour is still set as text colour');
+});
+
+/* ── A-S4 audit F10: two names for two things; an unmeasured outline is drawn outlined ── */
+test('F10: the scroll cue and the Less/More button no longer share an attribute name; the button query is scoped to its card', () => {
+  const heat = readFileSync('src/scripts/climate-engine/v2/heat-v2.ts', 'utf8');
+  assert.ok(!heat.includes('dataset.v2More'), 'the scroll cue still uses data-v2-more');
+  assert.ok(heat.includes("$<HTMLButtonElement>(root, '#v2WardCard [data-v2-more]')"), 'the Less/More query must be scoped to #v2WardCard');
+  assert.ok(!/data-v2-more/.test(CSS('heat.css')), 'heat.css still names data-v2-more');
+});
+test('F10: a ward with no polygon (a study square) draws its crumb glyph OUTLINED: it is not a measured boundary', () => {
+  const ms = V2('MapStack.astro');
+  assert.match(ms, /g\.facts\.kind === 'square'[\s\S]*fill="none" stroke="currentColor" stroke-width="8"/);
 });

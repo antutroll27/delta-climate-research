@@ -38,6 +38,8 @@ test.describe('@v2 map stack', () => {
     await page.evaluate(() => document.dispatchEvent(new CustomEvent('obos:open-area', { detail: { key: 'in/kolkata/baruipur' } })));
     await expect(page.locator('#crumbArea')).toHaveText('Baruipur', { timeout: 30_000 });
     await expect(card.locator('[data-v2-crumb] .crumb-g .cgw:not([hidden])')).toHaveAttribute('data-v2-for', 'in/kolkata/baruipur');
+    /* A-S4 audit F10: Baruipur has no ward polygon, so its glyph is the study square, drawn OUTLINED (not a measured boundary) */
+    await expect(card.locator('[data-v2-crumb] .crumb-g .cgw:not([hidden]) path')).toHaveAttribute('fill', 'none');
   });
 
   test('@v2 the stack keeps clear of the dock and the right column at 1440 x 900 (Sun above Ward)', async ({ page }) => {

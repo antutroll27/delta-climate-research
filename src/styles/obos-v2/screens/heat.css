@@ -10,4 +10,4 @@ html[data-ui="v2"] .obos-v2 [data-v2-card="method"] details.disc .body { padding
 html[data-ui="v2"] .obos-v2 [data-v2-card="method"] .sym-list { margin-top: 0; }
 /* A-S3 audit F4: the column scrolls with its bar hidden, so a fade at its foot says there is more below (heat-v2.ts bindScrollCue lifts it at the end).
    `black` is the mask's alpha, not a colour. */
-html[data-ui="v2"] .obos-v2 #legend.heat-panel[data-v2-more="1"] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent); }
+html[data-ui="v2"] .obos-v2 #legend.heat-panel[data-v2-scroll="1"] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent); }

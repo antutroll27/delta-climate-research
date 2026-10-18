@@ -8,7 +8,7 @@ import { resolve } from '../../../scripts/climate-engine/scope/resolve.ts';
 import { areaFacts } from '../../../scripts/climate-engine/v2/area-facts.ts';
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
-/* The breadcrumb glyph is each sibling ward's OWN outline (the title card's data, build time); the one for the open area shows (bindPerArea). No country outline is drawn here. */
+/* A study square is not a measured boundary, so its glyph is drawn OUTLINED (A-S4 audit F10). The breadcrumb glyph is each sibling ward's OWN outline (the title card's data, build time); the one for the open area shows (bindPerArea). No country outline is drawn here. */
 const glyphs = areaKeysInCity(scope.key).map(resolve).map((s) => ({ key: s.key, facts: areaFacts(s.area.id) }));
 ---
 {scope.area.hasData && (
@@ -30,7 +30,7 @@ const glyphs = areaKeysInCity(scope.key).map(resolve).map((s) => ({ key: s.key, 
   <div class="row">
     <button class="crumb" type="button" data-v2-crumb title="Switch city or ward">
       <span class="crumb-g">{glyphs.map((g) => g.facts && (
-        <span class="cgw" data-v2-for={g.key} {...(g.key !== scope.key ? { hidden: true } : {})}><svg class="cg" viewBox={g.facts.viewBox} aria-hidden="true"><path d={g.facts.path} fill="currentColor" /></svg></span>))}</span>
+        <span class="cgw" data-v2-for={g.key} {...(g.key !== scope.key ? { hidden: true } : {})}><svg class="cg" viewBox={g.facts.viewBox} aria-hidden="true">{g.facts.kind === 'square' ? <path d={g.facts.path} fill="none" stroke="currentColor" stroke-width="8" /> : <path d={g.facts.path} fill="currentColor" />}</svg></span>))}</span>
       <span>{scope.country.name}</span><span class="sep">/</span><span>{scope.city.name}</span><span class="sep">/</span><b id="crumbArea">{scope.area.name}</b>
     </button>
     <button class="wc-more" type="button" data-v2-more aria-expanded="true" aria-label="Show less about this ward">Less</button>

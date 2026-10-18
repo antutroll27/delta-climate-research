@@ -31,14 +31,14 @@ export function bindAirKind(ctx: ShellCtx): void {
   paint();
 }
 
-/** A-S3 audit F4. #legend scrolls with its bar hidden: data-v2-more="1" while there is more below, so screens/heat.css can fade the foot of the column.
+/** A-S3 audit F4. #legend scrolls with its bar hidden: data-v2-scroll="1" while there is more below, so screens/heat.css can fade the foot of the column.
     The fade lifts at the end, so the last line is never faded. Layout is read in a frame, never in an observer callback. */
 export function bindScrollCue(ctx: ShellCtx): void {
   const { root, cleanup } = ctx;
   const col = $(root, '#legend');
   if (!col) return;
   let queued = 0;
-  const sync = (): void => { queued = 0; col.dataset.v2More = col.scrollHeight - col.clientHeight - col.scrollTop > 2 ? '1' : '0'; };
+  const sync = (): void => { queued = 0; col.dataset.v2Scroll = col.scrollHeight - col.clientHeight - col.scrollTop > 2 ? '1' : '0'; };
   const queue = (): void => { if (!queued) queued = requestAnimationFrame(sync); };
   on(cleanup, col, 'scroll', queue, { passive: true });
   on(cleanup, col, 'toggle', queue, { capture: true });      // a disclosure opening changes the height (toggle does not bubble)
@@ -86,7 +86,7 @@ export function bindWardCard(ctx: ShellCtx): void {
     ctx.sections?.go('overview', true);
     $(root, '#scope-area-trigger')?.focus();
   });
-  const card = $(root, '#v2WardCard'), more = $<HTMLButtonElement>(root, '[data-v2-more]');
+  const card = $(root, '#v2WardCard'), more = $<HTMLButtonElement>(root, '#v2WardCard [data-v2-more]');
   const set = (open: boolean): void => {
     if (card) card.dataset.more = String(open);
     more?.setAttribute('aria-expanded', String(open));

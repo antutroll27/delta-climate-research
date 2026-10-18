@@ -170,12 +170,12 @@ test.describe('@v2 honesty', () => {
       await openV2(page);
       await go(page, 'heat');
       const col = page.locator('#legend');
-      await expect(col).toHaveAttribute('data-v2-more', '1');
+      await expect(col).toHaveAttribute('data-v2-scroll', '1');
       expect(await col.evaluate((e) => getComputedStyle(e).maskImage), 'the cue is a fade on the column').not.toBe('none');
       await page.locator('[data-v2-card="method"] summary').first().scrollIntoViewIfNeeded();
       await expect(page.locator('[data-v2-card="method"] summary').first()).toBeVisible();
       await col.evaluate((e) => { e.scrollTop = e.scrollHeight; });
-      await expect(col).toHaveAttribute('data-v2-more', '0');                // the fade lifts at the end: the last line is never faded
+      await expect(col).toHaveAttribute('data-v2-scroll', '0');                // the fade lifts at the end: the last line is never faded
       expect(await col.evaluate((e) => getComputedStyle(e).maskImage)).toBe('none');
       /* the last line of the legend/method cards is wholly inside the column when scrolled to the end */
       const last = await page.locator('[data-v2-card="method"]').boundingBox(), c = await col.boundingBox();
