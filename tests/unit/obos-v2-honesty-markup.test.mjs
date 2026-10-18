@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { airKind } from '../../src/scripts/climate-engine/v2/heat-v2.ts';
+import { weatherSource } from '../../src/scripts/climate-engine/v2/weather-panel.ts';
 
 const STAGE = readFileSync('src/components/ClimateEngine/HeatMapStage.astro', 'utf8');
 const V2 = (f) => readFileSync(`src/components/ClimateEngine/v2/${f}`, 'utf8');
@@ -366,4 +367,18 @@ test('A-S5 F7: the Explore hero names the area (mirrored from the app\'s #crumbA
   assert.ok(ex.includes('<p class="hero md num"><span data-v2-mirror="lst"></span><span class="u">°C</span></p>'));
   const src = readFileSync('src/scripts/climate-engine/v2/heat-v2.ts', 'utf8');
   assert.ok(src.includes("'#crumbArea'") && src.includes('[data-v2-mirror="area"]'));
+});
+
+/* A-S4 audit F8: ONE air-source rule. The Overview air row (Track A) and the Weather card (Track B) must say the same thing in every state. */
+test('F8: airKind and weatherSource agree in all four states, and airKind is derived from weatherSource (one rule, not two)', () => {
+  for (const observed of [true, false]) for (const reading of [true, false]) {
+    const a = airKind(observed, reading), w = weatherSource(observed, reading);
+    assert.equal(a.text, w.chip, `chip, observed=${observed} reading=${reading}`);
+    assert.equal(a.cls === 'measured', w.solid, `solid, observed=${observed} reading=${reading}`);
+    assert.equal(a.mark === 'measured', w.solid);
+    assert.equal(a.showMark, w.kind !== 'none');
+  }
+  const src = readFileSync('src/scripts/climate-engine/v2/heat-v2.ts', 'utf8');
+  assert.match(src, /import \{ weatherSource \} from '\.\/weather-panel\.ts';/);
+  assert.ok(!/observed && reading/.test(src), 'heat-v2.ts no longer carries its own copy of the rule');
 });

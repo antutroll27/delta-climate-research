@@ -52,8 +52,8 @@ test('source: a fresh airport report is observed and solid; the Met Norway fallb
   assert.deepEqual(weatherSource(true, true), { kind: 'observed', chip: 'observed', solid: true });
   assert.deepEqual(weatherSource(false, true), { kind: 'forecast', chip: 'forecast', solid: false });
   assert.deepEqual(weatherSource(false, false), { kind: 'none', chip: 'no reading', solid: false });
-  /* an airport report with no live reading cannot exist (the app composes both), but the rule must still not call it forecast */
-  assert.equal(weatherSource(true, false).kind, 'observed');
+  /* A-S4 audit F8: an observation with no number is claimed as nothing (Track A's stricter rule, now THE rule for both screens) */
+  assert.deepEqual(weatherSource(true, false), { kind: 'none', chip: 'no reading', solid: false });
 });
 
 test('markup: WeatherCards never wears "observed" or a solid mark before a report says so', () => {

@@ -14,7 +14,8 @@ export interface RainCell { readonly time: string; readonly tempC: number | null
 export type WeatherSourceKind = 'observed' | 'forecast' | 'none';
 export interface WeatherSource { readonly kind: WeatherSourceKind; readonly chip: 'observed' | 'forecast' | 'no reading'; readonly solid: boolean }
 export function weatherSource(hasObserved: boolean, hasReading: boolean): WeatherSource {
-  if (hasObserved) return { kind: 'observed', chip: 'observed', solid: true };
+  /* ONE rule for every screen (A-S4 audit F8; heat-v2.ts's airKind derives from this): "observed" needs the report AND a number to show for it. */
+  if (hasObserved && hasReading) return { kind: 'observed', chip: 'observed', solid: true };
   if (hasReading) return { kind: 'forecast', chip: 'forecast', solid: false };
   return { kind: 'none', chip: 'no reading', solid: false };
 }

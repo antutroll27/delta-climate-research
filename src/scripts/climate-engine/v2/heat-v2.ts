@@ -2,15 +2,17 @@
 import { $, $$, observe, on } from './dom.ts';
 import type { ShellCtx } from './shell-ctx.ts';
 import { symSvg } from './symbols.ts';
+import { weatherSource } from './weather-panel.ts';
 
 export interface AirKind { readonly text: string; readonly cls: 'measured' | 'modelled'; readonly mark: 'measured' | 'modelled'; readonly showMark: boolean }
 
-/** The air row's provenance, from the app's own source decision (paintWeatherLine → obos:observed, spec C9).
-    A fresh airport report is OBSERVED and solid; Met Norway is a FORECAST and outlined; no number at all is "no reading" and draws no mark. */
+/** The air row's provenance, from the app's own source decision (paintWeatherLine → obos:observed, spec C9). It IS the Weather card's rule
+    (weatherSource, weather-panel.ts; A-S4 audit F8): a fresh airport report with a number is OBSERVED and solid, Met Norway is a FORECAST and
+    outlined, no number at all is "no reading" and draws no mark. */
 export function airKind(observed: boolean, reading: boolean): AirKind {
-  if (observed && reading) return { text: 'observed', cls: 'measured', mark: 'measured', showMark: true };
-  if (reading) return { text: 'forecast', cls: 'modelled', mark: 'modelled', showMark: true };
-  return { text: 'no reading', cls: 'modelled', mark: 'modelled', showMark: false };
+  const s = weatherSource(observed, reading);
+  const cls = s.solid ? 'measured' : 'modelled';
+  return { text: s.chip, cls, mark: cls, showMark: s.kind !== 'none' };
 }
 
 /** A-S3 audit F1. Reads presence only, never a number (brainstorm 03 R7). The card ships in the safe state; a missed event can only under-claim. */
