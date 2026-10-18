@@ -1,1 +1,58 @@
-/* OBOS v2 — screens/overview.css (spec §4.1, §4.2). Owner: Track A (plan A1). */
+/* OBOS v2 — screens/overview.css (spec §4.1, §4.2). Owner: Track A (plan A1). Ported from the preview's screens/overview.html <style>;
+   [data-screen="overview"] .tc2 → html[data-ui="v2"] .obos-v2 .tc2, --ink → --ink-1, the laptop rules → the 700–1365 px band (as shell.css).
+   NO colour literal here: the heat classes come from tokens, the ink from --ink-1. */
+
+/* the temperature card (spec §4.1) */
+html[data-ui="v2"] .obos-v2 .tc2 { padding: 14px 16px 12px; }
+html[data-ui="v2"] .obos-v2 .tc2 .sec { padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 .tc2 .src { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 .tc2 .src b { font-size: 13px; font-weight: 600; }
+html[data-ui="v2"] .obos-v2 .tc2 .airrow { display: flex; align-items: flex-end; gap: 16px; margin-top: 6px; }
+html[data-ui="v2"] .obos-v2 .tc2 .air-sym { display: inline-flex; align-self: flex-end; margin-bottom: 4px; }
+html[data-ui="v2"] .obos-v2 .tc2 .air-sym[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .tc2 .big { font-size: 38px; font-weight: 200; letter-spacing: -0.04em; line-height: 0.95; white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .tc2 .big b { font-weight: inherit; }
+html[data-ui="v2"] .obos-v2 .tc2 .big.sm { font-size: 24px; }
+html[data-ui="v2"] .obos-v2 .tc2 .big .u { font-size: 12px; font-weight: 300; color: var(--unit); letter-spacing: 0; margin-left: 2px; }
+html[data-ui="v2"] .obos-v2 .tc2 > .foot { margin-top: 5px; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .tc2 .surf { position: relative; display: flex; align-items: flex-end; min-height: 50px; margin-top: 4px; }
+/* founder: a bigger gap above and below the hero number (16 px / 14 px) */
+html[data-ui="v2"] .obos-v2 .tc2 .surf .hero { margin: 16px 0 14px; font-weight: 200; font-size: 46px; }
+html[data-ui="v2"] .obos-v2 .tc2 .fine { font-size: 11px; line-height: 1.4; color: var(--ink-2); margin-top: 7px; }
+html[data-ui="v2"] .obos-v2 .tc2 .fine[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .tc2 .fine a { color: inherit; text-underline-offset: 2px; }
+html[data-ui="v2"] .obos-v2 .tc2 .fine b { font-weight: 600; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .tc2 .wx-ico { font-style: normal; margin-right: 6px; filter: grayscale(1); }   /* the app's weather glyph is an emoji: never a second colour */
+html[data-ui="v2"] .obos-v2 .tc2 .stats { margin-top: 0; }
+html[data-ui="v2"] .obos-v2 .tc2 details.disc { margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 .tc2 .ramp { height: 6px; margin-top: 3px; }
+html[data-ui="v2"] .obos-v2 .tc2 .keyrow { display: flex; flex-wrap: wrap; gap: 3px 8px; margin-top: 6px; font-size: 10.5px; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .tc2 .keyrow span { display: inline-flex; align-items: center; gap: 4px; }
+html[data-ui="v2"] .obos-v2 .tc2 .keyrow .hk { width: 8px; height: 8px; }
+html[data-ui="v2"] .obos-v2 .tc2 .sec > .foot:last-child { margin-top: 4px; }
+
+/* H2: the ONLY ± a reader sees is #conf's (spec C4) */
+html[data-ui="v2"] .obos-v2 #lst .band { display: none !important; }
+/* the hero numeral is ink; its class colour rides on the ward mark (spec §4.1.5) */
+html[data-ui="v2"] .obos-v2 #lst { color: var(--ink-1) !important; font-weight: 200; font-size: 46px; }
+html[data-ui="v2"] .obos-v2 .lst-sym { position: absolute; right: -10px; bottom: 2px; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .lst-sym svg .f { stroke: currentColor; }
+html[data-ui="v2"] .obos-v2 #histo { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; align-items: end; height: 38px; margin-top: 6px; }
+html[data-ui="v2"] .obos-v2 #histo i { display: block; border-radius: 2px 2px 0 0; box-shadow: inset 0 0 0 1.25px var(--ink-2); background: transparent !important; }
+html[data-ui="v2"] .obos-v2 .livedot { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .livedot.on { background: var(--ink-1); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ink-1) 16%, transparent); }
+/* #conf: the app REWRITES its className (heat-map-app.ts:3213, :3234), so it is styled by id, never by class */
+html[data-ui="v2"] .obos-v2 #conf { display: inline-block; min-height: 22px; margin-top: 6px; padding: 3px 9px; line-height: 1.4; border-radius: 99px;
+  box-shadow: inset 0 0 0 1px var(--line); background: transparent; font-size: 11px; font-weight: 500; color: var(--ink-2); white-space: normal; }
+/* inline-block, not inline-flex: a flex container drops the spaces around the app's <b> figures ("±3.0 °C·n=50") */
+html[data-ui="v2"] .obos-v2 #conf:empty { display: none; }
+html[data-ui="v2"] .obos-v2 #conf b { color: var(--ink-1); font-weight: 600; }
+
+@media (min-width: 700px) and (max-width: 1365px) {
+  html[data-ui="v2"] .obos-v2 .tc2 { padding: 12px 14px 10px; }
+  html[data-ui="v2"] .obos-v2 .tc2 .sec { padding-top: 8px; margin-top: 8px; }
+  html[data-ui="v2"] .obos-v2 .tc2 .big { font-size: 32px; }
+  html[data-ui="v2"] .obos-v2 .tc2 .surf .hero, html[data-ui="v2"] .obos-v2 #lst { font-size: 40px; }
+  html[data-ui="v2"] .obos-v2 #histo { height: 28px; }
+  html[data-ui="v2"] .obos-v2 .tc2 .keyrow { font-size: 10px; gap: 2px 7px; }
+}

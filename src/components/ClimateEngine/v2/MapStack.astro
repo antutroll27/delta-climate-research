@@ -1,6 +1,50 @@
 ---
-// src/components/ClimateEngine/v2/MapStack.astro — OBOS v2 spec §3.8. Owner: Track A. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
-// A1 SLOT: renders nothing until its owner fills it (plan S4.1, S4.2).
+// src/components/ClimateEngine/v2/MapStack.astro — OBOS v2 spec §3.8 [H]. Owner: Track A (plan S4.1, S4.2).
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+import Sym from './Sym.astro';
+import ConstructionStamp from '../../states/ConstructionStamp.astro';
+import { areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
+import { resolve } from '../../../scripts/climate-engine/scope/resolve.ts';
+import { areaFacts } from '../../../scripts/climate-engine/v2/area-facts.ts';
 interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
+/* A study square is not a measured boundary, so its glyph is drawn OUTLINED (A-S4 audit F10). The breadcrumb glyph is each sibling ward's OWN outline (the title card's data, build time); the one for the open area shows (bindPerArea). No country outline is drawn here. */
+const glyphs = areaKeysInCity(scope.key).map(resolve).map((s) => ({ key: s.key, facts: areaFacts(s.area.id) }));
 ---
+{scope.area.hasData && (
+<article class="card sunc" id="v2SunCard" hidden>
+  <div class="row"><span class="sun-lab"><Sym shape="disc" c="solar" size={12} /><span class="micro">Sun</span></span>
+    <details class="geo"><summary class="kind modelled" id="sunLineNote">geometry only</summary>
+      <p class="body-s" data-sun="note"></p></details></div>
+  <div class="sun-row">
+    <p class="sun-v"><span class="n num" data-sun="big"></span><span class="u" data-sun="unit"></span></p>
+    <svg class="sun-glyph" data-sun="arc" viewBox="0 0 44 26" aria-hidden="true"></svg>
+    <svg class="sun-glyph az" data-sun="az" viewBox="0 0 26 26" aria-hidden="true"></svg>
+  </div>
+  <p class="sun-s" data-sun="line" aria-hidden="true"></p>
+  <p class="sunline sr-only" id="sunLine" hidden><span id="sunLineText"></span></p>
+  <div class="scale" data-v2-scale-slot></div>
+</article>
+)}
+<article class="card wardc" id="v2WardCard" data-more="true">
+  <div class="row">
+    <button class="crumb" type="button" data-v2-crumb title="Switch city or ward">
+      <span class="crumb-g">{glyphs.map((g) => g.facts && (
+        <span class="cgw" data-v2-for={g.key} {...(g.key !== scope.key ? { hidden: true } : {})}><svg class="cg" viewBox={g.facts.viewBox} aria-hidden="true">{g.facts.kind === 'square' ? <path d={g.facts.path} fill="none" stroke="currentColor" stroke-width="8" /> : <path d={g.facts.path} fill="currentColor" />}</svg></span>))}</span>
+      <span>{scope.country.name}</span><span class="sep">/</span><span>{scope.city.name}</span><span class="sep">/</span><b id="crumbArea">{scope.area.name}</b>
+    </button>
+    <button class="wc-more" type="button" data-v2-more aria-expanded="true" aria-label="Show less about this ward">Less</button>
+  </div>
+  {scope.area.hasData && <p class="wc-stamp"><ConstructionStamp class="chip line" /></p>}
+  <div class="wc-body">
+    <p class="wc-fig"><span class="wc-t"><Sym shape="square" c="ink" size={14} /></span>
+      {scope.area.hasData ? <span id="bcount">— buildings</span> : <span>no artefacts · {scope.tier} tier</span>}</p>
+    {scope.area.hasData && <p class="wc-sub"><span class="chip" id="simBackend" aria-live="polite">SELECTING ENGINE</span></p>}
+    {scope.area.hasData && <ul class="sym-list wc-prov">
+      <li><span class="sym-tile sm"><Sym shape="square" c="ink" size={13} /></span><span>Live basemap, real footprints &amp; Google heights</span></li>
+      <li><span class="sym-tile sm"><Sym shape="ward" c="heat-4" kind="modelled" size={13} /></span><span>Heat field · modelled</span></li>
+      <li><span class="sym-tile sm"><Sym shape="square" c="neutral" kind="modelled" size={13} /></span><span>Block detail · illustrative</span></li>
+    </ul>}
+    {scope.area.hasData && <div class="loadchip foot" id="loadchip"></div>}
+  </div>
+</article>

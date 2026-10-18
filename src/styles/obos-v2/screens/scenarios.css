@@ -1,1 +1,27 @@
-/* OBOS v2 — screens/scenarios.css (spec §4.7). Owner: Track A (plan A1). */
+/* OBOS v2 — screens/scenarios.css (spec §4.7, §4.10). Owner: Track A (plan A1). NO colour literal. */
+html[data-ui="v2"] .obos-v2 [data-v2-card="scenario"] .body-s { margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="scenario"] code { font-family: var(--sans); font-size: 11.5px; font-weight: 500; color: var(--ink-1); word-break: break-all; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="scenario"] .tile { margin-top: 12px; padding: 12px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="scenario"] .tile .row b { font-size: 13px; font-weight: 600; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="scenario"] .tile .foot { margin-top: 6px; }
+
+/* the no-artefacts page: no instrument, so the one card is centred in the free ground beside the menu and the side panel (--ctr = the left edge of that ground) */
+html[data-ui="v2"] .obos-v2 { --ctr: 100px; }
+html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] { --ctr: 252px; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"] { --ctr: 416px; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-menu-eff="labels"] { --ctr: 568px; }
+html[data-ui="v2"] .obos-v2 #legend:has(> .notyet) { top: 50%; right: auto; bottom: auto; left: calc((100% + var(--ctr)) / 2); width: min(520px, calc(100% - var(--ctr) - 48px)); transform: translate(-50%, -50%); overflow: visible; }
+html[data-ui="v2"] .obos-v2 .notyet { padding: 22px 22px 20px; }
+html[data-ui="v2"] .obos-v2 .notyet-tier { font: var(--micro-weight) var(--micro-size)/1.35 var(--sans); letter-spacing: var(--micro-ls); text-transform: uppercase; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .notyet-h { margin-top: 6px; font-size: 28px; font-weight: 200; letter-spacing: -0.03em; line-height: 1.1; }
+html[data-ui="v2"] .obos-v2 .notyet-sub { margin-top: 6px; font-size: 13px; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .notyet-body { margin-top: 14px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .notyet-links { margin-top: 16px; }
+html[data-ui="v2"] .obos-v2 .notyet-links a { display: inline-flex; align-items: center; min-height: 32px; padding: 0 14px; border-radius: 99px; background: var(--ink-1); color: var(--on-ink); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+
+/* A-S5 audit F6: on Scenarios the screen's own card comes first (the live result of the current package follows it), so it is never below the fold */
+html[data-ui="v2"] .obos-v2[data-section="scenarios"] #legend [data-v2-card="scenario"] { order: -1; }
+
+/* A-S5 audit F8: on the no-artefacts page the credit-card title has no outline, coordinate, legend or compass, and the not-yet card already carries the name: hide the empty card
+   (it stays in the tree: #pname, #pzone and #coord are bound ids) */
+html[data-ui="v2"] .obos-v2:has(.notyet) #v2Title { display: none; }
