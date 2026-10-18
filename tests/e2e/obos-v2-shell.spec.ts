@@ -320,7 +320,17 @@ test.describe('@v2 shell', () => {
       await phase.locator(`button[data-p="${p}"]`).click();
       await expect(phase.locator(`button[data-p="${p}"]`)).toHaveClass(/\bon\b/);
       await expect(page.locator('#lstPhase')).toHaveText(label, { timeout: 30_000 });
+      /* A-S5 audit F3: the hero follows the card (phase label, and the chip without its ±, which the card alone carries: F1) */
+      await expect(page.locator('[data-v2-mirror="phase"]')).toHaveText(label);
+      const conf = (await page.locator('#conf').innerText()).split(' · ').filter((x) => !x.includes('±')).join(' · ');
+      await expect(page.locator('[data-v2-mirror="conf"]')).toHaveText(conf);
     }
+    /* A-S5 audit F3 (mutation M3): the hero follows #conf and #lstPhase on THEIR OWN, not only when #lst changes with them in the same tick.
+       The app writes these two ids; writing them here exercises the mirror's own observers. */
+    await page.evaluate(() => { document.getElementById('conf')!.innerHTML = 'Calibrated · <b>±3.0 °C</b> · <b>n=50</b>'; });
+    await expect(page.locator('[data-v2-mirror="conf"]')).toHaveText('Calibrated · n=50');
+    await page.evaluate(() => { document.getElementById('lstPhase')!.textContent = 'modelled at 22:00'; });
+    await expect(page.locator('[data-v2-mirror="phase"]')).toHaveText('modelled at 22:00');
     const path = page.locator('[data-side-pane="explore"] #segPath');
     await expect(path.locator('button')).toHaveCount(3);
     await phase.locator('button[data-p="night"]').click();
