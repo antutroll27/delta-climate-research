@@ -72,7 +72,10 @@ export function bindMirrors(ctx: ShellCtx): void {
     copy?.querySelector('.band')?.remove();
     const v = copy?.textContent?.trim() ?? '';
     for (const m of $$(root, '[data-v2-mirror="lst"]')) m.textContent = v;
-    for (const m of $$(root, '[data-v2-mirror="conf"]')) m.textContent = conf?.textContent ?? '';
+    /* ONE ± ON THE PAGE (founder's rule; A-S5 audit F1): the card's chip carries the ±, so the hero repeats the chip without it:
+       "Calibrated · n=50", "Indicative only · n=29 · earlier set", "Outside validation" stay; the ± segment does not. */
+    const chip = (conf?.textContent ?? '').split(' · ').filter((s) => !s.includes('±')).join(' · ');
+    for (const m of $$(root, '[data-v2-mirror="conf"]')) m.textContent = chip;
     for (const m of $$(root, '[data-v2-mirror="phase"]')) m.textContent = phase?.textContent ?? '';
   };
   for (const n of [lst, conf, phase]) observe(cleanup, n, { childList: true, characterData: true, subtree: true }, syncHero);

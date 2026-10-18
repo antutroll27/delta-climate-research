@@ -30,6 +30,8 @@ async function singlePm(page: Page): Promise<number> {
   expect(pm(conf)).toBeLessThanOrEqual(1);
   expect(pm(await visibleText(page, '#lst')), '#lst must show no band in v2').toBe(0);
   expect(pm(await visibleText(page, CARD))).toBe(pm(conf));
+  /* A-S5 audit F1: the rule is one ± on the whole PAGE, so the Explore hero's mirror of the chip must not repeat it */
+  expect(pm(await page.locator('body').innerText()), 'one ± on the whole page').toBe(pm(conf));
   return pm(conf);
 }
 

@@ -341,3 +341,9 @@ test('F10: a ward with no polygon (a study square) draws its crumb glyph OUTLINE
   const ms = V2('MapStack.astro');
   assert.match(ms, /g\.facts\.kind === 'square'[\s\S]*fill="none" stroke="currentColor" stroke-width="8"/);
 });
+
+/* ── A-S5 audit F1: the Explore hero repeats the chip WITHOUT its ± (one ± on the page, the founder's rule) ── */
+test('A-S5 F1: syncHero drops the ± part of the chip text; the card alone carries the one ±', () => {
+  const src = readFileSync('src/scripts/climate-engine/v2/heat-v2.ts', 'utf8');
+  assert.match(src, /\.split\(' · '\)\.filter\(\(s\) => !s\.includes\('±'\)\)\.join\(' · '\)/);
+});
