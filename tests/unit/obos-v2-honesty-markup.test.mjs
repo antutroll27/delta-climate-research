@@ -308,3 +308,14 @@ test('A-S3 F3 closed: no stopgap click survives in Track A\'s honesty spec (phas
   assert.ok(!/evaluate\([^)]*\.click\(\)/.test(spec), 'an evaluate(... .click()) remains in obos-v2-honesty.spec.ts');
   assert.match(spec, /const phase = \(page: Page, p: string\): Promise<void> => page\.locator\(`#segPhase button\[data-p="\$\{p\}"\]`\)\.click\(\);/);
 });
+
+/* ── A-S4 audit F3: the Under Construction stamp is a visible chip in the ward card's header ── */
+test('F3: the stamp sits in the ward card above the foldable body (its header block), and is styled as a stamp (ink border, no bronze)', () => {
+  const ms = V2('MapStack.astro');
+  const stamp = ms.indexOf('<ConstructionStamp class="chip line" />'), body = ms.indexOf('<div class="wc-body">'), crumb = ms.indexOf('data-v2-crumb');
+  assert.ok(stamp > crumb && stamp < body, 'the stamp must be in the header, before .wc-body');
+  assert.equal((ms.match(/<ConstructionStamp/g) ?? []).length, 1);
+  const css = strip(CSS('mapstack.css'));
+  assert.match(css, /\.wardc \.con-stamp \{[^}]*border: 1px solid var\(--ink-1\)/);
+  assert.ok(!/bronze/.test(css));
+});

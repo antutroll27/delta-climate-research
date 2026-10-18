@@ -52,6 +52,25 @@ test.describe('@v2 map stack', () => {
 });
 
 /* A-S4 audit F1: the map stack grows up from the dock; nothing may sit on it at any common laptop size, with the side panel shown or closed. */
+/* A-S4 audit F3 + F9: the build-status stamp lives in the ward card's HEADER (so a folded card still says it), and the fold follows the viewport. */
+test.describe('@v2 ward card on laptops', () => {
+  test.setTimeout(180_000);
+  for (const [w, h, open] of [[1280, 720, false], [1366, 768, false], [1366, 860, true], [1440, 900, true]] as const) {
+    test(`@v2 at ${w} x ${h} the ward card starts ${open ? 'open' : 'folded'} and still says Under Construction`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await openV2(page);
+      const card = page.locator('#v2WardCard');
+      await expect(card.locator('[data-v2-more]')).toHaveAttribute('aria-expanded', String(open));
+      if (open) await expect(card.locator('.wc-body')).toBeVisible(); else await expect(card.locator('.wc-body')).toBeHidden();
+      const stamp = card.locator('.con-stamp');
+      await expect(stamp).toBeVisible();
+      await expect(stamp).toHaveText('Under Construction');
+      expect(await stamp.evaluate((e) => getComputedStyle(e).borderTopWidth), 'a stamp has a visible border, not grey body text').toBe('1px');
+      expect(await stamp.evaluate((e) => !!e.closest('.wc-body')), 'the stamp is outside the fold').toBe(false);
+    });
+  }
+});
+
 test.describe('@v2 map stack: no collisions', () => {
   test.setTimeout(240_000);
   const SIZES: ReadonlyArray<readonly [number, number]> = [[1366, 768], [1366, 640], [1280, 720], [1440, 900]];

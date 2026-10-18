@@ -35,10 +35,11 @@ const glyphs = areaKeysInCity(scope.key).map(resolve).map((s) => ({ key: s.key, 
     </button>
     <button class="wc-more" type="button" data-v2-more aria-expanded="true" aria-label="Show less about this ward">Less</button>
   </div>
+  {scope.area.hasData && <p class="wc-stamp"><ConstructionStamp class="chip line" /></p>}
   <div class="wc-body">
     <p class="wc-fig"><span class="wc-t"><Sym shape="square" c="ink" size={14} /></span>
       {scope.area.hasData ? <span id="bcount">— buildings</span> : <span>no artefacts · {scope.tier} tier</span>}</p>
-    {scope.area.hasData && <p class="wc-sub"><span class="chip" id="simBackend" aria-live="polite">SELECTING ENGINE</span><ConstructionStamp class="chip line" /></p>}
+    {scope.area.hasData && <p class="wc-sub"><span class="chip" id="simBackend" aria-live="polite">SELECTING ENGINE</span></p>}
     {scope.area.hasData && <ul class="sym-list wc-prov">
       <li><span class="sym-tile sm"><Sym shape="square" c="ink" size={13} /></span><span>Live basemap, real footprints &amp; Google heights</span></li>
       <li><span class="sym-tile sm"><Sym shape="ward" c="heat-4" kind="modelled" size={13} /></span><span>Heat field · modelled</span></li>

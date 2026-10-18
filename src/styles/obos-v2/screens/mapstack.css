@@ -72,8 +72,10 @@ html[data-ui="v2"] .obos-v2 .wc-fig { display: flex; align-items: center; gap: 7
 html[data-ui="v2"] .obos-v2 .wc-t { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: color-mix(in oklch, var(--ink-1) 7%, transparent); flex: none; }
 html[data-ui="v2"] .obos-v2 .wc-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px; color: var(--ink-3); }
 html[data-ui="v2"] .obos-v2 .wc-sub .chip { height: 20px; font-size: 10.5px; }
-html[data-ui="v2"] .obos-v2 .wc-sub .con-stamp { transform: none; animation: none; opacity: 1; box-shadow: none; border: 0; padding: 0 8px; font: 500 10.5px/20px var(--sans);
-  letter-spacing: 0; text-transform: none; color: var(--ink-2); }
+/* the build-status stamp: a visible chip under the header, OUTSIDE the fold (a folded card on a laptop still says it). No bronze: that is a heat-ramp colour. */
+html[data-ui="v2"] .obos-v2 .wc-stamp { margin-top: 4px; }
+html[data-ui="v2"] .obos-v2 .wardc .con-stamp { display: inline-block; flex: none; transform: none; animation: none; opacity: 1; box-shadow: none; border: 1px solid var(--ink-1); border-radius: 4px; padding: 0 6px;
+  font: 600 9.5px/18px var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 .wc-prov { margin-top: 4px; }
 html[data-ui="v2"] .obos-v2 .wc-prov > li { grid-template-columns: 26px minmax(0, 1fr); gap: 8px; padding: 4px 0; font-size: 11.5px; line-height: 1.3; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 .wc-prov .sym-tile.sm { width: 24px; height: 24px; border-radius: 7px; }
@@ -82,3 +84,7 @@ html[data-ui="v2"] .obos-v2 #loadchip { margin-top: 4px; }
 html[data-ui="v2"] .obos-v2 #loadchip:not(.on):not(.fail) { display: none; }
 html[data-ui="v2"] .obos-v2 #loadchip.fail { color: var(--ink-1); font-weight: 600; }
 @media (min-width: 700px) and (max-width: 1365px) { html[data-ui="v2"] .obos-v2 .wc-fig { font-size: 11px; } }
+
+/* A-S4 audit F1: on a short window (measured at 1366 x 640) the title column's tip toast would sit on the Sun card; the first-run tip steps aside there,
+   the Sun card never does. The app still dismisses and remembers it as before. */
+@media (max-height: 700px) { html[data-ui="v2"] .obos-v2 #tiphint { display: none; } }
