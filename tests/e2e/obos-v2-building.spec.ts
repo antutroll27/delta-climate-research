@@ -108,7 +108,10 @@ test.describe('@v2 building card', () => {
     await expect(page.locator('[data-v2-card="temp"]')).toBeHidden();       // the card replaces the column's other cards
     await expect(page.locator('#bcT')).not.toHaveText('—');
     await expect(page.locator('#bcRings')).toContainText('how far you could walk from this building in 1 and 5 minutes');
+    await expect(page.locator('#bcRings')).toBeVisible();                    // A-S4 audit F4: text that exists but is hidden must fail
+    await expect(page.locator('#bcIns')).toBeVisible();
     await expect(page.locator('#bcIns')).not.toBeEmpty();
+    await expect(page.locator('#bcT')).toBeVisible();
     await expect(page.locator('#bcSolKwp')).toBeVisible();
     await expect(page.locator('#bcSolLoss')).toBeVisible();
     const loss = await page.locator('#bcSolLoss').boundingBox(), floor = await page.locator('#bcSolFloor').boundingBox();
