@@ -16,7 +16,7 @@ import MapChips from './MapChips.astro';
 import StreetViewModal from './StreetViewModal.astro';
 import ToastsV2 from './ToastsV2.astro';
 import SolarSheets from './SolarSheets.astro';
-import ParkS8 from './ParkS8.astro';
+import PhoneChrome from './PhoneChrome.astro';
 import ParkA1 from './ParkA1.astro';
 import ParkB1 from './ParkB1.astro';
 import ParkA2 from './ParkA2.astro';
@@ -171,6 +171,7 @@ const newCity = scope.area.hasData
 <main id="main" class="stage obos-v2" data-console data-area={scope.key} style={symbolCssVars()}>
   {scope.area.hasData && <div id="mlmap"></div>}
   {scope.area.hasData && <MapChips scope={scope} />}
+  <PhoneChrome sheet={scope.area.hasData} />
   <RailV2 current="overview" hasData={scope.area.hasData} areaName={scope.area.name} />
   <ToolbarV2 />
   <aside class="side-panel" id="v2Side" data-hud aria-label="Section panel">
@@ -184,7 +185,6 @@ const newCity = scope.area.hasData
   <ToastsV2 newCity={newCity} hasData={scope.area.hasData} />
   <RightColumn scope={scope} />
   <div data-v2-parking>
-    <ParkS8 />
     <ParkA1 scope={scope} />
     <ParkB1 scope={scope} />
     <ParkA2 scope={scope} />

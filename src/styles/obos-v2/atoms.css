@@ -108,18 +108,18 @@ html[data-ui="v2"] .obos-v2 .bleed { position: absolute; right: -18px; top: -16p
 html[data-ui="v2"] .obos-v2 .bleed-room::before { content: ""; float: right; width: 62px; height: 56px; }
 
 /* ── surfaces (spec §2.2): Glass blurs only when live; flat = the 0.94 fallback; Plates never blur ── */
-html[data-ui="v2"] .obos-v2 :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
+html[data-ui="v2"] .obos-v2 :is(.card, .side-panel, .compass, .sheet, .drawer, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
   background: var(--glass-fill); border: 1px solid var(--glass-border); color: var(--ink-1);
 }
 html[data-ui="v2"] .obos-v2 :is(.bar, .toolbar, .place, .attrib, .rail, .side-panel) { background: var(--glass-fill-strong); }
 html[data-ui="v2"] .obos-v2 :is(.card, .bar, .side-panel, .toolbar) { box-shadow: var(--glass-hi), var(--shadow-float); }
 html[data-ui="v2"] .obos-v2 :is(.place, .attrib, .toast) { box-shadow: var(--glass-hi), var(--shadow); }
-html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
+html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] :is(.card, .side-panel, .compass, .sheet, .drawer, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
   -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
 }
 /* S1 audit F3: the belt. Reduced transparency blurs nothing, whatever data-glass says at that instant (same selector, later in source). */
 @media (prefers-reduced-transparency: reduce) {
-  html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
+  html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] :is(.card, .side-panel, .compass, .sheet, .drawer, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
     -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--glass-fallback);
   }
 }
@@ -127,10 +127,10 @@ html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] :is(.card, .s
    (and, closed, its fill). Open, it keeps its inverted fill. Must follow the live rule above. */
 html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] .toolbar .place { -webkit-backdrop-filter: none; backdrop-filter: none; }
 html[data-ui="v2"] .obos-v2[data-cards="glass"][data-glass="live"] .toolbar .place:not([aria-expanded="true"]) { background: transparent; }
-html[data-ui="v2"] .obos-v2[data-cards="glass"]:not([data-glass="live"]) :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
+html[data-ui="v2"] .obos-v2[data-cards="glass"]:not([data-glass="live"]) :is(.card, .side-panel, .compass, .sheet, .drawer, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
   background: var(--glass-fallback);
 }
-html[data-ui="v2"] .obos-v2[data-cards="plates"] :is(.card, .side-panel, .compass, .sheet, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
+html[data-ui="v2"] .obos-v2[data-cards="plates"] :is(.card, .side-panel, .compass, .sheet, .drawer, .bar, .place, .toolbar, .attrib, .rail, .toast, .glass) {
   background: var(--plate); border-color: transparent; box-shadow: var(--plate-shadow);
 }
 html[data-ui="v2"] .obos-v2 .card { position: relative; border-radius: 22px; padding: 16px 16px 14px; min-width: 0; }

@@ -36,6 +36,8 @@ html[data-ui="v2"] .obos-v2 {
   --hx-quiet-light: #5C5B58; --hx-dock-light: #F8F8F6;
   /* print: the installer brief and the payback sheet are ink on paper in every theme (A1 S2.8; plan S6.2 Step 2) */
   --print-ink: #000000; --print-paper: #FFFFFF;
+  /* the phone's scrims (S8): behind the drawer, and behind the entry note */
+  --scrim-drawer: oklch(0 0 0 / 0.32); --scrim-entry: oklch(0 0 0 / 0.42);
   --hx-focus-light: #1f63d6; --hx-focus-dark: #8ab4ff;
   /* the teal hairlines and the ramp's hairline, each spelled once (S1 audit F5) */
   --hx-teal-a08: rgba(111, 202, 214, 0.08); --hx-teal-a14: rgba(111, 202, 214, 0.14); --hx-teal-a16: rgba(111, 202, 214, 0.16); --hairline: oklch(0 0 0 / 0.05);
@@ -84,7 +86,7 @@ html[data-ui="v2"] .obos-v2[data-theme="dark"] {
 }
 
 /* ── Plates re-ink their own surfaces (the ONE plate definition, sys.css :73–91, :402–408) ── */
-html[data-ui="v2"] .obos-v2[data-cards="plates"] :is(.card, .side-panel, .compass, .sheet) {
+html[data-ui="v2"] .obos-v2[data-cards="plates"] :is(.card, .side-panel, .compass, .sheet, .drawer) {
   --card: var(--plate); --ink-1: var(--plate-ink-1); --ink-2: var(--plate-ink-2); --ink-3: var(--plate-ink-3); --unit: var(--plate-unit);
   --well: var(--plate-well); --well-2: var(--plate-well-2); --line: var(--plate-line); --on-ink: var(--plate-on-ink); --tile: var(--plate-tile);
 }
@@ -92,7 +94,7 @@ html[data-ui="v2"] .obos-v2[data-cards="plates"] :is(.card, .side-panel, .compas
 /* ── the v1 bridge (spec §2.4): names heat-map-app.ts writes inline, re-resolved inside plates.
    NEVER put .v1-bridge on a .card itself: the plate selector would outrank it. ── */
 html[data-ui="v2"] .obos-v2,
-html[data-ui="v2"] .obos-v2[data-cards="plates"] :is(.card, .side-panel, .compass, .sheet) {
+html[data-ui="v2"] .obos-v2[data-cards="plates"] :is(.card, .side-panel, .compass, .sheet, .drawer) {
   --ink: var(--ink-1);
   --paper: var(--ink-1); --faint: var(--ink-3); --mono: var(--sans);
   --line-hi: color-mix(in oklab, var(--ink-1) 32%, transparent);

@@ -6,8 +6,8 @@ import { join } from 'node:path';
 
 const C = 'src/components/ClimateEngine/v2';
 const noJsx = (s) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
-export const REGIONS = ['MapChips', 'RailV2', 'ToolbarV2', 'ExploreSide', 'SolarSide', 'AirSide', 'TitleCard', 'CompassV2', 'MapStack',
-  'DockV2', 'ToastsV2', 'RightColumn', 'ParkS8', 'ParkA1', 'ParkB1', 'ParkA2', 'ParkB2', 'LayersPopover', 'Overlays', 'StreetViewModal', 'SolarSheets'];
+export const REGIONS = ['MapChips', 'PhoneChrome', 'RailV2', 'ToolbarV2', 'ExploreSide', 'SolarSide', 'AirSide', 'TitleCard', 'CompassV2', 'MapStack',
+  'DockV2', 'ToastsV2', 'RightColumn', 'ParkA1', 'ParkB1', 'ParkA2', 'ParkB2', 'LayersPopover', 'Overlays', 'StreetViewModal', 'SolarSheets'];
 export const CARDS = ['BuildingCardV2', 'TempCard', 'HeatCards', 'ScenarioCards', 'SolarCards', 'WeatherCards', 'MethodsCards'];
 export const SCREEN_PARTIALS = ['overview', 'heat', 'mapstack', 'building', 'explore', 'scenarios', 'solar', 'air', 'weather', 'methods', 'compare', 'brief'];
 export const PRINT_PARTIALS = ['solar', 'brief'];
@@ -47,12 +47,12 @@ test('no v2 component carries a <style> (Astro would stamp scope attributes)', (
   for (const f of files) assert.ok(!/<style[\s>]/.test(readFileSync(f, 'utf8')), `${f} has a <style>; v2 CSS lives in src/styles/obos-v2/`);
 });
 
-test('mountShellV2 calls the fourteen binders in the plan\'s order, gated for Compare (plan S9.2 Step 4)', () => {
+test('mountShellV2 calls the fifteen binders in the plan\'s order, gated for Compare (plan S9.2 Step 4)', () => {
   const src = readFileSync('src/scripts/climate-engine/v2/shell-v2.ts', 'utf8');
   const body = src.slice(src.indexOf('export function mountShellV2'));
   let at = -1;
   for (const b of ['bindSections(', 'bindPrefs(', 'bindPerArea(', 'bindPressedMirror(', 'bindProxies(', 'bindLayers(', 'bindPhone(',
-    'bindFlash(', 'bindMirrors(', 'bindSunCard(', 'bindWardCard(', 'bindWeather(', 'bindSolar(', 'bindGlass(']) {
+    'bindFlash(', 'bindModals(', 'bindMirrors(', 'bindSunCard(', 'bindWardCard(', 'bindWeather(', 'bindSolar(', 'bindGlass(']) {
     const i = body.indexOf(b); assert.ok(i > at, `${b} missing or out of order`); at = i;
   }
   assert.match(body, /const compare = root\.matches\('\[data-compare-root\], \[data-brief-root\]'\);/);   // c-02: the brief is frame-only by its own marker

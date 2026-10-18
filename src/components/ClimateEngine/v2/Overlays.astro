@@ -8,7 +8,7 @@ const { scope } = Astro.props;
 /* S2 audit F1: the chip lists only sources that area really draws. A DataMeet ward boundary exists only on the areas that ship one,
    and the app writes its credit (with the licence link) into MapLibre's control, which the credits popover mirrors; an area with no
    map says only "Credits". */
-const chipText = scope.area.hasData ? '© OpenStreetMap · OpenMapTiles · OpenFreeMap · Overture · Credits' : 'Credits';
+const chipLead = scope.area.hasData ? '© OpenStreetMap · OpenMapTiles · OpenFreeMap · Overture · ' : '';
 ---
 <div class="key-pop card" id="v2Key" role="dialog" aria-label="How to read the marks" tabindex="-1" data-open="false" data-hud>
   <div class="row"><h2 class="name-xl"><b>How</b><span> to read the marks</span></h2><button class="sp-close" type="button" data-pop-close aria-label="Close the key">×</button></div>
@@ -36,7 +36,7 @@ const chipText = scope.area.hasData ? '© OpenStreetMap · OpenMapTiles · OpenF
   </div>
 </div>
 
-<div class="st-attrib" data-hud><button class="attrib" type="button" data-pop-open="credits" aria-expanded="false" aria-controls="v2Credits">{chipText}</button></div>
+<div class="st-attrib" data-hud><button class="attrib" type="button" data-pop-open="credits" aria-expanded="false" aria-controls="v2Credits">{chipLead && <span class="at-lead">{chipLead}</span>}Credits</button></div>
 <div class="credits-pop card" id="v2Credits" role="dialog" aria-label="Data and credits" tabindex="-1" data-open="false" data-hud>
   <div class="row"><span class="micro">Data and credits</span><button class="sp-close" type="button" data-pop-close aria-label="Close credits">×</button></div>
   <ul>
@@ -58,3 +58,26 @@ const chipText = scope.area.hasData ? '© OpenStreetMap · OpenMapTiles · OpenF
 </div>
 
 <p class="flash glass" data-v2-flash role="status" aria-live="polite"></p>
+
+{/* S8.1 Step 4: the phone entry note and the rotate nudge, v1's words exactly (stage :180-200), driven by phone-console.ts unchanged
+    (it finds them by id and by [data-entry-close] / [data-rn-dismiss]). Hidden attribute = off; shown only on touch screens, once per session. */}
+<div class="entry" id="entryNote" hidden role="dialog" aria-modal="true" aria-labelledby="entry-h">
+  <div class="entry-card card">
+    <p class="entry-k micro">OBOS · Urban heat instrument</p>
+    <h2 class="entry-h name-xl" id="entry-h">Best on a <span class="thin">bigger screen</span></h2>
+    <p class="entry-b body-s">This is a full console — a live 3-D city, a heat field and its
+      error bars. It works on a phone, but a laptop, desktop or tablet is where you
+      can actually read it.</p>
+    <p class="entry-b entry-b-sm body-s">On a phone, turn it sideways for the full width.</p>
+    <button class="entry-go pill" type="button" data-entry-close>Continue anyway</button>
+  </div>
+</div>
+<div class="rotate-nudge rnudge toast" id="rotateNudge" hidden>
+  <span class="rn-ico" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4" y="2.5" width="10.5" height="19" rx="2"/><path d="M17.5 9.5a6 6 0 0 1 0 5"/><path d="M19.6 8l.4 2.2-2.2.3"/>
+    </svg>
+  </span>
+  <span class="rn-txt">Turn your phone for the full instrument</span>
+  <button class="rn-x" type="button" data-rn-dismiss aria-label="Dismiss">✕</button>
+</div>

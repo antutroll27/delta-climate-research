@@ -1,1 +1,155 @@
-/* OBOS v2 — phone (§3 phone drawer and sheet (C11)). Filled by a later slice. */
+/* OBOS v2 — phone (spec §3 phone, §7.3–7.4; decision C11; S8). Ported from the approved preview's phone views (21-obos-twin-system/system.css :406–446, :482–490,
+   :654–661, :698–701) with the plan's selector rewrites. Under the phone query the menu rail and the side panel live in ONE drawer and the right column, the map
+   stack, the dock and the credits chip in ONE bottom sheet; phone-v2.ts moves the nodes. NO HEX HERE (tokens.css owns them). The phone query is the one phone-v2.ts
+   matches: (max-width: 699px), or a coarse pointer under 561 px of height (a phone on its side). */
+
+/* ── off the phone: the phone's chrome does not exist ── */
+html[data-ui="v2"] .obos-v2 :where(.tw-menu, .drawer-scrim, #v2Drawer, #v2Sheet) { display: none; }
+
+/* ── the first-run note and the rotate nudge are v1's (stage :180–200). phone-console.ts shows them on touch screens, once per session ── */
+html[data-ui="v2"] .obos-v2 .entry { position: absolute; z-index: 95; inset: 0; display: grid; place-items: center; padding: 20px; background: var(--scrim-entry); }
+html[data-ui="v2"] .obos-v2 .entry[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .entry-card { max-width: 340px; padding: 22px 22px 18px; box-shadow: var(--shadow-float); }
+html[data-ui="v2"] .obos-v2 .entry-k { margin-bottom: 6px; }
+html[data-ui="v2"] .obos-v2 .entry-h { font-size: 22px; font-weight: 700; }
+html[data-ui="v2"] .obos-v2 .entry-b { margin-top: 10px; color: var(--ink-2); font-size: 13.5px; }
+html[data-ui="v2"] .obos-v2 .entry-b-sm { color: var(--ink-1); font-weight: 500; }
+html[data-ui="v2"] .obos-v2 .entry-go { margin-top: 16px; height: 44px; padding: 0 18px; background: var(--ink-1); color: var(--on-ink); font-size: 13px; font-weight: 600; }
+html[data-ui="v2"] .obos-v2 .rnudge { position: absolute; z-index: 33; left: 50%; top: 176px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px;
+  padding: 2px 4px 2px 12px; border-radius: 99px; font-size: 12px; color: var(--ink-1); white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .rnudge[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .rnudge .rn-ico svg { display: block; width: 18px; height: 18px; }
+html[data-ui="v2"] .obos-v2 .rnudge .rn-x { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border: 0; border-radius: 50%; background: var(--well); color: var(--ink-2); cursor: pointer; font-size: 11px; }
+@media (min-width: 700px) { html[data-ui="v2"] .obos-v2 .rnudge { display: none; } }   /* a nudge for a portrait phone; never beside a laptop's map */
+
+@media (max-width: 699px), (pointer: coarse) and (max-height: 560px) {
+  /* before phone-v2.ts has moved them, the desktop-positioned nodes stay out of sight (no half-laid-out flash) */
+  html[data-ui="v2"] .obos-v2:not([data-phone]) :is(#v2Rail, #v2Side, #legend, #v2MapStack, #v2Dock, .st-attrib) { visibility: hidden; }
+
+  /* ── the menu button (top-left, 44 px) ── */
+  html[data-ui="v2"] .obos-v2 .tw-menu { display: grid; place-items: center; position: absolute; z-index: 47; top: 8px; left: 8px; width: 44px; height: 44px; min-height: 44px; padding: 0;
+    border-radius: 14px; color: var(--ink-1); cursor: pointer; }
+  html[data-ui="v2"] .obos-v2 .tw-menu svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; }
+
+  /* ── the display toolbar: a column under the right edge (the preview's), and the title column between it and the menu ── */
+  html[data-ui="v2"] .obos-v2 .toolbar { top: 8px; right: 8px; width: 112px; flex-direction: column; align-items: stretch; gap: 4px; }
+  html[data-ui="v2"] .obos-v2 .toolbar .seg button { flex: 1; padding: 5px 6px; font-size: 11px; }
+  html[data-ui="v2"] .obos-v2 .toolbar .key-btn { justify-content: center; padding: 0 8px; }
+  html[data-ui="v2"] .obos-v2 .st-title { top: 8px; left: 60px; right: 128px; width: auto; transform: none !important; opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; }
+  html[data-ui="v2"] .obos-v2 .st-title .compass { position: absolute; left: -52px; top: 52px; width: 44px; height: 44px; }
+  html[data-ui="v2"] .obos-v2 .st-title .compass svg { width: 40px; height: 40px; }
+  /* the credit card, compact: the same facts in a small flow layout (the ward stamp bleeds off the bottom-right corner) */
+  html[data-ui="v2"] .obos-v2 .tc { aspect-ratio: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; align-items: start; gap: 2px 6px; padding: 10px 12px 10px !important; }
+  html[data-ui="v2"] .obos-v2 .tc > * { position: static; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-brand { grid-column: 1; font-size: 16px; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-grade { grid-column: 2; grid-row: 1; font-size: 10px; padding: 0.25em 0.7em; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-tag { grid-column: 1 / -1; max-width: none; font-size: 11px; line-height: 1.3; padding-right: 36px; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-coord { grid-column: 1 / -1; font-size: 10px; margin-top: 2px; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-legend { grid-column: 1 / -1; font-size: 10px; margin-top: 2px; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-area { grid-column: 1 / -1; margin-top: 4px; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-n { font-size: 28px; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-u { font-size: 12px; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-park[data-outline] { position: absolute; z-index: 1; right: 6px; bottom: -4px; top: auto; width: auto; height: 78px; opacity: 0.9; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-park[data-outline="square"] { width: 48px; height: 48px; right: -6px; bottom: 6px; }
+  html[data-ui="v2"] .obos-v2 .toasts { display: none !important; }
+  html[data-ui="v2"] .obos-v2 .flash { bottom: auto; top: 64px; }
+
+  /* ── the drawer: the menu rail, then the section's side panel (a dialog; phone-v2.ts traps focus and returns it) ── */
+  html[data-ui="v2"] .obos-v2 .drawer-scrim { display: block; position: absolute; inset: 0; z-index: 80; background: var(--scrim-drawer); }
+  html[data-ui="v2"] .obos-v2 .drawer-scrim[hidden] { display: none; }
+  html[data-ui="v2"] .obos-v2 #v2Drawer { position: absolute; z-index: 81; left: 0; top: 0; bottom: 0; width: min(330px, 86%); display: none; flex-direction: column;
+    overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; border-radius: 0 24px 24px 0; border-left: 0; box-shadow: var(--shadow-float); }
+  html[data-ui="v2"] .obos-v2 #v2Drawer::-webkit-scrollbar { display: none; }
+  html[data-ui="v2"] .obos-v2 #v2Drawer[data-open="true"] { display: flex; }
+  html[data-ui="v2"] .obos-v2 #v2Drawer > * { flex: none; }
+  html[data-ui="v2"] .obos-v2 .drawer-x { position: absolute; z-index: 2; top: 12px; right: 12px; width: 44px; height: 44px; min-height: 44px; }
+  html[data-ui="v2"] .obos-v2 #v2Drawer .rail { position: static; z-index: auto; width: auto; padding: 8px 12px 8px; clip-path: none; transition: none; background: transparent; border: 0; box-shadow: none; border-radius: 0; }
+  html[data-ui="v2"] .obos-v2 #v2Drawer .rail-brand { padding-right: 56px; }
+  html[data-ui="v2"] .obos-v2 #v2Drawer :is(.rail-brand .wm, .nav-label) { opacity: 1; }
+  html[data-ui="v2"] .obos-v2 #v2Drawer .nav-item[aria-current="true"]::after, html[data-ui="v2"] .obos-v2 #v2Drawer .nav-item[aria-current="page"]::after { opacity: 1; }
+  html[data-ui="v2"] .obos-v2 #v2Drawer .rail-pin { display: none; }
+  /* the side panel is the drawer's second half: the section's own pane, whatever the desktop "panel shown" state is */
+  html[data-ui="v2"] .obos-v2 #v2Drawer .side-panel { position: static; z-index: auto; width: auto; display: none; flex-direction: column; overflow: visible; border: 0; border-radius: 0; background: transparent;
+    box-shadow: none; margin-top: 4px; border-top: 1px solid var(--line); }
+  html[data-ui="v2"] .obos-v2[data-side-current="explore"] #v2Drawer .side-panel,
+  html[data-ui="v2"] .obos-v2[data-side-current="solar"] #v2Drawer .side-panel,
+  html[data-ui="v2"] .obos-v2[data-side-current="air"] #v2Drawer .side-panel { display: flex; }
+  html[data-ui="v2"] .obos-v2[data-side-current="explore"] #v2Drawer [data-side-pane="explore"],
+  html[data-ui="v2"] .obos-v2[data-side-current="solar"] #v2Drawer [data-side-pane="solar"],
+  html[data-ui="v2"] .obos-v2[data-side-current="air"] #v2Drawer [data-side-pane="air"] { display: flex; }
+  html[data-ui="v2"] .obos-v2 #v2Drawer .side-panel .sp-scroll { overflow: visible; }
+  /* the panel's own × is the drawer's × (the drawer has one at its corner), so the pane's is not drawn twice */
+  html[data-ui="v2"] .obos-v2 #v2Drawer .side-panel .sp-close { display: none; }
+  /* Compare and the brief carry their display toolbar in the drawer too: they have no map to keep it beside */
+  html[data-ui="v2"] .obos-v2 #v2Drawer .toolbar { position: static; width: auto; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; margin: 4px 12px 14px; background: transparent; border: 0; box-shadow: none; }
+
+  /* ── the sheet: the right column, the map stack and the dock, under one button handle ── */
+  html[data-ui="v2"] .obos-v2 #v2Sheet { display: flex; position: absolute; z-index: 24; left: 0; right: 0; bottom: 0; max-height: 64%; flex-direction: column; overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: none; padding: 0 12px; border-radius: 28px 28px 0 0; border-bottom: 0; scroll-padding: 52px 0 210px; }   /* a focused or scrolled-to element clears the sticky handle row and the sticky dock */
+  html[data-ui="v2"] .obos-v2 #v2Sheet::-webkit-scrollbar { display: none; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet > * { flex: none; }
+  html[data-ui="v2"] .obos-v2 .sheet-head { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 8px; margin: 0 -12px; padding: 0 12px; background: inherit; border-radius: 28px 28px 0 0; }
+  html[data-ui="v2"] .obos-v2 .sheet-handle { flex: 1; min-width: 0; min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border: 0; background: transparent;
+    color: var(--ink-2); font: 500 12px/1.2 var(--sans); cursor: pointer; padding: 6px 0 2px; }
+  html[data-ui="v2"] .obos-v2 .sheet-grip { display: block; width: 44px; height: 5px; border-radius: 4px; background: var(--well-2); }
+  html[data-ui="v2"] .obos-v2 #v2Sheet[data-open="false"] > :not(.sheet-head):not(#v2Dock) { display: none; }
+  /* the credits chip is the sheet's header furniture on a phone: visible and 44 px to hit, the long list of sources behind it */
+  html[data-ui="v2"] .obos-v2 .sheet-head .st-attrib { position: static; flex: none; }
+  html[data-ui="v2"] .obos-v2 .attrib .at-lead { display: none; }
+  html[data-ui="v2"] .obos-v2 .attrib::before { content: "© "; }
+
+  html[data-ui="v2"] .obos-v2 #v2Sheet #legend.heat-panel { position: static; width: auto; top: auto; right: auto; bottom: auto; left: auto; transform: none; max-height: none; z-index: auto; gap: 8px; padding: 2px 0 8px; overflow: visible; border-radius: 0; background: transparent; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .mapstack { position: static; width: auto; gap: 8px; padding: 0 0 8px; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .mapstack .card { padding: 12px 14px 11px; border-radius: 18px; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet :is(#legend, .mapstack) .card { box-shadow: none; border: 1px solid var(--line); background: var(--card); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  /* the bleeding marks run off a card's edge by design: clip them to the card (a phone's cards sit on a sheet that clips them anyway) */
+  html[data-ui="v2"] .obos-v2 #v2Sheet #legend .card { overflow: clip; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .geo[open] p { right: 0; width: min(260px, 70vw); }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .st-dock { position: sticky; left: auto; right: auto; bottom: 0; z-index: 3; display: block; margin: 0 -12px; padding: 6px 12px 10px; background: var(--card); box-shadow: 0 -10px 18px -6px var(--card); }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .dock { width: 100%; align-items: stretch; gap: 6px; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .places { display: flex !important; flex-wrap: wrap; justify-content: center; gap: 5px; padding: 2px; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .place { height: 32px; font-size: 11.5px; padding-right: 10px; box-shadow: none; border: 0; background: var(--well); }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .place small { display: none; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .place.two { height: 32px; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .place.two .pl-sub { display: none; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .place[aria-pressed="true"], html[data-ui="v2"] .obos-v2 #v2Sheet .ward.on { background: var(--ink-1); color: var(--on-ink); }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .place-city { padding: 0 12px; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .bar { box-shadow: none; border: 0; background: var(--well); padding: 8px 8px 6px; flex-direction: column; align-items: stretch; gap: 6px; border-radius: 18px; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .vsep { display: none; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .clockw { justify-content: space-between; padding: 0 8px; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .k-time { font-size: 28px; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .tabs { justify-content: space-between; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .tab { min-width: 0; flex: 1; padding: 5px 2px; }
+
+  /* ── an area that ships no data: no sheet, one centred card (spec §4.10); its ward card keeps the bottom-left corner, the credits chip the bottom-right ── */
+  html[data-ui="v2"] .obos-v2 > #v2MapStack { left: 8px; bottom: 12px; width: min(236px, calc(100% - 128px)); }
+  html[data-ui="v2"] .obos-v2 #legend:has(> .notyet) { top: 50%; bottom: auto; left: 12px; right: 12px; width: auto; transform: translateY(-50%); max-height: calc(100% - 140px); }
+
+  /* ── popovers: the layers and credits lists run the width of the screen; the key stacks its three columns ── */
+  html[data-ui="v2"] .obos-v2 :is(.layers-pop, .credits-pop) { left: 8px; right: 8px; width: auto; transform: none; bottom: 8px; max-height: 80%; }
+  html[data-ui="v2"] .obos-v2 .key-pop { left: 8px; right: 8px; top: 64px; width: auto; max-width: none; transform: none; max-height: calc(100% - 80px); overflow-y: auto; }
+  html[data-ui="v2"] .obos-v2 .key-cols { grid-template-columns: 1fr; }
+}
+
+/* ── a phone on its side (844 x 390): the sheet is a column on the right, the toolbar a row above it ── */
+@media (max-width: 699px) and (orientation: landscape), (pointer: coarse) and (max-height: 560px) and (orientation: landscape) {
+  html[data-ui="v2"] .obos-v2 .toolbar { width: auto; flex-direction: row; align-items: center; }
+  html[data-ui="v2"] .obos-v2 .st-title { right: auto; width: 200px; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet { left: auto; right: 8px; bottom: 8px; width: min(360px, 48%); max-height: calc(100% - 84px); border-radius: 22px; border-bottom: 1px solid var(--glass-border); }
+  html[data-ui="v2"] .obos-v2 .sheet-head { border-radius: 22px 22px 0 0; }
+  /* the dock does not stick on its side (it would leave a 100 px window for the readings): it ends the sheet, and its clock and tabs share a row */
+  html[data-ui="v2"] .obos-v2 #v2Sheet .st-dock { position: static; box-shadow: none; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .bar { flex-direction: row; align-items: center; gap: 8px; }
+  html[data-ui="v2"] .obos-v2 #v2Sheet .tabs { flex: 1; }
+  html[data-ui="v2"] .obos-v2 .flash { left: 40%; }
+}
+
+/* ── Compare and the brief on a phone: the rail is in the drawer, so the page keeps its whole width ── */
+@media (max-width: 699px) {
+  html[data-ui="v2"] .obos-v2.heat-compare { --cmp-rail: 12px; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-stage { padding-top: 60px; }
+  html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { padding: 60px 12px 40px 12px; }
+  html[data-ui="v2"] .obos-v2.heat-compare .tw-menu, html[data-ui="v2"] .obos-v2.heat-brief .tw-menu { position: fixed; }
+}
+html[data-ui="v2"] .obos-v2 .cmp-phone-note { display: none; }
+@media (max-width: 699px) { html[data-ui="v2"] .obos-v2 .cmp-phone-note { display: block; margin: 0 0 4px; } }

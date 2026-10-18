@@ -9,6 +9,7 @@ import { bindSunCard } from './sun-card.ts';
 import { bindWeather } from './weather-v2.ts';
 import { bindSolar } from './solar-v2.ts';
 import { bindPhone } from './phone-v2.ts';
+import { bindModals } from './modals.ts';
 import type { LayerStack, Sections, ShellCtx } from './shell-ctx.ts';
 
 export type { ShellCtx, Sections, LayerStack } from './shell-ctx.ts';
@@ -106,6 +107,8 @@ export function bindLayers(ctx: ShellCtx): LayerStack {
   });
   on(cleanup, window, 'keydown', (e) => {
     if ((e as KeyboardEvent).key !== 'Escape' || !stack.length) return;
+    /* an open select inside a layer (the drawer's Location) takes its own Esc first: one press, one thing (select-field.ts:399) */
+    if (document.activeElement?.matches('[role="combobox"][aria-expanded="true"]')) return;
     api.closeTop(); e.preventDefault(); e.stopImmediatePropagation();
   }, { capture: true });
   return api;
@@ -116,14 +119,23 @@ export function bindFlash(ctx: ShellCtx): void {
   const { root, cleanup } = ctx;
   const f = $(root, '[data-v2-flash]');
   let t = 0;
-  const flash = (msg: string): void => {
+  const flash = (msg: string, ms = 1800): void => {
     if (!f) return;
     f.textContent = msg; f.dataset.on = 'true'; clearTimeout(t);
-    t = window.setTimeout(() => { f.dataset.on = 'false'; }, 1800);
+    t = window.setTimeout(() => { f.dataset.on = 'false'; }, ms);
   };
   on(cleanup, $(root, '#compass'), 'click', () => flash('Facing north'));
   on(cleanup, $(root, '#clockAge'), 'click', () => flash('Re-reading the live reading…'));
   cleanup.push(() => clearTimeout(t));
+  /* spec §6: when an artefact will not load, the ward card says so (#loadchip.fail), and the flash repeats it ONCE, so it is announced (role=status)
+     and seen even where the card is folded away (a phone's closed sheet). */
+  const chip = $(root, '#loadchip');
+  let said = '';
+  observe(cleanup, chip, { attributes: true, attributeFilter: ['class'], childList: true, characterData: true, subtree: true }, () => {
+    if (!chip?.classList.contains('fail')) { said = ''; return; }
+    const msg = chip.textContent?.trim() ?? '';
+    if (msg && msg !== said) { said = msg; flash(msg, 4200); }
+  });
   const credit = $(root, '[data-v2-street-credit]');
   const street = (): void => { if (credit) credit.hidden = !document.querySelector('#streetchip button[data-s="1"].on'); };
   observe(cleanup, $(root, '#streetchip'), { attributes: true, subtree: true, attributeFilter: ['class'] }, street);
@@ -223,15 +235,20 @@ export function bindSections(ctx: ShellCtx): Sections {
     const t = e.target as Element;
     const item = t.closest<HTMLButtonElement>('.nav-item[data-section]');
     if (item && !item.disabled) {
-      nav = onMenuClick(nav, item.dataset.section as SectionId);
-      store.set(V2_KEYS.side, nav.sideOpen ? 'open' : 'closed');
+      /* On a phone the side panel lives in the drawer, which the section pick closes: choosing a section never toggles (or stores) the
+         desktop "side panel hidden" preference there (S8). */
+      nav = root.dataset.phone === '1' ? { section: item.dataset.section as SectionId, sideOpen: nav.sideOpen } : onMenuClick(nav, item.dataset.section as SectionId);
+      if (root.dataset.phone !== '1') store.set(V2_KEYS.side, nav.sideOpen ? 'open' : 'closed');
       paint(); return;
     }
     if (t.closest('[data-menu-pin]')) {
       const next: MenuState = root.dataset.menu === 'icons' ? 'labels' : 'icons';
       root.dataset.menu = next; store.set(V2_KEYS.menu, next); paint(); return;
     }
-    if (t.closest('[data-side-close]')) { nav = { ...nav, sideOpen: false }; store.set(V2_KEYS.side, 'closed'); paint(); return; }
+    if (t.closest('[data-side-close]')) {
+      if (root.dataset.phone === '1') return;   // the drawer's own × (phone-v2.ts): a phone has no "hide the panel" preference
+      nav = { ...nav, sideOpen: false }; store.set(V2_KEYS.side, 'closed'); paint(); return;
+    }
     const goEl = t.closest<HTMLElement>('[data-go-section]');
     if (goEl?.dataset.goSection) go(goEl.dataset.goSection as SectionId);
   });
@@ -260,6 +277,7 @@ export function mountShellV2(): (() => void) | null {
   bindPhone(root, cleanup, ctx.layers);          // S8
   if (!compare) {
     bindFlash(ctx);
+    bindModals(root, cleanup);                   // S8: focus stays inside the app's modals (B audit C3)
     bindMirrors(ctx);                            // Track A, S3.2 (heat-v2.ts)
     bindSunCard(root, cleanup);                  // Track A, S4.1 (sun-card.ts)
     bindWardCard(ctx);                           // Track A, S4.2 (heat-v2.ts)

@@ -11,6 +11,7 @@ export const ICON: Readonly<Record<string, string>> = Object.freeze({
   trees: '<path d="M10 17v-4M10 13c-3.5 0-5.5-2-5.5-4.5S7 3 10 3s5.5 3 5.5 5.5S13.5 13 10 13Z"/>',
   street: '<rect x="3" y="5.5" width="14" height="10" rx="2"/><circle cx="10" cy="10.5" r="2.8"/><path d="M7 5.5 8 3.5h4l1 2"/>',
   layers: '<path d="M10 3 2.5 7 10 11l7.5-4Z"/><path d="m2.5 10.5 7.5 4 7.5-4"/><path d="m2.5 14 7.5 4 7.5-4"/>',
+  menu: '<path d="M3.5 6h13M3.5 10h13M3.5 14h13"/>',
   collapse: '<path d="M12 5 7 10l5 5"/>',
   expand: '<path d="M8 5l5 5-5 5"/>',
 });

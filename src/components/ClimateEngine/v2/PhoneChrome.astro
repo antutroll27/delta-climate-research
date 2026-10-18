@@ -1,0 +1,29 @@
+---
+// src/components/ClimateEngine/v2/PhoneChrome.astro — OBOS v2 spec §3, §7.3–7.4, decision C11 (S8).
+// The phone's three pieces of chrome, rendered on every v2 page (area, Compare, the paired brief) and shown only under the phone query:
+//   · the menu button (top-left, 44 px): opens the drawer;
+//   · the scrim and the DRAWER, a modal dialog: on a phone the menu rail (and, on the area page, the section's side panel) live in it;
+//   · the SHEET (area page only): the right column, the map stack and the dock stack in it, under one real <button> handle.
+// phone-v2.ts moves the nodes in and puts them back exactly when the viewport leaves the phone band. Every piece is a DIRECT child of the
+// v2 root, so print/brief.css's "hide every direct child but .brf-sheet" rule needs no edit (C audit F4).
+import { ICON } from './icons.ts';
+interface Props { sheet?: boolean }
+const { sheet = false } = Astro.props;
+---
+<button class="tw-menu card" type="button" data-v2-menu data-hud aria-expanded="false" aria-controls="v2Drawer" aria-label="Sections and controls">
+  <svg viewBox="0 0 20 20" aria-hidden="true" set:html={ICON.menu} />
+</button>
+<div class="drawer-scrim" data-v2-scrim hidden></div>
+<div class="drawer" id="v2Drawer" role="dialog" aria-modal="true" aria-labelledby="v2DrawerH" tabindex="-1" data-open="false" data-modal="true" data-hud>
+  <h2 class="sr-only" id="v2DrawerH" tabindex="-1" data-autofocus>Sections and controls</h2>
+  <button class="sp-close drawer-x" type="button" data-pop-close aria-label="Close the menu">×</button>
+</div>
+{sheet && (
+  <div class="sheet" id="v2Sheet" data-hud data-open="false">
+    <div class="sheet-head">
+      <button class="sheet-handle" type="button" data-v2-sheet-toggle aria-expanded="false" aria-controls="v2Sheet">
+        <span class="sheet-grip" aria-hidden="true"></span><span class="sheet-lab">Show the readings</span>
+      </button>
+    </div>
+  </div>
+)}
