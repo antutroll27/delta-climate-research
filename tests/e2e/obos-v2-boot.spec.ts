@@ -113,6 +113,8 @@ test.describe('@v2 boot', () => {
     for (const s of ['heat', 'air', 'solar', 'weather', 'scenarios']) await expect(page.locator(`.nav-item[data-section="${s}"]`)).toBeDisabled();
     await expect(page.locator('.nav-item[data-section="methods"]')).toBeEnabled();
     await expect(page.locator('#scope-area-trigger')).toBeVisible();
+    /* A-S5 audit F4: no map here, so the panel must not say "Every result is the live map's own" */
+    await expect(page.locator('[data-side-pane="explore"]')).not.toContainText('live map');
     /* nothing looks like it is loading */
     await expect(page.locator('#loadchip, #simBackend, #v2SunCard')).toHaveCount(0);
   });

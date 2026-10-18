@@ -10,7 +10,7 @@ const { scope } = Astro.props;
 ---
 <div class="sp-body ov-panel" data-side-pane="explore">
   <div class="sp-head">
-    <div><h2>Explore the ward</h2><p class="sp-sub">Every result is the live map’s own.</p></div>
+    <div><h2>Explore the ward</h2>{scope.area.hasData && <p class="sp-sub">Every result is the live map’s own.</p>}</div>
     <button class="sp-close" type="button" data-side-close aria-label="Close the controls"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3 3 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
   </div>
   <div class="sp-scroll">

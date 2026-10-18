@@ -347,3 +347,7 @@ test('A-S5 F1: syncHero drops the ± part of the chip text; the card alone carri
   const src = readFileSync('src/scripts/climate-engine/v2/heat-v2.ts', 'utf8');
   assert.match(src, /\.split\(' · '\)\.filter\(\(s\) => !s\.includes\('±'\)\)\.join\(' · '\)/);
 });
+
+test('A-S5 F4: the "live map\'s own" subtitle renders only where there is a map', () => {
+  assert.match(V2('ExploreSide.astro'), /\{scope\.area\.hasData && <p class="sp-sub">Every result is the live map’s own\.<\/p>\}/);
+});
