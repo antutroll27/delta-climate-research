@@ -107,7 +107,10 @@ test('the print rules: v2 chrome hidden, #solBrief alone, no close button on pap
   assert.match(css, /@media print/);
   assert.ok(css.includes('#solBrief[hidden] { display: none !important; }'), 'the [hidden] belt');
   assert.ok(/#brClose \{ display: none !important; \}/.test(css));
-  assert.ok(/\.obos-v2 > \*:not\(#solBrief\) \{ display: none !important; \}/.test(css));
+  /* merge gate (18 Oct): scoped to the area stage, or it blanks the paired brief and Compare (print/brief.css owns theirs) */
+  const SCOPE = '\\.obos-v2:not\\(\\[data-brief-root\\]\\):not\\(\\[data-compare-root\\]\\)';
+  assert.ok(new RegExp(`${SCOPE} > \\*:not\\(#solBrief\\) \\{ display: none !important; \\}`).test(css));
+  assert.ok(!/html\[data-ui="v2"\] \.obos-v2 [>#{]/.test(css), 'no unscoped .obos-v2 print rule is left');
   assert.ok(css.includes('var(--print-ink)') && css.includes('var(--print-paper)'));
   assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(css.replace(/\/\*[\s\S]*?\*\//g, '')), 'print/solar.css may not write a hex');
   assert.ok(!/rgba?\(|hsla?\(|oklch\(/.test(css.replace(/\/\*[\s\S]*?\*\//g, '')), 'print/solar.css may not write a colour function');
