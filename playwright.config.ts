@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { PW_ORIGIN, PW_PORT, V2_STORAGE_STATE } from './tests/e2e/fixtures/ui-v2-state';
+import { V2_PART_A, V2_PART_B, v2Match } from './tests/e2e/fixtures/v2-split';
 
 /** Chromium args for the perf runs (BRIEF.md, founder rule 17 Oct: NO window ever appears on his screen). The off-screen
     variant (--window-position=-32000,-32000 --no-startup-window ...) was tried on 17 Oct and macOS CLAMPED the window back onto
@@ -134,15 +135,25 @@ export default defineConfig({
       snapshotPathTemplate: '/Volumes/OBOSLab/obos-v2/shots/v1-baseline/png/{arg}{ext}',
       use: { ...devices['Desktop Chrome'] },
     }]),
-    /* OBOS v2 (spec §9.2). The flag comes from storage, so every v2 spec opens
-       the v2 tree with no query. SwiftShader = tier 0 = Plates: no backdrop-filter in CI.
-       CI TIME BUDGET: this project (the whole @v2 suite) must stay <= 6 min on the 2-CPU runner
-       (S0 audit F6). Verify's browser contracts already use 29-31 of a 40 min globalTimeout.
+    /* OBOS v2 (spec §9.2). The flag comes from storage, so every v2 spec opens the v2 tree with no query. SwiftShader = tier 0 = Plates: no backdrop-filter in CI.
+       TWO PROJECTS, ONE SUITE (S8). chromium-v2 had grown to 95 specs and 8.8 minutes against the 9-minute global timeout of one e2e tool run, so it is split by spec file into
+       chromium-v2-a and chromium-v2-b (tests/e2e/fixtures/v2-split.ts; tests/unit/obos-v2-ci-split.test.mjs fails if a spec belongs to neither part or to both).
+       MEASURED AT S8 (dev machine, M-series, CPU-marginal, 1 worker, 18 Oct): part A 52 tests, 5.6 min; part B 71 tests, 6.1 min; the pair 123 tests, 11.7 min (the old project's
+       95 specs were 8.8). BUDGET: each part <= 6.5 min on the dev machine, so neither is near the 9-minute stop; the pair is the @v2 budget, 12 min.
+       CI ARITHMETIC, STATED AND NOT HIDDEN (spec 9.4 set <= 6 min for 22 tests; that no longer holds). On the 2-CPU runner the same tests take about 1.5x: ~17.5 min for the pair. The last
+       full CI run was 28.7 min for 197 tests (13 Oct) against the 38-minute stop above, so 28.7 + 17.5 = 46.2 does not fit. Spec 9.4's fallback, moving obos-v2-contrast and
+       obos-v2-phone (2.1 min here, ~3.2 on CI) to local-only, gets to ~43 and still does not fit. So the flip PR must give the @v2 suite its own CI job (a matrix leg per part, which
+       also halves the wall time) or raise the stop and the job limit; neither is done here. Until then CI runs both parts in the one job exactly as it ran the one project.
        Fold checks into one engine load (openV2 ~20 s locally) before adding a load. */
     {
-      name: 'chromium-v2',
-      testMatch: '**/obos-v2-*.spec.ts',
-      testIgnore: ['**/obos-v2-glass.spec.ts', '**/obos-v2-split-baseline.spec.ts'],
+      name: 'chromium-v2-a',
+      testMatch: v2Match(V2_PART_A),
+      grep: /@v2/,
+      use: { ...devices['Desktop Chrome'], storageState: V2_STORAGE_STATE },
+    },
+    {
+      name: 'chromium-v2-b',
+      testMatch: v2Match(V2_PART_B),
       grep: /@v2/,
       use: { ...devices['Desktop Chrome'], storageState: V2_STORAGE_STATE },
     },
@@ -160,13 +171,6 @@ export default defineConfig({
         headless: false,
         launchOptions: { args: [...PERF_METAL] },
       },
-    }]),
-    /* A1 S2.9: the split changes nothing (v2 markup, computed style, pixels). Local only; runs only with V2_SPLIT set. */
-    ...(process.env.CI ? [] : [{
-      name: 'chromium-v2-split',
-      testMatch: '**/obos-v2-split-baseline.spec.ts',
-      snapshotPathTemplate: '/Volumes/OBOSLab/obos-v2/shots/v2-split-baseline/png/{arg}{ext}',
-      use: { ...devices['Desktop Chrome'], storageState: V2_STORAGE_STATE },
     }]),
     {
       name: 'firefox-cbam',

@@ -6,8 +6,9 @@ test.describe('@v2 boot', () => {
   test.setTimeout(180_000);
 
   /* CI TIME BUDGET (S0 audit F6). Each openV2 waits ~20 s for the engine (longer on the 2-CPU
-     SwiftShader runner), so the boot checks that need a live engine share ONE load. The whole
-     @v2 suite is budgeted at <= 6 min in CI; fold new checks into existing loads before adding one. */
+     SwiftShader runner), so the boot checks that need a live engine share ONE load. The @v2 suite is two Playwright projects
+     (chromium-v2-a and -b, tests/e2e/fixtures/v2-split.ts), each budgeted at <= 6.5 min on the dev machine (S8); fold new checks
+     into existing loads before adding one. */
   test('@v2 boot: the flag swaps the tree before mount (one main, unique ids, live readouts, no page errors), writes no v1 preference, and an in-place ward switch still works', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(String(e)));
