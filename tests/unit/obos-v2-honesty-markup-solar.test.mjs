@@ -152,7 +152,7 @@ test('F1: the sheet\'s button row is sticky so Close is in view on open; the scr
   assert.match(SOLAR_CSS, /#solPay \.sp-btns \{[^}]*position: sticky;[^}]*bottom: 0;[^}]*background: var\(--card\)/);
   assert.match(SOLAR_CSS, /#solPay \{[^}]*scroll-padding: 64px 0 52px;/);
   assert.match(SOLAR_CSS, /#solPay \{[^}]*scrollbar-width: thin;/);
-  const bind = readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8');
+  const bind = readFileSync('src/scripts/climate-engine/v2/solar-v2.ts', 'utf8');   // b-01: moved out of weather-v2.ts
   assert.match(bind, /getElementById\('solPay'\)[\s\S]*scrollTop = 0/, 'the sheet is put back at its top after the app focuses Close');
   assert.ok(!/\.focus\(/.test(bind.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')), 'v2 does not move focus: the app\'s focus on Close stays');
   assert.ok(!/#solPay::-webkit-scrollbar/.test(SOLAR_CSS) && !/scrollbar-width: none/.test(SOLAR_CSS), 'the sheet\'s scrollbar is not hidden');
@@ -169,7 +169,7 @@ test('F5: the tariff unit uses --ink-3 (AA in Light-Plates), no hex', () => {
 });
 
 test('F6: the selected roof row is marked by a v2-only binder (no app edit), and the inverted-row rule is live', () => {
-  const bind = readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8');
+  const bind = readFileSync('src/scripts/climate-engine/v2/solar-v2.ts', 'utf8');   // b-01: moved out of weather-v2.ts
   assert.match(bind, /aria-selected/);
   assert.match(bind, /#solList/);
   assert.match(bind, /bcId/);

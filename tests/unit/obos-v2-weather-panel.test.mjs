@@ -92,13 +92,14 @@ test('F8 (B-S7 audit): the forecast state does not describe rings that are not d
   assert.match(css, /\[data-v2-card="rain"\] \.hrs:empty ~ \.foot \{ display: none; \}/);
 });
 
-test('F6 (B-S7 audit): the solar binder is a recorded request, not a silent smell', () => {
+test('F6 (B-S7 audit): the solar binder was a recorded request (b-01) and now lives in solar-v2.ts, with no TODO left behind', () => {
   assert.ok(existsSync('/Volumes/OBOSLab/obos-v2/requests/b-01-solar-binder.md'), 'requests/b-01-solar-binder.md');
-  assert.match(readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8'), /TODO\(request b-01\)/);
+  assert.ok(existsSync('src/scripts/climate-engine/v2/solar-v2.ts'), 'b-01 applied: solar-v2.ts');
+  assert.ok(!/TODO\(request b-01\)/.test(readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8')));
 });
 
 test('F1 (B-S7 audit): the brief link mirrors the app\'s own Compare query', () => {
-  const src = readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8');
+  const src = readFileSync('src/scripts/climate-engine/v2/solar-v2.ts', 'utf8');   // b-01: moved out of weather-v2.ts
   assert.match(src, /a\[data-rail="analysis"\]/);
   assert.match(src, /\/heat-map\/compare\/[\s\S]*\/heat-map\/brief\//);
   assert.match(src, /data-v2-brief/);
