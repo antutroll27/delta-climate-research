@@ -321,3 +321,11 @@ test('F3: the stamp sits in the ward card above the foldable body (its header bl
   assert.match(css, /\.wardc \.con-stamp \{[^}]*border: 1px solid var\(--ink-1\)/);
   assert.ok(!/bronze/.test(css));
 });
+
+/* ── A-S4 audit F7: ramp colours are marks, not text colours, on the building card (Light AA) ── */
+test('F7: the "vs ward mean" figure is ink with a ramp-coloured underline mark, never ramp-coloured text', () => {
+  const css = strip(CSS('building.css'));
+  assert.match(css, /#bcard \.bc-ins :is\(\.hot, \.cool\) \{[^}]*color: var\(--ink-1\)[^}]*box-shadow: inset 0 -2px 0 var\(--heat-5\)/);
+  assert.match(css, /#bcard \.bc-ins \.cool \{[^}]*box-shadow: inset 0 -2px 0 var\(--heat-1\)/);
+  assert.ok(!/\.bc-ins \.(hot|cool) \{ color: var\(--heat/.test(css), 'a ramp colour is still set as text colour');
+});

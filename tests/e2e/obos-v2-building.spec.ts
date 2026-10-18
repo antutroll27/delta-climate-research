@@ -219,4 +219,19 @@ test.describe('@v2 building card', () => {
     const loss = (await page.locator('#bcSolLoss').boundingBox())!, floor = (await page.locator('#bcSolFloor').boundingBox())!;
     expect(Math.abs(loss.y - floor.y)).toBeLessThanOrEqual(8);
   });
+
+  test('@v2 [H] Light theme: the vs-ward-mean figure on the card is ink (AA), with the ramp as a mark only', async ({ page }) => {
+    await page.addInitScript(() => { try { localStorage.setItem('obos:v2:theme', 'light'); } catch { /* none */ } });
+    await openV2(page);
+    await pick(page);
+    await expect(page.locator('#bcard')).toBeVisible();
+    const mark = page.locator('#bcIns :is(.hot, .cool)').first();
+    await expect(mark).toBeVisible();
+    const [markInk, idInk, underline] = await page.evaluate(() => {
+      const m = document.querySelector('#bcIns :is(.hot, .cool)') as HTMLElement, id = document.getElementById('bcId') as HTMLElement;
+      return [getComputedStyle(m).color, getComputedStyle(id).color, getComputedStyle(m).boxShadow];
+    });
+    expect(markInk, 'the figure takes the card\'s ink, not a ramp colour').toBe(idInk);
+    expect(underline, 'and carries the ramp as an underline mark').not.toBe('none');
+  });
 });

@@ -48,8 +48,9 @@ html[data-ui="v2"] .obos-v2 #bcard .bc-rings { margin: 12px 0 0; padding: 8px 10
 html[data-ui="v2"] .obos-v2 #bcard .bc-rings b { color: var(--ink-1); font-weight: 600; }
 html[data-ui="v2"] .obos-v2 #bcard .bc-ins { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; line-height: 1.5; color: var(--ink-2); }
 html[data-ui="v2"] .obos-v2 #bcard .bc-ins b { font-weight: 600; color: var(--ink-1); }
-html[data-ui="v2"] .obos-v2 #bcard .bc-ins .hot { color: var(--heat-5); font-weight: 600; }
-html[data-ui="v2"] .obos-v2 #bcard .bc-ins .cool { color: var(--heat-1); font-weight: 600; }
+/* the ramp colour is a mark under the figure, never the text colour: heat-5 on the Light plate is 3.2:1 (A-S4 audit F7) */
+html[data-ui="v2"] .obos-v2 #bcard .bc-ins :is(.hot, .cool) { color: var(--ink-1); font-weight: 600; box-shadow: inset 0 -2px 0 var(--heat-5); }
+html[data-ui="v2"] .obos-v2 #bcard .bc-ins .cool { box-shadow: inset 0 -2px 0 var(--heat-1); }
 html[data-ui="v2"] .obos-v2 #bcard .bc-prov, html[data-ui="v2"] .obos-v2 #bcard .bc-sol-note { margin: 8px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-3); }
 html[data-ui="v2"] .obos-v2 #bcard .bc-prov:empty { display: none; }
 html[data-ui="v2"] .obos-v2 #bcard .sv-thumb { margin-top: 10px; }
