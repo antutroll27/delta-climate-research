@@ -52,10 +52,11 @@ interface Props { scope: ResolvedScope }
     <section class="bc-sol bc-part" id="bcSol" hidden>
       <div class="bc-h"><span class="bleed" aria-hidden="true"><Sym shape="square" c="solar" kind="modelled" size={40} /></span><span>Rooftop solar</span><span id="bcSolTier" class="bc-tier">screened</span></div>
       <dl>
-        {/* H13: the strict-mask floor is printed BESIDE the headline, in one row, never under a fold */}
-        <div class="interval"><dt>Installable</dt><dd id="bcSolKwp" class="sun">—</dd><dt>At least</dt><dd id="bcSolFloor">—</dd></div>
+        <dt>Installable</dt><dd id="bcSolKwp" class="sun">—</dd>
         <dt>Yield</dt><dd id="bcSolKwh">—</dd>
-        <dt>Shaded</dt><dd id="bcSolLoss">—</dd>
+        {/* H13 (A-S4 audit F2; spec correction 18 Oct): the strict-mask floor is the floor of the SHADING loss (pv.loss_strict), so it sits BESIDE "Shaded", in one row.
+            The capacity floor is printed by the app inside #bcSolKwp's own <small>. */}
+        <div class="interval"><dt>Shaded</dt><dd id="bcSolLoss">—</dd><dt>At least</dt><dd id="bcSolFloor">—</dd></div>
         <dt>Raised 2 m</dt><dd id="bcSolRaised">—</dd>
         <dt>Worth</dt><dd id="bcSolRs">—</dd>
       </dl>

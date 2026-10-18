@@ -128,11 +128,23 @@ test('H11: v1\'s building-card wording survives, every text node and every label
   assert.deepEqual(missing, [], 'text v1 prints that the v2 card lost');
 });
 
-test('H13: the strict floor sits beside the headline, in one .interval row (both ids)', () => {
+test('H13 (A-S4 audit F2): each floor sits beside ITS headline: the strict-mask floor with the SHADING loss, the capacity floor stays inside Installable\'s own small', () => {
   const v2 = V2('BuildingCardV2.astro');
-  assert.match(v2, /<div class="interval">[^]*?id="bcSolKwp"[^]*?id="bcSolFloor"[^]*?<\/div>/);
   const row = /<div class="interval">([^]*?)<\/div>/.exec(v2)[1];
-  assert.ok(row.includes('id="bcSolKwp"') && row.includes('id="bcSolFloor"'), 'headline and floor must share the row');
+  assert.ok(row.includes('id="bcSolLoss"') && row.includes('id="bcSolFloor"'), 'the shading loss and its strict floor must share the row');
+  assert.ok(!row.includes('id="bcSolKwp"'), 'the capacity headline must not be paired with the shading floor');
+  /* the app's own templates say which floor is which (heat-map-app.ts paintSolarCard) */
+  const app = readFileSync('src/scripts/climate-engine/heat-map-app.ts', 'utf8');
+  assert.match(app, /setHTML\('bcSolKwp', `\$\{r\.kwpLow\.toFixed\(1\)\}–\$\{r\.kwpHigh\.toFixed\(1\)\} kWp<small>floor \$\{r\.kwpLow/, 'the capacity floor is printed inside #bcSolKwp');
+  assert.match(app, /setHTML\('bcSolFloor', `\$\{pct\(pv\.loss_strict\[i\]\)\}<small>under a strict roof mask/, '#bcSolFloor is the strict-mask floor of the shading loss');
+  assert.match(app, /Shading \$\{pct\(pv\.loss\[i\]\)\} headline, \$\{pct\(pv\.loss_strict\[i\]\)\} floor/, 'the app\'s own ladder pairs loss with loss_strict');
+});
+
+test('H13 (A-S4 audit F2): the rows keep v1\'s order: Installable, Yield, Shaded, At least, Raised 2 m, Worth', () => {
+  const order = (html) => [...html.matchAll(/<dt>([^<]+)<\/dt>/g)].map((m) => m[1]).filter((t) => ['Installable', 'Yield', 'Shaded', 'At least', 'Raised 2 m', 'Worth'].includes(t));
+  const v1 = bcardOf(STAGE, '<div class="bcard" id="bcard"');
+  assert.deepEqual(order(V2('BuildingCardV2.astro')), order(v1));
+  assert.deepEqual(order(v1), ['Installable', 'Yield', 'Shaded', 'At least', 'Raised 2 m', 'Worth']);
 });
 
 test('H14/H15: no "validated" and no banned money word on the building card; the estimate wording is v1\'s', () => {

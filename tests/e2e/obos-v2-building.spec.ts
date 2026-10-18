@@ -110,8 +110,11 @@ test.describe('@v2 building card', () => {
     await expect(page.locator('#bcRings')).toContainText('how far you could walk from this building in 1 and 5 minutes');
     await expect(page.locator('#bcIns')).not.toBeEmpty();
     await expect(page.locator('#bcSolKwp')).toBeVisible();
-    const kwp = await page.locator('#bcSolKwp').boundingBox(), floor = await page.locator('#bcSolFloor').boundingBox();
-    expect(Math.abs(kwp!.y - floor!.y), 'H13: the strict floor sits beside the headline').toBeLessThanOrEqual(8);
+    await expect(page.locator('#bcSolLoss')).toBeVisible();
+    const loss = await page.locator('#bcSolLoss').boundingBox(), floor = await page.locator('#bcSolFloor').boundingBox();
+    expect(Math.abs(loss!.y - floor!.y), 'H13 (A-S4 F2): the strict-mask floor sits beside the SHADING loss it bounds').toBeLessThanOrEqual(8);
+    /* the capacity headline carries its own floor in its small line, and is not the strict floor's neighbour */
+    await expect(page.locator('#bcSolKwp small')).toContainText('floor');
     /* the ring labels and the greenery tag are placed clear of every HUD box (the app's keep-out, spec E1/E2) */
     await page.waitForTimeout(1500);                                         // the entrance animation and the app's 250 ms HUD read settle
     for (const sel of ['#ringNear', '#ringFar', '#coolTag']) {
@@ -176,5 +179,22 @@ test.describe('@v2 building card', () => {
     await expect(page.locator('#bcLm')).toBeVisible();
     await expect(page.locator('#bcLmH')).not.toHaveText('—');
     await expect(page.locator('#bcLmSrc')).not.toHaveText('—');
+  });
+
+  test('@v2 [H] the shading loss and its strict floor stay together, whole, inside the column at 1366 x 640', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 640 });
+    await stubWeather(page, '2026-10-07T06:05:00Z');
+    await openV2(page);
+    await pick(page);
+    await expect(page.locator('#bcSolLoss')).toBeAttached();
+    await page.locator('#bcSolLoss').scrollIntoViewIfNeeded();
+    const col = (await page.locator('#legend').boundingBox())!;
+    for (const id of ['#bcSolLoss', '#bcSolFloor']) {
+      const b = (await page.locator(id).boundingBox())!;
+      expect(b.y, `${id} top inside the column`).toBeGreaterThanOrEqual(col.y - 1);
+      expect(b.y + b.height, `${id} bottom inside the column`).toBeLessThanOrEqual(col.y + col.height + 1);
+    }
+    const loss = (await page.locator('#bcSolLoss').boundingBox())!, floor = (await page.locator('#bcSolFloor').boundingBox())!;
+    expect(Math.abs(loss.y - floor.y)).toBeLessThanOrEqual(8);
   });
 });
