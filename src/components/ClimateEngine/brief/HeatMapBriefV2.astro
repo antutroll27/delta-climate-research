@@ -25,6 +25,7 @@ import '../../../styles/obos-v2/screens.css';
 import '../../../styles/obos-v2/phone.css';
 import '../../../styles/obos-v2/print.css';
 import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
+import { SENTINEL_CREDIT, WATER_CREDIT } from '../../../scripts/climate-engine/v2/credits.ts';
 ---
 <main id="main" class="heat-brief obos-v2" data-brief-root aria-busy="true" style={symbolCssVars()}>
   <PhoneChrome />
@@ -82,6 +83,19 @@ import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
           <a class="pill" href="/heat-map/compare/" data-role="compare-link"><span aria-hidden="true">←</span> Back to Compare</a>
           <button type="button" class="pill" data-action="print">Print brief</button>
         </div>
+      </section>
+
+      {/* FINAL (founder, 19 Oct): the brief is printed and passed on, so it carries the credits of the model inputs it reproduces, the same sources and licences as Compare's Credits popover (the lines come
+          from the one shared module). The ward-boundary line is the existing [data-value="boundary-credit"] note above, written by paired-brief.ts where a boundary is drawn. */}
+      <section class="card brf-credits" aria-labelledby="brf-credits-h">
+        <h2 class="micro" id="brf-credits-h">Data and credits</h2>
+        <ul class="brf-cr">
+          <li>Footprints © <a href="https://overturemaps.org" target="_blank" rel="noopener noreferrer">Overture Maps Foundation</a><small>ODbL</small></li>
+          <li>Heights Google Open Buildings 2.5D<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
+          <li>Roads © OpenStreetMap<small>ODbL</small></li>
+          <li>{WATER_CREDIT.lead}<small>{WATER_CREDIT.licence}</small></li>
+          <li>Surface vegetation and albedo · {SENTINEL_CREDIT.lead}<small><a href={SENTINEL_CREDIT.url ?? undefined} target="_blank" rel="noopener noreferrer">{SENTINEL_CREDIT.licence}</a></small></li>
+        </ul>
       </section>
     </div>
   </div>

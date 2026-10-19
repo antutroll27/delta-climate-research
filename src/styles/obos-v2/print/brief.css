@@ -18,7 +18,14 @@
   html[data-ui="v2"] .obos-v2.heat-brief [data-action="print"] { display: none; }
   html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { display: block; max-width: none; padding: 0; }
   html[data-ui="v2"] .obos-v2.heat-brief .brf-side, html[data-ui="v2"] .obos-v2.heat-brief .brf-main { display: block; }
-  html[data-ui="v2"] .obos-v2.heat-brief .card { margin: 0 0 6mm; }
+  html[data-ui="v2"] .obos-v2.heat-brief .card { margin: 0 0 4mm; }
+  /* paper has no links to click: the address of each credit's licence is printed after it */
+  html[data-ui="v2"] .obos-v2.heat-brief .brf-cr a[href]::after { content: " (" attr(href) ")"; font-size: 9px; overflow-wrap: anywhere; }
+  html[data-ui="v2"] .obos-v2.heat-brief .brf-cr li { padding: 1mm 0; font-size: 9.5px; line-height: 1.3; }
+  html[data-ui="v2"] .obos-v2.heat-brief .brf-cr li small { display: inline; margin-left: 0.5em; color: var(--print-ink); font-size: 9.5px; }
+  html[data-ui="v2"] .obos-v2.heat-brief .brf-cr { columns: 2; column-gap: 6mm; }
+  html[data-ui="v2"] .obos-v2.heat-brief .brf-cr li { break-inside: avoid; border-top: 0; }
+  html[data-ui="v2"] .obos-v2.heat-brief .brf-credits { margin-bottom: 0; padding-top: 3mm; padding-bottom: 3mm; }
   html[data-ui="v2"] .obos-v2.heat-brief .brf-status { background: var(--print-paper); border: 1px solid var(--line); }
 }
 

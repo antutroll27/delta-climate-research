@@ -1,6 +1,7 @@
 // tests/e2e/obos-v2-merged.spec.ts — OBOS v2 integration: what only a MERGE can break (three tracks written apart).
 // Added by the integration session after Track A joined B and C. Each test reads the whole page, not one track's card.
 import { expect, test, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { openV2, stubWeather } from './obos-v2-helpers';
 
 const BALLYGUNGE = '/heat-map/in/kolkata/ballygunge/';
@@ -103,7 +104,19 @@ test.describe('@v2 merged', () => {
     await expect(page.locator('.brf-sheet')).toBeVisible();
     await expect(page.locator('.brf-org')).toBeVisible();
     for (const sel of ['nav.rail', '.toolbar', '#v2Key', '.brf-acts']) await expect(page.locator(sel), sel).toBeHidden();
+    /* FINAL (founder, 19 Oct): the printed brief carries the credits of what it shows, matching the on-screen sources and licences: the Copernicus Sentinel-2 notice (years from the
+       pipeline's provenance, data/dc-urs/sentinel.json), Overture footprints, Google heights CC BY 4.0, OpenStreetMap roads and water ODbL, and the ward boundary where one is drawn. */
+    const years = (JSON.parse(readFileSync('data/dc-urs/sentinel.json', 'utf8')) as { years_requested: number[] }).years_requested;
+    const credits = page.locator('.brf-credits');
+    await expect(credits, 'the credits are on the printed page').toBeVisible();
+    const text = await credits.innerText();
+    for (const t of ['Overture Maps Foundation', 'Heights Google Open Buildings 2.5D', 'CC BY 4.0', 'Roads \u00a9 OpenStreetMap', 'Water \u00a9 OpenStreetMap', 'ODbL',
+      `Contains modified Copernicus Sentinel data ${years[0]}\u2013${years[years.length - 1]}`]) expect(text, t).toContain(t);
+    await expect(credits.locator('a[href*="Sentinel_Data_Legal_Notice"]'), 'the Copernicus legal notice is linked, and its address is printed after the link').toHaveCount(1);
+    expect(await credits.locator('a[href*="Sentinel_Data_Legal_Notice"]').evaluate((e) => getComputedStyle(e, '::after').content)).toContain('Sentinel_Data_Legal_Notice');
+    await expect(credits, 'the card is a block on the sheet (not folded or clipped)').toHaveCSS('display', 'block');
     await page.emulateMedia({ media: 'screen' });
+    await expect(credits, 'and on the screen too: the brief is a document').toBeVisible();
     await openV2(page, '/heat-map/compare/?a=ballygunge&b=baruipur');
     await expect(page.locator('main.obos-v2[data-compare-root]')).toHaveAttribute('aria-busy', 'false', { timeout: 120_000 });
     await page.emulateMedia({ media: 'print' });

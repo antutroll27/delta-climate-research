@@ -315,6 +315,29 @@ test.describe('@v2 compare', () => {
     await ctx.close();
   });
 
+  /* FINAL visual V4: the paired brief is a DOCUMENT. At 1440 x 900 it is taller than the screen, and that is right provided it scrolls the page once (no inner scroller, no double scrollbar)
+     and every card is reachable and whole. (Measured on the S9.4 head: one viewport scroller, no inner ones; pinned here.) */
+  test('@v2 [V4] the paired brief scrolls as one document at 1440 x 900: no inner scrollers, nothing clipped, the last card reachable', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openV2(page, '/heat-map/brief/?a=ballygunge&b=baruipur');
+    await expect(page.locator('main.obos-v2[data-brief-root]')).toHaveAttribute('aria-busy', 'false', { timeout: 120_000 });
+    const m = await page.evaluate(() => {
+      const scrollers: string[] = [];
+      for (const e of document.querySelectorAll('body *')) {
+        const cs = getComputedStyle(e);
+        if (/(auto|scroll)/.test(cs.overflowY) && e.scrollHeight > e.clientHeight + 1) scrollers.push(`${e.tagName}.${e.className}`);
+        if (/(auto|scroll|hidden)/.test(cs.overflowY) && e.matches('.brf-sheet, .brf-side, .brf-main, main.obos-v2')) scrollers.push(`clipping ${e.tagName}.${e.className}`);
+      }
+      return { scrollers, doc: document.documentElement.scrollHeight, inner: window.innerHeight, bodyScrolls: document.body.scrollHeight > document.body.clientHeight + 1 };
+    });
+    expect(m.scrollers, 'no element scrolls or clips inside the page').toEqual([]);
+    expect(m.doc, 'the page is taller than the screen: it is a document').toBeGreaterThan(m.inner);
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+    await expect.poll(() => page.evaluate(() => Math.round(window.scrollY + window.innerHeight) >= document.documentElement.scrollHeight - 1)).toBe(true);
+    const last = await page.evaluate(() => { const cards = [...document.querySelectorAll('.brf-sheet .card')]; return cards.map((c) => { const r = c.getBoundingClientRect(); return { bottom: r.bottom, right: r.right, left: r.left }; }); });
+    for (const c of last) { expect(c.bottom, 'a card ends on the screen once scrolled to the end').toBeLessThanOrEqual(900); expect(c.left).toBeGreaterThanOrEqual(0); expect(c.right).toBeLessThanOrEqual(1440); }
+  });
+
   test('@v2 [V3] desktop: the phone-only brief link is not drawn (one "Open brief" in the tab order)', async ({ page }) => {
     await openCompare(page);
     await expect(page.locator('[data-v2-brief-link]')).toHaveCount(1);

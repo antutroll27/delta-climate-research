@@ -37,3 +37,11 @@ html[data-ui="v2"] .obos-v2.heat-brief .pill:is(a) { display: inline-flex; align
 html[data-ui="v2"] .obos-v2.heat-brief .brf-acts button.pill { height: 30px; padding: 0 14px; }
 @media (max-width: 1060px) { html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 699px), (pointer: coarse) and (max-height: 560px) { html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { padding: 72px 12px 40px 88px; } }
+
+/* FINAL (founder, 19 Oct): the credits card under the evidence. Small print: one source to a line, its licence beside it. */
+html[data-ui="v2"] .obos-v2.heat-brief .brf-credits { margin-top: 10px; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-cr { margin-top: 6px; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-cr li { font-size: 12px; line-height: 1.45; padding: 5px 0; border-top: 1px solid var(--line); color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-cr li:first-child { border-top: 0; }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-cr li small { display: block; font-size: 11px; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2.heat-brief .brf-cr a { color: inherit; }
