@@ -36,4 +36,4 @@ html[data-ui="v2"] .obos-v2.heat-brief .brf-acts { margin-top: 14px; }
 html[data-ui="v2"] .obos-v2.heat-brief .pill:is(a) { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; height: 30px; padding: 0 14px; }
 html[data-ui="v2"] .obos-v2.heat-brief .brf-acts button.pill { height: 30px; padding: 0 14px; }
 @media (max-width: 1060px) { html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 699px) { html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { padding: 72px 12px 40px 88px; } }
+@media (max-width: 699px), (pointer: coarse) and (max-height: 560px) { html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { padding: 72px 12px 40px 88px; } }

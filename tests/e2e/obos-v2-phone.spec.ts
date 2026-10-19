@@ -307,5 +307,22 @@ for (const v of [{ n: '360x740', width: 360, height: 740 }, { n: '844x390 on its
       expect(await phoneIssues(page), 'key popover').toEqual([]);
       await page.keyboard.press('Escape');
     });
+
+    /* the two off-map pages at the other two sizes (390x844 is pinned above): their phone layout answers the same query, so a phone on its side gets it too */
+    if (v.width !== 390 || v.height !== 844) test(`@v2 Compare and the paired brief at ${v.n}: nothing scrolls sideways or overlaps, the caveats are on the page, the rail is the drawer`, async ({ page }) => {
+      await seenNote(page);
+      await page.goto('/heat-map/compare/');
+      await expect(page.locator('[data-role="status"]')).not.toHaveText('Preparing the paired model.', { timeout: 90_000 });
+      await expect(page.locator('.cmp-phone-note')).toBeVisible();
+      await expect(page.locator('.cmp-phone-note')).toContainText('They are not a ward ranking.');
+      expect(await phoneIssues(page), 'Compare').toEqual([]);
+      await menu(page).click();
+      await expect(page.locator('#v2Drawer nav.rail')).toBeVisible();
+      expect(await phoneIssues(page), 'Compare with the drawer open').toEqual([]);
+      await page.keyboard.press('Escape');
+      await page.goto('/heat-map/brief/');
+      await expect(page.locator('main.obos-v2[data-brief-root]')).toHaveCount(1);
+      expect(await phoneIssues(page), 'the paired brief').toEqual([]);
+    });
   });
 }

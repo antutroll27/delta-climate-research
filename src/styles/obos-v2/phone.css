@@ -145,11 +145,11 @@ html[data-ui="v2"] .obos-v2 .rnudge .rn-x { width: 44px; height: 44px; min-width
 }
 
 /* ── Compare and the brief on a phone: the rail is in the drawer, so the page keeps its whole width ── */
-@media (max-width: 699px) {
+@media (max-width: 699px), (pointer: coarse) and (max-height: 560px) {
   html[data-ui="v2"] .obos-v2.heat-compare { --cmp-rail: 12px; }
   html[data-ui="v2"] .obos-v2.heat-compare .cmp-stage { padding-top: 60px; }
   html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { padding: 60px 12px 40px 12px; }
   html[data-ui="v2"] .obos-v2.heat-compare .tw-menu, html[data-ui="v2"] .obos-v2.heat-brief .tw-menu { position: fixed; }
 }
 html[data-ui="v2"] .obos-v2 .cmp-phone-note { display: none; }
-@media (max-width: 699px) { html[data-ui="v2"] .obos-v2 .cmp-phone-note { display: block; margin: 0 0 4px; } }
+@media (max-width: 699px), (pointer: coarse) and (max-height: 560px) { html[data-ui="v2"] .obos-v2 .cmp-phone-note { display: block; margin: 0 0 4px; } }

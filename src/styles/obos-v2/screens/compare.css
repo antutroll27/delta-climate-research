@@ -117,7 +117,7 @@ html[data-ui="v2"] .obos-v2.heat-compare .cmp-method { margin-top: 8px; }
 
 /* ── a phone: the page scrolls, the panel becomes the v1 bottom sheet (collapsed, half, full), the rail's column is kept clear.
    The rail's own phone behaviour (a drawer) is S8's; until then its icon column ends at 88 px and fixed. ── */
-@media (max-width: 699px) {
+@media (max-width: 699px), (pointer: coarse) and (max-height: 560px) {
   html[data-ui="v2"] .obos-v2.heat-compare { --cmp-rail: 96px; overflow-x: hidden; overflow-y: auto; }
   html[data-ui="v2"] .obos-v2.heat-compare :is(.rail, .toolbar) { position: fixed; }
   html[data-ui="v2"] .obos-v2.heat-compare .cmp-stage { position: static; z-index: auto; pointer-events: auto; padding: 72px 12px 24px var(--cmp-rail); }
