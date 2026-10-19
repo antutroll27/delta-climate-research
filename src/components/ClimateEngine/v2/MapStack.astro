@@ -35,14 +35,14 @@ const glyphs = areaKeysInCity(scope.key).map(resolve).map((s) => ({ key: s.key, 
     </button>
     <button class="wc-more" type="button" data-v2-more aria-expanded="true" aria-label="Show less about this ward">Less</button>
   </div>
-  {scope.area.hasData && <p class="wc-stamp"><ConstructionStamp class="chip line" /></p>}
+  {/* FINAL audit F6 (honesty): what the map face says about the heat field is never folded away. The stamp and this row are the card's header furniture, outside .wc-body. */}
+  {scope.area.hasData && <p class="wc-stamp"><ConstructionStamp class="chip line" /><span class="wc-heat"><span class="sym-tile sm"><Sym shape="ward" c="heat-4" kind="modelled" size={13} /></span><span>Heat field · modelled</span></span></p>}
   <div class="wc-body">
     <p class="wc-fig"><span class="wc-t"><Sym shape="square" c="ink" size={14} /></span>
       {scope.area.hasData ? <span id="bcount">— buildings</span> : <span>no artefacts · {scope.tier} tier</span>}</p>
     {scope.area.hasData && <p class="wc-sub"><span class="chip" id="simBackend" aria-live="polite">SELECTING ENGINE</span></p>}
     {scope.area.hasData && <ul class="sym-list wc-prov">
       <li><span class="sym-tile sm"><Sym shape="square" c="ink" size={13} /></span><span>Live basemap, real footprints &amp; Google heights</span></li>
-      <li><span class="sym-tile sm"><Sym shape="ward" c="heat-4" kind="modelled" size={13} /></span><span>Heat field · modelled</span></li>
       <li><span class="sym-tile sm"><Sym shape="square" c="neutral" kind="modelled" size={13} /></span><span>Block detail · illustrative</span></li>
     </ul>}
     {scope.area.hasData && <div class="loadchip foot" id="loadchip"></div>}

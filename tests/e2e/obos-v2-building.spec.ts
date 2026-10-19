@@ -15,7 +15,8 @@ test.describe('@v2 map stack', () => {
     await expect(page.locator('#bcount')).toHaveText(/^[\d,]+ buildings in .+ · [\d,]+ drawn$/);
     await expect(page.locator('#simBackend')).not.toHaveText('SELECTING ENGINE');
     const rows = card.locator('.wc-prov li');
-    await expect(rows).toHaveText(['Live basemap, real footprints & Google heights', 'Heat field · modelled', 'Block detail · illustrative']);
+    await expect(rows).toHaveText(['Live basemap, real footprints & Google heights', 'Block detail · illustrative']);
+    await expect(card.locator('.wc-heat'), 'F6: the modelled-heat row sits in the header, outside the fold').toHaveText('Heat field · modelled');
     await expect(card.locator('[data-v2-crumb]')).toContainText('India');
     /* a-01: the glyph is the SVG itself, switched by the hidden attribute (no wrapper span) */
     await expect(card.locator('[data-v2-crumb] .crumb-g svg.cg:not([hidden])')).toBeVisible();
@@ -73,6 +74,16 @@ test.describe('@v2 ward card on laptops', () => {
       await expect(stamp).toHaveText('Under Construction');
       expect(await stamp.evaluate((e) => getComputedStyle(e).borderTopWidth), 'a stamp has a visible border, not grey body text').toBe('1px');
       expect(await stamp.evaluate((e) => !!e.closest('.wc-body')), 'the stamp is outside the fold').toBe(false);
+      /* FINAL audit F6 (honesty): "Heat field · modelled" is never folded away, folded card or not; and on Heat the block-pattern note is on screen too */
+      const heat = card.locator('.wc-heat');
+      await expect(heat).toBeVisible();
+      await expect(heat).toHaveText('Heat field · modelled');
+      expect(await heat.evaluate((e) => !!e.closest('.wc-body')), 'the modelled-heat row is outside the fold').toBe(false);
+      await page.locator('.nav-item[data-section="heat"]').click({ position: { x: 30, y: 22 } });
+      const note = page.locator('#patternNote');
+      await expect(note).toContainText('illustrative', { timeout: 30_000 });
+      await expect(note, 'the block-pattern note is visible on Heat').toBeVisible();
+      expect(await note.evaluate((e) => { let n: Element | null = e; while (n) { if (n.matches('details:not([open]), [hidden], .wc-body')) return false; n = n.parentElement; } return true; }), 'and it is in no folded container (the right column scrolls; nothing folds it)').toBe(true);
     });
   }
 });
