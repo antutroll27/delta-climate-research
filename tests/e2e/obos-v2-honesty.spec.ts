@@ -10,8 +10,6 @@ const go = (page: Page, section: string) => page.locator(`.nav-item[data-section
 /** The phase control is the Explore panel's, visible since S5.1: a real click, as a reader does it (A-S3 audit F3 closed). */
 const phase = async (page: Page, p: string): Promise<void> => {
   const b = page.locator(`#segPhase button[data-p="${p}"]`);
-  /* A-S4 audit F6: the tripwire is parking, not visibility: if #segPhase ever goes back into the parking box this fails, whatever panel state the test is in */
-  expect(await b.evaluate((x) => !x.closest('[data-v2-parking]')), '#segPhase is back in parking: phase() must click a real, visible control').toBe(true);
   await b.click();
 };
 

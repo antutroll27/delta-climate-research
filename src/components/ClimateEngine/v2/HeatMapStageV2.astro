@@ -1,6 +1,5 @@
 ---
-// OBOS v2 SKELETON TREE (spec 1.2, 1.6, 1.8). S0: every app-bound id exactly once, parked and unstyled.
-// Each parked block leaves [data-v2-parking] in the slice named beside it. Copied from HeatMapStage.astro at 7eb32e8.
+// OBOS v2 area stage (spec 1.2, 1.6, 1.8): every app-bound id exactly once. Started as a copy of HeatMapStage.astro at 7eb32e8.
 // Full-bleed instrument markup for one AREA of /heat-map. Behaviour is mounted by
 // src/scripts/climate-engine/heat-map-app.ts (booted from the page). Styles are
 // is:global but only bundled onto the heat-map routes (the sole pages importing
@@ -17,10 +16,6 @@ import StreetViewModal from './StreetViewModal.astro';
 import ToastsV2 from './ToastsV2.astro';
 import SolarSheets from './SolarSheets.astro';
 import PhoneChrome from './PhoneChrome.astro';
-import ParkA1 from './ParkA1.astro';
-import ParkB1 from './ParkB1.astro';
-import ParkA2 from './ParkA2.astro';
-import ParkB2 from './ParkB2.astro';
 import TitleCard from './TitleCard.astro';
 import CompassV2 from './CompassV2.astro';
 import DockV2 from './DockV2.astro';
@@ -139,7 +134,6 @@ const strip = siblings.flatMap((sib) => {
 const otherArea = AREA_KEYS.map(resolve).find((s) => s.city.id !== scope.city.id && s.area.hasData);
 const otherCity = otherArea ? { href: areaPath(otherArea.key), name: otherArea.city.name } : null;
 
-/* The ward record's href (reportHref) is computed where it is used: ParkB1.astro, until S7.3 moves it. */
 
 /* THE OTHER CITY, ANNOUNCED ONCE. Server-rendered rather than drawn by the app:
    the markup is identical for every reader, and the two reader-specific facts —
@@ -178,12 +172,6 @@ const newCity = scope.area.hasData
   <div class="st-dock" id="v2Dock">{scope.area.hasData && <DockV2 currentKey={scope.key} strip={strip} otherCity={otherCity} />}</div>
   <ToastsV2 newCity={newCity} hasData={scope.area.hasData} />
   <RightColumn scope={scope} />
-  <div data-v2-parking>
-    <ParkA1 scope={scope} />
-    <ParkB1 scope={scope} />
-    <ParkA2 scope={scope} />
-    <ParkB2 scope={scope} />
-  </div>
   <LayersPopover current={scope.key} mapillary={mapillary} hasData={scope.area.hasData} />
   <Overlays scope={scope} />
   <StreetViewModal scope={scope} />

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 const C = 'src/components/ClimateEngine/v2';
 const noJsx = (s) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
 export const REGIONS = ['MapChips', 'PhoneChrome', 'RailV2', 'ToolbarV2', 'ExploreSide', 'SolarSide', 'AirSide', 'TitleCard', 'CompassV2', 'MapStack',
-  'DockV2', 'ToastsV2', 'RightColumn', 'ParkA1', 'ParkB1', 'ParkA2', 'ParkB2', 'LayersPopover', 'Overlays', 'StreetViewModal', 'SolarSheets'];
+  'DockV2', 'ToastsV2', 'RightColumn', 'LayersPopover', 'Overlays', 'StreetViewModal', 'SolarSheets'];
 export const CARDS = ['BuildingCardV2', 'TempCard', 'HeatCards', 'ScenarioCards', 'SolarCards', 'WeatherCards', 'MethodsCards'];
 export const SCREEN_PARTIALS = ['overview', 'heat', 'mapstack', 'building', 'explore', 'scenarios', 'solar', 'air', 'weather', 'methods', 'compare', 'brief'];
 export const PRINT_PARTIALS = ['solar', 'brief'];
@@ -25,6 +25,12 @@ function inOrder(src, names, what) {
 test('the area stage mounts every region once, in the A1 order', () => {
   const s = readFileSync(join(C, 'HeatMapStageV2.astro'), 'utf8');
   inOrder(noJsx(s.slice(s.indexOf('<main'))), REGIONS, 'HeatMapStageV2.astro');
+});
+
+test('FINAL audit F12: the empty parking regions are gone (no Park file, no parking box in the stage or its CSS)', () => {
+  for (const n of ['ParkA1', 'ParkA2', 'ParkB1', 'ParkB2']) assert.ok(!existsSync(join(C, `${n}.astro`)), `${n}.astro is still there`);
+  assert.ok(!readFileSync(join(C, 'HeatMapStageV2.astro'), 'utf8').includes('data-v2-parking'), 'the stage still mounts the parking box');
+  assert.ok(!readFileSync('src/styles/obos-v2/tokens.css', 'utf8').includes('data-v2-parking'), 'tokens.css still styles the parking box');
 });
 
 test('the right column holds every card slot once, building card first, the .attr marker last', () => {

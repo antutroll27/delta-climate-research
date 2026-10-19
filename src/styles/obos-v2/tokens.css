@@ -8,7 +8,6 @@ html[data-ui="v2"] body { overflow: hidden; }
 html[data-ui="v2"] .obos-v2 { position: fixed; inset: 0; overflow: hidden; isolation: isolate; font: 400 15px/1.45 var(--sans);
   color: var(--ink-1); font-synthesis: none; -webkit-font-smoothing: antialiased; background: var(--card); }
 html[data-ui="v2"] .obos-v2 #mlmap { position: absolute; inset: 0; z-index: 0; }
-html[data-ui="v2"] .obos-v2 [data-v2-parking] { display: none; }
 
 /* digits-only Roboto subset (Apache-2.0, v2.138), used only where Helvetica Neue is absent (spec §2.6) */
 @font-face { font-family: "OBOS Num"; src: url("/fonts/obos-num-300.woff2") format("woff2"); font-weight: 100 300; font-style: normal; font-display: swap;

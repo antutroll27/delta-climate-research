@@ -172,9 +172,9 @@ test('the card is a dialog the app\'s selection logic can still drive: every bc*
 });
 
 test('the map-borne chips and the street-view modal left parking for their own regions', () => {
-  const chips = V2('MapChips.astro'), sv = V2('StreetViewModal.astro'), park = V2('ParkA2.astro');
-  for (const id of ['bsel', 'ringNear', 'ringFar', 'coolTag', 'coolTagIn', 'coolTagM', 'lmlabs']) { assert.ok(chips.includes(`id="${id}"`), `#${id} not in MapChips`); assert.ok(!park.includes(`id="${id}"`), `#${id} still parked`); }
-  for (const id of ['svModal', 'svClose', 'svViewer']) { assert.ok(sv.includes(`id="${id}"`), `#${id} not in StreetViewModal`); assert.ok(!park.includes(`id="${id}"`), `#${id} still parked`); }
+  const chips = V2('MapChips.astro'), sv = V2('StreetViewModal.astro');
+  for (const id of ['bsel', 'ringNear', 'ringFar', 'coolTag', 'coolTagIn', 'coolTagM', 'lmlabs']) { assert.ok(chips.includes(`id="${id}"`), `#${id} not in MapChips`) }
+  for (const id of ['svModal', 'svClose', 'svViewer']) { assert.ok(sv.includes(`id="${id}"`), `#${id} not in StreetViewModal`) }
   assert.ok(sv.includes('Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener noreferrer">Mapillary</a> · community-captured (CC BY-SA)'), 'the credit is v1\'s text with a real link');
 });
 
@@ -250,7 +250,6 @@ test('S5.1: the Explore panel hosts the real switcher and the real toolbox, once
   assert.ok(ex.includes('<InterventionPane scope={scope} />'), 'the app\'s own toolbox');
   assert.ok(ex.includes('Explore the ward') && ex.includes('Every result is the live map’s own.'));
   assert.ok(ex.includes('data-side-close'), 'the panel closes through the shell\'s own handler');
-  assert.ok(!/<ScopeSwitcher|<InterventionPane/.test(V2('ParkA1.astro').replace(/^---[\s\S]*?---/, '')), 'the parked copies must be gone');
 });
 
 test('S5.1: the toolbox keeps v1\'s real ranges and steps (the pane file is unchanged and v2 never types a range)', () => {
@@ -299,7 +298,6 @@ test('S5.2: the no-artefacts card is v1\'s .notyet, word for word, inside the ri
   const norm = (t) => t.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/<[^>]+>/g, '|').replace(/\s+/g, ' ').replace(/\|( \|)+/g, '|').trim();
   for (const part of norm(v1).split('|').map((x) => x.trim()).filter((x) => x.length > 12)) assert.ok(norm(sc).includes(part), `not-yet text missing: ${part}`);
   assert.match(sc, /scope\.area\.hasData \? \([\s\S]*?\) : \([\s\S]*class="card notyet"/, 'the card shows on no-data areas only');
-  assert.ok(!V2('ParkA2.astro').includes('notyet'), 'the parked copy must be gone');
 });
 
 test('S5: the Explore text for every area is derived, never an empty slab: ExploreSide always has the head and a scroller', () => {
@@ -310,7 +308,7 @@ test('S5: the Explore text for every area is derived, never an empty slab: Explo
 test('A-S3 F3 closed: no stopgap click survives in Track A\'s honesty spec (phase() is a real click on a visible control)', () => {
   const spec = readFileSync('tests/e2e/obos-v2-honesty.spec.ts', 'utf8');
   assert.ok(!/evaluate\([^)]*\.click\(\)/.test(spec), 'an evaluate(... .click()) remains in obos-v2-honesty.spec.ts');
-  assert.match(spec, /const phase = async \(page: Page, p: string\): Promise<void> => \{[\s\S]*?closest\('\[data-v2-parking\]'\)[\s\S]*?await b\.click\(\);/);
+  assert.match(spec, /const phase = async \(page: Page, p: string\): Promise<void> => \{[\s\S]*?await b\.click\(\);/);
 });
 
 /* ── A-S4 audit F3: the Under Construction stamp is a visible chip in the ward card's header ── */

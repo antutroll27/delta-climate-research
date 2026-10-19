@@ -89,17 +89,14 @@ test('the Solar side panel: roof table keeps its aria-label and tbody#solList; t
   assert.ok(side.includes('"at least" is the strict-mask floor. Screening only, not bankable.'), 'the method foot lost the floor definition');
 });
 
-test('ids: each solar pane id the app paints lives once in the v2 solar files, and not in ParkB1 any more', () => {
-  const side = idsOf(V2('SolarSide.astro')), cards = idsOf(V2('SolarCards.astro')), park = V2('ParkB1.astro');
+test('ids: each solar pane id the app paints lives once in the v2 solar files', () => {
+  const side = idsOf(V2('SolarSide.astro')), cards = idsOf(V2('SolarCards.astro'));
   for (const id of ['solPaneSum', 'solPaneArea', 'solTariff', 'solCur', 'solTariffNote', 'solList', 'solCsv']) {
     assert.ok(side.includes(id), `SolarSide lacks #${id}`);
-    assert.ok(!park.includes(`id="${id}"`), `#${id} is still parked in ParkB1`);
   }
   for (const id of ['solPaneBlock', 'solPaneHead', 'solPaneTier', 'solPaneKwp', 'solPaneConf', 'solPaneFloor', 'solPaneSure', 'solPaneKwh', 'solPaneRs', 'solPaneBigK', 'solPaneBig', 'solPaneSh', 'solPanePay']) {
     assert.ok(cards.includes(id), `SolarCards lacks #${id}`);
-    assert.ok(!park.includes(`id="${id}"`), `#${id} is still parked in ParkB1`);
   }
-  assert.ok(!park.includes('id="solList"') && !park.includes('pane-solar-h'), 'the solar pane-body leaves ParkB1 whole');
 });
 
 test('the print rules: v2 chrome hidden, #solBrief alone, no close button on paper, ink and paper from tokens only', () => {
@@ -127,11 +124,10 @@ test('the brief keeps "Questions to ask your installer" and its footer words', (
 const AIR_CSS = readFileSync('src/styles/obos-v2/screens/air.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
 test('S7.1 Air: AirSide keeps the painter\'s ids and writes no air-quality sentence of its own', () => {
-  const side = V2('AirSide.astro'), park = V2('ParkB1.astro');
+  const side = V2('AirSide.astro');
   assert.ok(side.includes('data-side-pane="air"') && side.includes('data-side-close'));
   for (const id of ['airPane', 'airPaneArea', 'airPaneBody', 'airStatus', 'pane-air-h']) {
     assert.equal(idsOf(side).filter((x) => x === id).length, 1, `#${id} must exist once in AirSide`);
-    assert.ok(!park.includes(`id="${id}"`), `#${id} is still parked in ParkB1`);
   }
   assert.ok(side.includes("isAirCity(scope.key) ? 'Loading air quality…' : UNCOVERED_NOTE"), 'the first-paint sentence is v1\'s, imported not retyped');
   const text = noComments(side);
