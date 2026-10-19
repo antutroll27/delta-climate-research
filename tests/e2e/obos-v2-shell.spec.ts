@@ -397,6 +397,19 @@ test.describe('@v2 shell', () => {
     await expect(page.locator('main.obos-v2')).toHaveAttribute('data-side-shown', '1');
   });
 
+  /* FINAL audit F7: at exactly 700 px (the first laptop width) the side panel (left 100 + 300 wide) and the right column (300 wide, 16 from the edge) overlapped by 16 px. */
+  test('@v2 [F7] the side panel and the right column never overlap across the laptop band, 700 to 760 px', async ({ page }) => {
+    await page.setViewportSize({ width: 700, height: 900 });
+    await openV2(page);
+    await expect(page.locator('main.obos-v2')).toHaveAttribute('data-side-shown', '1');
+    for (const w of [700, 701, 720, 740, 759, 760, 800]) {
+      await page.setViewportSize({ width: w, height: 900 });
+      const g = await page.evaluate(() => { const a = document.getElementById('v2Side')!.getBoundingClientRect(), b = document.getElementById('legend')!.getBoundingClientRect(); return { sideRight: a.right, legendLeft: b.left, legendRight: b.right, w: window.innerWidth }; });
+      expect(g.legendLeft, `the column starts right of the panel at ${w} px`).toBeGreaterThanOrEqual(g.sideRight);
+      expect(g.legendRight, `and ends inside the window at ${w} px`).toBeLessThanOrEqual(w);
+    }
+  });
+
   /* FINAL visual V1: at 1280 x 720 the Explore panel is shorter than its content. Nothing may be unreachable, and the reader must be able to SEE that there is more: the body scrolls
      inside the panel (a thin scrollbar, and a fade at the cut edge that goes when the end is reached). */
   test('@v2 [V1] 1280 x 720: the Explore panel scrolls inside itself with a visible cue, and Warming pathway and Resilience Score are reachable', async ({ page }) => {

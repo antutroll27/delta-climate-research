@@ -251,6 +251,8 @@ html[data-ui="v2"] .obos-v2 #legend.heat-panel { position: absolute; z-index: 20
 html[data-ui="v2"] .obos-v2 #legend.heat-panel::-webkit-scrollbar { display: none; }
 html[data-ui="v2"] .obos-v2 #legend.heat-panel .card { flex: none; }
 @media (min-width: 700px) and (max-width: 1365px) { html[data-ui="v2"] .obos-v2 #legend.heat-panel { width: 300px; } }
+/* FINAL audit F7: at 700 px the side panel (100 + 300) and a 300 px column 16 from the edge overlapped by 16 px. While a side panel shows, the column gives way below 760 px. */
+@media (max-width: 759px) { html[data-ui="v2"] .obos-v2[data-side-shown="1"] #legend.heat-panel { width: min(300px, calc(100vw - 432px)); } }
 
 /* right-column composition by section (spec §3.9) */
 html[data-ui="v2"] .obos-v2 #legend [data-sections] { display: none; }
