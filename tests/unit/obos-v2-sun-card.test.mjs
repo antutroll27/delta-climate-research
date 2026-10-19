@@ -42,3 +42,15 @@ test('the scale bar is MapLibre\'s own control, moved into the card; no static "
   assert.ok(!/100 m/.test(ms), 'the preview\'s static 100 m must not be copied');
   assert.match(readFileSync('src/scripts/climate-engine/v2/sun-card.ts', 'utf8'), /maplibregl-ctrl-scale/);
 });
+
+test('rc3: the scale bar has five quarter ticks drawn from tokens, and its label sits above the bar', () => {
+  const ms = readFileSync('src/components/ClimateEngine/v2/MapStack.astro', 'utf8');
+  assert.match(ms, /<div class="scale-ticks" aria-hidden="true">(<i><\/i>){5}<\/div>/);
+  const css = readFileSync('src/styles/obos-v2/screens/mapstack.css', 'utf8');
+  const bar = css.slice(css.indexOf('.scale {'), css.indexOf('/* ── the Ward card ── */'));
+  assert.ok(!/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|oklch\(/.test(bar), 'no colour literal in the scale bar CSS');
+  for (const n of [1, 2, 3, 4, 5]) assert.ok(bar.includes(`.scale-ticks > i:nth-child(${n})`), `tick ${n} is placed`);
+  for (const l of ['0', '25%', '50%', '75%', '100%']) assert.ok(bar.includes(`left: ${l}`), `a tick at ${l}`);
+  assert.match(bar, /--scale-gap: 7px/);
+  assert.match(bar, /margin: 0 0 var\(--scale-gap\)/);
+});

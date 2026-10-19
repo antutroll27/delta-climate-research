@@ -44,10 +44,22 @@ html[data-ui="v2"] .obos-v2 .geo summary.kind { min-height: 24px; text-transform
 html[data-ui="v2"] .obos-v2 .geo[open] p { position: absolute; z-index: 5; right: -12px; bottom: calc(100% + 8px); width: 214px; box-sizing: border-box; padding: 10px 12px; border-radius: 14px;
   background: var(--glass-fallback); box-shadow: var(--shadow-float); color: var(--ink-2); }
 html[data-ui="v2"] .obos-v2[data-cards="plates"] .geo[open] p { background: var(--plate); }
-/* the scale bar: MapLibre's own control, moved here by sun-card.ts; it keeps updating in place */
-html[data-ui="v2"] .obos-v2 .scale { display: flex; align-items: center; margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--line); min-height: 24px; }
-html[data-ui="v2"] .obos-v2 .scale .maplibregl-ctrl-scale { position: static; float: none; margin: 0; padding: 0 6px; background: transparent; box-sizing: border-box;
-  border: 2px solid var(--ink-1); border-top: 0; border-radius: 0 0 1px 1px; color: var(--unit); font: 300 11px/1.1 var(--sans); }
+/* the scale bar: MapLibre's own control, moved here by sun-card.ts; it keeps updating in place (it rewrites its text and sets its pixel width on every zoom).
+   rc3: the distance is a label ABOVE the bar, --scale-gap (7 px) clear of it, "0" at the left end and the distance at the right. The bar is .scale-ticks, a sibling the grid stretches
+   to the control's own width, so its five divisions (0, 1/4, 1/2, 3/4, 1; the middle one taller) follow the live width. Tokens only: --ink-1 for the bar, --unit for the words. */
+html[data-ui="v2"] .obos-v2 .scale { --scale-gap: 7px; --scale-tick: 5px; --scale-tick-mid: 9px; --scale-line: 2px;
+  display: grid; grid-template-columns: max-content; justify-content: start; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 .scale .maplibregl-ctrl-scale { grid-area: 1 / 1; position: relative; float: none; margin: 0 0 var(--scale-gap); padding: 0; background: transparent; box-sizing: border-box; border: 0;
+  color: var(--unit); font: 300 11px/1.1 var(--sans); text-align: right; white-space: nowrap; overflow: visible; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .scale .maplibregl-ctrl-scale::before { content: "0"; content: "0" / ""; position: absolute; left: 0; top: 0; }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks { grid-area: 2 / 1; position: relative; height: var(--scale-tick-mid); }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--scale-line); background: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i { position: absolute; bottom: 0; width: var(--scale-line); height: var(--scale-tick); margin-left: calc(var(--scale-line) / -2); background: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i:nth-child(1) { left: 0; }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i:nth-child(2) { left: 25%; }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i:nth-child(3) { left: 50%; height: var(--scale-tick-mid); }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i:nth-child(4) { left: 75%; }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i:nth-child(5) { left: 100%; }
 
 /* ── the Ward card ── */
 html[data-ui="v2"] .obos-v2 .wardc > .row { gap: 6px; min-width: 0; align-items: center; }

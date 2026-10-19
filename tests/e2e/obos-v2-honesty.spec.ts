@@ -153,6 +153,44 @@ test.describe('@v2 honesty', () => {
     await expect(page.locator('#v2SunCard .maplibregl-ctrl-scale')).toContainText(/\d+\s(m|km)/);
   });
 
+  /* rc3 (founder, 19 Oct): the scale bar in the Sun card's footer. The distance label sits clearly ABOVE the bar (6-8 px between them), so the two never overlap at any zoom or label width,
+     and the bar has quarter divisions: five ticks (0, 1/4, 1/2, 3/4, 1), the middle one taller, that follow the live width MapLibre gives the control as the map zooms. */
+  test('@v2 [H] scale bar: the label never touches the bar at three zoom levels, and five ticks track its live width', async ({ page }) => {
+    await stubAt(page, '2026-10-15T06:05:00Z');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openV2(page, '/heat-map/in/kolkata/ballygunge/?lab=1');
+    await expect(page.locator('#v2SunCard')).toBeVisible({ timeout: 60_000 });
+    const seen = new Set<string>();
+    for (const zoom of [13.2, 15.4, 17.6]) {
+      await page.evaluate((z) => (window as unknown as { __obosMap: { jumpTo: (o: { zoom: number }) => void } }).__obosMap.jumpTo({ zoom: z }), zoom);
+      await page.waitForTimeout(600);
+      const m = await page.evaluate(() => {
+        const card = document.querySelector('#v2SunCard')!.getBoundingClientRect();
+        const ctrl = document.querySelector<HTMLElement>('#v2SunCard .maplibregl-ctrl-scale')!;
+        const tn = [...ctrl.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '')!;
+        const rg = document.createRange(); rg.selectNodeContents(tn);
+        const label = rg.getBoundingClientRect(), cr = ctrl.getBoundingClientRect();
+        const bar = document.querySelector('#v2SunCard .scale-ticks')!.getBoundingClientRect();
+        const ticks = [...document.querySelectorAll('#v2SunCard .scale-ticks > i')].map((t) => { const r = t.getBoundingClientRect(); return { cx: r.left + r.width / 2, h: r.height, top: r.top, bottom: r.bottom }; });
+        return { text: (tn.textContent ?? '').trim(), label: { b: label.bottom, t: label.top, l: label.left, r: label.right }, bar: { l: bar.left, r: bar.right, t: bar.top, b: bar.bottom, w: bar.width },
+          ctrlW: cr.width, styleW: parseFloat(ctrl.style.width), cardR: card.right, cardB: card.bottom, ticks };
+      });
+      seen.add(`${m.text}|${Math.round(m.styleW)}`);
+      expect(m.text, `zoom ${zoom}: a distance`).toMatch(/^\d+\s(m|km)$/);
+      const gap = m.bar.t - m.label.b;
+      expect(gap, `zoom ${zoom} "${m.text}": the label's bottom to the bar's top is ${gap.toFixed(1)} px, not under 6`).toBeGreaterThanOrEqual(6);
+      expect(gap, `and not loose either (${gap.toFixed(1)} px)`).toBeLessThanOrEqual(11);
+      expect(m.label.r, 'the label stays inside the card').toBeLessThanOrEqual(m.cardR);
+      expect(m.ticks.length, 'five ticks: 0, 1/4, 1/2, 3/4, 1').toBe(5);
+      expect(Math.abs(m.bar.w - m.styleW), `the bar is as wide as the control MapLibre sized (${m.styleW})`).toBeLessThanOrEqual(1.5);
+      m.ticks.forEach((t, i) => expect(Math.abs(t.cx - (m.bar.l + (m.bar.w * i) / 4)), `tick ${i} sits at ${i}/4 of the bar`).toBeLessThanOrEqual(1.5));
+      expect(m.ticks[2].h, 'the middle tick is the tallest').toBeGreaterThan(m.ticks[1].h);
+      expect(m.ticks[1].h).toBeCloseTo(m.ticks[3].h, 0);
+      for (const t of m.ticks) expect(t.bottom, 'ticks stand on the bar line').toBeLessThanOrEqual(m.bar.b + 0.5);
+    }
+    expect(seen.size, 'the bar really changed across the three zooms').toBeGreaterThanOrEqual(2);
+  });
+
   test('@v2 [H] Sun card at night: "Below horizon" and the rise time, no azimuth claimed', async ({ page }) => {
     await stubAt(page, '2026-10-15T17:30:00Z');          // 23:00 IST, the sun is down
     await openV2(page);
