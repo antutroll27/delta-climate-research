@@ -292,7 +292,7 @@ export async function contrastFailures(page: Page): Promise<Finding[]> {
       const nowBox = [r.left, r.top, r.width, r.height].map((v) => Math.round(v)).join(',');
       if (before !== undefined && before !== nowBox) { moved += 1; continue; }
 
-      /* S8 CHANGE 2 of 5: a glyph smaller than 10 px (the compass's N, 5.5 px), or bold capitals under 12 px (a chip's 8.5 px kind line), cover most of their own box, so the mode of the box is the GLYPH, not its
+      /* S8 CHANGE 2 of 5: a box narrower or shorter than 10 px (the compass's N, 5.5 px), or ANY text under 12 px (a chip's 8.5 px bold-capitals kind line is the case that was caught), cover most of their own box, so the mode of the box is the GLYPH, not its
          ground (it read the red N against a pink that is half red, and a 5.5:1 chip label against a grey that is half ink). The ground of such a box is read over its box grown by 3 px each way, where the glyph is the minority again. */
       const grow = r.width < 10 || r.height < 10 || parseFloat(cs.fontSize) < 12 ? 3 : 0;
       const x0 = Math.round(r.left) - grow, y0 = Math.round(r.top) - grow;
