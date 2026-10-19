@@ -313,3 +313,19 @@ test('D2 revised: a first visit on tier 2 is Plates (nothing blurred); choosing 
   await expect(root).toHaveAttribute('data-glass', 'flat');
   expect(await blurred()).toBe(0);
 });
+
+test('S8: a CHOSEN Glass is flat on a phone layout (a narrow window included), live again when the window widens, and nothing is blurred on the phone', async ({ page }) => {
+  test.setTimeout(180_000);
+  const root = page.locator('main.obos-v2');
+  const blurred = (): Promise<number> => page.evaluate(() => [...document.querySelectorAll('main.obos-v2 *')].filter((e) => { if (e.getClientRects().length === 0) return false; const v = getComputedStyle(e).backdropFilter; return !!v && v !== 'none'; }).length);
+  await page.addInitScript(() => { try { localStorage.setItem('obos:v2:cards', 'glass'); sessionStorage.setItem('obos:entry-note-seen', '1'); sessionStorage.setItem('obos:rotate-nudge-dismissed', '1'); } catch { /* none */ } });
+  await page.goto('/heat-map/in/kolkata/ballygunge/');
+  await expect(root).toHaveAttribute('data-glass', 'live', { timeout: 60_000 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(root).toHaveAttribute('data-phone', '1');
+  await expect(root, 'phones are flat (spec 2.3)').toHaveAttribute('data-glass', 'flat');
+  expect(await blurred(), 'nothing blurs on the phone layout').toBe(0);
+  expect(await page.evaluate(() => localStorage.getItem('obos:v2:cards')), 'the choice itself is kept').toBe('glass');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(root).toHaveAttribute('data-glass', 'live');
+});

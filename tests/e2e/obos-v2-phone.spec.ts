@@ -232,6 +232,8 @@ test.describe('@v2 phone 390x844', () => {
     expect(await occludedBy(page, '.st-attrib .attrib')).toBeNull();
     expect(await phoneIssues(page)).toEqual([]);
     await menu(page).click();
+    await expect(page.locator('#v2Drawer [data-side-pane="explore"]'), 'the Location selects are the way off this page').toBeVisible();
+    await expect(page.locator('#v2Drawer [data-side-pane="explore"] .field-trigger').first()).toBeVisible();
     await expect(page.locator('#v2Drawer .nav-item[data-section="overview"]')).toBeEnabled();
     await expect(page.locator('#v2Drawer .nav-item[data-section="heat"]')).toBeDisabled();
     await page.keyboard.press('Escape');
@@ -280,6 +282,9 @@ for (const v of [{ n: '360x740', width: 360, height: 740 }, { n: '844x390 on its
       /* the menu is reachable in every orientation (v1 bug #1) and its drawer is clean */
       await menu(page).click();
       expect(await phoneIssues(page), 'the drawer').toEqual([]);
+      /* S2 audit: the Explore pane has content, and on a phone it is in the drawer, visible, at every size */
+      await expect(page.locator('#v2Drawer [data-side-pane="explore"]')).toBeVisible();
+      expect(await page.locator('#v2Drawer [data-side-pane="explore"]').evaluate((e) => e.querySelectorAll(':scope > *, :scope .sp-scroll > *').length)).toBeGreaterThan(0);
       await page.keyboard.press('Escape');
       for (const s of SECTIONS) {
         await section(page, s);
