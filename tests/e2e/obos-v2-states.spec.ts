@@ -67,6 +67,9 @@ test.describe('@v2 states', () => {
     await expect(card).toBeVisible();
     await expect(card.locator('a')).toHaveText('Open a validated area →');
     await expect(card.locator('a')).toHaveAttribute('href', /\/heat-map\/in\/kolkata\/ballygunge\/$/);
+    /* FINAL audit F10: UNREACHABLE BY DESIGN (spec §4.10). Air is disabled on a no-data area (the loop below), so a reader never sees this note: it is in the DOM, and this asserts exactly that (attached),
+       not visibility the page does not offer. The sentence is still checked, as markup. */
+    await expect(page.locator('#airPane')).toBeAttached();
     await expect(page.locator('#airPane')).toContainText('Air quality covers Kolkata and Bengaluru; this city is not yet covered.');
     for (const s of ['heat', 'air', 'solar', 'weather', 'scenarios']) await expect(page.locator(`.nav-item[data-section="${s}"]`)).toBeDisabled();
     for (const s of ['overview', 'methods']) await expect(page.locator(`.nav-item[data-section="${s}"]`)).toBeEnabled();
