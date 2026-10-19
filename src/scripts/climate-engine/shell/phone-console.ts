@@ -108,6 +108,8 @@ export function initPhoneConsole(): void {
   // open over the map on arrival exactly as it did in landscape.
   const settleSheet = () => {
     if (!isPhone()) return;
+    /* FINAL audit F8 (E9): only v1 has the panel chevron this settles. Under v2 (own sheet, own key) the v1 key must not be written, or ?ui=v1 in the same tab opens v1's sheet over the map. */
+    if (!root.querySelector('button[data-panel-toggle]')) return;
     try {
       if (sessionStorage.getItem(SHEET_KEY) === '1') return;
       sessionStorage.setItem(SHEET_KEY, '1');

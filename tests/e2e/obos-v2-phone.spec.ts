@@ -105,6 +105,15 @@ test.describe('@v2 phone 390x844', () => {
     await expect(page.locator('[data-v2-sheet-toggle]')).toHaveAttribute('aria-expanded', 'true');
   });
 
+  /* FINAL audit F8: v1's phone-console.ts settles ITS sheet once per session under key obos:phone-sheet-settled. v2 has its own (obos:v2:sheet-settled), so v2 must not write v1's:
+     a reader who goes on to ?ui=v1 in the same tab would otherwise get v1's sheet open over the map. */
+  test('@v2 [F8] a v2 phone does not write the v1 sheet key', async ({ page }) => {
+    await seenNote(page);
+    await openV2(page);
+    await expect(page.locator('[data-v2-sheet-toggle]')).toHaveAttribute('aria-expanded', 'false');
+    expect(await page.evaluate(() => sessionStorage.getItem('obos:phone-sheet-settled')), 'the v1 key stays unwritten under v2').toBeNull();
+  });
+
   test('@v2 [H] the sheet: a real button handle, closed once per session, 44 px; the credits chip is visible and tappable beside it; the readings are tied to their honesty text', async ({ page }) => {
     await seenNote(page);
     await openV2(page);
