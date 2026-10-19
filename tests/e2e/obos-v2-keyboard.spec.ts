@@ -71,6 +71,24 @@ test.describe('@v2 keyboard (desktop)', () => {
     await expect(page.locator('#bcard')).toBeHidden();
   });
 
+  /* FINAL audit F4 (WCAG 2.4.3): the building card is a dialog; when Esc closes it, focus goes back to what opened it, not to <body>. */
+  test('@v2 [F4] Esc on the building card returns focus to the roof row that opened it', async ({ page }) => {
+    await openV2(page);
+    await go(page, 'solar');
+    const rows = page.locator('#solList tr[data-idx]');
+    await expect(rows.first()).toBeAttached({ timeout: 60_000 });
+    await rows.nth(1).focus();
+    const idx = await rows.nth(1).getAttribute('data-idx');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#bcard')).toBeVisible({ timeout: 30_000 });
+    /* the reader tabs into the card (here: its payback button, as in the auditor's probe); closing the card then hides the focused control, and focus fell to <body> */
+    await page.locator('#bcPay').focus();
+    await expect(page.locator('#bcPay')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#bcard')).toBeHidden();
+    await expect(page.locator(`#solList tr[data-idx="${idx}"]`), 'the row that opened the card has focus again').toBeFocused();
+  });
+
   test('@v2 a place chip is a keyboard button: Enter switches the ward in place', async ({ page }) => {
     await openV2(page);
     await go(page, 'overview');                                   // the side panel closes: the dock's chips show
