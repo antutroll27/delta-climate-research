@@ -35,7 +35,7 @@ html[data-ui="v2"] .obos-v2 .sg-arc { fill: none; stroke: var(--ink-3); stroke-w
 html[data-ui="v2"] .obos-v2 .sg-sun { fill: var(--sym-solar); stroke: var(--ink-1); stroke-width: 0.9; }
 html[data-ui="v2"] .obos-v2 .sg-sun.down { fill: none; stroke: var(--sym-solar); stroke-width: 1.6; }
 html[data-ui="v2"] .obos-v2 .sg-ring { fill: none; stroke: var(--ink-3); stroke-width: 1.2; opacity: .6; }
-html[data-ui="v2"] .obos-v2 .sg-n { font: 700 5.5px/1 var(--sans); fill: var(--compass-red); }
+html[data-ui="v2"] .obos-v2 .sg-n { font: 700 5.5px/1 var(--sans); fill: var(--compass-n-ink); }
 html[data-ui="v2"] .obos-v2 .sg-needle { stroke: var(--ink-2); stroke-width: 1.3; stroke-linecap: round; }
 html[data-ui="v2"] .obos-v2 .sg-hub { fill: var(--ink-1); }
 /* "geometry only": the disclosure's own control, always visible, never under 24 px (S2 a11y rule); its body opens upward over the map */

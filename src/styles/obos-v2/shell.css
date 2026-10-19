@@ -198,7 +198,7 @@ html[data-ui="v2"] .obos-v2[data-side-shown="1"]:not([data-side-current="explore
 html[data-ui="v2"] .obos-v2 .toasts > * { pointer-events: auto; }
 html[data-ui="v2"] .obos-v2 .toast { display: inline-flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 99px; font-size: 12.5px; color: var(--ink-1); white-space: nowrap; }
 html[data-ui="v2"] .obos-v2 .toast .t-eyebrow { font: 700 9.5px/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); }
-html[data-ui="v2"] .obos-v2 .toast a { display: inline-flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+html[data-ui="v2"] .obos-v2 .toast a { display: inline-flex; align-items: center; gap: 10px; min-height: 24px; color: inherit; text-decoration: none; }   /* the "New city" link is a 24 px target (S8, spec 7.2) */
 html[data-ui="v2"] .obos-v2 .toast a, html[data-ui="v2"] .obos-v2 .toast .t-go { font-weight: 600; }
 html[data-ui="v2"] .obos-v2 .toast .t-x { width: 24px; height: 24px; min-width: 24px; min-height: 24px; border-radius: 50%; border: 0; background: var(--well); color: var(--ink-2); cursor: pointer; display: grid; place-items: center; }
 html[data-ui="v2"] .obos-v2 .toast[hidden] { display: none; }

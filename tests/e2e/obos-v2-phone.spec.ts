@@ -259,6 +259,7 @@ test.describe('@v2 phone 390x844', () => {
     /* the brief: a document; the menu is still one tap away; no credits chip (v1's brief has none either) */
     await page.goto('/heat-map/brief/');
     await expect(page.locator('main.obos-v2[data-brief-root]')).toHaveCount(1);
+    await expect(page.locator('.attrib, #v2Credits'), 'the brief carries no credits popover, as v1\'s has none (S8 decision; the boundary credit line is printed in the sheet)').toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(await phoneIssues(page)).toEqual([]);
     await menu(page).click();

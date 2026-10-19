@@ -7,13 +7,15 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { stubAir } from './aqi-cpcb-stub.ts';
-import { duplicateIds, openV2 } from './obos-v2-helpers';
+import { duplicateIds, openV2, phoneIssues } from './obos-v2-helpers';
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
 const go = (page: Page, section: string) => page.locator(`.nav-item[data-section="${section}"]`).click({ position: { x: 30, y: 22 } });
+/** axe's findings, plus every visible control under 24 px (WCAG 2.5.8; spec 7.2): the same reader of the live page that the phone sweep uses, here for its target rule only */
 const axe = async (page: Page, what: string): Promise<string[]> => {
   const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-  return r.violations.map((v) => `${what}: ${v.impact} ${v.id} (${v.nodes.length}): ${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(' | ')}`);
+  const small = (await phoneIssues(page)).filter((l) => l.startsWith('target under 24 px')).map((l) => `${what}: ${l}`);
+  return small.concat(r.violations.map((v) => `${what}: ${v.impact} ${v.id} (${v.nodes.length}): ${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(' | ')}`));
 };
 
 for (const theme of ['dark', 'light'] as const) {

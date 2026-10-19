@@ -11,7 +11,7 @@
  */
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { stubAir } from './aqi-cpcb-stub.ts';
-import { openV2, report, SCORED, sweepScreen } from './obos-v2-helpers';
+import { openV2, phoneIssues, report, SCORED, stubAt, sweepScreen } from './obos-v2-helpers';
 
 /** a sweep that scored almost nothing proves nothing: every screen must have been read (the smallest, Air's pane or the closed phone sheet, has well over this many words) */
 const MIN_SCORED = 60;        // a desktop screen has 99-126 scored words
@@ -21,8 +21,10 @@ const go = (page: Page, section: string) => page.locator(`.nav-item[data-section
 const settle = (page: Page) => page.waitForTimeout(1800);
 const isFull = (t: TestInfo): boolean => t.project.name === 'chromium-v2-relief';
 
-async function prime(page: Page, theme: string, cards: string, look?: 'dark' | 'studio'): Promise<void> {
+async function prime(page: Page, theme: string, cards: string, look?: 'dark' | 'studio', at = '2026-10-07T06:05:00Z'): Promise<void> {
   await stubAir(page, { nowcast: true });
+  /* A FIXED DAYTIME (11:35 IST): the Sun card draws its azimuth glyph (a red N at 5.5 px) only while the sun is up, so a sweep on the wall clock passed at night and failed at noon. */
+  await stubAt(page, at);
   await page.addInitScript(([t, c, l]) => {
     try {
       localStorage.setItem('obos:v2:theme', t); localStorage.setItem('obos:v2:cards', c);
@@ -58,6 +60,8 @@ for (const theme of ['dark', 'light'] as const) for (const cards of ['plates', '
     const view = async (name: string, show: () => Promise<void>): Promise<void> => {
       await show(); await settle(page);
       found.push(...(await sweepScreen(page, `${label} ${name}`)));
+      /* every screen's controls are 24 px or more (spec 7.2): the same live-page read the phone sweep uses, for its target rule only */
+      if (isFull(testInfo)) found.push(...(await phoneIssues(page)).filter((l) => l.startsWith('target under 24 px')).map((l) => `${label} ${name}: ${l}`));
     };
     await view('overview', async () => {});
     await view('air', async () => { await go(page, 'air'); await expect(page.locator('#aqiBlock')).toBeVisible({ timeout: 30_000 }); });
@@ -95,6 +99,26 @@ test('@v2 contrast: Light Glass over the BRIGHT map and Dark Glass over the DARK
     found.push(...(await sweepScreen(p, `${theme} glass on the ${look} map · overview`)));
     await go(p, 'air'); await settle(p);
     found.push(...(await sweepScreen(p, `${theme} glass on the ${look} map · air`)));
+    await p.close();
+  }
+  expect(found, found.join('\n')).toEqual([]);
+});
+
+test('@v2 contrast: after dark (00:30 IST) the Sun card says "Below horizon" and every word still clears AA', async ({ page }, testInfo) => {
+  test.skip(!isFull(testInfo), 'the compact set judges the daytime screens; the night variant is the relief project\'s');
+  test.setTimeout(300_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const found: string[] = [];
+  for (const theme of ['dark', 'light'] as const) {
+    const p = await page.context().newPage();
+    await p.setViewportSize({ width: 1440, height: 900 });
+    await prime(p, theme, 'plates', undefined, '2026-10-07T19:00:00Z');
+    await openV2(p);
+    await settle(p);
+    await expect(p.locator('#v2SunCard')).toContainText(/Below\s*horizon/, { timeout: 30_000 });
+    found.push(...(await sweepScreen(p, `${theme}/plates at night · overview`)));
+    await go(p, 'weather'); await settle(p);
+    found.push(...(await sweepScreen(p, `${theme}/plates at night · weather`)));
     await p.close();
   }
   expect(found, found.join('\n')).toEqual([]);
