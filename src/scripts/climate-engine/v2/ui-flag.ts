@@ -8,7 +8,13 @@
  */
 export const UI_FLAG_KEY = 'obos:ui';
 export const UI_ATTR = 'data-ui';
-export const V2_TREE_ID = 'obos-v2-tree';
+/** The UiSwap script element's id: its presence marks a page that HAS a v2 tree (a page without one, e.g. /team/, must not keep data-ui="v2"). */
+export const V2_SWAP_ID = 'obos-v2-swap';
+/** FINAL audit F5: the v2 stylesheet and each page's v2 tree are separate files, fetched only under the flag (src/pages/obos-v2/). */
+export const V2_CSS_URL = '/obos-v2/obos-v2.css';
+export const V2_GUARD_ID = 'obos-v2-guard';
+export const v2TreeUrl = (page: 'compare' | 'brief' | { readonly areaKey: string }): string =>
+  typeof page === 'string' ? `/obos-v2/${page}.html` : `/obos-v2/area/${page.areaKey}.html`;
 
 export const V2_KEYS = Object.freeze({
   theme: 'obos:v2:theme',
@@ -63,8 +69,8 @@ export function resolvePrefs(
 const J = (v: string): string => JSON.stringify(v);
 
 /** Runs in <head>-order before the v1 tree. Query wins; storage answers only without one.
- *  On a soft navigation the new body is already in place (its inline scripts have not run), so the
- *  template is findable: a page without a v2 tree (e.g. team) must not keep data-ui="v2". */
+ *  Under the flag it also writes the guard that keeps the v1 frame from painting (it used to live in tokens.css, which a flag-off page no longer loads, and a flag-on page loads only after this runs).
+ *  On a soft navigation the new body is already in place (its inline scripts have not run), so UiSwap's script element is findable: a page without a v2 tree (e.g. team) must not keep data-ui="v2". */
 export const UI_PREPAINT_JS = `(function(){
 var d=document.documentElement,K=${J(UI_FLAG_KEY)};
 function apply(){
@@ -72,21 +78,32 @@ var q=null;try{q=new URLSearchParams(location.search).get('ui');}catch(e){}
 var st=null;try{st=localStorage.getItem(K);}catch(e){}
 var v=q==='v2'?'v2':q==='v1'?'v1':(st==='v2'?'v2':'v1');
 try{if(q==='v2')localStorage.setItem(K,'v2');else if(q==='v1')localStorage.removeItem(K);}catch(e){}
-if(v==='v2')d.setAttribute(${J(UI_ATTR)},'v2');else d.removeAttribute(${J(UI_ATTR)});
+if(v==='v2'){d.setAttribute(${J(UI_ATTR)},'v2');if(!document.getElementById(${J(V2_GUARD_ID)})){var g=document.createElement('style');g.id=${J(V2_GUARD_ID)};g.textContent='html[data-ui="v2"] main#main:not(.obos-v2){visibility:hidden}html[data-ui="v2"] body{overflow:hidden}';(document.head||d).appendChild(g);}}
+else d.removeAttribute(${J(UI_ATTR)});
 }
 apply();
-if(!window.__obosUiBound){window.__obosUiBound=1;document.addEventListener('astro:after-swap',function(){if(document.getElementById(${J(V2_TREE_ID)}))apply();else d.removeAttribute(${J(UI_ATTR)});});}
+if(!window.__obosUiBound){window.__obosUiBound=1;document.addEventListener('astro:after-swap',function(){if(document.getElementById(${J(V2_SWAP_ID)}))apply();else d.removeAttribute(${J(UI_ATTR)});});}
 })();`;
 
-/** Runs after the template. Flag on: clone, apply prefs to the clone's root, replace v1. Flag off: drop the template. */
+/** Runs after the v1 tree. Flag off: nothing (a v1 reader never fetched, and the page never carried, any v2 byte). Flag on: fetch the page's v2 tree and the v2 stylesheet (synchronously, so
+ *  the first paint is the finished v2 page, exactly as when the template was in the HTML; both are cacheable files), apply prefs to the tree's root, replace v1. If either cannot be had, drop the flag:
+ *  the reader gets v1, whole. */
 export const UI_SWAP_JS = `(function(){
-var t=document.getElementById(${J(V2_TREE_ID)});if(!t)return;
+var s=document.getElementById(${J(V2_SWAP_ID)});if(!s)return;
 var d=document.documentElement;
-if(d.getAttribute(${J(UI_ATTR)})!=='v2'){t.remove();return;}
+if(d.getAttribute(${J(UI_ATTR)})!=='v2')return;
+function drop(){d.removeAttribute(${J(UI_ATTR)});var g=document.getElementById(${J(V2_GUARD_ID)});if(g)g.remove();}
+function get(u){try{var x=new XMLHttpRequest();x.open('GET',u,false);x.send();return x.status===200?x.responseText:null;}catch(e){return null;}}
 var v1=document.getElementById('main');
-var frag=t.content.cloneNode(true);
+var html=v1?get(s.getAttribute('data-tree')):null;
+if(html===null){drop();return;}
+if(!document.querySelector('style[data-v2-css]')){
+var css=get(s.getAttribute('data-css'));if(css===null){drop();return;}
+var st=document.createElement('style');st.setAttribute('data-v2-css','');st.textContent=css;document.head.appendChild(st);}
+var t=document.createElement('template');t.innerHTML=html;
+var frag=t.content;
 var root=frag.querySelector('main.obos-v2');
-if(!v1||!root){d.removeAttribute(${J(UI_ATTR)});t.remove();return;}
+if(!root){drop();return;}
 function g(k){try{return localStorage.getItem(k);}catch(e){return null;}}
 var w=window.innerWidth||1440;
 var th=g(${J(V2_KEYS.theme)}),cd=g(${J(V2_KEYS.cards)}),mn=g(${J(V2_KEYS.menu)}),sd=g(${J(V2_KEYS.side)});
@@ -102,5 +119,4 @@ root.setAttribute('data-menu-eff',shown&&w>=${LAPTOP_MIN_PX}&&w<${DESKTOP_MIN_PX
 root.setAttribute('data-glass','flat');
 root.setAttribute('data-section','overview');
 v1.replaceWith(frag);
-t.remove();
 })();`;

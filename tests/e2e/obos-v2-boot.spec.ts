@@ -1,5 +1,6 @@
 // tests/e2e/obos-v2-boot.spec.ts
 import { expect, test } from '@playwright/test';
+import { PW_ORIGIN } from './fixtures/ui-v2-state';
 import { duplicateIds, openV2 } from './obos-v2-helpers';
 
 test.describe('@v2 boot', () => {
@@ -55,6 +56,58 @@ test.describe('@v2 boot', () => {
     await expect(page).toHaveURL(/\/team/);
     await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
     expect(await page.evaluate(() => localStorage.getItem('obos:ui')), 'the sticky flag itself must survive').toBe('v2');
+  });
+
+  /* FINAL audit F5 (founder: "v1 visitors pay nothing until the flip"): the v2 stylesheet and the v2 tree are separate files, fetched ONLY when the flag is on. A flag-off page carries neither
+     in its HTML nor in a request; a flag-on page asks for each once. If either fails, the reader gets v1, not a half-built page. */
+  test('@v2 [F5] flag off: no v2 stylesheet, no v2 tree, no /obos-v2/ request; the v1 page is whole', async ({ browser }) => {
+    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, storageState: { cookies: [], origins: [] } });
+    const page = await ctx.newPage();
+    const asked: string[] = [];
+    page.on('request', (r) => asked.push(new URL(r.url()).pathname));
+    await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
+    for (const path of ['/heat-map/in/kolkata/ballygunge/', '/heat-map/compare/', '/heat-map/brief/']) {
+      const html = await (await page.request.get(path)).text();
+      expect(html, `${path}: no v2 template in the HTML`).not.toContain('obos-v2-tree');
+      expect(html, `${path}: no v2 markup in the HTML`).not.toMatch(/class="[^"]*\bobos-v2\b/);
+      await page.goto(path);
+      await expect(page.locator('main#main:not(.obos-v2)')).toHaveCount(1);
+      await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
+      const sheets = await page.evaluate(async () => Promise.all([...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')].map(async (l) => (await fetch(l.href)).text())));
+      expect(sheets.filter((t) => t.includes('.obos-v2')).length, `${path}: no stylesheet carries v2 rules`).toBe(0);
+      expect(await page.locator('style[data-v2-css]').count()).toBe(0);
+    }
+    expect(asked.filter((p) => p.startsWith('/obos-v2/')), 'not one request for a v2 file').toEqual([]);
+    await ctx.close();
+  });
+
+  test('@v2 [F5] flag on: the stylesheet and the area tree are each fetched once and the page is styled before it shows; a soft hop to Compare brings its own tree and keeps ONE stylesheet', async ({ page }) => {
+    const asked: string[] = [];
+    page.on('request', (r) => asked.push(new URL(r.url()).pathname));
+    await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
+    await expect(page.locator('html')).toHaveAttribute('data-ui', 'v2');
+    await expect(page.locator('main.obos-v2')).toHaveCount(1);
+    expect(asked.filter((p) => p === '/obos-v2/obos-v2.css')).toHaveLength(1);
+    expect(asked.filter((p) => p === '/obos-v2/area/in/kolkata/ballygunge.html')).toHaveLength(1);
+    expect(await page.locator('style[data-v2-css]').count()).toBe(1);
+    expect(await page.locator('main.obos-v2').evaluate((e) => getComputedStyle(e).getPropertyValue('--card').trim() !== ''), 'the v2 rules apply').toBe(true);
+    await page.evaluate(() => { const a = document.createElement('a'); a.href = '/heat-map/compare/'; a.id = 'softnav'; a.textContent = 'soft'; a.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;padding:8px;background:#fff'; document.body.appendChild(a); });
+    await page.locator('#softnav').click();
+    await expect(page).toHaveURL(/\/heat-map\/compare\//);
+    await expect(page.locator('main.obos-v2[data-compare-root]')).toHaveCount(1);
+    expect(asked.filter((p) => p === '/obos-v2/compare.html')).toHaveLength(1);
+    expect(await page.locator('style[data-v2-css]').count(), 'one v2 stylesheet after the soft hop').toBe(1);
+    expect(await page.locator('main.obos-v2').evaluate((e) => getComputedStyle(e).getPropertyValue('--card').trim() !== '')).toBe(true);
+  });
+
+  test('@v2 [F5] if the v2 files cannot be fetched the reader gets v1, whole, not a half-built page', async ({ page }) => {
+    await page.route(/\/obos-v2\//, (route) => route.abort());
+    await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
+    await expect(page.locator('main#main:not(.obos-v2)')).toHaveCount(1);
+    await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
+    await expect(page.locator('#mlmap')).toHaveCount(1);
   });
 
   test('@v2 SwiftShader (tier 0): Plates by default, flat glass, no backdrop-filter anywhere', async ({ page }, testInfo) => {

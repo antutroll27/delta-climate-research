@@ -1,9 +1,9 @@
 ---
 import Base from '../../layouts/Base.astro';
 import HeatMapBrief from '../../components/ClimateEngine/brief/HeatMapBrief.astro';
-import HeatMapBriefV2 from '../../components/ClimateEngine/brief/HeatMapBriefV2.astro';
 import UiPrepaint from '../../components/ClimateEngine/v2/UiPrepaint.astro';
 import UiSwap from '../../components/ClimateEngine/v2/UiSwap.astro';
+import { v2TreeUrl } from '../../scripts/climate-engine/v2/ui-flag.ts';
 ---
 <Base
   title="Urban Heat Scenario Brief — Delta Climate Research"
@@ -13,8 +13,7 @@ import UiSwap from '../../components/ClimateEngine/v2/UiSwap.astro';
 >
   <UiPrepaint />
   <HeatMapBrief />
-  <template id="obos-v2-tree"><HeatMapBriefV2 /></template>
-  <UiSwap />
+  <UiSwap tree={v2TreeUrl('brief')} />
 </Base>
 
 <script>

@@ -34,14 +34,16 @@ export function scriptIds() {
   return ids;
 }
 
+/* FINAL audit F5: the v2 tree is a FILE (dist/obos-v2/area/<key>.html), not a <template> in the page. The page carries the v1 <main> and nothing of v2. */
 function pageParts(path) {
   const file = `dist/${path}/index.html`;
   assert.ok(existsSync(file), `run npm run build first (${file})`);
   const html = readFileSync(file, 'utf8');
   const v1s = html.indexOf('<main id="main"'); const v1e = html.indexOf('</main>', v1s);
-  const ts = html.indexOf('<template id="obos-v2-tree">'); const te = html.indexOf('</template>', ts);
-  assert.ok(ts > v1e, `${path}: the v2 template must follow the v1 <main>`);
-  return { v1: html.slice(v1s, v1e), v2: html.slice(ts, te) };
+  assert.ok(!html.includes('obos-v2-tree'), `${path}: the page must carry no v2 template (F5)`);
+  const treeFile = `dist/obos-v2/area/${path.replace(/^heat-map\//, '')}.html`;
+  assert.ok(existsSync(treeFile), `run npm run build first (${treeFile})`);
+  return { v1: html.slice(v1s, v1e), v2: readFileSync(treeFile, 'utf8') };
 }
 const idsIn = (s) => [...s.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
 
@@ -70,7 +72,7 @@ for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-
       }
     }
     if (v1.includes('id="mlmap"')) assert.match(v2, /<select\b[^>]*\bdata-scope="area"/, 'v2 tree lacks the scope select hook');
-    assert.ok(!/<script/i.test(v2.replace(/^<template id="obos-v2-tree">/, '')), 'no <script> may sit inside the v2 tree (template scripts never run)');
+    assert.ok(!/<script/i.test(v2), 'no <script> may sit inside the v2 tree (a tree set through innerHTML never runs scripts)');
   });
 }
 

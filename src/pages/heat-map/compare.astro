@@ -1,9 +1,9 @@
 ---
 import Base from '../../layouts/Base.astro';
 import PairedBench from '../../components/ClimateEngine/compare/PairedBench.astro';
-import PairedBenchV2 from '../../components/ClimateEngine/compare/PairedBenchV2.astro';
 import UiPrepaint from '../../components/ClimateEngine/v2/UiPrepaint.astro';
 import UiSwap from '../../components/ClimateEngine/v2/UiSwap.astro';
+import { v2TreeUrl } from '../../scripts/climate-engine/v2/ui-flag.ts';
 ---
 <Base
   title="Compare Urban Heat Scenarios — Delta Climate Research"
@@ -13,8 +13,7 @@ import UiSwap from '../../components/ClimateEngine/v2/UiSwap.astro';
 >
   <UiPrepaint />
   <PairedBench />
-  <template id="obos-v2-tree"><PairedBenchV2 /></template>
-  <UiSwap />
+  <UiSwap tree={v2TreeUrl('compare')} />
 </Base>
 
 <script>

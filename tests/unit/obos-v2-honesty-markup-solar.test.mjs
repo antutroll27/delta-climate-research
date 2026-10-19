@@ -157,7 +157,9 @@ test('F1: the sheet\'s button row is sticky so Close is in view on open; the scr
   assert.match(SOLAR_CSS, /#solPay \{[^}]*scrollbar-width: thin;/);
   const bind = readFileSync('src/scripts/climate-engine/v2/solar-v2.ts', 'utf8');   // b-01: moved out of weather-v2.ts
   assert.match(bind, /getElementById\('solPay'\)[\s\S]*scrollTop = 0/, 'the sheet is put back at its top after the app focuses Close');
-  assert.ok(!/\.focus\(/.test(bind.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')), 'v2 does not move focus: the app\'s focus on Close stays');
+  /* FINAL audit F4 added ONE deliberate focus move: bindCardFocusReturn puts focus back on the control that opened the building card when the card hides. Nothing else here moves focus. */
+  const bindRest = bind.slice(0, bind.indexOf('function bindCardFocusReturn')) + bind.slice(bind.indexOf('export function bindSolar'));
+  assert.ok(!/\.focus\(/.test(bindRest.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')), 'v2 does not move focus (but for the F4 return): the app\'s focus on Close stays');
   assert.ok(!/#solPay::-webkit-scrollbar/.test(SOLAR_CSS) && !/scrollbar-width: none/.test(SOLAR_CSS), 'the sheet\'s scrollbar is not hidden');
 });
 

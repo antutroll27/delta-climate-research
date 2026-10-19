@@ -146,11 +146,12 @@ test('Compare: the credits name every model input (C audit F2): footprints, heig
 });
 
 for (const [page, tag] of [['compare', 'PairedBenchV2'], ['brief', 'HeatMapBriefV2']]) {
-  test(`${page}.astro wraps the v2 tree exactly as the area page does (UiPrepaint, v1, template, UiSwap) and boots v2 under the flag`, () => {
+  test(`${page}.astro wraps the page as the area page does (UiPrepaint, v1, UiSwap with its tree file) and boots v2 under the flag`, () => {
     const src = readFileSync(`src/pages/heat-map/${page}.astro`, 'utf8');
-    for (const part of ['<UiPrepaint />', '<template id="obos-v2-tree">', '<UiSwap />']) assert.ok(src.includes(part), part);
-    assert.ok(src.indexOf('<UiPrepaint />') < src.indexOf('<template id="obos-v2-tree">') && src.indexOf('<template id="obos-v2-tree">') < src.indexOf('<UiSwap />'));
-    assert.match(src, new RegExp(`<template id="obos-v2-tree"><${tag} /></template>`));
+    for (const part of ['<UiPrepaint />', '<UiSwap tree=']) assert.ok(src.includes(part), part);
+    assert.ok(src.indexOf('<UiPrepaint />') < src.indexOf('<UiSwap tree='));
+    assert.ok(!src.includes('obos-v2-tree') && !src.includes(`<${tag}`), 'FINAL audit F5: the page no longer carries the v2 tree');
+    assert.ok(src.includes(`v2TreeUrl('${page}')`), `the page names its own tree file (${page})`);
     assert.match(src, /document\.documentElement\.getAttribute\('data-ui'\) !== 'v2'/);
     assert.match(src, /disposeV2\?\.\(\); disposeV2 = null;/);
   });
@@ -163,21 +164,23 @@ test('compare.astro mounts the bench exactly as before (v1 behaviour kept), then
   assert.ok(src.indexOf('mountConsoleShell()') < src.indexOf('bootV2(generation)'), 'the v2 frame binds after the v1 console shell, as on the area page');
 });
 
-/* the built page: one v2 tree per page, unique ids, the v1 <main> untouched in front of it */
-for (const [path, root, tag] of [['heat-map/compare', 'heat-compare', 'PairedBenchV2'], ['heat-map/brief', 'heat-brief', 'HeatMapBriefV2']]) {
-  test(`${path}: the built page carries the v1 <main> and then ONE v2 template, with unique ids`, () => {
+/* the built page carries the v1 <main> only; its v2 tree is a file of its own (FINAL audit F5): one root, unique ids */
+for (const [path, root, tree] of [['heat-map/compare', 'heat-compare', 'compare'], ['heat-map/brief', 'heat-brief', 'brief']]) {
+  test(`${path}: the built page carries the v1 <main> and NO v2 markup; the v2 tree is dist/obos-v2/${tree}.html, with unique ids`, () => {
     const file = `dist/${path}/index.html`;
     assert.ok(existsSync(file), `run npm run build first (${file})`);
     const html = readFileSync(file, 'utf8');
     const v1s = html.indexOf('<main id="main"'); const v1e = html.indexOf('</main>', v1s);
-    const ts = html.indexOf('<template id="obos-v2-tree">'); const te = html.indexOf('</template>', ts);
-    assert.ok(v1s >= 0 && ts > v1e && te > ts, 'v1 main, then the template');
-    assert.equal((html.match(/<template id="obos-v2-tree">/g) ?? []).length, 1);
-    const v1 = html.slice(v1s, v1e), v2 = html.slice(ts, te);
+    assert.ok(v1s >= 0 && v1e > v1s, 'v1 main');
+    assert.ok(!html.includes('obos-v2-tree') && !/class="[^"]*\bobos-v2\b/.test(html), 'no v2 template or markup in the page');
+    const v1 = html.slice(v1s, v1e);
     assert.match(v1, new RegExp(`^<main id="main" class="${root}`));
+    const v2file = `dist/obos-v2/${tree}.html`;
+    assert.ok(existsSync(v2file), `run npm run build first (${v2file})`);
+    const v2 = readFileSync(v2file, 'utf8');
+    assert.equal((v2.match(/<main id="main"/g) ?? []).length, 1);
     assert.match(v2, new RegExp(`<main id="main" class="${root} obos-v2"`));
     const ids = [...v2.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
     assert.deepEqual([...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))], [], 'duplicate ids in the v2 tree');
-    assert.ok(tag.length > 0);
   });
 }

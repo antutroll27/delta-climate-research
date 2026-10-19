@@ -1,5 +1,7 @@
 ---
-// src/components/ClimateEngine/v2/UiSwap.astro — spec §1.2
-import { UI_SWAP_JS } from '../../../scripts/climate-engine/v2/ui-flag.ts';
+// src/components/ClimateEngine/v2/UiSwap.astro — spec §1.2. FINAL audit F5: the v2 tree is a FILE now, not a <template> in the page. `tree` is that file's URL.
+import { UI_SWAP_JS, V2_CSS_URL, V2_SWAP_ID } from '../../../scripts/climate-engine/v2/ui-flag.ts';
+interface Props { tree: string }
+const { tree } = Astro.props;
 ---
-<script is:inline data-astro-rerun set:html={UI_SWAP_JS} />
+<script is:inline data-astro-rerun id={V2_SWAP_ID} data-tree={tree} data-css={V2_CSS_URL} set:html={UI_SWAP_JS} />
