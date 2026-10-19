@@ -169,7 +169,10 @@ test('the card is a dialog the app\'s selection logic can still drive: every bc*
     'bcSolLoss', 'bcSolFloor', 'bcSolRaised', 'bcSolRs', 'bcSolNote', 'bcSure', 'bcSureRoof', 'bcSureCanopy', 'bcSureIrr', 'bcSureValid', 'bcBrief', 'bcPay', 'svThumb', 'bcRings', 'bcIns', 'bcSrc', 'bcX']) {
     assert.ok(ids.includes(id), `#${id} missing`);
   }
-  assert.match(v2, /<div class="bcard card" id="bcard" hidden role="dialog" aria-label="Selected building">/);
+  assert.match(v2, /<div class="bcard card" id="bcard" hidden role="dialog" aria-label="Selected building" data-peek="1">/);
+  /* brainstorm 04: the card's own new doors, each once: the heading focus lands on, the fold, the phone's expand button and grip */
+  for (const id of ['bcHead', 'bcFold', 'bcExpand', 'bcGrip', 'bcBody']) assert.ok(ids.includes(id), `#${id} missing`);
+  assert.match(v2, /<h2 class="micro bc-head" id="bcHead" tabindex="-1">Selected building<\/h2>/, 'the dialog\'s heading is focusable by script only');
   assert.equal((v2.match(/data-limit="/g) ?? []).length, 10, 'the five rungs and their five buttons');
 });
 
@@ -180,13 +183,20 @@ test('the map-borne chips and the street-view modal left parking for their own r
   assert.ok(sv.includes('Street imagery · <a href="https://www.mapillary.com" target="_blank" rel="noopener noreferrer">Mapillary</a> · community-captured (CC BY-SA)'), 'the credit is v1\'s text with a real link');
 });
 
-test('the card override is CSS-only: v2 neutralises the app\'s inline placement and nothing is written in a script', () => {
+test('the card is placed by script as transforms only, and styled by CSS (brainstorm 04): no layout property is ever written per frame, and the fold is transform + opacity', () => {
   const css = strip(CSS('building.css'));
-  assert.match(css, /#bcard \{[^}]*transform: none !important; opacity: 1 !important;/);
-  assert.match(css, /#bcard \.bcard-in \{[^}]*max-height: none !important;/);
-  assert.match(css, /#legend:has\(> #bcard:not\(\[hidden\]\)\) > :not\(#bcard\) \{ display: none !important; \}/);
-  assert.match(css, /#bcard \.lead \{ display: none; \}/);
+  assert.match(css, /#bcard \{[^}]*position: absolute;[^}]*width: 320px;[^}]*will-change: transform;/);
+  assert.match(css, /\[data-card-sink\] #bcard \{ left: 0; top: 0; right: auto; \}/, 'the column\'s corner is the fallback until the shell has mounted');
+  assert.match(css, /#bcard \.bcard-in \{[^}]*overflow-y: auto;/, 'a capped card scrolls inside itself');
+  assert.match(css, /#bcard \.bcard-in > \* \{ flex: none; \}/, 'a capped card never squeezes its sections');
+  assert.match(css, /#bcard \.lead \{[^}]*transform-origin: 0 50%;/);
+  assert.match(css, /\[data-readings="folded"\] #legend\.heat-panel \{[^}]*transform: translate3d\([^}]*opacity: 0; visibility: hidden;/);
+  assert.ok(!/#legend:has\(> #bcard/.test(css), 'the column no longer hides its cards to make room for the card');
   assert.ok(!/#[0-9a-f]{3,8}\b|rgba?\(/i.test(css), 'building.css spells a colour literal');
+  const ts = readFileSync('src/scripts/climate-engine/v2/card-v2.ts', 'utf8');
+  assert.ok(!/\.style\.(left|top|width|height|right|bottom)\b/.test(ts), 'card-v2.ts writes a layout property');
+  assert.deepEqual([...new Set([...ts.matchAll(/\.style\.(\w+)\s*=/g)].map((m) => m[1]))].sort(), ['maxHeight', 'visibility'], 'the only direct style writes: the visibility of a card with no apex, and its height cap (only when the free space changes)');
+  assert.deepEqual([...new Set([...ts.matchAll(/write\((?:card|lead|dot), '(\w+)'/g)].map((m) => m[1]))], ['transform'], 'every per-frame write is a transform')
 });
 
 /* ── A-S3 audit F2: the ward mark's colour is synced once at mount, and on every change ── */

@@ -8,7 +8,7 @@ const C = 'src/components/ClimateEngine/v2';
 const noJsx = (s) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
 export const REGIONS = ['MapChips', 'PhoneChrome', 'RailV2', 'ToolbarV2', 'ExploreSide', 'SolarSide', 'AirSide', 'TitleCard', 'CompassV2', 'MapStack',
   'DockV2', 'ToastsV2', 'RightColumn', 'LayersPopover', 'Overlays', 'StreetViewModal', 'SolarSheets'];
-export const CARDS = ['BuildingCardV2', 'TempCard', 'HeatCards', 'ScenarioCards', 'SolarCards', 'WeatherCards', 'MethodsCards'];
+export const CARDS = ['TempCard', 'HeatCards', 'ScenarioCards', 'SolarCards', 'WeatherCards', 'MethodsCards'];
 export const SCREEN_PARTIALS = ['overview', 'heat', 'mapstack', 'building', 'explore', 'scenarios', 'solar', 'air', 'weather', 'methods', 'compare', 'brief'];
 export const PRINT_PARTIALS = ['solar', 'brief'];
 
@@ -33,9 +33,11 @@ test('FINAL audit F12: the empty parking regions are gone (no Park file, no park
   assert.ok(!readFileSync('src/styles/obos-v2/tokens.css', 'utf8').includes('data-v2-parking'), 'tokens.css still styles the parking box');
 });
 
-test('the right column holds every card slot once, building card first, the .attr marker last', () => {
+test('the right column holds every card slot once, temperature card first, the .attr marker last; the building card is NOT in it (brainstorm 04: it stands on the map)', () => {
   const rc = noJsx(readFileSync(join(C, 'RightColumn.astro'), 'utf8'));
   inOrder(rc, CARDS, 'RightColumn.astro');
+  assert.ok(!rc.includes('BuildingCardV2'), 'the building card left the column');
+  assert.ok(noJsx(readFileSync(join(C, 'HeatMapStageV2.astro'), 'utf8')).includes('<BuildingCardV2'), 'the stage mounts it');
   assert.ok(rc.lastIndexOf('class="attr"') > rc.lastIndexOf('<MethodsCards'), 'the .attr marker must stay the last child (app:1212, :1238)');
 });
 

@@ -72,7 +72,9 @@ function bindCardFocusReturn(ctx: ShellCtx): void {
     const at = document.activeElement;
     if (at && at !== document.body && !card.contains(at)) return;   /* focus is somewhere the reader put it: leave it */
     const target = last && shown(last) ? last : lastRow !== null ? document.querySelector<HTMLElement>(`#solList tr[data-idx="${CSS.escape(lastRow)}"]`) : null;
-    if (target && shown(target)) target.focus({ preventScroll: true });
+    if (target && shown(target)) { target.focus({ preventScroll: true }); return; }
+    /* a card opened with the pointer on the map has no opener: focus goes to the map itself, never to <body> (brainstorm 04 §7) */
+    document.querySelector<HTMLElement>('#mlmap canvas')?.focus({ preventScroll: true });
   });
 }
 

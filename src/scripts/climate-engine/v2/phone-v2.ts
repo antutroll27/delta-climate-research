@@ -88,11 +88,7 @@ export function bindPhone(root: HTMLElement, cleanup: Cleanup, layers: LayerStac
   }
   if (sheet && handle) {
     on(cleanup, handle, 'click', () => setSheet(sheet.dataset.open !== 'true'));
-    /* a building picked on the map (or from the roof list) puts its card at the top of the sheet: the sheet opens to it */
-    const bcard = $(root, '#bcard');
-    observe(cleanup, bcard, { attributes: true, attributeFilter: ['hidden'] }, () => {
-      if (mq.matches && bcard && !bcard.hidden) { setSheet(true); sheet.scrollTop = 0; }
-    });
+    /* a building picked on the map (or from the roof list) no longer opens the sheet (brainstorm 04): its card is a short peek above the sheet, so the roof stays on the map (card-v2.ts) */
     /* an artefact that will not load is said in the ward card, which is in the sheet: on a phone the sheet opens so the refusal is seen, not folded away */
     observe(cleanup, $(root, '#loadchip'), { attributes: true, attributeFilter: ['class'] }, () => {
       if (mq.matches && $(root, '#loadchip')?.classList.contains('fail')) setSheet(true);

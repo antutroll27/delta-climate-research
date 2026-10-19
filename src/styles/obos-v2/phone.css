@@ -124,6 +124,38 @@ html[data-ui="v2"] .obos-v2 .rnudge .rn-x { width: 44px; height: 44px; min-width
   html[data-ui="v2"] .obos-v2 #v2Sheet .tabs { justify-content: space-between; }
   html[data-ui="v2"] .obos-v2 #v2Sheet .tab { min-width: 0; flex: 1; padding: 5px 2px; }
 
+  /* ── the building card on a phone (brainstorm 04 §5): a PEEK above the sheet that keeps the roof on the map, and the same card grown by tap, grip or drag.
+     card-v2.ts writes data-peek and --v2-sheet-h (the sheet's height, so the peek stands on its top edge). No floating card and no lead line. ── */
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard { left: 8px; right: 8px; top: auto; bottom: calc(var(--v2-sheet-h, 250px) + 8px); width: auto; z-index: 26; transform: none !important; will-change: auto; display: flex; flex-direction: column; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[hidden] { display: none; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard :is(.lead, .lead-dot) { display: none; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard .bcard-in { flex: 1 1 auto; min-height: 0; max-height: none !important; gap: 8px; padding: 14px 14px 12px; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard .bc-grip { position: absolute; z-index: 3; top: 0; left: 50%; display: flex; align-items: center; justify-content: center; width: 72px; height: 24px; min-height: 24px; margin-left: -36px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard .bc-grip span { display: block; width: 40px; height: 4px; border-radius: 4px; background: var(--well-2); }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard .bc-expand { display: inline-flex; align-self: flex-start; min-height: 34px; background: var(--ink-1); color: var(--on-ink); }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard .bc-top > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard .bc-top .bc-h { margin: 0; font-size: 22px; }
+  /* the peek: the roof, its measured rows that matter, the capacity and the shading each with its OWN floor, and the door to the rest (220 px at most, measured) */
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] .bcard-in { overflow: hidden; gap: 5px; padding: 18px 14px 9px; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] :is(.bc-ll, .bc-s-v, .bc-s-al, .bc-lm, .sol-kwh, .sol-raised, .sol-worth, .bc-sol-note, .bc-sure, .bc-acts, .bc-fold, .bc-sol > .bc-h, #bcSolLoss small) { display: none; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] .bc-grip { top: -8px; height: 24px; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] .bc-stats { grid-template-columns: auto auto auto minmax(0, 1fr); gap: 2px 10px; margin-top: 2px; padding-top: 0; border-top: 0; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] .bc-stats dd { font-size: 14px; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] #bcT { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] #bcT small { margin: 0; font-size: 9.5px; letter-spacing: -0.01em; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] .bc-stats dt { letter-spacing: 0.03em; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] .bc-sol { display: block; border-top: 1px solid var(--line); padding-top: 6px; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] .bc-sol > dl { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 4px 12px; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] .bc-sol > dl > .sol-kwp { grid-column: 1; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] .bc-sol > dl > .interval { grid-column: 2; padding: 0; background: transparent; gap: 2px 10px; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] #bcSolKwp { font-size: 17px; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] #bcSolKwp small { margin-top: 3px; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="1"] .interval dd { font-size: 17px; }
+  /* grown: the whole card, under the title card, over the sheet */
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="0"] { top: 100px; bottom: 8px; z-index: 40; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="0"] .bc-expand { display: none; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="0"] .bcard-in { overflow-y: auto; padding-top: 22px; }
+
   /* ── an area that ships no data: no sheet, one centred card (spec §4.10); its ward card keeps the bottom-left corner, the credits chip the bottom-right ── */
   html[data-ui="v2"] .obos-v2 > #v2MapStack { left: 8px; bottom: 12px; width: min(236px, calc(100% - 128px)); }
   html[data-ui="v2"] .obos-v2 #legend:has(> .notyet) { top: 50%; bottom: auto; left: 12px; right: 12px; width: auto; transform: translateY(-50%); max-height: calc(100% - 140px); }
@@ -143,6 +175,9 @@ html[data-ui="v2"] .obos-v2 .rnudge .rn-x { width: 44px; height: 44px; min-width
   html[data-ui="v2"] .obos-v2 .st-title { right: auto; width: 200px; }
   html[data-ui="v2"] .obos-v2 #v2Sheet { left: auto; right: 8px; bottom: 8px; width: min(360px, 48%); max-height: calc(100% - 84px); border-radius: 22px; border-bottom: 1px solid var(--glass-border); }
   html[data-ui="v2"] .obos-v2 .sheet-head { border-radius: 22px 22px 0 0; }
+  /* the building card's peek stands bottom-left, beside the sheet's column; grown, it takes the left of the screen */
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard { right: auto; width: min(380px, calc(100% - 392px)); bottom: 8px; }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard[data-peek="0"] { top: 8px; }
   /* the dock does not stick on its side (it would leave a 100 px window for the readings): it ends the sheet, and its clock and tabs share a row */
   html[data-ui="v2"] .obos-v2 #v2Sheet .st-dock { position: static; box-shadow: none; }
   html[data-ui="v2"] .obos-v2 #v2Sheet .bar { flex-direction: row; align-items: center; gap: 8px; }

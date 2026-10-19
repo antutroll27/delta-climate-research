@@ -69,3 +69,24 @@ test('Compare\'s phone note is the stage\'s, the method paragraph and both cavea
   for (const t of ['They are not a ward ranking.', 'Both sides come from one city.', 'Ballygunge is KMC Ward 68']) assert.ok(m[1].includes(t), t);
   assert.match(CSS, /\.cmp-phone-note \{ display: none; \}/);
 });
+
+/* ── brainstorm 04 §5 (20 Oct): the building card is a PEEK on a phone, not the sheet's first card ── */
+test('a selected building no longer opens the sheet: phone-v2.ts has no card observer, and the card\'s own binder folds an open sheet instead', () => {
+  const phone = read('src/scripts/climate-engine/v2/phone-v2.ts');
+  assert.ok(!/observe\(cleanup, bcard,/.test(phone), 'phone-v2.ts still watches the card to open the sheet');
+  assert.ok(!/const bcard = \$\(root, '#bcard'\);/.test(phone));
+  const card = read('src/scripts/climate-engine/v2/card-v2.ts');
+  assert.match(card, /handle\?\.getAttribute\('aria-expanded'\) === 'true'\) handle\.click\(\);/, 'an open sheet steps down so the roof and its peek are on the map');
+  assert.match(card, /root\.style\.setProperty\('--v2-sheet-h'/, 'the peek stands on the sheet\'s top edge, from one custom property');
+});
+
+test('phone.css: the peek is above the sheet, 220 px of content at most, shows each floor beside its own headline, and grows from the SAME #bcard (no clone, no second id)', () => {
+  assert.match(CSS, /\.obos-v2\[data-phone\] #bcard \{[^}]*bottom: calc\(var\(--v2-sheet-h, 250px\) \+ 8px\);[^}]*transform: none !important;/);
+  assert.match(CSS, /#bcard\[data-peek="1"\] :is\(\.bc-ll, \.bc-s-v, \.bc-s-al, \.bc-lm, \.sol-kwh, \.sol-raised, \.sol-worth, \.bc-sol-note, \.bc-sure, \.bc-acts, \.bc-fold, \.bc-sol > \.bc-h, #bcSolLoss small\) \{ display: none; \}/);
+  assert.match(CSS, /#bcard\[data-peek="1"\] \.bc-sol > dl > \.sol-kwp \{ grid-column: 1; \}/, 'the capacity and its floor stay in the peek');
+  assert.match(CSS, /#bcard\[data-peek="1"\] \.bc-sol > dl > \.interval \{ grid-column: 2;/, 'Shaded and At least (the strict floor) stay together in the peek');
+  assert.match(CSS, /#bcard\[data-peek="0"\] \{ top: 100px; bottom: 8px; z-index: 40; \}/);
+  const card = read('src/components/ClimateEngine/v2/BuildingCardV2.astro');
+  for (const id of ['bcExpand', 'bcGrip']) assert.equal((card.match(new RegExp(`id="${id}"`, 'g')) ?? []).length, 1, `#${id} once`);
+  assert.match(card, /<button class="bc-grip" id="bcGrip" type="button" aria-expanded="false" aria-controls="bcBody" aria-label="Show all building details">/);
+});

@@ -4,47 +4,77 @@
    Ported from the preview's screens/building.html <style> for the classes the app's strings can use (NOT its bar classes: the app writes strings, not numbers).
    NO colour literal: the ink from --ink-1, the cooling green from --sym-green, a heat class only from --heat-*. */
 
-/* ── the card (spec C5) ── */
-html[data-ui="v2"] .obos-v2 #bcard { position: relative; inset: auto; transform: none !important; opacity: 1 !important; order: -1; width: auto; z-index: auto; }
+/* ── the card, ON THE MAP (brainstorm 04, founder option C). card-v2.ts writes its transform (and its lead's) from the roof's apex; everything else is here. ──
+   Until the shell has mounted (and if it never does) the card falls back to the old column's corner, so it is never left at 0,0 under the rail. */
+html[data-ui="v2"] .obos-v2 #bcard { position: absolute; z-index: 28; top: 68px; right: 16px; width: 320px; padding: 0; will-change: transform; }
+html[data-ui="v2"] .obos-v2[data-card-sink] #bcard { left: 0; top: 0; right: auto; }
 html[data-ui="v2"] .obos-v2 #bcard[hidden] { display: none; }
-html[data-ui="v2"] .obos-v2 #bcard .bcard-in { max-height: none !important; overflow: visible; display: flex; flex-direction: column; gap: 12px; }
-html[data-ui="v2"] .obos-v2 #bcard .lead { display: none; }
-html[data-ui="v2"] .obos-v2 #legend:has(> #bcard:not([hidden])) > :not(#bcard) { display: none !important; }
-html[data-ui="v2"] .obos-v2 #bcard .bc-part { position: relative; overflow: hidden; }
-html[data-ui="v2"] .obos-v2 #bcard .bc-sol { border-top: 1px solid var(--line); padding-top: 12px; }
+html[data-ui="v2"] .obos-v2 #bcard .bcard-in { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 10px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; border-radius: inherit; }
+/* the lead line and its dot: a 100 px hairline scaled to length and rotated to the brackets, so a frame only ever writes a transform */
+html[data-ui="v2"] .obos-v2 #bcard :is(.lead, .lead-dot) { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; }
+html[data-ui="v2"] .obos-v2 #bcard .lead { top: -1px; width: 100px; height: 2px; transform-origin: 0 50%; background: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 #bcard .lead-dot { left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-1); box-shadow: 0 0 0 2px var(--card); }
+html[data-ui="v2"] .obos-v2 #bcard[data-side="dock"] :is(.lead, .lead-dot) { display: none; }
+html[data-ui="v2"] .obos-v2 #bcard .bcard-in > * { flex: none; }   /* a capped card scrolls; it never squeezes its sections */
+html[data-ui="v2"] .obos-v2 #bcard .bc-grip { display: none; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-expand { display: none; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-part { position: relative; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-sol { border-top: 1px solid var(--line); padding-top: 10px; }
 html[data-ui="v2"] .obos-v2 #bcard .bc-sol[hidden] { display: none; }
-/* the bleeding marks: a solid ink square for the building, an outlined solar square for the solar section */
-html[data-ui="v2"] .obos-v2 #bcard .bleed { position: absolute; z-index: 0; right: -14px; top: -14px; width: 64px; height: 64px; pointer-events: none; opacity: .16; }
-html[data-ui="v2"] .obos-v2 #bcard .bc-part > :not(.bleed) { position: relative; z-index: 1; }   /* the mark sits behind every word */
-html[data-ui="v2"] .obos-v2 #bcard .bleed svg { width: 100%; height: 100%; }
-html[data-ui="v2"] .obos-v2 #bcard .bc-sol .bleed { width: 40px; height: 40px; right: -8px; top: 0; opacity: .3; }
-html[data-ui="v2"] .obos-v2 #bcard .bc-h > :not(.bleed) { position: relative; z-index: 1; }
+/* the solar section's mark: an OUTLINED solar square (modelled), drawn inline before the title as in the approved preview */
+html[data-ui="v2"] .obos-v2 #bcard .bc-sol .bleed { position: static; flex: none; width: 14px; height: 14px; pointer-events: none; }
+html[data-ui="v2"] .obos-v2 #bcard .bleed svg { display: block; width: 100%; height: 100%; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-h > :not(.bleed, .sr-only) { position: relative; z-index: 1; }
+
+/* head: the micro heading, the big id, Close in the corner */
+html[data-ui="v2"] .obos-v2 #bcard .bc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-head { margin: 0; font-size: var(--micro-size); font-weight: var(--micro-weight); letter-spacing: var(--micro-ls); text-transform: uppercase; color: var(--ink-3); outline: none; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-top .bc-h { margin: 4px 0 0; font: 300 28px/1.05 var(--sans); letter-spacing: -0.02em; text-transform: none; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 #bcard .bc-ll { margin: 4px 0 0; font-size: 12px; line-height: 1.4; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 #bcard .bc-ll dd { text-align: left; font-weight: 400; letter-spacing: 0; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 #bcard .bc-ll dd small { display: block; margin-top: 1px; }
+/* the six measured rows: label over value, three to a row */
+html[data-ui="v2"] .obos-v2 #bcard .bc-stats { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr); gap: 10px 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 #bcard .bc-stats > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 
 /* head and rows: the app writes the values, v2 sets the type */
 html[data-ui="v2"] .obos-v2 #bcard .bc-h { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 2px 0 8px;
   font: 600 10px/1.35 var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
-html[data-ui="v2"] .obos-v2 #bcard .bc-building > .micro { display: block; }
 html[data-ui="v2"] .obos-v2 #bcard #bcId { font-variant-numeric: tabular-nums; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 #bcard dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; margin: 0; font-size: 13px; }
-html[data-ui="v2"] .obos-v2 #bcard dt { font: 600 10px/1.5 var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); align-self: baseline; }
+html[data-ui="v2"] .obos-v2 #bcard dt { font: 600 10px/1.35 var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); align-self: baseline; }
 html[data-ui="v2"] .obos-v2 #bcard dd { margin: 0; text-align: right; font-weight: 500; letter-spacing: -0.01em; color: var(--ink-1); font-variant-numeric: tabular-nums; }
-html[data-ui="v2"] .obos-v2 #bcard dd small { display: block; font: 400 11px/1.35 var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 #bcard dd small { display: block; font: 400 10px/1.3 var(--sans); letter-spacing: -0.005em; text-transform: none; color: var(--ink-3); }
 html[data-ui="v2"] .obos-v2 #bcard #bcH { cursor: help; }
-/* H13: the headline and its strict floor share one row, label over value, left-aligned (grid areas, so each pair stays a dt/dd of the same dl) */
-html[data-ui="v2"] .obos-v2 #bcard .interval { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 4px 14px; align-items: start; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-stats dd { text-align: left; font-size: 15px; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-stats dd small { margin-top: 1px; }
+/* the rooftop solar block: one column of rows; Raised and Worth side by side; the capacity floor is the chip inside Installable's own small line */
+html[data-ui="v2"] .obos-v2 #bcard .bc-sol > dl { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-sol > dl > div:not(.interval) { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-sol > dl > :is(.sol-kwp, .sol-kwh, .interval) { grid-column: 1 / -1; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-sol dd { text-align: left; font-size: 15px; }
+html[data-ui="v2"] .obos-v2 #bcard #bcSolKwp { font-size: 19px; font-weight: 400; }
+html[data-ui="v2"] .obos-v2 #bcard #bcSolKwp small { display: block; width: max-content; max-width: 100%; margin-top: 5px; padding: 1px 8px; border-radius: 99px; box-shadow: inset 0 0 0 1px var(--ink-1); font: 600 10.5px/1.5 var(--sans); color: var(--ink-1); }
+/* H13: Shaded and its strict floor share one row, label over value, left-aligned (grid areas, so each pair stays a dt/dd of the same row) */
+html[data-ui="v2"] .obos-v2 #bcard .interval { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 3px 14px; align-items: start; padding: 7px 12px; border-radius: 12px; background: var(--well); }
 html[data-ui="v2"] .obos-v2 #bcard .interval dt:nth-of-type(1) { grid-area: 1 / 1; }
 html[data-ui="v2"] .obos-v2 #bcard .interval dd:nth-of-type(1) { grid-area: 2 / 1; }
 html[data-ui="v2"] .obos-v2 #bcard .interval dt:nth-of-type(2) { grid-area: 1 / 2; }
 html[data-ui="v2"] .obos-v2 #bcard .interval dd:nth-of-type(2) { grid-area: 2 / 2; }
-html[data-ui="v2"] .obos-v2 #bcard .interval dd { text-align: left; font-size: 15px; }
+html[data-ui="v2"] .obos-v2 #bcard .interval dd { font-size: 18px; font-weight: 400; }
 html[data-ui="v2"] .obos-v2 #bcard .bc-tier { flex: none; align-self: center; padding: 1px 8px; border-radius: 99px; box-shadow: inset 0 0 0 1px var(--line); font: 600 9.5px/1.6 var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 #bcard .bc-sol > .bc-h { justify-content: flex-start; margin: 0 0 8px; font: 600 14px/1.3 var(--sans); letter-spacing: -0.01em; text-transform: none; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 #bcard .bc-sol > .bc-h .bc-tier { margin-left: auto; }
 /* the landmark block: ruled off, the best-evidenced figure on the card */
 html[data-ui="v2"] .obos-v2 #bcard .bc-lm { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--line); }
 html[data-ui="v2"] .obos-v2 #bcard .bc-lm[hidden] { display: none; }
 html[data-ui="v2"] .obos-v2 #bcard .bc-lm-name { margin: 0 0 8px; font: 600 14px/1.25 var(--sans); letter-spacing: -0.01em; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 #bcard #bcLmSrc { font: 400 11px/1.4 var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink-2); }
+/* the fold: rings, greenery and sources */
+html[data-ui="v2"] .obos-v2 #bcard .bc-fold { border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 #bcard .bc-fold summary, html[data-ui="v2"] .obos-v2 #bcard .bc-sure summary { cursor: pointer; padding: 6px 0; font-size: 12.5px; font-weight: 500; min-height: 24px; color: var(--ink-1); }
 /* notes: the card's footnote voice */
-html[data-ui="v2"] .obos-v2 #bcard .bc-rings { margin: 12px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--well); font-size: 11.5px; line-height: 1.4; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 #bcard .bc-rings { margin: 4px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--well); font-size: 11.5px; line-height: 1.4; color: var(--ink-2); }
 html[data-ui="v2"] .obos-v2 #bcard .bc-rings b { color: var(--ink-1); font-weight: 600; }
 html[data-ui="v2"] .obos-v2 #bcard .bc-ins { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; line-height: 1.5; color: var(--ink-2); }
 html[data-ui="v2"] .obos-v2 #bcard .bc-ins b { font-weight: 600; color: var(--ink-1); }
@@ -58,18 +88,26 @@ html[data-ui="v2"] .obos-v2 #bcard .sv-thumb[hidden] { display: none; }
 html[data-ui="v2"] .obos-v2 #bcard .sv-thumb img { width: 100%; display: block; border-radius: 10px; cursor: pointer; box-shadow: inset 0 0 0 1px var(--line); }
 html[data-ui="v2"] .obos-v2 #bcard .sv-thumb .sv-none { font-size: 11px; color: var(--ink-3); }
 /* how sure, and what would make it surer: a disclosure in the card's voice (the app opens it; its rungs are the app's own strings) */
-html[data-ui="v2"] .obos-v2 #bcard .bc-sure { margin: 10px 0 0; border-top: 1px solid var(--line); }
-html[data-ui="v2"] .obos-v2 #bcard .bc-sure summary { cursor: pointer; padding: 9px 0; font-size: 12.5px; font-weight: 500; min-height: 24px; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 #bcard .bc-sure { margin: 8px 0 0; border-top: 1px solid var(--line); }
 html[data-ui="v2"] .obos-v2 #bcard .bc-sure ul { margin: 0; padding: 0 0 4px 16px; list-style: disc; }
 html[data-ui="v2"] .obos-v2 #bcard .bc-sure li { margin: 0 0 8px; font-size: 11.5px; line-height: 1.45; color: var(--ink-2); }
 html[data-ui="v2"] .obos-v2 #bcard .bc-sure li b { font-weight: 600; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 #bcard .bc-ask { display: inline-flex; align-items: center; min-height: 24px; margin-top: 4px; padding: 0 10px; border: 0; border-radius: 99px; background: var(--well); color: var(--ink-1); font: 500 11px/1 var(--sans); cursor: pointer; }
-html[data-ui="v2"] .obos-v2 #bcard .bc-brief, html[data-ui="v2"] .obos-v2 #bcard .bc-x { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; margin: 10px 6px 0 0; padding: 0 13px; border: 0; border-radius: 99px;
+html[data-ui="v2"] .obos-v2 #bcard .bc-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+html[data-ui="v2"] .obos-v2 #bcard :is(.bc-brief, .bc-x, .bc-expand) { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; margin: 0; padding: 0 11px; border: 0; border-radius: 99px;
   background: var(--well); color: var(--ink-1); font: 500 12px/1 var(--sans); cursor: pointer; white-space: nowrap; }
 html[data-ui="v2"] .obos-v2 #bcard .bc-brief[hidden] { display: none; }
 html[data-ui="v2"] .obos-v2 #bcard #bcPay { background: var(--ink-1); color: var(--on-ink); }
 html[data-ui="v2"] .obos-v2 #bcard .bc-brief:disabled { opacity: 1; color: var(--ink-3); cursor: not-allowed; }
-html[data-ui="v2"] .obos-v2 #bcard .bc-x { align-self: flex-start; margin: 0; }
+html[data-ui="v2"] .obos-v2 #bcard .bc-x { flex: none; }
+
+/* ── the right column folds while a building is selected (transform and opacity only); the pill brings it back ── */
+html[data-ui="v2"] .obos-v2 #legend.heat-panel { transition: transform .18s var(--ease), opacity .18s var(--ease); }
+html[data-ui="v2"] .obos-v2[data-readings="folded"] #legend.heat-panel { transform: translate3d(calc(100% + 32px), 0, 0); opacity: 0; visibility: hidden; pointer-events: none; transition: transform .18s var(--ease), opacity .18s var(--ease), visibility 0s linear .18s; }
+@media (prefers-reduced-motion: reduce) { html[data-ui="v2"] .obos-v2 #legend.heat-panel, html[data-ui="v2"] .obos-v2[data-readings="folded"] #legend.heat-panel { transition: none; } }
+html[data-ui="v2"] .obos-v2 .readings-pill { position: absolute; z-index: 30; top: 62px; right: 16px; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 14px; border-radius: 99px; border: 0;
+  font: 500 12.5px/1 var(--sans); color: var(--ink-1); cursor: pointer; white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .readings-pill[hidden] { display: none; }
 
 /* ── the map-borne chips: the app creates and moves them (transform, hidden, visibility); v2 only dresses them ── */
 html[data-ui="v2"] .obos-v2 :is(#bsel, .ringlab, #coolTag) { position: absolute; left: 0; top: 0; z-index: 6; pointer-events: none; will-change: transform; }

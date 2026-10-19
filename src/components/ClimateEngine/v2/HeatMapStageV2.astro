@@ -22,6 +22,7 @@ import DockV2 from './DockV2.astro';
 import LayersPopover from './LayersPopover.astro';
 import Overlays from './Overlays.astro';
 import RightColumn from './RightColumn.astro';
+import BuildingCardV2 from './BuildingCardV2.astro';
 /* THE FOUR SHELL COMPONENTS, COMPOSED. Until this task each was imported by
    nothing: the rail, the scope switcher and the layer tree were built and proven
    against their own sources, and the toolbox had been moved out of this file with
@@ -172,6 +173,10 @@ const newCity = scope.area.hasData
   <div class="st-dock" id="v2Dock">{scope.area.hasData && <DockV2 currentKey={scope.key} strip={strip} otherCity={otherCity} />}</div>
   <ToastsV2 newCity={newCity} hasData={scope.area.hasData} />
   <RightColumn scope={scope} />
+  {/* THE BUILDING CARD STANDS ON THE MAP (brainstorm 04, founder option C), not in the column: v2/card-v2.ts places it beside the selected roof. While a building is
+      selected the column folds away; this pill brings it back. */}
+  {scope.area.hasData && <BuildingCardV2 scope={scope} />}
+  {scope.area.hasData && <button class="readings-pill card" id="v2ReadingsPill" type="button" data-hud hidden aria-expanded="false" aria-controls="legend">Ward readings <span aria-hidden="true">‹</span></button>}
   <LayersPopover current={scope.key} mapillary={mapillary} hasData={scope.area.hasData} />
   <Overlays scope={scope} />
   <StreetViewModal scope={scope} />

@@ -1,8 +1,8 @@
 ---
 // src/components/ClimateEngine/v2/RightColumn.astro — OBOS v2 spec §1.6 (#legend is the right column), §3.9.
 // FROZEN after S2 (plan amendment A1): tracks fill the card components, never this file.
+// 20 Oct (brainstorm 04, amending A1): the building card left this column for the map (HeatMapStageV2.astro); the column folds while a building is selected.
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
-import BuildingCardV2 from './BuildingCardV2.astro';
 import TempCard from './TempCard.astro';
 import HeatCards from './HeatCards.astro';
 import ScenarioCards from './ScenarioCards.astro';
@@ -14,7 +14,6 @@ const { scope } = Astro.props;
 const data = scope.area.hasData;
 ---
 <section class="heat-panel" id="legend" data-hud aria-label="Readings">
-  {data && <BuildingCardV2 scope={scope} />}
   {data && <TempCard scope={scope} />}
   {data && <div class="aqblock legend-air card" id="aqiBlock" role="region" aria-label="Air quality" hidden data-sections="overview air"></div>}
   {data && <HeatCards scope={scope} />}

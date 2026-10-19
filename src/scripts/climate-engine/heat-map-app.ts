@@ -40,7 +40,8 @@ import {
   LABEL_SOURCE, LABEL_LAYER, REPLACED_ROAD_GEOMETRY, isReplacedRoadLabel,
   labelLayerSpec, EMPTY_LABELS, ensureLabelsOnTop,
 } from './road-labels';
-import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
+import { cardSink, type CardBox } from './card-sink';
+import { findCoolingSurfaces, nearestCooling, walkRoundM, type CoolingSurfaces } from './explore/cooling-surfaces';
 import { createWardSession, type WardRequestToken } from './ward-session';
 import { createLoadChip } from './load-chip';
 import { createExploreFrameScheduler } from './explore/frame-scheduler';
@@ -753,7 +754,7 @@ export function mountHeatMap(): () => void {
     } else if (svThumb) {
       svThumb.setAttribute('hidden', '');
     }
-    setHTML('bcLL', `${formatLatLon(ll.lat, ll.lon, '<br>')}<small>centroid · WGS-84</small>`);
+    setHTML('bcLL', `${formatLatLon(ll.lat, ll.lon, cardSink.current ? ' · ' : '<br>')}<small>centroid · WGS-84</small>`);   // v2's card is wide enough for one line
     /* WHO DREW THIS BUILDING. Overture conflates three sources and they are not
        equally trustworthy: OSM footprints are traced by a person against imagery,
        the other two are model output. Google publishes a confidence; the others do
@@ -818,14 +819,13 @@ export function mountHeatMap(): () => void {
         return `about ${mins} minute${mins === 1 ? '' : 's'} away`;
       };
       setHTML('bcRings', `${intro} The nearest greenery is <b>${say(d)}</b>.`);
-      /* Rounded to 10 m: the grid cell is 7.3 m, so a finer figure would be
-         claiming precision the raster does not have. */
-      const rnd = (m: number) => Math.round(m / 10) * 10;
-      parts.push(`Nearest greenery ≈<b>${rnd(d)} m</b> · straight line from the building edge`);
+      /* Rounded to 10 m by walkRoundM, the same function the map tag reads: the grid
+         cell is 7.3 m, so a finer figure would be claiming precision the raster does not have. */
+      parts.push(`Nearest greenery ≈<b>${walkRoundM(d)} m</b> · straight line from the building edge`);
       /* The spread across greenery definitions, stated rather than buried. It is
          usually larger than every other error in this card combined. */
-      if (coolRangeM && rnd(coolRangeM[1]) - rnd(coolRangeM[0]) >= 20) {
-        parts.push(`${rnd(coolRangeM[0])}–${rnd(coolRangeM[1])} m depending on how dense “green” must be`);
+      if (coolRangeM && walkRoundM(coolRangeM[1]) - walkRoundM(coolRangeM[0]) >= 20) {
+        parts.push(`${walkRoundM(coolRangeM[0])}–${walkRoundM(coolRangeM[1])} m depending on how dense “green” must be`);
       }
     } else {
       setHTML('bcRings', intro);
@@ -1403,9 +1403,20 @@ export function mountHeatMap(): () => void {
     const ll = wardLatLon(wardOf(state.ward), b.cx, b.cz);
     /* A row click is an interaction, so it pauses the idle orbit like a touch of the
        map does; the orbit also yields while this ease runs (advanceOrbit). */
+    if (cardSink.current) { easeRowToFreeGround(b, ll); return; }
     nudgeOrbit();
     map.easeTo({ center: [ll.lon, ll.lat], duration: reduceMotion ? 0 : 700, essential: true });
   };
+  /* v2: land a roof picked from the list where its card has room and no chrome covers it (the bottom-left stack sits on the canvas centre).
+     `offset` puts the ground point at that spot; the apex stands above the ground by its own height on screen, which is added back. */
+  function easeRowToFreeGround(b: BuildingMeta, ll: { lat: number; lon: number }): void {
+    nudgeOrbit();
+    const w = cv.clientWidth, h = cv.clientHeight;
+    const to = cardSink.current?.target(w, h, !!relief);
+    const g = to && relief ? relief.project(b.cx, 0, b.cz, w, h) : null, a = g ? relief?.project(b.cx, b.h, b.cz, w, h) : null;
+    const lift = g && a && g.w > 0 && a.w > 0 ? g.y - a.y : 0;
+    map.easeTo({ center: [ll.lon, ll.lat], ...(to ? { offset: [to.x - w / 2, to.y + lift - h / 2] as [number, number] } : {}), duration: reduceMotion ? 0 : 700, essential: true });
+  }
   const tariffInput = el('solTariff') as HTMLInputElement | null;
   if (tariffInput) tariffInput.value = tariff.toFixed(2);
   setText('solCur', currencyMark(COSTS));   // the country names the currency; never typed into a template
@@ -1491,7 +1502,9 @@ export function mountHeatMap(): () => void {
        selection, so "topmost on screen" walked the labels straight underneath
        it. Score candidates that clear the card first and only fall back to a
        covered one if the ring has nowhere else to put its label. */
-    const cardBox = bcard.hasAttribute('hidden') ? null : bcard.getBoundingClientRect();
+    /* v2: the card's box is the shell's cached one (it places the card itself); v1 reads it. */
+    const sink = cardSink.current;
+    const cardBox: CardBox | null = bcard.hasAttribute('hidden') ? null : sink ? sink.box() : bcard.getBoundingClientRect();
     const cvBox = cv.getBoundingClientRect();
     const clearsCard = (x: number, y: number) => {
       if (!cardBox) return true;
@@ -1511,7 +1524,9 @@ export function mountHeatMap(): () => void {
        both land under the card does it hide — the card carries the same fact
        in prose, so nothing is lost. Exact rectangles, no slop margins: a
        near-miss is not a collision. */
-    const hud = hudKeepOut();
+    /* v2: the card's lead line is a keep-out too, or it would run through the tag's text. */
+    const leadBox = sink?.lead();
+    const hud: ReadonlyArray<{ left: number; top: number; right: number; bottom: number }> = leadBox ? [...hudKeepOut(), leadBox] : hudKeepOut();
     /* The tag is placed FIRST, and its box is what the ring labels then avoid. */
     let tagBox: number[] | null = null;
     if (nearestCool) {
@@ -1521,7 +1536,7 @@ export function mountHeatMap(): () => void {
         if (q.w <= 0) tag.style.visibility = 'hidden';
         else {
           const cvB = cv.getBoundingClientRect();
-          const cardB = bcard.hasAttribute('hidden') ? null : bcard.getBoundingClientRect();
+          const cardB: CardBox | null = bcard.hasAttribute('hidden') ? null : sink ? sink.box() : bcard.getBoundingClientRect();
           /* .cooltag box, kept in step with the CSS: margin -16px 0 0 -73px,
              146 wide, ~41 tall. These are the chip's real dimensions — a stale
              width here silently tests a rectangle the tag no longer occupies. */
@@ -1597,6 +1612,14 @@ export function mountHeatMap(): () => void {
       lab.style.transform = `translate3d(${Math.round(bx)}px, ${Math.round(by)}px, 0)`;
     }
     const p = relief?.project(selected.cx, selected.h, selected.cz, w, h) ?? { x: 0, y: 0, w: -1 };
+    if (sink) {
+      /* v2 (brainstorm 04): the shell places the card from the apex, by a keep-out search; this file only moves the brackets. */
+      sink.place(p.w > 0 ? { x: p.x + cvBox.left, y: p.y + cvBox.top } : null, !!relief);
+      if (p.w <= 0) { bsel.style.opacity = '0'; return; }
+      bsel.style.opacity = '1';
+      bsel.style.transform = `translate3d(${Math.round(p.x)}px, ${Math.round(p.y)}px, 0)`;
+      return;
+    }
     if (p.w <= 0) { bcard.style.opacity = '0'; bsel.style.opacity = '0'; return; }
     bcard.style.opacity = '1'; bsel.style.opacity = '1';
     bsel.style.transform = `translate3d(${Math.round(p.x)}px, ${Math.round(p.y)}px, 0)`;
@@ -1696,10 +1719,12 @@ export function mountHeatMap(): () => void {
       const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, simN(), currentWardSizeM, b.ring) : null;
       coolRangeM = lo && hi ? [Math.min(lo.distM, hi.distM), Math.max(lo.distM, hi.distM)] : null;
       /* The tag's value is written HERE, once per selection — placeCard only
-         moves it. Rounded to 10 m because the grid cell is 7.3 m. */
+         moves it. v2 (the card sink is mounted) rounds with walkRoundM, the card's own
+         function: a measured 1.5 m reads "≈0 m" on both. v1 keeps its old floor of 10 m
+         on the tag, byte for byte, while the flag is off. */
       if (nearestCool) {
         el('coolTag')?.removeAttribute('hidden');
-        popCoolTag(Math.round(nearestCool.distM / 10) * 10 || 10);
+        popCoolTag(cardSink.current ? walkRoundM(nearestCool.distM) : Math.round(nearestCool.distM / 10) * 10 || 10);
       } else {
         el('coolTag')?.setAttribute('hidden', '');
       }
@@ -1737,6 +1762,14 @@ export function mountHeatMap(): () => void {
   cv.addEventListener('pointerup', onPickUp);
   const onPickKey = (e: KeyboardEvent) => {
     if (e.key !== 'Escape') return;
+    if (cardSink.current) {
+      /* v2: one press, one thing, topmost first: the brief, the street view, then the card (the payback sheet and the popovers stop their own Esc). */
+      if (!el('solBrief')?.hasAttribute('hidden')) { closeBrief(); return; }
+      if (el('svModal') && !el('svModal')?.hasAttribute('hidden')) { closeStreetView(); return; }
+      paySheet?.close();
+      if (selected) select(null);
+      return;
+    }
     closeBrief();                       // the sheet first: it is the topmost thing on screen
     paySheet?.close();                  // normally already closed by its own Escape, which stops here
     if (selected) select(null);

@@ -8,6 +8,7 @@ import { bindMirrors, bindWardCard } from './heat-v2.ts';
 import { bindSunCard } from './sun-card.ts';
 import { bindWeather } from './weather-v2.ts';
 import { bindSolar } from './solar-v2.ts';
+import { bindCard } from './card-v2.ts';
 import { bindCompareLinks } from './compare-v2.ts';
 import { bindPhone } from './phone-v2.ts';
 import { bindModals } from './modals.ts';
@@ -290,6 +291,7 @@ export function mountShellV2(): (() => void) | null {
     bindWardCard(ctx);                           // Track A, S4.2 (heat-v2.ts)
     bindWeather(ctx);                            // Track B, S7.2 (weather-v2.ts)
     bindSolar(ctx);                              // Track B (solar-v2.ts)
+    bindCard(ctx);                               // brainstorm 04: the building card on the map (card-v2.ts)
   }
   /* bindGlass is async: if the page was left before it resolved, undo what it registered. */
   void bindGlass(root, cleanup).then((g) => { ctx.glassRefresh = g.refresh; if (disposed) dispose(); });

@@ -100,10 +100,14 @@ for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-
     assert.ok(col > 0, '#legend must be in the v2 tree');
     if (!path.includes('/ae/')) {
       const attr = v2.indexOf('<span class="attr" hidden></span>', col);
-      for (const id of ['bcard', 'aqiBlock', 'solBlock']) {
+      for (const id of ['aqiBlock', 'solBlock']) {
         const at = v2.indexOf(` id="${id}"`);
         assert.ok(at > col && at < attr, `#${id} must sit inside #legend, before .attr`);
       }
+      /* brainstorm 04 (amends A1): the building card stands on the map, a direct child of the root and OUTSIDE the column, once; the pill that restores the column is beside it */
+      assert.equal((v2.match(/\sid="bcard"/g) ?? []).length, 1, '#bcard once');
+      assert.ok(v2.indexOf(' id="bcard"') > attr, '#bcard must sit after the column (outside #legend)');
+      assert.equal((v2.match(/\sid="v2ReadingsPill"/g) ?? []).length, 1, 'the Ward readings pill, once');
     }
   });
 }
