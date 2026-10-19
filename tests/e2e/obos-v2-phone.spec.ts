@@ -157,7 +157,7 @@ test.describe('@v2 phone 390x844', () => {
     await expect(handle).toBeFocused();
   });
 
-  test('@v2 [H13] Solar on a phone (S6 audit C2): the headline and its strict-mask floor in one row, nothing on top of them; a roof from the drawer opens its card with the floor beside Shaded, on screen', async ({ page }) => {
+  test('@v2 [H13] Solar on a phone (S6 audit C2): the headline and its strict-mask floor in one row, nothing on top of them; a roof from the drawer opens its card (a peek) with the floor beside Shaded, on screen', async ({ page }) => {
     await seenNote(page);
     await openV2(page);
     await section(page, 'solar');
@@ -180,7 +180,9 @@ test.describe('@v2 phone 390x844', () => {
     await expect(page.locator('#v2Drawer')).toBeHidden();
     const bcard = page.locator('#bcard');
     await expect(bcard).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator('[data-v2-sheet-toggle]')).toHaveAttribute('aria-expanded', 'true');
+    /* brainstorm 04: the card is a PEEK above the sheet (the building stays on the map), and the sheet does not open itself */
+    await expect(bcard).toHaveAttribute('data-peek', '1');
+    await expect(page.locator('[data-v2-sheet-toggle]')).toHaveAttribute('aria-expanded', 'false');
     /* v1 bug #3 (the building card off the left edge): the card lies inside the screen, left edge included */
     const b = await bcard.boundingBox();
     expect(b!.x).toBeGreaterThanOrEqual(0);
@@ -189,10 +191,17 @@ test.describe('@v2 phone 390x844', () => {
     const [l, fl] = await Promise.all([page.locator('#bcSolLoss').boundingBox(), page.locator('#bcSolFloor').boundingBox()]);
     expect(Math.abs(fl!.y - l!.y), 'the strict floor sits beside the Shaded figure').toBeLessThanOrEqual(8);
     expect(await phoneIssues(page)).toEqual([]);
-    /* Esc closes the card and nothing else: the same press does not also fold the sheet */
+    /* the whole card, grown from the same node: the payback door is there */
+    await page.locator('#bcExpand').click();
+    await expect(bcard).toHaveAttribute('data-peek', '0');
+    await expect(page.locator('#bcBrief')).toBeVisible();
+    expect(await phoneIssues(page)).toEqual([]);
+    /* Esc folds the grown card to its peek; the next closes it; neither folds the sheet */
+    await page.keyboard.press('Escape');
+    await expect(bcard).toHaveAttribute('data-peek', '1');
     await page.keyboard.press('Escape');
     await expect(bcard).toBeHidden();
-    await expect(page.locator('[data-v2-sheet-toggle]')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('[data-v2-sheet-toggle]')).toHaveAttribute('aria-expanded', 'false');
   });
 
   test('@v2 [H] the payback sheet is a modal on a phone: focus cannot leave it, Esc closes it and nothing else (S6 audit C3)', async ({ page }) => {
@@ -204,6 +213,7 @@ test.describe('@v2 phone 390x844', () => {
     for (let i = 0; i < 5 && !shown; i++) {
       await page.locator('#solList tr[data-idx]').nth(i).dispatchEvent('click');
       await expect(page.locator('#bcard')).toBeVisible({ timeout: 30_000 });
+      if ((await page.locator('#bcard').getAttribute('data-peek')) === '1') await page.locator('#bcExpand').click();   // the payback door is in the grown card, not the peek
       shown = await page.locator('#bcPay').isVisible();
     }
     expect(shown, 'none of the first five roofs offers a payback').toBe(true);

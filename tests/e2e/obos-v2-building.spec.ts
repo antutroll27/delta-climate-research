@@ -144,21 +144,28 @@ test.describe('@v2 building card', () => {
     await page.locator('#solList tr[data-idx]').nth(row).dispatchEvent('click');
   };
 
-  test('@v2 [H] a roof row selects its building: card in the right column, surface row, rings, greenery, Esc closes', async ({ page }) => {
+  test('@v2 [H] a roof row selects its building: the card is on the map (not in the column), surface row, rings in the fold, greenery, Esc closes and the column returns', async ({ page }) => {
     await stubWeather(page, '2026-10-07T06:05:00Z');
     await openV2(page);
     await pick(page);
     const card = page.locator('#bcard');
     await expect(card).toBeVisible();
-    const box = await card.boundingBox(), col = await page.locator('#legend').boundingBox();
-    expect(box!.x).toBeGreaterThanOrEqual(col!.x - 1);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(col!.x + col!.width + 1);
-    await expect(page.locator('[data-v2-card="temp"]')).toBeHidden();       // the card replaces the column's other cards
+    /* brainstorm 04: the card stands on the map, a direct child of the root and outside the right column, and clear of every other piece of chrome (a flat map has no apex, so it docks at the right) */
+    expect(await card.evaluate((e) => e.parentElement === document.querySelector('main.obos-v2') && !e.closest('#legend'))).toBe(true);
+    await page.waitForTimeout(1500);
+    const box = (await card.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(1440);
+    expect(box.y + box.height).toBeLessThanOrEqual(900);
+    for (const hud of await page.locator('[data-hud]').all()) {
+      if (!(await hud.isVisible())) continue;                              // (not written as a :visible selector: Tailwind turns that string into a site-wide junk class, F11)
+      const h = await hud.boundingBox();
+      if (!h || h.width === 0 || (await hud.getAttribute('id')) === 'v2Toasts') continue;
+      expect(box.x < h.x + h.width && box.x + box.width > h.x && box.y < h.y + h.height && box.y + box.height > h.y, `the card sits on ${await hud.evaluate((e) => `${e.tagName}#${e.id}.${e.className}`)}`).toBe(false);
+    }
+    await expect(page.locator('main.obos-v2')).toHaveAttribute('data-readings', 'folded');   // the column folded away while a building is selected
+    await expect(page.locator('[data-v2-card="temp"]')).toBeHidden();
     await expect(page.locator('#bcT')).not.toHaveText('—');
-    await expect(page.locator('#bcRings')).toContainText('how far you could walk from this building in 1 and 5 minutes');
-    await expect(page.locator('#bcRings')).toBeVisible();                    // A-S4 audit F4: text that exists but is hidden must fail
-    await expect(page.locator('#bcIns')).toBeVisible();
-    await expect(page.locator('#bcIns')).not.toBeEmpty();
     await expect(page.locator('#bcT')).toBeVisible();
     await expect(page.locator('#bcSolKwp')).toBeVisible();
     await expect(page.locator('#bcSolLoss')).toBeVisible();
@@ -166,6 +173,13 @@ test.describe('@v2 building card', () => {
     expect(Math.abs(loss!.y - floor!.y), 'H13 (A-S4 F2): the strict-mask floor sits beside the SHADING loss it bounds').toBeLessThanOrEqual(8);
     /* the capacity headline carries its own floor in its small line, and is not the strict floor's neighbour */
     await expect(page.locator('#bcSolKwp small')).toContainText('floor');
+    /* the building's notes are ONE fold (rc3 mutation MB1: text that exists but is hidden must fail): closed they are not drawn, open they are */
+    await expect(page.locator('#bcRings')).toBeHidden();
+    await page.locator('#bcFold summary').click();
+    await expect(page.locator('#bcRings')).toContainText('how far you could walk from this building in 1 and 5 minutes');
+    await expect(page.locator('#bcRings')).toBeVisible();                    // A-S4 audit F4: text that exists but is hidden must fail
+    await expect(page.locator('#bcIns')).toBeVisible();
+    await expect(page.locator('#bcIns')).not.toBeEmpty();
     /* the ring labels and the greenery tag are placed clear of every HUD box (the app's keep-out, spec E1/E2) */
     await page.waitForTimeout(1500);                                         // the entrance animation and the app's 250 ms HUD read settle
     for (const sel of ['#ringNear', '#ringFar', '#coolTag']) {
@@ -173,7 +187,7 @@ test.describe('@v2 building card', () => {
       if (!shown) continue;                                                  // hidden when nowhere is clear: allowed
       const b = (await page.locator(sel).boundingBox())!;
       for (const hud of await page.locator('[data-hud]').all()) {
-        if (!(await hud.isVisible())) continue;                              // (not written as a :visible selector: Tailwind turns that string into a site-wide junk class, F11)
+        if (!(await hud.isVisible())) continue;
         const h = await hud.boundingBox();
         if (!h || h.width === 0) continue;
         const overlap = b.x < h.x + h.width && b.x + b.width > h.x && b.y < h.y + h.height && b.y + b.height > h.y;
@@ -183,7 +197,7 @@ test.describe('@v2 building card', () => {
     }
     await page.keyboard.press('Escape');
     await expect(card).toBeHidden();
-    await expect(page.locator('[data-v2-card="temp"]')).toBeVisible();
+    await expect(page.locator('[data-v2-card="temp"]')).toBeVisible();      // the column is back
   });
 
   test('@v2 the close button and a second building both work; no page errors over a selection and an orbit', async ({ page }) => {
@@ -233,18 +247,19 @@ test.describe('@v2 building card', () => {
     await expect(page.locator('#bcLmSrc')).not.toHaveText('—');
   });
 
-  test('@v2 [H] the shading loss and its strict floor stay together, whole, inside the column at 1366 x 640', async ({ page }) => {
+  test('@v2 [H] the shading loss and its strict floor stay together, whole, inside the card (which scrolls inside itself) at 1366 x 640', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 640 });
     await stubWeather(page, '2026-10-07T06:05:00Z');
     await openV2(page);
     await pick(page);
     await expect(page.locator('#bcSolLoss')).toBeAttached();
     await page.locator('#bcSolLoss').scrollIntoViewIfNeeded();
-    const col = (await page.locator('#legend').boundingBox())!;
+    const card = (await page.locator('#bcard .bcard-in').boundingBox())!;
+    expect(card.y + card.height, 'the card is inside the window').toBeLessThanOrEqual(640);
     for (const id of ['#bcSolLoss', '#bcSolFloor']) {
       const b = (await page.locator(id).boundingBox())!;
-      expect(b.y, `${id} top inside the column`).toBeGreaterThanOrEqual(col.y - 1);
-      expect(b.y + b.height, `${id} bottom inside the column`).toBeLessThanOrEqual(col.y + col.height + 1);
+      expect(b.y, `${id} top inside the card`).toBeGreaterThanOrEqual(card.y - 1);
+      expect(b.y + b.height, `${id} bottom inside the card`).toBeLessThanOrEqual(card.y + card.height + 1);
     }
     const loss = (await page.locator('#bcSolLoss').boundingBox())!, floor = (await page.locator('#bcSolFloor').boundingBox())!;
     expect(Math.abs(loss.y - floor.y)).toBeLessThanOrEqual(8);
@@ -255,6 +270,7 @@ test.describe('@v2 building card', () => {
     await openV2(page);
     await pick(page);
     await expect(page.locator('#bcard')).toBeVisible();
+    await page.locator('#bcFold summary').click();   // the context line is in the card's fold
     const mark = page.locator('#bcIns :is(.hot, .cool)').first();
     await expect(mark).toBeVisible();
     const [markInk, idInk, underline] = await page.evaluate(() => {

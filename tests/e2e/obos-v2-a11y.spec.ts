@@ -34,6 +34,8 @@ for (const theme of ['dark', 'light'] as const) {
     await expect(page.locator('#solList tr[data-idx]').first()).toBeAttached({ timeout: 60_000 });
     await page.locator('#solList tr[data-idx]').first().dispatchEvent('click');
     await expect(page.locator('#bcard')).toBeVisible({ timeout: 30_000 });
+    await page.locator('#bcFold summary').click();    // the card's fold and its how-sure ladder are read open too
+    await page.locator('#bcSure summary').click();
     await page.waitForTimeout(800);
     found.push(...(await axe(page, `${theme} building card`)));
     /* narrow the window: the phone band is entered by resizing, and the same page becomes the drawer + sheet */

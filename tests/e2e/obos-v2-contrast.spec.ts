@@ -44,6 +44,12 @@ async function openBuilding(page: Page): Promise<void> {
   await expect(page.locator('#solList tr[data-idx]').first()).toBeAttached({ timeout: 60_000 });
   await page.locator('#solList tr[data-idx]').first().dispatchEvent('click');
   await expect(page.locator('#bcard')).toBeVisible({ timeout: 30_000 });
+  /* the card is ON THE MAP now (brainstorm 04): its words are scored like any other, with its fold and its how-sure ladder open (a capped card scrolls inside itself: sweepScreen reads it at 50% and 100%) */
+  await page.locator('#bcFold summary').click();
+  await page.locator('#bcSure summary').click();
+  await page.waitForTimeout(1500);
+  /* the card follows the roof, and the sweep skips what moved between its two reads: a key press on the canvas pauses the idle orbit for 2.5 s, which covers the sweep */
+  await page.locator('#mlmap canvas').dispatchEvent('keydown', { key: 'Shift' });
 }
 
 for (const theme of ['dark', 'light'] as const) for (const cards of ['plates', 'glass'] as const) {

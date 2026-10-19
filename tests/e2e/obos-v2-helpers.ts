@@ -376,7 +376,7 @@ export async function sweepScreen(page: Page, label: string): Promise<string[]> 
   const scoredNow = (): Promise<number> => page.evaluate(() => (window as unknown as { __contrastScored?: number }).__contrastScored ?? 0);
   add('top', await contrastFailures(page));
   SCORED.set(label, await scoredNow());
-  for (const sel of ['#legend', '.side-panel .sp-scroll', '#v2Sheet', '#v2Drawer']) {
+  for (const sel of ['#legend', '.side-panel .sp-scroll', '#bcard .bcard-in', '#v2Sheet', '#v2Drawer']) {
     const room = await page.evaluate((s) => { const e = document.querySelector<HTMLElement>(s); return !e || e.getClientRects().length === 0 ? 0 : e.scrollHeight - e.clientHeight; }, sel);
     if (room < 24) continue;
     for (const at of [0.5, 1]) {
