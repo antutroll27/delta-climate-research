@@ -6,10 +6,7 @@ html[data-ui="v2"] .obos-v2 [data-v2-card="scenario"] .tile .row b { font-size: 
 html[data-ui="v2"] .obos-v2 [data-v2-card="scenario"] .tile .foot { margin-top: 6px; }
 
 /* the no-artefacts page: no instrument, so the one card is centred in the free ground beside the menu and the side panel (--ctr = the left edge of that ground) */
-html[data-ui="v2"] .obos-v2 { --ctr: 100px; }
-html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] { --ctr: 252px; }
-html[data-ui="v2"] .obos-v2[data-side-shown="1"] { --ctr: 416px; }
-html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-menu-eff="labels"] { --ctr: 568px; }
+html[data-ui="v2"] .obos-v2 { --ctr: var(--lead); }
 html[data-ui="v2"] .obos-v2 #legend:has(> .notyet) { top: 50%; right: auto; bottom: auto; left: calc((100% + var(--ctr)) / 2); width: min(520px, calc(100% - var(--ctr) - 48px)); transform: translate(-50%, -50%); overflow: visible; }
 html[data-ui="v2"] .obos-v2 .notyet { padding: 22px 22px 20px; }
 html[data-ui="v2"] .obos-v2 .notyet-tier { font: var(--micro-weight) var(--micro-size)/1.35 var(--sans); letter-spacing: var(--micro-ls); text-transform: uppercase; color: var(--ink-3); }

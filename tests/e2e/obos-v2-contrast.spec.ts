@@ -84,6 +84,25 @@ for (const theme of ['dark', 'light'] as const) for (const cards of ['plates', '
   });
 }
 
+/* rc3: the expanded rail is thinner (184 px). At 1280 x 720 (the laptop band) the menu is expanded by choice with the side panel closed: its labels sit closer to the pill's edge,
+   so they are judged on their own, in both themes, as well as on the pill of the current page. */
+for (const theme of ['dark', 'light'] as const) {
+  test(`@v2 contrast: the thinner expanded rail at 1280 x 720 · ${theme} · plates`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await prime(page, theme, 'plates');
+    await page.addInitScript(() => { try { localStorage.setItem('obos:v2:menu', 'labels'); localStorage.setItem('obos:v2:side', 'closed'); } catch { /* none */ } });
+    await openV2(page);
+    await settle(page);
+    await expect(page.locator('main.obos-v2')).toHaveAttribute('data-menu-eff', 'labels');
+    const found = await sweepScreen(page, `${theme}/plates 1280 x 720 labels · overview`);
+    const rail = found.filter((l) => /nav-label|rail/.test(l));
+    expect(rail, rail.join('\n')).toEqual([]);
+    expect(found, found.join('\n')).toEqual([]);
+    expect(SCORED.get(`${theme}/plates 1280 x 720 labels · overview`) ?? 0).toBeGreaterThanOrEqual(MIN_SCORED);
+  });
+}
+
 test('@v2 contrast: Light Glass over the BRIGHT map and Dark Glass over the DARK map, each the other way round too (D1: look and theme are independent)', async ({ page }, testInfo) => {
   test.skip(!isFull(testInfo), 'live Glass over the real canvas: the relief project (Metal) only');
   test.setTimeout(420_000);

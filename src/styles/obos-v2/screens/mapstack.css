@@ -1,12 +1,10 @@
 /* OBOS v2 — screens/mapstack.css (spec §3.8). Owner: Track A (plan A1). Ported from the preview's system.css :536–641, :677–763 (the 214 px pass);
    .tw-root[data-rail]/[data-side] → the v2 root's data-menu-eff / data-side-shown, [data-device="laptop"] → the 700–1365 px band. NO colour literal. */
 
-/* the stack: left of the map area, clear of the dock. It follows the title column's rules: 100 px (menu icons), +152 with labels, beside the side panel when it shows. */
-html[data-ui="v2"] .obos-v2 .mapstack { position: absolute; z-index: 19; left: var(--ms-left, 100px); bottom: var(--ms-bottom, 132px); width: 214px;
+/* the stack: left of the map area, clear of the dock. It follows the title column's rules: --col-x (beside the menu), --lead beside the side panel when it shows (tokens.css). */
+html[data-ui="v2"] .obos-v2 .mapstack { position: absolute; z-index: 19; left: var(--lead); bottom: var(--ms-bottom, 132px); width: 214px;
   display: flex; flex-direction: column; gap: 7px; }
-html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .mapstack { --ms-left: 252px; }
-html[data-ui="v2"] .obos-v2[data-side-shown="1"] .mapstack { --ms-left: 416px; --ms-bottom: 84px; }
-html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-menu-eff="labels"] .mapstack { --ms-left: 568px; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"] .mapstack { --ms-bottom: 84px; }
 html[data-ui="v2"] .obos-v2 .mapstack .card { padding: 10px 12px 9px; border-radius: 16px; }
 html[data-ui="v2"] .obos-v2 .mapstack .card[hidden] { display: none; }
 @media (min-width: 700px) and (max-width: 1365px) {

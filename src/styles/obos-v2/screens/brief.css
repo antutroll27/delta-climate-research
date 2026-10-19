@@ -4,8 +4,7 @@
    Every selector is under html[data-ui="v2"] .obos-v2.heat-brief. NO colour literal here. */
 
 html[data-ui="v2"]:has(.obos-v2.heat-brief) body { overflow: auto; }
-html[data-ui="v2"] .obos-v2.heat-brief { position: relative; inset: auto; overflow: visible; min-height: 100vh; --brf-l: 100px; }
-html[data-ui="v2"] .obos-v2.heat-brief[data-menu-eff="labels"] { --brf-l: 252px; }
+html[data-ui="v2"] .obos-v2.heat-brief { position: relative; inset: auto; overflow: visible; min-height: 100vh; --brf-l: var(--col-x); }
 html[data-ui="v2"] .obos-v2.heat-brief :is(.rail, .toolbar) { position: fixed; }
 
 html[data-ui="v2"] .obos-v2.heat-brief .brf-sheet { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; max-width: 1080px;

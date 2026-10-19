@@ -43,7 +43,7 @@ test.describe('@v2 shell', () => {
     const root = page.locator('main.obos-v2');
     const pin = page.locator('[data-menu-pin]');
     const overview = page.locator('.nav-item[data-section="overview"]');
-    // Click the ICON, not the centre: in icons mode the rail is clip-path-clipped to 72 px (F10), so the centre of the 204 px item is
+    // Click the ICON, not the centre: in icons mode the rail is clip-path-clipped to 72 px (F10), so the centre of the 172 px item is
     // deliberately not hit-testable once the .45 s transition passes it; the icon (x 28) is visible and clickable in both modes.
     const ICON = { position: { x: 30, y: 22 } };
     for (const [menu, side] of [['labels', '1'], ['icons', '1'], ['icons', '0'], ['labels', '0']]) {
@@ -284,7 +284,7 @@ test.describe('@v2 shell', () => {
   });
 
   test('@v2 A1: the right column composes by section (#aqiBlock on Overview and Air only; #solBlock never)', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });   // desktop: the rail is 220 px wide, so a centre click lands on it
+    await page.setViewportSize({ width: 1440, height: 900 });   // desktop: the rail is 184 px wide, so a centre click lands on it
     await openV2(page);
     /* a probe: the painter unhides #aqiBlock only when a payload lands; the rule under test is the CSS */
     await page.evaluate(() => { const a = document.getElementById('aqiBlock'); if (a) { a.hidden = false; a.textContent = 'probe'; } });
@@ -457,6 +457,75 @@ test.describe('@v2 shell', () => {
         expect(await pane.locator('.sp-scroll').evaluate((e) => e.scrollHeight)).toBeGreaterThan(150);
         if (path.includes('/ae/')) await expect(pane).toContainText('There is nothing to intervene in here.');
         else await expect(pane.locator('#ivTrees')).toBeVisible();
+      }
+    });
+  }
+  /* rc3: the expanded menu rail is THINNER (founder, 19 Oct): about 184 px, down from 220. Every label still fits on one line at the same font size; targets stay 40 px. */
+  test('@v2 [rc3] the expanded rail is 176-184 px wide, every label fits on one line, and icons mode is unchanged', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openV2(page);
+    const m = await page.evaluate(() => {
+      const rail = document.querySelector<HTMLElement>('#v2Rail')!, rr = rail.getBoundingClientRect();
+      const items = [...rail.querySelectorAll<HTMLElement>('.nav-item')].map((it) => {
+        const l = it.querySelector<HTMLElement>('.nav-label')!, lr = l.getBoundingClientRect(), ir = it.getBoundingClientRect();
+        const lh = parseFloat(getComputedStyle(l).lineHeight) || 16;
+        return { text: l.textContent!.trim(), lines: l.getClientRects().length, h: lr.height, lh, labelRight: lr.right, itemRight: ir.right, itemH: ir.height, size: getComputedStyle(l).fontSize, fits: l.scrollWidth <= l.clientWidth + 1 };
+      });
+      return { w: rr.width, right: rr.right, items, clip: getComputedStyle(rail).clipPath, font: getComputedStyle(rail.querySelector('.nav-label')!).fontSize };
+    });
+    expect(m.w, 'the expanded rail is about 184 px wide').toBeGreaterThanOrEqual(176);
+    expect(m.w).toBeLessThanOrEqual(184);
+    expect(m.items.length).toBe(9);
+    for (const it of m.items) {
+      expect(it.lines, `${it.text}: one line box`).toBe(1);
+      expect(it.h, `${it.text}: one line tall`).toBeLessThanOrEqual(it.lh + 1);
+      expect(it.size, `${it.text}: the font size is unchanged`).toBe('13px');
+      expect(it.fits, `${it.text}: not clipped`).toBe(true);
+      expect(it.labelRight, `${it.text}: ends inside its pill, with room to spare`).toBeLessThanOrEqual(it.itemRight - 8);
+      expect(it.itemH, `${it.text}: the hit target stays tall`).toBeGreaterThanOrEqual(40);
+    }
+    /* icons mode: the rail is clipped to the same 72 px as before */
+    await page.locator('[data-menu-pin]').click({ position: { x: 30, y: 22 } });
+    await expect(page.locator('main.obos-v2')).toHaveAttribute('data-menu-eff', 'icons');
+    await page.waitForTimeout(700);
+    const clip = await page.evaluate(() => { const r = document.querySelector<HTMLElement>('#v2Rail')!; return { cs: getComputedStyle(r).clipPath, w: r.getBoundingClientRect().width }; });
+    const right = Number(/inset\(0(?:px)? ([\d.]+)px/.exec(clip.cs)?.[1]);
+    expect(clip.w - right, 'icons mode still shows 72 px of rail').toBeCloseTo(72, 0);
+  });
+
+  /* rc3: everything positioned from the rail follows it. At every desktop and laptop size, with the side panel open and closed, nothing overlaps, nothing leaves the window,
+     and the first column starts 12 px (icons) or 16 px (labels) right of the rail's visible edge. */
+  for (const [w, h] of [[1440, 900], [1366, 768], [1280, 720], [1920, 1080], [1420, 900], [1430, 900]] as const) {
+    test(`@v2 [rc3] rail reflow at ${w} x ${h}: panel, title, stack, toasts and dock keep clear of the rail and each other, panel open and closed`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await stubWeather(page, '2026-10-07T06:05:00Z');
+      await openV2(page);
+      const root = page.locator('main.obos-v2');
+      for (const side of ['1', '0'] as const) {
+        if ((await root.getAttribute('data-side-shown')) !== side) await page.locator('.nav-item[data-section="overview"]').click({ position: { x: 30, y: 22 } });
+        await expect(root).toHaveAttribute('data-side-shown', side);
+        await page.waitForTimeout(900);
+        const g = await page.evaluate(() => {
+          const vis = (e: Element): boolean => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0'; };
+          const eff = document.querySelector('main.obos-v2')!.getAttribute('data-menu-eff');
+          const rail = document.querySelector('#v2Rail')!.getBoundingClientRect();
+          const railRight = eff === 'labels' ? rail.right : rail.left + 72;
+          const parts: Array<[string, string]> = [['side panel', '#v2Side'], ['title card', '#v2Title .tc'], ['compass', '#compass'], ['toast', '#v2Toasts > *'], ['sun card', '#v2SunCard'], ['ward card', '#v2WardCard'], ['dock', '#v2Dock > *'], ['column', '#legend'], ['toolbar', '.obos-v2 > .toolbar']];
+          const boxes: Array<{ n: string; l: number; t: number; r: number; b: number }> = [{ n: 'rail', l: rail.left, t: rail.top, r: railRight, b: rail.bottom }];
+          for (const [n, sel] of parts) for (const e of document.querySelectorAll(sel)) if (vis(e)) { const r = e.getBoundingClientRect(); boxes.push({ n, l: r.left, t: r.top, r: r.right, b: r.bottom }); }
+          const out: string[] = [];
+          for (const b of boxes) if (b.l < -0.5 || b.t < -0.5 || b.r > innerWidth + 0.5 || b.b > innerHeight + 0.5) out.push(`${b.n} leaves the window`);
+          for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+            const a = boxes[i], c = boxes[j], ix = Math.min(a.r, c.r) - Math.max(a.l, c.l), iy = Math.min(a.b, c.b) - Math.max(a.t, c.t);
+            if (ix > 0.5 && iy > 0.5) out.push(`${a.n} overlaps ${c.n} by ${Math.round(ix)}x${Math.round(iy)}`);
+          }
+          const sp = document.querySelector('#v2Side')!, st = document.querySelector('#v2SunCard')!;
+          return { out, eff, railRight, railW: rail.width, panelLeft: vis(sp) ? sp.getBoundingClientRect().left : null, stackLeft: vis(st) ? st.getBoundingClientRect().left : null };
+        });
+        expect(g.out, `${w}x${h}, panel ${side}, menu ${g.eff}`).toEqual([]);
+        expect(g.railW).toBeLessThanOrEqual(184);
+        if (g.panelLeft !== null) expect(g.panelLeft - g.railRight, `the panel sits ${g.eff === 'labels' ? 16 : 12} px right of the rail`).toBeCloseTo(g.eff === 'labels' ? 16 : 12, 0);
+        if (g.stackLeft !== null && side === '0') expect(g.stackLeft - g.railRight, 'the bottom-left stack too').toBeCloseTo(g.eff === 'labels' ? 16 : 12, 0);
       }
     });
   }

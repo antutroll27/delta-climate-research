@@ -6,8 +6,7 @@
    rescales both uniformly: a bitmap painted for the old size is never stretched on one axis (the controller repaints only on a
    window resize or a new run). */
 
-html[data-ui="v2"] .obos-v2.heat-compare { --cmp-l: 416px; --cmp-r: 352px; }
-html[data-ui="v2"] .obos-v2.heat-compare[data-menu-eff="labels"] { --cmp-l: 568px; }
+html[data-ui="v2"] .obos-v2.heat-compare { --cmp-l: var(--col-x-side); --cmp-r: 352px; }
 @media (min-width: 700px) and (max-width: 1365px) { html[data-ui="v2"] .obos-v2.heat-compare { --cmp-r: 332px; } }
 
 /* ── the Compare panel: always shown on this route. The menu has nothing that could bring it back (the Compare item is the current page),

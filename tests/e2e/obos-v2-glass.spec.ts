@@ -31,12 +31,13 @@ const BINDING = /^s9/.test(SLICE);
    /Volumes/OBOSLab/obos-v2/audits/s1a/preview-rects.json. Rerun in S9 against the full chrome (OBOS_V2_SLICE=s9, DUMMY=0).
    Tuple: [class, x, y, w, h, border-radius]. */
 const BOXES: ReadonlyArray<[string, number, number, number, number, string]> = [
-  ['toolbar', 1210, 12, 214, 41, '14px'], ['rail', 16, 16, 220, 498, '22px'], ['card', 568, 16, 300, 189, '22px'],
-  ['card compass', 568, 215, 56, 56, '50%'], ['card', 568, 495, 214, 117, '16px'], ['card', 568, 619, 214, 197, '16px'],
-  ['toast', 884, 16, 197, 38, '99px'], ['toast', 884, 62, 229, 38, '99px'], ['side-panel', 252, 16, 300, 788, '22px'],
+  ['toolbar', 1210, 12, 214, 41, '14px'], ['rail', 16, 16, 184, 449, '22px'], ['card', 532, 16, 300, 189, '22px'],
+  ['card compass', 532, 215, 56, 56, '50%'], ['card', 532, 495, 214, 117, '16px'], ['card', 532, 619, 214, 197, '16px'],
+  ['toast', 848, 16, 197, 38, '99px'], ['toast', 848, 62, 229, 38, '99px'], ['side-panel', 216, 16, 300, 788, '22px'],
   ['card', 1104, 68, 320, 633, '22px'], ['card', 1104, 711, 320, 189, '22px'], ['bar', 641, 831, 374, 55, '20px'],
   ['place', 1131, 16, 69, 30, '99px'], ['attrib', 1076, 864, 352, 24, '11px'],
 ];
+/* rc3: the rail is 184 x 449 (was 220 x 498) and the columns beside it moved 36 px left (the preview's 220 px rail -> the shipped 184 px one, tokens.css): the blurred area is 27k px2 smaller, so this fixture is the conservative side of the gate. */
 /* text rastered inside each surface, so the blur has real content to sample and clip */
 const SURFACE_HTML = '<div class="micro">Air now · Dum Dum airport</div><p class="hero">31.4<span class="u">°C</span></p><p class="lede">Ballygunge · KMC Ward 68 · ground 38.2 °C · rooftop 44.1 °C</p><dl class="stats"><div><dt class="micro">Above 40 °C</dt><dd>21%</dd></div><div><dt class="micro">Δ vs green</dt><dd>+2.4 °C</dd></div></dl>';
 
