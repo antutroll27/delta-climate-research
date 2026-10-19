@@ -8,6 +8,7 @@ import { bindMirrors, bindWardCard } from './heat-v2.ts';
 import { bindSunCard } from './sun-card.ts';
 import { bindWeather } from './weather-v2.ts';
 import { bindSolar } from './solar-v2.ts';
+import { bindCompareLinks } from './compare-v2.ts';
 import { bindPhone } from './phone-v2.ts';
 import { bindModals } from './modals.ts';
 import type { LayerStack, Sections, ShellCtx } from './shell-ctx.ts';
@@ -279,6 +280,7 @@ export function mountShellV2(): (() => void) | null {
   if (!compare) { bindPerArea(ctx); bindPressedMirror(ctx); bindProxies(ctx); }
   ctx.layers = bindLayers(ctx);
   bindPhone(root, cleanup, ctx.layers);          // S8
+  if (root.matches('[data-compare-root]')) bindCompareLinks(ctx);   // FINAL visual V3 + the phase-follows link fix (compare-v2.ts)
   if (!compare) {
     bindFlash(ctx);
     bindModals(root, cleanup);                   // S8: focus stays inside the app's modals (B audit C3)

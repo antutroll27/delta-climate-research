@@ -242,11 +242,10 @@ test.describe('@v2 compare', () => {
     expect(missing, `data artefacts 404'd: ${missing.join(', ')}`).toEqual([]);
   });
 
-  test('@v2 Retry model: a failed run says so and offers Retry, and Retry re-enters the run', async ({ page }) => {
-    /* the first ward-data request of the page fails (a dropped connection); every later one succeeds.
-       KNOWN v1 BEHAVIOUR, kept (the controller is untouched): the ward loader memoises a failed ward JSON, so Retry re-runs the
-       model but a ward that failed to load stays failed until the page is reloaded. Checked on v1 on 17 Oct. This test therefore
-       asserts what Retry promises today, that it runs again, and not that it recovers. */
+  /* FINAL (founder, 19 Oct): the old v1 Retry bug is fixed IN V2 ONLY. A ward whose data failed to load was memoised as failed, so Retry re-ran the model against the same dead promise. In v2, Retry starts a
+     fresh model worker, so a ward that failed to load recovers without a page reload. The v1 twin of this test (flag off) pins that v1 is exactly as it was. */
+  test('@v2 Retry model: a failed run says so and offers Retry, and Retry RECOVERS the ward without a reload (v2)', async ({ page }) => {
+    /* the first ward-data request of the page fails (a dropped connection); every later one succeeds. */
     let seen = 0;
     await page.route(/\/heat-map\/data\//, (route) => { seen += 1; return seen === 1 ? route.abort() : route.continue(); });
     await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
@@ -255,10 +254,72 @@ test.describe('@v2 compare', () => {
     await expect(page.locator('[data-role="status"]').first()).toContainText('Comparison unavailable', { timeout: 90_000 });
     await expect(retry).toBeVisible();
     await expect(page.locator('main.obos-v2')).toHaveAttribute('aria-busy', 'false');
+    await retry.click();
+    await expect(page.locator('[data-role="status"]').first()).toContainText('Comparison settled', { timeout: 90_000 });
+    await expect(page.locator('[data-value="a-baseline"]').first(), 'the evidence table is filled, not "—"').not.toHaveText('—');
+    await expect(retry).toBeHidden();
+  });
+
+  test('@v2 flag off: v1 Retry is exactly as it was (a ward that failed to load stays failed until a reload)', async ({ browser }) => {
+    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, storageState: NO_FLAG });
+    const page = await ctx.newPage();
+    let seen = 0;
+    await page.route(/\/heat-map\/data\//, (route) => { seen += 1; return seen === 1 ? route.abort() : route.continue(); });
+    await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
+    await page.goto('/heat-map/compare/');
+    await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
+    const retry = page.locator('[data-action="retry"]');
+    await expect(page.locator('[data-role="status"]').first()).toContainText('Comparison unavailable', { timeout: 90_000 });
+    await expect(retry).toBeVisible();
     const before = seen;
     await retry.click();
-    await expect.poll(() => seen, { timeout: 30_000 }).toBeGreaterThan(before);
-    await expect(page.locator('main.obos-v2')).toHaveAttribute('aria-busy', 'false', { timeout: 90_000 });
+    await expect.poll(() => seen, { timeout: 30_000 }).toBeGreaterThanOrEqual(before);
+    await expect(page.locator('[data-compare-root]')).toHaveAttribute('aria-busy', 'false', { timeout: 90_000 });
+    await expect(page.locator('[data-role="status"]').first(), 'v1 keeps its known behaviour').toContainText('Comparison unavailable');
+    await ctx.close();
+  });
+
+  /* FINAL (founder, 19 Oct): the "Open brief" link follows phase changes IN V2 (v1's link is stale after a phase change until some other control rewrites it). */
+  test('@v2 "Open brief" follows the phase: both the workspace link and the phone link carry the phase in the URL', async ({ page }) => {
+    await openCompare(page);
+    const brief = page.locator('[data-role="brief-link"]'), phone = page.locator('[data-v2-brief-link]');
+    await expect(brief).toHaveAttribute('href', /phase=peak/);
+    await page.locator('[data-input="phase"][value="retained"]').check({ force: true });
+    await expect(brief).toHaveAttribute('href', /phase=retained/);
+    await expect(phone).toHaveAttribute('href', /phase=retained/);
+    await page.locator('[data-input="phase"][value="peak"]').check({ force: true });
+    await expect(brief).toHaveAttribute('href', /phase=peak/);
+    await expect(phone).toHaveAttribute('href', /phase=peak/);
+    /* and it is the same query as the address bar (the brief reproduces what Compare shows) */
+    expect(await brief.evaluate((a) => new URL((a as HTMLAnchorElement).href).search)).toBe(new URL(page.url()).search);
+  });
+
+  /* FINAL visual V3: on a phone the workspace is a collapsed bottom sheet, so "Open brief" was out of sight. It is now on the page, under the method note. */
+  test('@v2 [V3] phone: "Open brief" is visible on the page, a 44 px target, and opens the brief with the state', async ({ browser }) => {
+    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, storageState: { cookies: [], origins: [{ origin: PW_ORIGIN, localStorage: [{ name: 'obos:ui', value: 'v2' }] }] }, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); sessionStorage.setItem('obos:entry-note-seen', '1'); sessionStorage.setItem('obos:rotate-nudge-dismissed', '1'); } catch { /* none */ } });
+    await page.goto('/heat-map/compare/?a=ballygunge&b=baruipur&trees=40');
+    await expect(page.locator('main.obos-v2[data-compare-root]')).toHaveAttribute('aria-busy', 'false', { timeout: 120_000 });
+    const link = page.locator('[data-v2-brief-link]');
+    await expect(link).toBeVisible();
+    await expect(link).toContainText('Open brief');
+    const r = (await link.boundingBox())!;
+    expect(r.height).toBeGreaterThanOrEqual(44);
+    expect(r.x).toBeGreaterThanOrEqual(0); expect(r.x + r.width).toBeLessThanOrEqual(390);
+    expect(r.y + r.height, 'on the first screen, above the workspace handle').toBeLessThanOrEqual(844);
+    expect(await link.evaluate((e) => { const b = e.getBoundingClientRect(); const t = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2); return !!t && (t === e || e.contains(t)); }), 'nothing covers it').toBe(true);
+    await expect(link).toHaveAttribute('href', /\/heat-map\/brief\/\?.*trees=40/);
+    await link.click();
+    await expect(page).toHaveURL(/\/heat-map\/brief\/\?.*trees=40/);
+    await ctx.close();
+  });
+
+  test('@v2 [V3] desktop: the phone-only brief link is not drawn (one "Open brief" in the tab order)', async ({ page }) => {
+    await openCompare(page);
+    await expect(page.locator('[data-v2-brief-link]')).toHaveCount(1);
+    await expect(page.locator('[data-v2-brief-link]')).toBeHidden();
+    await expect(page.locator('[data-role="brief-link"]')).toBeVisible();
   });
 
   test('@v2 the two maps stay side by side and clear of the panel and the column across laptop and desktop widths', async ({ page }) => {

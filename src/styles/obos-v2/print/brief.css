@@ -45,5 +45,5 @@
   html[data-ui="v2"] .obos-v2.heat-compare[data-cards] :is(.side-panel, .cmp-stage) { border: 0; }
   html[data-ui="v2"] .obos-v2.heat-compare .cmp-col { display: flex; flex-direction: column; gap: 4mm; }
   /* controls that do nothing on paper */
-  html[data-ui="v2"] .obos-v2.heat-compare :is(.cmp-handle, .cmp-tabs, .cmp-tools button, .cmp-views, .cmp-acts, .sp-close) { display: none !important; }
+  html[data-ui="v2"] .obos-v2.heat-compare :is(.cmp-handle, .cmp-tabs, .cmp-tools button, .cmp-views, .cmp-acts, .cmp-phone-brief, .sp-close) { display: none !important; }
 }

@@ -156,4 +156,6 @@ html[data-ui="v2"] .obos-v2 .rnudge .rn-x { width: 44px; height: 44px; min-width
   html[data-ui="v2"] .obos-v2.heat-compare .tw-menu, html[data-ui="v2"] .obos-v2.heat-brief .tw-menu { position: fixed; }
 }
 html[data-ui="v2"] .obos-v2 .cmp-phone-note { display: none; }
+html[data-ui="v2"] .obos-v2.heat-compare a.cmp-phone-brief { display: none; }
 @media (max-width: 699px), (pointer: coarse) and (max-height: 560px) { html[data-ui="v2"] .obos-v2 .cmp-phone-note { display: block; margin: 0 0 4px; } }
+@media (max-width: 699px), (pointer: coarse) and (max-height: 560px) { html[data-ui="v2"] .obos-v2.heat-compare a.cmp-phone-brief { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 44px; min-height: 44px; padding: 0 18px; margin: 4px 0 8px; text-decoration: none; } }
