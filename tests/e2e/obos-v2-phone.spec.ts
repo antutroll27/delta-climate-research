@@ -268,6 +268,34 @@ test.describe('@v2 phone 390x844', () => {
     await expect(page.locator('#v2Drawer')).toBeVisible();
     await page.keyboard.press('Escape');
   });
+
+  /* FINAL audit F2: the Key button rides the toolbar into the drawer on Compare and the brief, so the popover it opens must ride along (it was a root child, made inert by the drawer). */
+  for (const route of ['/heat-map/compare/', '/heat-map/brief/']) {
+    test(`@v2 [F2] ${route}: the Key popover opened from the drawer is usable (not inert), takes focus, and Esc closes it before the drawer`, async ({ page }) => {
+      await seenNote(page);
+      await page.goto(route);
+      await expect(page.locator(ROOT)).toHaveCount(1);
+      await menu(page).click();
+      await expect(page.locator('#v2Drawer')).toBeVisible();
+      await page.locator('#v2Drawer .key-btn').click();
+      const key = page.locator('#v2Key');
+      await expect(key).toBeVisible();
+      expect(await key.evaluate((e) => e.closest('[inert]') === null), 'no inert ancestor').toBe(true);
+      expect(await page.evaluate(() => document.getElementById('v2Key')!.contains(document.activeElement)), 'focus is inside the popover').toBe(true);
+      /* it lies inside the drawer's box and the viewport */
+      expect(await key.evaluate((e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth && r.height > 40; })).toBe(true);
+      await page.keyboard.press('Escape');
+      await expect(key).toBeHidden();
+      await expect(page.locator('#v2Drawer')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#v2Drawer')).toBeHidden();
+      await expect(menu(page)).toBeFocused();
+      /* on the way back out of the phone band the popover is back at the root (every id once, no marker left over) */
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await expect(page.locator('#v2Drawer')).toBeHidden();
+      expect(await page.evaluate(() => document.getElementById('v2Key')!.parentElement === document.querySelector('main.obos-v2'))).toBe(true);
+    });
+  }
 });
 
 for (const v of [{ n: '360x740', width: 360, height: 740 }, { n: '844x390 on its side', width: 844, height: 390 }, { n: '390x844', width: 390, height: 844 }]) {

@@ -119,7 +119,12 @@ export function bindPhone(root: HTMLElement, cleanup: Cleanup, layers: LayerStac
       root.dataset.phone = '1';
       move($(root, '#v2Rail'), drawer); move($(root, '#v2Side'), drawer);
       /* Compare and the brief have no map to keep the display toolbar beside: it joins the menu. An area that ships no data has no sheet either, but keeps its toolbar. */
-      if (frameOnly) move($(root, '.toolbar'), drawer);
+      if (frameOnly) {
+        move($(root, '.toolbar'), drawer);
+        /* FINAL audit F2: the Key button rides the toolbar into the drawer, so the popover it opens rides with it (as a root child it was made inert by the drawer's own focus hold).
+           The credits popover stays: its chip is not in the drawer, so it is only ever opened with the drawer closed. */
+        move($(root, '#v2Key'), drawer);
+      }
       if (sheet) {
         move($(root, '#legend'), sheet); move($(root, '#v2MapStack'), sheet); move($(root, '#v2Dock'), sheet);
         move($(root, '.st-attrib'), $(sheet, '.sheet-head') ?? sheet);

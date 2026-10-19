@@ -129,6 +129,8 @@ html[data-ui="v2"] .obos-v2 .rnudge .rn-x { width: 44px; height: 44px; min-width
   html[data-ui="v2"] .obos-v2 :is(.layers-pop, .credits-pop) { left: 8px; right: 8px; width: auto; transform: none; bottom: 8px; max-height: 80%; }
   html[data-ui="v2"] .obos-v2 .key-pop { left: 8px; right: 8px; top: 64px; width: auto; max-width: none; transform: none; max-height: calc(100% - 80px); overflow-y: auto; }
   html[data-ui="v2"] .obos-v2 .key-cols { grid-template-columns: 1fr; }
+  /* FINAL audit F2: opened from the drawer (Compare and the brief), the key sits inside it, above the drawer's own rows */
+  html[data-ui="v2"] .obos-v2 #v2Drawer .key-pop { position: absolute; z-index: 3; }
 }
 
 /* ── a phone on its side (844 x 390): the sheet is a column on the right, the toolbar a row above it ── */
