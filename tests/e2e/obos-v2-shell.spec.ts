@@ -524,6 +524,19 @@ test.describe('@v2 shell', () => {
         });
         expect(g.out, `${w}x${h}, panel ${side}, menu ${g.eff}`).toEqual([]);
         expect(g.railW).toBeLessThanOrEqual(184);
+        /* founder, 20 Oct: air under the rail header, in both menu modes; and with it all 8 items and "Collapse menu" are still whole inside the window (nothing was shrunk to make room) */
+        const hd = await page.evaluate(() => {
+          const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
+          const brand = r('#v2Rail .rail-brand'), first = r('#v2Rail .nav-list li:first-child .nav-item'), pin = r('#v2Rail .rail-pin');
+          const items = [...document.querySelectorAll<HTMLElement>('#v2Rail .nav-item')].map((e) => { const b = e.getBoundingClientRect(); return { h: b.height, bottom: b.bottom }; });
+          return { gap: first.top - brand.bottom, token: parseFloat(getComputedStyle(document.querySelector('main.obos-v2')!).getPropertyValue('--rail-head-gap')), items, pinBottom: pin.bottom, railBottom: document.querySelector('#v2Rail')!.getBoundingClientRect().bottom };
+        });
+        expect(hd.token, 'the header gap is one token, 12-16 px').toBeGreaterThanOrEqual(12);
+        expect(hd.token).toBeLessThanOrEqual(16);
+        expect(hd.gap, `header to Overview: the token plus the list's 3 px gap (${g.eff} mode)`).toBeCloseTo(hd.token + 3, 0);
+        expect(hd.items.length, 'eight sections and Collapse menu').toBe(9);
+        for (const it of hd.items) { expect(it.h, 'items keep their 40 px').toBeCloseTo(40, 0); expect(it.bottom, 'no item is clipped by the window').toBeLessThanOrEqual(h); }
+        expect(hd.railBottom).toBeLessThanOrEqual(h - 12);
         if (g.panelLeft !== null) expect(g.panelLeft - g.railRight, `the panel sits ${g.eff === 'labels' ? 16 : 12} px right of the rail`).toBeCloseTo(g.eff === 'labels' ? 16 : 12, 0);
         if (g.stackLeft !== null && side === '0') expect(g.stackLeft - g.railRight, 'the bottom-left stack too').toBeCloseTo(g.eff === 'labels' ? 16 : 12, 0);
       }

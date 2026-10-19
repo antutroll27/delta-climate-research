@@ -39,3 +39,10 @@ test('the columns derive from the tokens: panel, title column, toasts, stack, do
   assert.match(css[join(DIR, 'screens/brief.css')], /--brf-l: var\(--col-x\)/);
   assert.match(shell, /clip-path: inset\(0 calc\(var\(--rail-w\) - var\(--rail-w-icons\)\) 0 0 round 22px\)/);
 });
+
+test('the rail header\'s air is one token (12-16 px), read by the header and nothing else', () => {
+  const m = [...tokens.matchAll(/--rail-head-gap:\s*(\d+)px/g)];
+  assert.equal(m.length, 1);
+  assert.ok(Number(m[0][1]) >= 12 && Number(m[0][1]) <= 16);
+  assert.match(css[join(DIR, 'shell.css')], /\.rail-brand \{[^}]*margin-bottom: var\(--rail-head-gap\);/);
+});

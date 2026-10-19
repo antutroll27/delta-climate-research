@@ -5,7 +5,7 @@
 html[data-ui="v2"] .obos-v2 .rail { position: absolute; z-index: 46; left: var(--rail-x); top: 16px; width: var(--rail-w); padding: 8px 4px 8px 8px; border-radius: 22px; display: flex; flex-direction: column; gap: 3px;
   clip-path: inset(0 calc(var(--rail-w) - var(--rail-w-icons)) 0 0 round 22px); transition: clip-path .45s var(--ease); }
 html[data-ui="v2"] .obos-v2[data-menu-eff="labels"] .rail { clip-path: inset(0 0 0 0 round 22px); }
-html[data-ui="v2"] .obos-v2 .rail-brand { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 0 0 16px; font-size: 15px; letter-spacing: -0.02em; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .rail-brand { display: flex; align-items: center; gap: 10px; height: 40px; margin-bottom: var(--rail-head-gap); padding: 0 0 0 16px; font-size: 15px; letter-spacing: -0.02em; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 .rail-brand b { font-weight: 700; }
 html[data-ui="v2"] .obos-v2 .rail-brand .rail-logo { width: 26px; height: 26px; flex: none; object-fit: contain; }
 html[data-ui="v2"] .obos-v2 .rail-brand .wm { opacity: 0; transition: opacity .3s var(--ease); white-space: nowrap; }

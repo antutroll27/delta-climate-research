@@ -21,6 +21,7 @@ html[data-ui="v2"] .obos-v2 #mlmap { position: absolute; inset: 0; z-index: 0; }
    --rail-w is the expanded rail (founder, 19 Oct: thinner, 220 -> 184; the widest label, "Analysis · Compare", is 117 px at 13 px); --rail-w-icons the visible strip in icons mode. --col-x is the left edge of the free ground beside the rail,
    --lead the same once a side panel has taken its place (panel + gap). Tokens are lengths; the 1366 px laptop/desktop split is in ui-flag.ts (LAPTOP_MIN_PX / DESKTOP_MIN_PX). ── */
 html[data-ui="v2"] .obos-v2 {
+  --rail-head-gap: 14px;   /* founder, 20 Oct: air between the rail header (logo + OBOS) and the first item, in labels and icons mode alike */
   --rail-x: 16px; --rail-w: 184px; --rail-w-icons: 72px; --rail-gap: 16px; --rail-gap-icons: 12px;
   --panel-w: 300px; --panel-gap: 16px; --title-w: 300px;
   --col-icons: calc(var(--rail-x) + var(--rail-w-icons) + var(--rail-gap-icons));
