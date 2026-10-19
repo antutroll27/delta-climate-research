@@ -197,4 +197,7 @@ test('flag on, the file has no v2 root: v1 is kept', () => {
   const r = runSwap({ ui: 'v2', treeHasRoot: false });
   assert.equal(r.ui, 'v1');
   assert.ok(!r.events.includes('replaced'));
+  /* rc1 R3: and the v2 stylesheet is not left behind on a v1 page (it was injected before the root was checked) */
+  assert.deepEqual(r.styles, [], 'no v2 <style> is added to a page that kept v1');
+  assert.ok(!r.events.includes('style-added'));
 });

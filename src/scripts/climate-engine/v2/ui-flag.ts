@@ -97,13 +97,14 @@ function get(u){try{var x=new XMLHttpRequest();x.open('GET',u,false);x.send();re
 var v1=document.getElementById('main');
 var html=v1?get(s.getAttribute('data-tree')):null;
 if(html===null){drop();return;}
-if(!document.querySelector('style[data-v2-css]')){
-var css=get(s.getAttribute('data-css'));if(css===null){drop();return;}
-var st=document.createElement('style');st.setAttribute('data-v2-css','');st.textContent=css;document.head.appendChild(st);}
 var t=document.createElement('template');t.innerHTML=html;
 var frag=t.content;
 var root=frag.querySelector('main.obos-v2');
 if(!root){drop();return;}
+/* rc1 R3: the stylesheet goes in only once the tree is known good, so a malformed tree never leaves it on a v1 page */
+if(!document.querySelector('style[data-v2-css]')){
+var css=get(s.getAttribute('data-css'));if(css===null){drop();return;}
+var st=document.createElement('style');st.setAttribute('data-v2-css','');st.textContent=css;document.head.appendChild(st);}
 function g(k){try{return localStorage.getItem(k);}catch(e){return null;}}
 var w=window.innerWidth||1440;
 var th=g(${J(V2_KEYS.theme)}),cd=g(${J(V2_KEYS.cards)}),mn=g(${J(V2_KEYS.menu)}),sd=g(${J(V2_KEYS.side)});
