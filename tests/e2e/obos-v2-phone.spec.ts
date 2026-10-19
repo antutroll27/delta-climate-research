@@ -81,7 +81,7 @@ test.describe('@v2 phone 390x844', () => {
     for (let i = 0; i < 60; i++) await page.keyboard.press('Shift+Tab');
     expect(await page.evaluate(() => document.getElementById('v2Drawer')!.contains(document.activeElement))).toBe(true);
     expect(await page.locator('#v2Sheet').getAttribute('inert')).not.toBeNull();
-    expect(await page.locator('main.obos-v2 > .toolbar').getAttribute('inert')).not.toBeNull();
+    expect(await page.locator('#v2Drawer .toolbar').count(), 'FINAL visual V2: the display toolbar is in the drawer on a phone').toBe(1);
     /* Esc closes it and returns focus to the button, and frees everything it held */
     await page.keyboard.press('Escape');
     await expect(drawer).toBeHidden();
@@ -269,6 +269,40 @@ test.describe('@v2 phone 390x844', () => {
     await page.keyboard.press('Escape');
   });
 
+  /* FINAL visual V2 (the twin's phone pattern, the approved preview's ?device=phone): the title card, the display toggles and the compass took about a quarter of the screen. The title is
+     a slim card, the Light/Dark and Glass/Plates toggles and the Key live in the drawer, the compass is small; the map gets the screen. */
+  test('@v2 [V2] phone top: a slim title card and a small compass; the toggles and the Key are in the drawer; the map keeps most of the screen', async ({ page }) => {
+    await seenNote(page);
+    await openV2(page);
+    const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
+    const tc = await box('.st-title .tc'), compass = await box('#compass'), menuB = await box('[data-v2-menu]');
+    expect(tc.height, 'the title card is slim').toBeLessThanOrEqual(92);
+    expect(Math.max(compass.width, compass.height), 'the compass is small').toBeLessThanOrEqual(40);
+    expect(Math.min(compass.width, compass.height), 'and still a 24 px target').toBeGreaterThanOrEqual(24);
+    const chromeBottom = Math.max(tc.y + tc.height, compass.y + compass.height, menuB.y + menuB.height);
+    expect(chromeBottom, 'the top chrome ends within the first 13% of the screen').toBeLessThanOrEqual(844 * 0.13);
+    /* the card still names the ward, the city and the figure */
+    await expect(page.locator('#pname')).toContainText('Ballygunge');
+    await expect(page.locator('.st-title .tc-area:not([hidden])')).toContainText('ha');
+    await expect(page.locator('#coord')).toBeVisible();
+    /* the toggles are not on the map; they are in the drawer, and they work from there */
+    await expect(page.locator('main.obos-v2 > .toolbar')).toHaveCount(0);
+    await expect(page.locator('#v2Drawer .toolbar')).toBeHidden();
+    await menu(page).click();
+    await expect(page.locator('#v2Drawer .toolbar')).toBeVisible();
+    await page.locator('#v2Drawer .toolbar [data-pref="theme"][data-v="light"]').click();
+    await expect(page.locator(ROOT)).toHaveAttribute('data-theme', 'light');
+    await page.locator('#v2Drawer .toolbar [data-pref="theme"][data-v="dark"]').click();
+    await expect(page.locator(ROOT)).toHaveAttribute('data-theme', 'dark');
+    await page.locator('#v2Drawer .key-btn').click();
+    await expect(page.locator('#v2Key')).toBeVisible();
+    expect(await page.locator('#v2Key').evaluate((e) => e.closest('[inert]') === null)).toBe(true);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#v2Drawer')).toBeHidden();
+    expect(await phoneIssues(page)).toEqual([]);
+  });
+
   /* FINAL audit F2: the Key button rides the toolbar into the drawer on Compare and the brief, so the popover it opens must ride along (it was a root child, made inert by the drawer). */
   for (const route of ['/heat-map/compare/', '/heat-map/brief/']) {
     test(`@v2 [F2] ${route}: the Key popover opened from the drawer is usable (not inert), takes focus, and Esc closes it before the drawer`, async ({ page }) => {
@@ -293,7 +327,7 @@ test.describe('@v2 phone 390x844', () => {
       /* on the way back out of the phone band the popover is back at the root (every id once, no marker left over) */
       await page.setViewportSize({ width: 1440, height: 900 });
       await expect(page.locator('#v2Drawer')).toBeHidden();
-      expect(await page.evaluate(() => document.getElementById('v2Key')!.parentElement === document.querySelector('main.obos-v2'))).toBe(true);
+      await expect.poll(() => page.evaluate(() => document.getElementById('v2Key')!.parentElement === document.querySelector('main.obos-v2'))).toBe(true);
     });
   }
 });
@@ -330,10 +364,14 @@ for (const v of [{ n: '360x740', width: 360, height: 740 }, { n: '844x390 on its
       await expect(page.locator('#v2Layers')).toBeVisible();
       expect(await phoneIssues(page), 'layers popover').toEqual([]);
       await page.keyboard.press('Escape');
-      await page.locator('.key-btn').click();
+      /* the Key button is in the drawer with the display toolbar (FINAL visual V2) */
+      await menu(page).click();
+      await page.locator('#v2Drawer .key-btn').click();
       await expect(page.locator('#v2Key')).toBeVisible();
       expect(await phoneIssues(page), 'key popover').toEqual([]);
       await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#v2Drawer')).toBeHidden();
     });
 
     /* the two off-map pages at the other two sizes (390x844 is pinned above): their phone layout answers the same query, so a phone on its side gets it too */

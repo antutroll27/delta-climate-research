@@ -24,8 +24,6 @@ export function bindPhone(root: HTMLElement, cleanup: Cleanup, layers: LayerStac
   const drawer = $(root, '#v2Drawer'), scrim = $(root, '[data-v2-scrim]'), menu = $<HTMLButtonElement>(root, '[data-v2-menu]');
   if (!drawer || !menu) return;
   const sheet = $(root, '#v2Sheet'), handle = $<HTMLButtonElement>(root, '[data-v2-sheet-toggle]');
-  /* Compare and the brief bind the frame only (mountShellV2): no map, no sheet */
-  const frameOnly = root.matches('[data-compare-root], [data-brief-root]');
   const sheetLab = handle?.querySelector<HTMLElement>('.sheet-lab') ?? null;
 
   /* WHERE EACH MOVED NODE LIVES ON A DESKTOP: a comment marks the spot, so putting it back is exact whatever else moved. */
@@ -117,14 +115,13 @@ export function bindPhone(root: HTMLElement, cleanup: Cleanup, layers: LayerStac
   const apply = (): void => {
     if (mq.matches) {
       root.dataset.phone = '1';
-      move($(root, '#v2Rail'), drawer); move($(root, '#v2Side'), drawer);
-      /* Compare and the brief have no map to keep the display toolbar beside: it joins the menu. An area that ships no data has no sheet either, but keeps its toolbar. */
-      if (frameOnly) {
-        move($(root, '.toolbar'), drawer);
-        /* FINAL audit F2: the Key button rides the toolbar into the drawer, so the popover it opens rides with it (as a root child it was made inert by the drawer's own focus hold).
-           The credits popover stays: its chip is not in the drawer, so it is only ever opened with the drawer closed. */
-        move($(root, '#v2Key'), drawer);
-      }
+      /* The drawer holds, in order: the menu, the display toolbar (Light/Dark, Glass/Plates, Key) with the Key popover it opens, then the section's side panel. FINAL visual V2: the toolbar
+         left the map on every phone route (it was a 112 px column at the top right, a quarter of the screen with the title card); Compare and the brief always had it here (no map to keep it beside). */
+      move($(root, '#v2Rail'), drawer);
+      move($(root, '.toolbar'), drawer);
+      /* FINAL audit F2: the Key popover rides with its button, or the drawer's focus hold makes it inert. The credits popover stays at the root: its chip is not in the drawer. */
+      move($(root, '#v2Key'), drawer);
+      move($(root, '#v2Side'), drawer);
       if (sheet) {
         move($(root, '#legend'), sheet); move($(root, '#v2MapStack'), sheet); move($(root, '#v2Dock'), sheet);
         move($(root, '.st-attrib'), $(sheet, '.sheet-head') ?? sheet);

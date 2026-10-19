@@ -31,26 +31,28 @@ html[data-ui="v2"] .obos-v2 .rnudge .rn-x { width: 44px; height: 44px; min-width
     border-radius: 14px; color: var(--ink-1); cursor: pointer; }
   html[data-ui="v2"] .obos-v2 .tw-menu svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; }
 
-  /* ── the display toolbar: a column under the right edge (the preview's), and the title column between it and the menu ── */
-  html[data-ui="v2"] .obos-v2 .toolbar { top: 8px; right: 8px; width: 112px; flex-direction: column; align-items: stretch; gap: 4px; }
+  /* ── the title column: the slim title card, between the menu button (left) and the edge. The display toolbar is in the drawer (phone-v2.ts), so the card has the width. ── */
   html[data-ui="v2"] .obos-v2 .toolbar .seg button { flex: 1; padding: 5px 6px; font-size: 11px; }
   html[data-ui="v2"] .obos-v2 .toolbar .key-btn { justify-content: center; padding: 0 8px; }
-  html[data-ui="v2"] .obos-v2 .st-title { top: 8px; left: 60px; right: 128px; width: auto; transform: none !important; opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; }
-  html[data-ui="v2"] .obos-v2 .st-title .compass { position: absolute; left: -52px; top: 52px; width: 44px; height: 44px; }
-  html[data-ui="v2"] .obos-v2 .st-title .compass svg { width: 40px; height: 40px; }
-  /* the credit card, compact: the same facts in a small flow layout (the ward stamp bleeds off the bottom-right corner) */
-  html[data-ui="v2"] .obos-v2 .tc { aspect-ratio: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; align-items: start; gap: 2px 6px; padding: 10px 12px 10px !important; }
+  html[data-ui="v2"] .obos-v2 .st-title { top: 8px; left: 60px; right: 8px; width: auto; transform: none !important; opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; }
+  /* the compass: small, under the menu button */
+  html[data-ui="v2"] .obos-v2 .st-title .compass { position: absolute; left: -52px; top: 52px; width: 36px; height: 36px; margin-left: 4px; }
+  html[data-ui="v2"] .obos-v2 .st-title .compass svg { width: 34px; height: 34px; }
+  @media (pointer: coarse) { html[data-ui="v2"] .obos-v2 .st-title .compass { min-width: 36px; min-height: 36px; } }   /* beats the coarse-pointer 44 px floor: the founder asked for a small compass; 36 px is above the 24 px WCAG 2.5.8 floor */
+  /* the credit card, SLIM (FINAL visual V2): name and kind on one line, the city and zone on the next, then the area and the coordinate on one small line. The outline stays at the right
+     edge. The measured/modelled legend is the Key's; it is not repeated here. */
+  html[data-ui="v2"] .obos-v2 .tc { aspect-ratio: auto; display: flex; flex-wrap: wrap; align-items: baseline; align-content: flex-start; gap: 1px 8px; padding: 9px 64px 9px 12px !important; min-height: 0; }
   html[data-ui="v2"] .obos-v2 .tc > * { position: static; }
-  html[data-ui="v2"] .obos-v2 .tc .tc-brand { grid-column: 1; font-size: 16px; }
-  html[data-ui="v2"] .obos-v2 .tc .tc-grade { grid-column: 2; grid-row: 1; font-size: 10px; padding: 0.25em 0.7em; }
-  html[data-ui="v2"] .obos-v2 .tc .tc-tag { grid-column: 1 / -1; max-width: none; font-size: 11px; line-height: 1.3; padding-right: 36px; }
-  html[data-ui="v2"] .obos-v2 .tc .tc-coord { grid-column: 1 / -1; font-size: 10px; margin-top: 2px; }
-  html[data-ui="v2"] .obos-v2 .tc .tc-legend { grid-column: 1 / -1; font-size: 10px; margin-top: 2px; }
-  html[data-ui="v2"] .obos-v2 .tc .tc-area { grid-column: 1 / -1; margin-top: 4px; }
-  html[data-ui="v2"] .obos-v2 .tc .tc-n { font-size: 28px; }
-  html[data-ui="v2"] .obos-v2 .tc .tc-u { font-size: 12px; }
-  html[data-ui="v2"] .obos-v2 .tc .tc-park[data-outline] { position: absolute; z-index: 1; right: 6px; bottom: -4px; top: auto; width: auto; height: 78px; opacity: 0.9; }
-  html[data-ui="v2"] .obos-v2 .tc .tc-park[data-outline="square"] { width: 48px; height: 48px; right: -6px; bottom: 6px; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-brand { font-size: 18px; flex: 0 1 auto; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-grade { font-size: 10px; padding: 0.2em 0.65em; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-tag { flex: 1 1 100%; max-width: none; font-size: 11px; line-height: 1.3; padding-right: 0; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-legend { display: none; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-area { flex: none; margin: 0; line-height: 1; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-n { font-size: 14px; font-weight: 300; letter-spacing: 0; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-u { font-size: 11px; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-coord { flex: 0 1 auto; font-size: 10px; margin: 0; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-park[data-outline] { position: absolute; z-index: 1; right: 10px; top: 8px; bottom: auto; width: auto; height: 58px; opacity: 0.9; }
+  html[data-ui="v2"] .obos-v2 .tc .tc-park[data-outline="square"] { width: 44px; height: 44px; right: 10px; top: 14px; }
   html[data-ui="v2"] .obos-v2 .toasts { display: none !important; }
   html[data-ui="v2"] .obos-v2 .flash { bottom: auto; top: 64px; }
 
@@ -136,7 +138,6 @@ html[data-ui="v2"] .obos-v2 .rnudge .rn-x { width: 44px; height: 44px; min-width
 
 /* ── a phone on its side (844 x 390): the sheet is a column on the right, the toolbar a row above it ── */
 @media (max-width: 699px) and (orientation: landscape), (pointer: coarse) and (max-height: 560px) and (orientation: landscape) {
-  html[data-ui="v2"] .obos-v2 .toolbar { width: auto; flex-direction: row; align-items: center; }
   html[data-ui="v2"] .obos-v2 .st-title { right: auto; width: 200px; }
   html[data-ui="v2"] .obos-v2 #v2Sheet { left: auto; right: 8px; bottom: 8px; width: min(360px, 48%); max-height: calc(100% - 84px); border-radius: 22px; border-bottom: 1px solid var(--glass-border); }
   html[data-ui="v2"] .obos-v2 .sheet-head { border-radius: 22px 22px 0 0; }
