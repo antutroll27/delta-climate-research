@@ -397,6 +397,36 @@ test.describe('@v2 shell', () => {
     await expect(page.locator('main.obos-v2')).toHaveAttribute('data-side-shown', '1');
   });
 
+  /* FINAL visual V1: at 1280 x 720 the Explore panel is shorter than its content. Nothing may be unreachable, and the reader must be able to SEE that there is more: the body scrolls
+     inside the panel (a thin scrollbar, and a fade at the cut edge that goes when the end is reached). */
+  test('@v2 [V1] 1280 x 720: the Explore panel scrolls inside itself with a visible cue, and Warming pathway and Resilience Score are reachable', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await openV2(page);
+    const sc = page.locator('[data-side-pane="explore"] .sp-scroll');
+    await expect(sc).toBeVisible();
+    const m = await sc.evaluate((e) => {
+      const cs = getComputedStyle(e), after = getComputedStyle(e, '::after');
+      return { over: e.scrollHeight - e.clientHeight, overflowY: cs.overflowY, scrollbarWidth: cs.scrollbarWidth, fade: after.content !== 'none' && after.content !== 'normal' && parseFloat(after.height) > 8, opacity: after.opacity };
+    });
+    expect(m.over, 'at 1280 x 720 the content is taller than the panel').toBeGreaterThan(20);
+    expect(m.overflowY).toBe('auto');
+    expect(m.scrollbarWidth, 'the scrollbar is not hidden').not.toBe('none');
+    expect(m.fade, 'a fade marks the cut edge').toBe(true);
+    expect(Number(m.opacity), 'the fade is showing while there is more below').toBeGreaterThan(0.5);
+    /* the panel's own box never leaves the screen */
+    const panel = await page.locator('#v2Side').boundingBox();
+    expect(panel!.y + panel!.height).toBeLessThanOrEqual(720);
+    for (const name of ['Warming pathway', 'Resilience Score']) {
+      const el = sc.getByText(name, { exact: true }).locator('visible=true').first();
+      await el.scrollIntoViewIfNeeded();
+      const ok = await el.evaluate((e) => { const box = e.closest('.sp-scroll')!.getBoundingClientRect(), r = e.getBoundingClientRect(); return r.height > 0 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1; });
+      expect(ok, `${name} can be scrolled into the panel's view`).toBe(true);
+    }
+    /* at the end the fade is gone, so it never dims the last row */
+    await sc.evaluate((e) => { e.scrollTop = e.scrollHeight; });
+    await expect.poll(() => sc.evaluate((e) => getComputedStyle(e, '::after').opacity)).toBe('0');
+  });
+
   /* the S2 audit's gate addition: the Explore pane is never an empty slab, on any area, in either section it serves */
   for (const path of ['/heat-map/in/kolkata/ballygunge/', '/heat-map/in/bengaluru/mg-road/', '/heat-map/ae/dubai/al-quoz/']) {
     test(`@v2 Explore is never an empty slab: ${path}`, async ({ page }) => {

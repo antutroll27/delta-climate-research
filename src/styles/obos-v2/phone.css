@@ -78,6 +78,7 @@ html[data-ui="v2"] .obos-v2 .rnudge .rn-x { width: 44px; height: 44px; min-width
   html[data-ui="v2"] .obos-v2[data-side-current="solar"] #v2Drawer [data-side-pane="solar"],
   html[data-ui="v2"] .obos-v2[data-side-current="air"] #v2Drawer [data-side-pane="air"] { display: flex; }
   html[data-ui="v2"] .obos-v2 #v2Drawer .side-panel .sp-scroll { overflow: visible; }
+  html[data-ui="v2"] .obos-v2 #v2Drawer .side-panel .sp-scroll::after { display: none; }   /* the drawer scrolls as a whole: no inner fade */
   /* the panel's own × is the drawer's × (the drawer has one at its corner), so the pane's is not drawn twice */
   html[data-ui="v2"] .obos-v2 #v2Drawer .side-panel .sp-close { display: none; }
   /* Compare and the brief carry their display toolbar in the drawer too: they have no map to keep it beside */

@@ -35,8 +35,15 @@ html[data-ui="v2"] .obos-v2 .side-panel .sp-head { display: flex; align-items: f
 html[data-ui="v2"] .obos-v2 .side-panel .sp-head h2 { font-size: 18px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.15; }
 html[data-ui="v2"] .obos-v2 .side-panel .sp-sub { font-size: 11.5px; line-height: 1.4; color: var(--ink-3); margin-top: 3px; }
 html[data-ui="v2"] .obos-v2 .sp-close { flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%; background: var(--well); color: var(--ink-2); display: grid; place-items: center; cursor: pointer; }
-html[data-ui="v2"] .obos-v2 .side-panel .sp-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 16px; scrollbar-width: none; }
-html[data-ui="v2"] .obos-v2 .side-panel .sp-scroll::-webkit-scrollbar { display: none; }
+/* FINAL visual V1: a panel shorter than its content (1280 x 720) SCROLLS and SAYS SO: a thin scrollbar, and a fade at the cut edge that goes when the scroll reaches the end.
+   The fade is sticky inside the scroller, driven by the scroller's own scroll position (opacity only); with no overflow the timeline is inactive and the base opacity 0 hides it. */
+html[data-ui="v2"] .obos-v2 .side-panel .sp-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 28px; scrollbar-width: thin; scrollbar-color: var(--ink-3) transparent; }
+html[data-ui="v2"] .obos-v2 .side-panel .sp-scroll::after { content: ""; display: block; position: sticky; bottom: -28px; height: 40px; margin: -12px -16px -28px; pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--card) 85%); opacity: 0; animation: sp-more linear both; }
+@supports (animation-timeline: scroll()) {   /* a separate rule on purpose: the minifier would fold these longhands into the shorthand, which Chrome then drops whole */
+  html[data-ui="v2"] .obos-v2 .side-panel .sp-scroll::after { animation-timeline: scroll(nearest block); animation-range: calc(100% - 32px) 100%; }
+}
+@keyframes sp-more { from { opacity: 1; } to { opacity: 0; } }
 html[data-ui="v2"] .obos-v2 .side-panel .sp-body { display: none; flex-direction: column; min-height: 0; flex: 1; }
 html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"] [data-side-pane="explore"],
 html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="solar"] [data-side-pane="solar"],
