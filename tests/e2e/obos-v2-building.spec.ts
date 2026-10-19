@@ -160,7 +160,8 @@ test.describe('@v2 building card', () => {
       const shown = await page.locator(sel).evaluate((e) => !(e as HTMLElement).hidden && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none');
       if (!shown) continue;                                                  // hidden when nowhere is clear: allowed
       const b = (await page.locator(sel).boundingBox())!;
-      for (const hud of await page.locator('[data-hud]:visible').all()) {
+      for (const hud of await page.locator('[data-hud]').all()) {
+        if (!(await hud.isVisible())) continue;                              // (not written as a :visible selector: Tailwind turns that string into a site-wide junk class, F11)
         const h = await hud.boundingBox();
         if (!h || h.width === 0) continue;
         const overlap = b.x < h.x + h.width && b.x + b.width > h.x && b.y < h.y + h.height && b.y + b.height > h.y;

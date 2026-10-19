@@ -1,7 +1,7 @@
 // tests/unit/obos-v2-contract.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 
 /* THE PORT CONTRACT (spec §1.2, §1.6). The app binds by id and selector at mount;
    onEl (heat-map-app.ts:3818) silently skips a null node, so a missing id is a
@@ -107,3 +107,13 @@ for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-
     }
   });
 }
+
+/* FINAL audit F11: Tailwind harvests candidate class names from every source file it scans, tests included. The Playwright selector written as `[data-hud]` + `:visible` in one string
+   was read as an arbitrary-variant utility and emitted `.\[data-hud\]\:visible:is(data-hud){visibility:visible}` into Base.css, on EVERY page of the site. Selectors that must filter by
+   visibility use .filter({ visible: true }) or isVisible() instead. (Built in two pieces here so this file is not itself the source of the string.) */
+test('F11: no source or test file carries the string that Tailwind turns into a site-wide junk utility', () => {
+  const needle = '[data-hud]' + ':visible';
+  const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.name.startsWith('._') ? [] : d.isDirectory() ? walk(`${dir}/${d.name}`) : [`${dir}/${d.name}`]));
+  const hits = [...walk('src'), ...walk('tests')].filter((f) => /\.(ts|tsx|mjs|js|astro|css|html)$/.test(f) && readFileSync(f, 'utf8').includes(needle));
+  assert.deepEqual(hits, []);
+});
