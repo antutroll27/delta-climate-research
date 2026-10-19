@@ -43,6 +43,10 @@ test('verify.yml: the existing job runs the main scope; a separate obos-v2-brows
   assert.match(run, /npx playwright test --project=chromium-v2-\$\{\{ matrix\.part \}\}/);
   const test = j.steps.find((s) => /npx playwright test/.test(s.run ?? ''));
   assert.equal(test.env.OBOS_PW_SCOPE, 'v2-${{ matrix.part }}');
+  /* rc1 R4: Playwright stops itself before the job limit does, so a hang ends as a failure with a summary, not a silent cancellation (the config's own 38 minutes is longer than this job's 30) */
+  const gt = /--global-timeout=(\d+)/.exec(test.run);
+  assert.ok(gt, 'the v2 step passes --global-timeout');
+  assert.ok(Number(gt[1]) <= (j['timeout-minutes'] - 3) * 60_000, 'it leaves at least 3 minutes of the job limit to print the summary and upload the results');
   const up = j.steps.find((s) => /upload-artifact/.test(s.uses ?? ''));
   assert.equal(up.with.name, 'playwright-results-v2-${{ matrix.part }}');
   assert.match(up.with.path, /test-results\//);

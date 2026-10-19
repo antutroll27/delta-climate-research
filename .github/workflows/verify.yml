@@ -273,11 +273,12 @@ jobs:
         if: steps.scope.outputs.browser == 'true'
         run: npm run build
 
+      # --global-timeout (25 min) overrides the config's CI 38: Playwright stops itself 5 minutes before this job's 30-minute limit, so a hang ends as a failure with a summary and durations, not a bare cancellation (rc1 R4).
       - name: OBOS v2 browser contracts, part ${{ matrix.part }}
         if: steps.scope.outputs.browser == 'true'
         env:
           OBOS_PW_SCOPE: v2-${{ matrix.part }}
-        run: npx playwright test --project=chromium-v2-${{ matrix.part }}
+        run: npx playwright test --project=chromium-v2-${{ matrix.part }} --global-timeout=1500000
 
       # test-results/durations.json (the json reporter's record) on passing runs too, as in `quality`: one artifact per part.
       - name: Upload browser results and durations
