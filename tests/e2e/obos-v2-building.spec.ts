@@ -15,8 +15,8 @@ test.describe('@v2 map stack', () => {
     await expect(page.locator('#bcount')).toHaveText(/^[\d,]+ buildings in .+ · [\d,]+ drawn$/);
     await expect(page.locator('#simBackend')).not.toHaveText('SELECTING ENGINE');
     const rows = card.locator('.wc-prov li');
-    await expect(rows).toHaveText(['Live basemap, real footprints & Google heights', 'Block detail · illustrative']);
-    await expect(card.locator('.wc-heat'), 'F6: the modelled-heat row sits in the header, outside the fold').toHaveText('Heat field · modelled');
+    await expect(rows).toHaveText(['Live basemap, real footprints & Google heights']);
+    await expect(card.locator('.wc-heat'), 'F6 + rc1 R1: the modelled-heat and illustrative-block rows sit in the header, outside the fold').toHaveText(['Heat field · modelled', 'Block detail · illustrative']);
     await expect(card.locator('[data-v2-crumb]')).toContainText('India');
     /* a-01: the glyph is the SVG itself, switched by the hidden attribute (no wrapper span) */
     await expect(card.locator('[data-v2-crumb] .crumb-g svg.cg:not([hidden])')).toBeVisible();
@@ -76,9 +76,21 @@ test.describe('@v2 ward card on laptops', () => {
       expect(await stamp.evaluate((e) => !!e.closest('.wc-body')), 'the stamp is outside the fold').toBe(false);
       /* FINAL audit F6 (honesty): "Heat field · modelled" is never folded away, folded card or not; and on Heat the block-pattern note is on screen too */
       const heat = card.locator('.wc-heat');
-      await expect(heat).toBeVisible();
-      await expect(heat).toHaveText('Heat field · modelled');
-      expect(await heat.evaluate((e) => !!e.closest('.wc-body')), 'the modelled-heat row is outside the fold').toBe(false);
+      await expect(heat).toHaveText(['Heat field · modelled', 'Block detail · illustrative']);
+      for (const row of await heat.all()) {
+        await expect(row).toBeVisible();
+        expect(await row.evaluate((e) => !!e.closest('.wc-body')), 'the modelled-heat and illustrative-block rows are outside the fold').toBe(false);
+        /* rc1 R1 (honesty): on the FIRST screen, so a laptop reader sees both without scrolling */
+        const rb = (await row.boundingBox())!;
+        expect(rb.y + rb.height, 'the row is above the bottom edge of the window').toBeLessThanOrEqual(h);
+      }
+      const cardBox = (await card.boundingBox())!;
+      for (const other of ['#compass', '#v2SunCard']) {
+        const o = page.locator(other);
+        if (!(await o.isVisible())) continue;
+        const b = (await o.boundingBox())!;
+        expect(cardBox.x + cardBox.width <= b.x || b.x + b.width <= cardBox.x || cardBox.y + cardBox.height <= b.y || b.y + b.height <= cardBox.y, `rc1 R1: the ward card does not overlap ${other}`).toBe(true);
+      }
       await page.locator('.nav-item[data-section="heat"]').click({ position: { x: 30, y: 22 } });
       const note = page.locator('#patternNote');
       await expect(note).toContainText('illustrative', { timeout: 30_000 });

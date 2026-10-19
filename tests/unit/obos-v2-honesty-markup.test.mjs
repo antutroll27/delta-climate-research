@@ -96,6 +96,8 @@ test('H10: the ward card carries the v1 map-face chip word for word, as three pr
   assert.ok(/<Sym shape="ward" c="heat-4" kind="modelled"/.test(ms), 'the heat field row must be OUTLINED');
   assert.ok(ms.indexOf('Heat field · modelled') < ms.indexOf('<div class="wc-body">'), 'FINAL audit F6: the heat-field row is in the always-visible header, never in the foldable .wc-body');
   assert.ok(/<Sym shape="square" c="neutral" kind="modelled"[^>]*\/><\/span><span>Block detail/.test(ms), 'illustrative block detail must be OUTLINED, neutral');
+  assert.ok(ms.indexOf('Block detail · illustrative') < ms.indexOf('<div class="wc-body">'), 'rc1 R1 (honesty): the block-detail row is in the always-visible header, never in the foldable .wc-body');
+  assert.ok(ms.indexOf('Block detail · illustrative') > ms.indexOf('<p class="wc-stamp">'), 'rc1 R1: and it sits in .wc-stamp beside the heat-field row');
 });
 
 test('the ward card: the app\'s ids stay once, the count is the app\'s sentence, the breadcrumb glyph is the ward\'s own outline (no India outline)', () => {

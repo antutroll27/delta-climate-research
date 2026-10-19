@@ -75,6 +75,7 @@ html[data-ui="v2"] .obos-v2 .wc-sub .chip { height: 20px; font-size: 10.5px; }
 html[data-ui="v2"] .obos-v2 .wc-stamp { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 html[data-ui="v2"] .obos-v2 .wc-heat { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; line-height: 1.3; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 .wc-heat .sym-tile.sm { width: 24px; height: 24px; border-radius: 7px; }
+html[data-ui="v2"] .obos-v2 .wc-stamp .wc-heat + .wc-heat { flex-basis: 100%; }   /* rc1 R1: the second honesty row takes its own line */
 html[data-ui="v2"] .obos-v2 .wardc .con-stamp { display: inline-block; flex: none; transform: none; animation: none; opacity: 1; box-shadow: none; border: 1px solid var(--ink-1); border-radius: 4px; padding: 0 6px;
   font: 600 9.5px/18px var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 .wc-prov { margin-top: 4px; }
@@ -89,3 +90,9 @@ html[data-ui="v2"] .obos-v2 #loadchip.fail { color: var(--ink-1); font-weight: 6
 /* A-S4 audit F1: on a short window (measured at 1366 x 640) the title column's tip toast would sit on the Sun card; the first-run tip steps aside there,
    the Sun card never does. The app still dismisses and remembers it as before. */
 @media (max-height: 700px) { html[data-ui="v2"] .obos-v2 #tiphint { display: none; } }
+/* rc1 R1: the ward card's header holds TWO always-visible honesty rows now (24 px taller). On a short window (a 1366 x 768 laptop's viewport is about 640) that put the Sun card on the compass
+   (0.6 px of clearance before). The stack sits nearer the chips and the two rows use 18 px tiles; the Sun card and the honesty rows never step aside. The side-open stack already sits at 84 px. */
+@media (max-height: 700px) {
+  html[data-ui="v2"] .obos-v2:not([data-side-shown="1"]) .mapstack { --ms-bottom: 118px; }
+  html[data-ui="v2"] .obos-v2 .wc-heat .sym-tile.sm { width: 18px; height: 18px; border-radius: 5px; }
+}
