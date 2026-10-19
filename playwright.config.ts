@@ -8,6 +8,20 @@ import { V2_PART_A, V2_PART_B, v2Match } from './tests/e2e/fixtures/v2-split';
     Metal. The JSON is labelled "headless". One list, shared with the glass spec. */
 const PERF_METAL = ['--headless=new', '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'];
 
+/** WHICH PROJECTS RUN (FINAL audit F1, founder-approved 19 Oct). Unset = every project, as always (local runs). CI sets it per job, so the @v2 browser suite has a job of its own and the 38-minute stop
+    below never has to hold both suites:
+      main  -> everything except chromium-v2-a and chromium-v2-b (the existing job);
+      v2-a  -> chromium-v2-a only;      v2-b  -> chromium-v2-b only (the obos-v2-browser matrix, verify.yml).
+    Any other value is refused: a typo must not quietly run nothing, or everything. */
+const SCOPE = process.env.OBOS_PW_SCOPE;
+const V2_PARTS = ['chromium-v2-a', 'chromium-v2-b'];
+function scopeProjects<T extends { name: string }>(projects: T[]): T[] {
+  if (SCOPE === undefined || SCOPE === '') return projects;
+  if (SCOPE === 'main') return projects.filter((p) => !V2_PARTS.includes(p.name));
+  if (SCOPE === 'v2-a' || SCOPE === 'v2-b') return projects.filter((p) => p.name === `chromium-${SCOPE}`);
+  throw new Error(`OBOS_PW_SCOPE must be unset, "main", "v2-a" or "v2-b" (got "${SCOPE}")`);
+}
+
 export default defineConfig({
   testDir: './tests/e2e',
   // macOS may create AppleDouble sidecars beside copied test files. They are
@@ -90,7 +104,7 @@ export default defineConfig({
     baseURL: PW_ORIGIN,
     trace: 'on-first-retry',
   },
-  projects: [
+  projects: scopeProjects([
     /* THE DEFAULT PROJECT IS TIER 0, AND NOBODY KNEW.
        Headless Chromium reports `ANGLE (Google, Vulkan … SwiftShader Device …)`,
        which src/utils/render-quality.ts matches as LOW_GPU -> tier 0 -> isotherm.
@@ -143,7 +157,7 @@ export default defineConfig({
        CI ARITHMETIC, STATED AND NOT HIDDEN (spec 9.4 set <= 6 min for 22 tests; that no longer holds). On the 2-CPU runner the same tests take about 1.5x: ~18.5 min for the pair. The last
        full CI run was 28.7 min for 197 tests (13 Oct) against the 38-minute stop above, so 28.7 + 18.5 = 47.2 does not fit. Spec 9.4's fallback, moving obos-v2-contrast and
        obos-v2-phone (2.1 min here, ~3.2 on CI) to local-only, gets to ~44 and still does not fit. So the flip PR must give the @v2 suite its own CI job (a matrix leg per part, which
-       also halves the wall time) or raise the stop and the job limit; neither is done here. Until then CI runs both parts in the one job exactly as it ran the one project.
+       also halves the wall time) or raise the stop and the job limit; neither was done at S8. FINAL audit F1 (founder-approved 19 Oct): the @v2 parts have their own CI job (verify.yml, `obos-v2-browser`, a matrix leg per part, each ~9-10 CI-min), selected by OBOS_PW_SCOPE above; the existing job runs OBOS_PW_SCOPE=main.
        Fold checks into one engine load (openV2 ~20 s locally) before adding a load. */
     {
       name: 'chromium-v2-a',
@@ -199,7 +213,7 @@ export default defineConfig({
       testMatch: '**/cbam-lines.spec.ts',
       use: { ...devices['Desktop Safari'] },
     }]),
-  ],
+  ]),
   webServer: {
     /* Browser contracts exercise the exact static output that will ship. A
        dedicated port prevents an existing development server masking it.
