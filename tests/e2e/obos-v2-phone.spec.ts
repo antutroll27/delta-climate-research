@@ -341,6 +341,26 @@ test.describe('@v2 phone 390x844', () => {
   }
 });
 
+/* rc1 R2: on its side the brief's Key popover (413 px tall) opened 22 px above the visible drawer, its top cut off. */
+test.describe('@v2 phone on its side: the Key popover stays whole', () => {
+  test.setTimeout(120_000);
+  test.use({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
+  test('@v2 [R2] /heat-map/brief/ at 844x390: the Key popover opened from the drawer lies inside the viewport', async ({ page }) => {
+    await seenNote(page);
+    await page.goto('/heat-map/brief/');
+    await expect(page.locator(ROOT)).toHaveCount(1);
+    await menu(page).click();
+    await expect(page.locator('#v2Drawer')).toBeVisible();
+    await page.locator('#v2Drawer .key-btn').click();
+    const key = page.locator('#v2Key');
+    await expect(key).toBeVisible();
+    await page.waitForTimeout(400);
+    const r = await key.evaluate((e) => { const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: window.innerHeight }; });
+    expect(r.top, `the popover's top is on the screen (${JSON.stringify(r)})`).toBeGreaterThanOrEqual(0);
+    expect(r.bottom, 'and so is its bottom').toBeLessThanOrEqual(r.h);
+  });
+});
+
 for (const v of [{ n: '360x740', width: 360, height: 740 }, { n: '844x390 on its side', width: 844, height: 390 }, { n: '390x844', width: 390, height: 844 }]) {
   test.describe(`@v2 phone sweep ${v.n}`, () => {
     test.setTimeout(240_000);

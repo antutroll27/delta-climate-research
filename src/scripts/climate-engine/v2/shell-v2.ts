@@ -69,6 +69,7 @@ export function bindLayers(ctx: ShellCtx): LayerStack {
       el.dataset.open = 'true'; opener?.setAttribute('aria-expanded', 'true');
       stack.push({ el, opener, onClose });
       (el.querySelector<HTMLElement>('[data-autofocus]') ?? el).focus();
+      if (el.closest('#v2Drawer')) el.scrollIntoView({ block: 'nearest', behavior: 'instant' });   /* rc1 R2: a phone on its side: the drawer is shorter than the popover; show all of it */
     },
     closeTop() {
       const l = stack.pop(); if (!l) return false;
