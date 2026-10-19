@@ -21,3 +21,29 @@
   html[data-ui="v2"] .obos-v2.heat-brief .card { margin: 0 0 6mm; }
   html[data-ui="v2"] .obos-v2.heat-brief .brf-status { background: var(--print-paper); border: 1px solid var(--line); }
 }
+
+/* FINAL audit F3: COMPARE PRINTS AS A FLOWING DOCUMENT. On screen it is a fixed canvas (the workspace panel, the two maps and the evidence column are all
+   absolutely placed over a full-viewport root); printed as it was, it came out as one clipped page with the menu and toolbar on it and the cards on top of each other.
+   Here the root is a plain block, only the three bands remain (a rule, as for the brief: whatever a later slice adds to the root cannot print), each band flows in
+   turn, and the ink/paper tokens are the brief's. */
+@media print {
+  html[data-ui="v2"] .obos-v2.heat-compare { position: static; display: block; overflow: visible; height: auto; min-height: 0; background: var(--print-paper); color: var(--print-ink);
+    --card: var(--print-paper); --ink-1: var(--print-ink); --ink-2: var(--print-ink); --ink-3: var(--print-ink); --unit: var(--print-ink);
+    --line: color-mix(in srgb, var(--print-ink) 30%, var(--print-paper)); --well: var(--print-paper); --on-ink: var(--print-paper); }
+  html[data-ui="v2"] .obos-v2.heat-compare > :not(.side-panel, .cmp-stage, .cmp-col, h1) { display: none !important; }
+  html[data-ui="v2"] .obos-v2.heat-compare :is(.side-panel, .cmp-stage, .cmp-col) { position: static !important; display: block !important; width: auto; max-height: none; height: auto; overflow: visible;
+    transform: none; inset: auto; margin: 0 0 6mm; padding: 0; background: transparent; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  /* the stage's own parts are absolutely placed on screen too */
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-stage > :not(.sr-only) { position: static !important; inset: auto; width: auto; overflow: visible; margin: 0 0 4mm; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-maps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6mm; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-map { break-inside: avoid; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-surface { background: transparent; }
+  html[data-ui="v2"] .obos-v2.heat-compare[data-cards] :is(.card, .side-panel, .cmp-stage) { --card: var(--print-paper); --ink-1: var(--print-ink); --ink-2: var(--print-ink); --ink-3: var(--print-ink); --unit: var(--print-ink);
+    --line: color-mix(in srgb, var(--print-ink) 30%, var(--print-paper)); --well: var(--print-paper); --on-ink: var(--print-paper);
+    background: var(--print-paper) !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+    border: 1px solid var(--line); break-inside: avoid; }
+  html[data-ui="v2"] .obos-v2.heat-compare[data-cards] :is(.side-panel, .cmp-stage) { border: 0; }
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-col { display: flex; flex-direction: column; gap: 4mm; }
+  /* controls that do nothing on paper */
+  html[data-ui="v2"] .obos-v2.heat-compare :is(.cmp-handle, .cmp-tabs, .cmp-tools button, .cmp-views, .cmp-acts, .sp-close) { display: none !important; }
+}

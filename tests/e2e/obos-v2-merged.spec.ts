@@ -109,5 +109,20 @@ test.describe('@v2 merged', () => {
     await page.emulateMedia({ media: 'print' });
     expect(await page.locator('main.obos-v2[data-compare-root]').evaluate((e) => getComputedStyle(e).display), 'Compare keeps its page in print').not.toBe('none');
     await expect(page.locator('.heat-compare__stage, [data-compare-root] canvas, [data-compare-root] h1').first()).toBeVisible();
+    /* FINAL audit F3: Compare prints as a flowing document, not a screen grab. No menu, no toolbar, no popovers; the workspace, the maps and the
+       evidence are in the flow (static), each in its own band, none on top of another. */
+    for (const sel of ['nav.rail', '.tw-menu', '.toolbar', '#v2Key', '#v2Credits', '.st-attrib']) await expect(page.locator(sel), `${sel} is not printed`).toBeHidden();
+    for (const sel of ['.side-panel', '.cmp-stage', '.cmp-col']) {
+      expect(await page.locator(sel).first().evaluate((e) => getComputedStyle(e).position), `${sel} flows`).toBe('static');
+    }
+    const bands = await page.evaluate(() => ['.side-panel', '.cmp-stage', '.cmp-col'].map((s) => {
+      const r = document.querySelector(s)!.getBoundingClientRect(); return { s, top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+    }));
+    for (let i = 1; i < bands.length; i++) expect(bands[i].top, `${bands[i].s} starts below ${bands[i - 1].s}`).toBeGreaterThanOrEqual(bands[i - 1].bottom - 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'nothing is cut at the right edge').toBe(true);
+    expect(bands.every((b) => b.left >= 0), 'nothing is cut at the left edge').toBe(true);
+    /* and the PDF is more than one page of the evidence, not one clipped screen */
+    const pdf = await page.pdf({ format: 'A4' });
+    expect((pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length, 'the PDF is more than one page').toBeGreaterThan(1);
   });
 });
