@@ -92,6 +92,6 @@ test('the card reads the array by building index, not by guessing', async () => 
     + 'lookup would name a different building\'s source');
   assert.match(app, /no confidence published/,
     'the card must distinguish "none published" from "low confidence"');
-  const markup = await readFile(join(ROOT, 'src/components/ClimateEngine/HeatMapStage.astro'), 'utf8');
+  const markup = await readFile(join(ROOT, 'src/components/ClimateEngine/v2/BuildingCardV2.astro'), 'utf8');
   assert.match(markup, /id="bcSrc"/, 'the card lost its provenance row while the app still writes it');
 });
