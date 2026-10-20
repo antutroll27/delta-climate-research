@@ -98,7 +98,7 @@ html[data-ui="v2"] .obos-v2[data-theme="dark"] {
   --tile: rgba(111, 202, 214, 0.06); --dock-solid: var(--hx-teal-dock);
   --compass-s: rgba(236, 237, 240, 0.4); --compass-line: rgba(111, 202, 214, 0.45);
   /* dark glass over a bright map is lighter than Plates' teal, where the tile's red measures 3.4:1: the letter takes a lighter red (4.7:1 there, 6 on Plates) */
-  --compass-n-ink: #FF7478;
+  --compass-n-ink: #FF8083;
   --sym-green: var(--sym-green-dark);
   --plate: var(--hx-teal-0); --plate-ink-1: var(--hx-snow-1); --plate-ink-2: var(--hx-snow-2); --plate-ink-3: var(--hx-snow-3); --plate-unit: var(--hx-snow-u);
   --plate-well: var(--hx-teal-1); --plate-well-2: var(--hx-teal-2); --plate-line: var(--hx-teal-a16);

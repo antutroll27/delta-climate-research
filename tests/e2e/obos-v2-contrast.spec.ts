@@ -43,13 +43,22 @@ async function openBuilding(page: Page): Promise<void> {
   await go(page, 'solar');
   await expect(page.locator('#solList tr[data-idx]').first()).toBeAttached({ timeout: 60_000 });
   await page.locator('#solList tr[data-idx]').first().dispatchEvent('click');
+  await freezeOrbit(page, true);   // at once: the orbit resumes 2.5 s after a row pick, and the card follows the roof
   await expect(page.locator('#bcard')).toBeVisible({ timeout: 30_000 });
   /* the card is ON THE MAP now (brainstorm 04): its words are scored like any other, with its fold and its how-sure ladder open (a capped card scrolls inside itself: sweepScreen reads it at 50% and 100%) */
   await page.locator('#bcFold summary').click();
   await page.locator('#bcSure summary').click();
   await page.waitForTimeout(1500);
-  /* the card follows the roof, and the sweep skips what moved between its two reads: a key press on the canvas pauses the idle orbit for 2.5 s, which covers the sweep */
-  await page.locator('#mlmap canvas').dispatchEvent('keydown', { key: 'Shift' });
+}
+/* The card follows the roof, and the sweep skips what moved between its two reads (on a real GPU the orbit moves it every frame: 41 of 130 words were scored once). A key press on the canvas
+   pauses the idle orbit for 2.5 s, so it is re-pressed every 400 ms for as long as the building is open (freezeOrbit(false) stops it). */
+async function freezeOrbit(page: Page, on: boolean): Promise<void> {
+  await page.evaluate((go) => {
+    const w = window as unknown as { __freeze?: number };
+    if (w.__freeze) { clearInterval(w.__freeze); w.__freeze = 0; }
+    if (go) { const nudge = (): void => { document.querySelector('#mlmap canvas')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' })); }; nudge(); w.__freeze = window.setInterval(nudge, 400); }
+  }, on);
+  if (on) await page.waitForTimeout(600);
 }
 
 for (const theme of ['dark', 'light'] as const) for (const cards of ['plates', 'glass'] as const) {
@@ -73,6 +82,7 @@ for (const theme of ['dark', 'light'] as const) for (const cards of ['plates', '
     await view('air', async () => { await go(page, 'air'); await expect(page.locator('#aqiBlock')).toBeVisible({ timeout: 30_000 }); });
     await view('building', async () => { await openBuilding(page); });
     if (isFull(testInfo)) {
+      await freezeOrbit(page, false);
       await page.keyboard.press('Escape');
       for (const s of ['heat', 'solar', 'weather', 'scenarios']) await view(s, async () => { await go(page, s); });
       await view('methods', async () => { await go(page, 'methods'); await page.locator('#srcBtn').click(); });
