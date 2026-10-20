@@ -16,8 +16,11 @@ html[data-ui="v2"] .obos-v2.heat-compare .cmp-handle,
 html[data-ui="v2"] .obos-v2.heat-compare .cmp-tabs { display: none; }
 html[data-ui="v2"] .obos-v2.heat-compare .cmp-panel[hidden] { display: none; }
 html[data-ui="v2"] .obos-v2.heat-compare .cmp-gap { margin-top: 16px; }
-/* flip plan A.2.6: v1's noscript sentence, shown when the model cannot run */
-html[data-ui="v2"] .obos-v2.heat-compare .cmp-noscript { margin: 0 0 12px; padding: 10px 12px; border-radius: 14px; background: var(--well); color: var(--ink-1); }
+/* flip plan A.2.6: v1's noscript sentence, shown when the model cannot run. It sits in the map area, above the panes (flip audit F2: inside the collapsed phone sheet it was 0 px tall) */
+html[data-ui="v2"] .obos-v2.heat-compare .cmp-noscript { position: absolute; z-index: 20; top: 140px; left: var(--cmp-l); right: var(--cmp-r); margin: 0; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--ink-1); }
+@media (max-width: 699px), (pointer: coarse) and (max-height: 560px) {
+  html[data-ui="v2"] .obos-v2.heat-compare .cmp-noscript { top: 72px; left: var(--cmp-rail); right: 12px; }
+}
 html[data-ui="v2"] .obos-v2.heat-compare .cmp-note { margin-top: 8px; }
 html[data-ui="v2"] .obos-v2.heat-compare .cmp-acts { margin-top: 10px; }
 html[data-ui="v2"] .obos-v2.heat-compare .pill[hidden] { display: none; }

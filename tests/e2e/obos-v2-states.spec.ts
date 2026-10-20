@@ -108,6 +108,33 @@ test.describe('@v2 states without JavaScript', () => {
     await expect(page.locator('.cmp-noscript')).toContainText('Compare results need JavaScript to run the model.');
     await expect(page.locator('.cmp-noscript a')).toHaveAttribute('href', '/heat-map/brief/');
   });
+
+  /* flip audit F2: presence is not enough. On a phone the sentence sat inside the collapsed sheet and rendered 0 px tall. It must have a real box,
+     lie wholly inside the first screen (no scrolling), and have nothing on top of its centre. */
+  for (const [name, w, h] of [['phone', 390, 844], ['desktop', 1440, 900]] as const) {
+    test(`@v2 noscript: Compare's sentence is VISIBLE on ${name} (${w}x${h}): a real box, inside the viewport, uncovered (flip audit F2)`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await page.goto('/heat-map/compare/');
+      const s = page.locator('.cmp-noscript');
+      await expect(s).toContainText('Compare results need JavaScript to run the model.');
+      await expect(s).toBeVisible();
+      const box = await s.boundingBox();
+      expect(box, 'the sentence has a box').not.toBeNull();
+      expect(box!.height, 'non-zero height').toBeGreaterThan(0);
+      expect(box!.width, 'non-zero width').toBeGreaterThan(0);
+      expect(box!.x, 'inside the viewport, left').toBeGreaterThanOrEqual(0);
+      expect(box!.y, 'inside the viewport, top').toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width, 'inside the viewport, right').toBeLessThanOrEqual(w);
+      expect(box!.y + box!.height, 'inside the viewport, bottom').toBeLessThanOrEqual(h);
+      const covered = await s.evaluate((e) => {
+        const r = e.getBoundingClientRect();
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return top && (e.contains(top) || top.contains(e)) ? null : `covered by ${top ? top.tagName.toLowerCase() + '.' + String(top.className) : 'nothing'}`;
+      });
+      expect(covered, 'nothing sits on top of the sentence').toBeNull();
+      await expect(s.locator('a')).toBeVisible();
+    });
+  }
 });
 
 test.describe('@v2 states on a phone', () => {

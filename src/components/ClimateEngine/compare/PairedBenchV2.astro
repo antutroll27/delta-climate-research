@@ -30,6 +30,10 @@ import { SENTINEL_CREDIT, WATER_CREDIT } from '../../../scripts/climate-engine/v
 <main id="main" class="heat-compare obos-v2" data-compare-root data-console data-renderer="canvas" aria-busy="true" style={symbolCssVars()} data-theme="dark" data-cards="plates" data-glass="flat" data-section="overview" data-side="open" data-side-current="explore" data-side-shown="1" data-menu="labels" data-menu-eff="labels">
   <V2Prefs />
   <h1 class="sr-only" id="compare-title">Same policy. Different fabric.</h1>
+  <!-- outside the sheet: the collapsed phone sheet cannot open without JS and rendered this 0 px tall (flip audit F2) -->
+  <noscript>
+    <p class="body-s cmp-noscript">Compare results need JavaScript to run the model. The method, scope, and limits remain available in the <a href="/heat-map/brief/">research brief</a>.</p>
+  </noscript>
   <PhoneChrome />
   <RailV2 current="compare" hasData={true} areaName="Compare" />
   <ToolbarV2 />
@@ -47,9 +51,6 @@ import { SENTINEL_CREDIT, WATER_CREDIT } from '../../../scripts/climate-engine/v
       </div>
     </div>
     <div class="sp-scroll heat-compare__sheet-content">
-      <noscript>
-        <p class="body-s cmp-noscript">Compare results need JavaScript to run the model. The method, scope, and limits remain available in the <a href="/heat-map/brief/">research brief</a>.</p>
-      </noscript>
       <div class="seg cmp-tabs" role="tablist" aria-label="Comparison workspace sections">
         <button type="button" role="tab" aria-selected="true" data-tab="settings">Settings</button>
         <button type="button" role="tab" aria-selected="false" data-tab="evidence">Evidence</button>
