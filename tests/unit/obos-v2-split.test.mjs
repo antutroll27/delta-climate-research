@@ -1,0 +1,93 @@
+// tests/unit/obos-v2-split.test.mjs — OBOS v2 plan amendment A1: the extension points stay where every track expects them.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+const C = 'src/components/ClimateEngine/v2';
+const noJsx = (s) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+export const REGIONS = ['MapChips', 'PhoneChrome', 'RailV2', 'ToolbarV2', 'ExploreSide', 'SolarSide', 'AirSide', 'TitleCard', 'CompassV2', 'MapStack',
+  'DockV2', 'ToastsV2', 'RightColumn', 'LayersPopover', 'Overlays', 'StreetViewModal', 'SolarSheets'];
+export const CARDS = ['TempCard', 'HeatCards', 'ScenarioCards', 'SolarCards', 'WeatherCards', 'MethodsCards'];
+export const SCREEN_PARTIALS = ['overview', 'heat', 'mapstack', 'building', 'explore', 'scenarios', 'solar', 'air', 'weather', 'methods', 'compare', 'brief'];
+export const PRINT_PARTIALS = ['page', 'solar', 'brief'];
+
+function inOrder(src, names, what) {
+  let at = -1;
+  for (const n of names) {
+    const hits = [...src.matchAll(new RegExp(`<${n}[\\s/>]`, 'g'))];
+    assert.equal(hits.length, 1, `${n} must appear exactly once in ${what}`);
+    assert.ok(hits[0].index > at, `${n} is out of order in ${what}`);
+    at = hits[0].index;
+  }
+}
+
+test('the area stage mounts every region once, in the A1 order', () => {
+  const s = readFileSync(join(C, 'HeatMapStageV2.astro'), 'utf8');
+  inOrder(noJsx(s.slice(s.indexOf('<main'))), REGIONS, 'HeatMapStageV2.astro');
+});
+
+test('FINAL audit F12: the empty parking regions are gone (no Park file, no parking box in the stage or its CSS)', () => {
+  for (const n of ['ParkA1', 'ParkA2', 'ParkB1', 'ParkB2']) assert.ok(!existsSync(join(C, `${n}.astro`)), `${n}.astro is still there`);
+  assert.ok(!readFileSync(join(C, 'HeatMapStageV2.astro'), 'utf8').includes('data-v2-parking'), 'the stage still mounts the parking box');
+  assert.ok(!readFileSync('src/styles/obos-v2/tokens.css', 'utf8').includes('data-v2-parking'), 'tokens.css still styles the parking box');
+});
+
+test('the right column holds every card slot once, temperature card first, the .attr marker last; the building card is NOT in it (brainstorm 04: it stands on the map)', () => {
+  const rc = noJsx(readFileSync(join(C, 'RightColumn.astro'), 'utf8'));
+  inOrder(rc, CARDS, 'RightColumn.astro');
+  assert.ok(!rc.includes('BuildingCardV2'), 'the building card left the column');
+  assert.ok(noJsx(readFileSync(join(C, 'HeatMapStageV2.astro'), 'utf8')).includes('<BuildingCardV2'), 'the stage mounts it');
+  assert.ok(rc.lastIndexOf('class="attr"') > rc.lastIndexOf('<MethodsCards'), 'the .attr marker must stay the last child (app:1212, :1238)');
+});
+
+test('screens.css and print.css are manifests: @import lines only, in order, each partial present', () => {
+  for (const [sheet, dir, list] of [['screens.css', 'screens', SCREEN_PARTIALS], ['print.css', 'print', PRINT_PARTIALS]]) {
+    const lines = readFileSync(`src/styles/obos-v2/${sheet}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.trim()).filter(Boolean);
+    assert.deepEqual(lines, list.map((p) => `@import './${dir}/${p}.css';`), `${sheet} is not the A1 manifest`);
+    for (const p of list) assert.ok(existsSync(`src/styles/obos-v2/${dir}/${p}.css`), `${dir}/${p}.css`);
+  }
+});
+
+test('no v2 component carries a <style> (Astro would stamp scope attributes)', () => {
+  const files = [...readdirSync(C).filter((x) => x.endsWith('.astro')).map((f) => join(C, f)),
+    'src/components/ClimateEngine/compare/PairedBenchV2.astro', 'src/components/ClimateEngine/brief/HeatMapBriefV2.astro'].filter(existsSync);
+  for (const f of files) assert.ok(!/<style[\s>]/.test(readFileSync(f, 'utf8')), `${f} has a <style>; v2 CSS lives in src/styles/obos-v2/`);
+});
+
+test('mountShellV2 calls the fifteen binders in the plan\'s order, gated for Compare (plan S9.2 Step 4)', () => {
+  const src = readFileSync('src/scripts/climate-engine/v2/shell-v2.ts', 'utf8');
+  const body = src.slice(src.indexOf('export function mountShellV2'));
+  let at = -1;
+  for (const b of ['bindSections(', 'bindPrefs(', 'bindPerArea(', 'bindPressedMirror(', 'bindProxies(', 'bindLayers(', 'bindPhone(',
+    'bindFlash(', 'bindModals(', 'bindMirrors(', 'bindSunCard(', 'bindWardCard(', 'bindWeather(', 'bindSolar(', 'bindGlass(']) {
+    const i = body.indexOf(b); assert.ok(i > at, `${b} missing or out of order`); at = i;
+  }
+  assert.match(body, /const compare = root\.matches\('\[data-compare-root\], \[data-brief-root\]'\);/);   // c-02: the brief is frame-only by its own marker
+});
+
+test('mountShellV2 binds ONCE per root (c-03): the guard returns null for a bound root, and dispose releases it', () => {
+  const src = readFileSync('src/scripts/climate-engine/v2/shell-v2.ts', 'utf8');
+  const body = src.slice(src.indexOf('export function mountShellV2'));
+  assert.match(body, /if \(!root \|\| root\.dataset\.v2Bound === '1'\) return null;\s*root\.dataset\.v2Bound = '1';/, 'mountShellV2 must refuse a root it already bound');
+  assert.match(body, /const dispose = \(\): void => \{[^}]*delete root\.dataset\.v2Bound;/, 'dispose must release the root so a later boot can bind it again');
+  assert.ok(body.indexOf("root.dataset.v2Bound = '1'") < body.indexOf('const ctx: ShellCtx'), 'the mark is set before any binder runs');
+});
+
+test('b-01: the solar and brief-link binders live in Track B\'s solar-v2.ts, not hidden in weather-v2.ts', () => {
+  const solar = readFileSync('src/scripts/climate-engine/v2/solar-v2.ts', 'utf8');
+  assert.match(solar, /export function bindSolar\(ctx: ShellCtx\): void/);
+  assert.match(solar, /function bindSolarRows\(/);
+  assert.match(solar, /function bindBriefLink\(/);
+  const weather = readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8');
+  assert.ok(!/bindSolarRows|bindBriefLink|TODO\(request b-01\)/.test(weather), 'weather-v2.ts carries neither binder nor the TODO any more');
+  const shell = readFileSync('src/scripts/climate-engine/v2/shell-v2.ts', 'utf8');
+  assert.match(shell, /import \{ bindSolar \} from '\.\/solar-v2\.ts';/);
+});
+
+test('the built CSS inlined every partial (no manifest @import survives into dist)', () => {
+  assert.ok(existsSync('dist/_astro'), 'run npm run build first');
+  for (const f of readdirSync('dist/_astro').filter((x) => x.endsWith('.css'))) {
+    assert.ok(!/@import[^;]*(screens|print)\//.test(readFileSync(join('dist/_astro', f), 'utf8')), `${f} still imports a partial`);
+  }
+});

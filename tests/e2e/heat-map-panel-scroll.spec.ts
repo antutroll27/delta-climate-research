@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openLayers } from './fixtures/obos-nav';
 
 /**
  * A MOUSE WHEEL SCROLLS AN OBOS PANEL.
@@ -20,7 +21,8 @@ import { expect, test } from '@playwright/test';
  * the tier-0 preview build this suite runs: 411 px of content in 257 px at 1280x480,
  * no overflow by 1280x720 (production measured 353 px in 297 px at 1280x520).
  */
-test('a mouse wheel scrolls the Layers pane on a ward page', async ({ page }) => {
+/* FLIP (plan B.2.2): v1's Layers pane is v2's Layers popover (#v2Layers, which scrolls itself: overflow-y:auto under a max-height). No v2 spec sent a wheel over it, so this test is re-pointed, not retired. */
+test('a mouse wheel scrolls the Layers popover on a ward page', async ({ page }) => {
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 1280, height: 480 });
   await page.goto('/heat-map/in/kolkata/ballygunge/', { waitUntil: 'domcontentloaded' });
@@ -29,16 +31,16 @@ test('a mouse wheel scrolls the Layers pane on a ward page', async ({ page }) =>
   // means that, in a regression, Lenis is already listening when the wheels arrive.
   await page.waitForLoadState('load');
 
-  await page.locator('button[data-rail="layers"]').click();
-  const tree = page.locator('.pane[data-pane="layers"] .tree').first();
+  await openLayers(page);
+  const tree = page.locator('#v2Layers');
   await expect(tree).toBeVisible({ timeout: 15_000 });
 
   const size = await tree.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
-  expect(size.scroll, 'precondition: the Layers tree must overflow here, or this test proves nothing')
+  expect(size.scroll, 'precondition: the Layers popover must overflow here, or this test proves nothing')
     .toBeGreaterThan(size.client + 20);
 
   const box = await tree.boundingBox();
-  if (!box) throw new Error('the Layers tree has no bounding box');
+  if (!box) throw new Error('the Layers popover has no bounding box');
   const before = await tree.evaluate((el) => el.scrollTop);
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   for (let i = 0; i < 4; i++) {

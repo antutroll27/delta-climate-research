@@ -35,7 +35,7 @@ test.describe('the seasonal caveat', () => {
     await expect(note).toHaveText(/^Dry-season reading: the modelled surface runs at night ~\d\.\d–\d\.\d °C warm in Mar–Apr against ECOSTRESS$/);
     await expect(page.locator('#conf')).toContainText('dry-season warm');
     await expect(page.locator('#conf')).toHaveAttribute('title', /outside the published ±3\.0 K band/);
-    await page.locator('.metric:has(#lst)').screenshot({ path: test.info().outputPath('april-night-readout.png') });
+    await page.locator('[data-v2-card="temp"]').screenshot({ path: test.info().outputPath('april-night-readout.png') });
   });
 
   test('an April noon carries no caveat: the daytime band holds', async ({ page }) => {

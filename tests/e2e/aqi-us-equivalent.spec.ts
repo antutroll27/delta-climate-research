@@ -1,5 +1,6 @@
 import { devices, expect, test, type Page } from '@playwright/test';
 import { stubAir } from './aqi-cpcb-stub.ts';
+import { openSection } from './fixtures/obos-nav';
 
 /**
  * THE US EPA EQUIVALENT under the official CPCB number (air-panel.ts usLine), on the
@@ -22,7 +23,7 @@ async function toClay(page: Page): Promise<void> {
 }
 
 async function openAirPane(page: Page): Promise<void> {
-  await page.locator('[data-rail="air"]').first().click();
+  await openSection(page, 'air');
   await expect(page.locator('#airPane .aq-us summary')).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(800);
 }
@@ -54,7 +55,7 @@ test.describe('US AQI equivalent', () => {
       await openAirPane(page);
       await expect(page.locator('#airPane .aq-us summary')).toContainText(LINE, { ignoreCase: true });
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/pane-${env}-desktop.png` });
-      await page.locator('[data-rail="air"]').first().click();
+      await openSection(page, 'air');
     }
   });
 
@@ -105,7 +106,7 @@ test.describe('US AQI equivalent', () => {
           await openAirPane(page);
           await expect(page.locator('#airPane .aq-us summary')).toContainText(NOWCAST_LINE);
           if (SHOTS) await page.screenshot({ path: `${SHOTS}/nowcast-pane-${env}-desktop.png` });
-          await page.locator('[data-rail="air"]').first().click();
+          await openSection(page, 'air');
         }
       }
       await ctx.close();

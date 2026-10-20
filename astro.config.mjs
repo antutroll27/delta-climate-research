@@ -176,6 +176,12 @@ export default defineConfig({
   ],
   vite: {
     plugins: [tailwindcss(), devApiProxies()],
+    // CSS NESTING NEVER REACHES THE BROWSER (OBOS v2 S0 audit F1). Astro pins build.target to
+    // 'esnext', so Vite's lightningcss minifier lowers nothing, and the v2 fence
+    // `:where(html:not([data-ui=v2])){…}` would ship as native nesting, which Chrome/Edge <112,
+    // Safari/iOS <16.5 and Firefox <117 drop whole. `include` forces ONLY the nesting transform
+    // (lightningcss Features.Nesting === 1); every other stylesheet stays byte-identical.
+    css: { lightningcss: { include: 1 } },
     // KEEP VITE'S CACHE OFF THIS REPO'S VOLUME.
     //
     // The working copy lives on an exFAT external disk. Vite and esbuild MMAP

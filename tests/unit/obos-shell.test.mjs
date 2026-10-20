@@ -1096,8 +1096,9 @@ test('both routes render the panel chevron, exactly once, inside the sidebar', a
       + 'just hid, and sits there offering to hide it again');
 
     /* THE PRE-PAINT RULE THAT CARRIES THE STORED VALUE DOWN FROM <html>, AND THE
-       CLASS THE SHELL AND THE BROWSER GUARDS BOTH READ. Both, on both routes. */
-    assert.match(src, /html\[data-panel="collapsed"\] \.sidebar\s*\{\s*display:\s*none/,
+       CLASS THE SHELL AND THE BROWSER GUARDS BOTH READ. Both, on both routes.
+       (`&[...]` is the same rule inside the OBOS v2 firewall's :where() wrapper, spec 1.4.) */
+    assert.match(src, /(?:html|&)\[data-panel="collapsed"\] \.sidebar\s*\{\s*display:\s*none/,
       `${name} has no rule hiding the sidebar from the document-level attribute. `
       + 'The pre-paint script runs where the rail is, before this column is '
       + 'parsed, so without it a stored collapse renders open on every load and '

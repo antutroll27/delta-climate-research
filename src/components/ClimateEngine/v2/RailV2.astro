@@ -1,0 +1,32 @@
+---
+// src/components/ClimateEngine/v2/RailV2.astro — OBOS v2 spec §3.1
+import { COMPARE_ITEM, RAIL_ORDER, sectionOf, type RailId } from '../../../scripts/climate-engine/v2/sections.ts';
+import { DEFAULT_AREA_PATH } from '../../../scripts/climate-engine/scope/paths.ts';
+import { ICON } from './icons.ts';
+interface Props { current: RailId; hasData: boolean; areaName: string }
+const { current, hasData, areaName } = Astro.props;
+const onCompare = current === 'compare';
+---
+<nav class="rail" id="v2Rail" data-hud aria-label="OBOS sections">
+  <div class="rail-brand"><img class="rail-logo" src="/logo-mark-96.webp" alt="Delta Climate Research" width="26" height="26" /><span class="wm"><b>OBOS</b></span></div>
+  <ul class="nav-list">
+    {RAIL_ORDER.map((id) => {
+      const label = id === 'compare' ? COMPARE_ITEM.label : sectionOf(id).label;
+      const svg = <svg viewBox="0 0 20 20" aria-hidden="true" set:html={ICON[id]} />;
+      if (id === 'compare') {
+        return <li>{onCompare
+          ? <button class="nav-item" type="button" aria-current="page" title={label}>{svg}<span class="nav-label">{label}</span></button>
+          : <a class="nav-item" data-rail="analysis" href={COMPARE_ITEM.href} title={label}>{svg}<span class="nav-label">{label}</span></a>}</li>;
+      }
+      if (onCompare) {
+        return <li><a class="nav-item" href={DEFAULT_AREA_PATH} title={label}>{svg}<span class="nav-label">{label}</span></a></li>;
+      }
+      const off = sectionOf(id).needsData && !hasData;
+      return <li><button class="nav-item" type="button" data-section={id} aria-current={id === 'overview' ? 'true' : 'false'}
+        disabled={off} title={off ? `Nothing ships for ${areaName}` : label}>{svg}<span class="nav-label">{label}</span></button></li>;
+    })}
+  </ul>
+  <button class="nav-item rail-pin" type="button" data-menu-pin aria-pressed="true">
+    <svg viewBox="0 0 20 20" aria-hidden="true" set:html={ICON.collapse} /><span class="nav-label">Collapse menu</span>
+  </button>
+</nav>

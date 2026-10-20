@@ -1,0 +1,186 @@
+---
+// OBOS v2 area stage (spec 1.2, 1.6, 1.8): every app-bound id exactly once. Started as a copy of HeatMapStage.astro at 7eb32e8.
+// Full-bleed instrument markup for one AREA of /heat-map. Behaviour is mounted by
+// src/scripts/climate-engine/heat-map-app.ts (booted from the page). Styles are
+// is:global but only bundled onto the heat-map routes (the sole pages importing
+// this). Brand tokens are scoped to .stage so nothing leaks to :root; Mona Sans /
+// Noplato Mono come from global.css.
+import RailV2 from './RailV2.astro';
+import ToolbarV2 from './ToolbarV2.astro';
+import ExploreSide from './ExploreSide.astro';
+import SolarSide from './SolarSide.astro';
+import AirSide from './AirSide.astro';
+import MapStack from './MapStack.astro';
+import MapChips from './MapChips.astro';
+import StreetViewModal from './StreetViewModal.astro';
+import ToastsV2 from './ToastsV2.astro';
+import SolarSheets from './SolarSheets.astro';
+import PhoneChrome from './PhoneChrome.astro';
+import TitleCard from './TitleCard.astro';
+import CompassV2 from './CompassV2.astro';
+import DockV2 from './DockV2.astro';
+import LayersPopover from './LayersPopover.astro';
+import Overlays from './Overlays.astro';
+import RightColumn from './RightColumn.astro';
+import BuildingCardV2 from './BuildingCardV2.astro';
+import V2Prefs from './V2Prefs.astro';
+/* THE FOUR SHELL COMPONENTS, COMPOSED. Until this task each was imported by
+   nothing: the rail, the scope switcher and the layer tree were built and proven
+   against their own sources, and the toolbox had been moved out of this file with
+   its seventeen runtime-queried ids intact. Here they become one console — a rail,
+   a sidebar of panes, and a main column that keeps its top bar, its map and its
+   ward strip. The toolbox's rules stay in the is:global block below because
+   heat-map-app.ts classes its markup at runtime; see its own header. */
+import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
+import { AREA_KEYS, areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
+import { areaPath } from '../../../scripts/climate-engine/scope/paths.ts';
+import { resolve, type ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+import { newCityToAnnounce } from '../../../scripts/climate-engine/shell/new-city.ts';
+import { renderableWardById as wardById } from '../../../data/wards.ts';
+
+/**
+ * THE PAGE TELLS THE INSTRUMENT WHICH AREA IT IS, rather than both assuming.
+ *
+ * Until the URL carried the area, this file hardcoded Ballygunge's coordinate and
+ * three literal `data-w` divs, and heat-map-app.ts separately hardcoded
+ * `INITIAL_AREA`. Two places holding one opinion, agreeing only by hand — which is
+ * the shape of every defect the scope migration exists to end. The one that had
+ * already happened is recorded in tests/unit/standards-ward-record.test.mjs: the
+ * download link's static href and the app's boot ward were pinned to each other by
+ * a REGEX OVER BOTH SOURCE FILES, because nothing structural made them agree.
+ *
+ * Now the scope arrives once, from the route, and everything on the page — the
+ * readout, the name, the scope switcher, the strip, the record link, the
+ * `data-area` the app boots from — is derived from it. The regex has nothing left
+ * to compare, because there is only one copy.
+ */
+interface Props {
+  scope: ResolvedScope;
+}
+
+const { scope } = Astro.props;
+
+/* The sibling areas, from the registry, IN THE SAME CITY. `AREA_KEYS` would put
+   Al Quoz in Kolkata's ward strip: two cities, two climates, two currencies, and
+   the second half shipping no artefacts at all. */
+const siblings = areaKeysInCity(scope.key).map(resolve);
+
+/** This page's own URL — so the Explore link points here rather than at a redirect. */
+const here = areaPath(scope.key);
+
+/**
+ * Whether this BUILD has a Mapillary token, passed to the layer tree as its one
+ * capability.
+ *
+ * READ HERE AND NOWHERE ELSE ON THE PAGE. `scope/layers.ts` takes capabilities as
+ * a parameter precisely so the tree can be rendered in both states, and the
+ * component's own header says why it must not read `import.meta.env` itself. This
+ * is the single site that turns a build fact into that parameter, and it spells
+ * the variable exactly as heat-map-app.ts does — the whole street-level feature
+ * tree-shakes out when it is unset, so a row offered here against a token the
+ * instrument does not have would be a control that could never do anything.
+ */
+const mapillary = ((import.meta.env.PUBLIC_MAPILLARY_TOKEN as string | undefined) ?? '') !== '';
+
+/* The ward-table row (coordinate, wordmark) is read by TitleCard.astro now (S2.4). */
+
+/**
+ * The strip swatch, DERIVED from the ward table's baseline vegetation fraction.
+ *
+ * Three radial-gradient strings used to be pasted here, one per ward. They were
+ * never arbitrary — they encode how green the ward is, which is the one thing the
+ * strip is comparing — so they are computed from `veg` rather than kept as a fourth
+ * per-ward table for someone to update in one place and not the other. It renders
+ * the same three swatches it replaced: 0.12 → red/bronze, 0.28 → orange/bronze,
+ * 0.62 → sage/cyan, from the legend's own five classes.
+ *
+ * Every colour here is written as `var()` and not as a hex. This string lands in
+ * an inline `style` on `.ward .sw`, which is inside `.stage` — where the tokens
+ * are declared — so they resolve; a `var()` used outside that subtree would
+ * resolve to nothing and drop the declaration silently.
+ */
+const swatch = (veg: number): string => {
+  const head = veg >= 0.5 ? 'var(--sage)' : veg >= 0.2 ? 'var(--orange)' : 'var(--red)';
+  const mid = veg >= 0.5 ? 'var(--cyan) 60%' : 'var(--bronze) 55%';
+  return `background:radial-gradient(circle at 40% 40%,${head},${mid},var(--surface2))`;
+};
+
+/**
+ * The ward strip's rows: the siblings that actually ship artefacts.
+ *
+ * Built here rather than in the template so the ward-table lookup can be NARROWED
+ * rather than asserted. `wardById` returns `Ward | undefined` and an inline `!`
+ * would be a promise made to the compiler with nothing keeping it — registry check
+ * 7 does in fact pin every data-shipping area to a ward row, but a `!` in the
+ * markup would survive that check being weakened. `flatMap` drops a row that has
+ * no ward instead, so the failure is a missing tile rather than a thrown render.
+ *
+ * The short label comes from the SAME descriptor the panel shows, cut at its first
+ * separator: "Urban Core · Ward 68" → "Urban Core". The strip has room for the kind
+ * and not the number, which is a layout fact, not a second name for the place.
+ */
+const strip = siblings.flatMap((sib) => {
+  const row = wardById(sib.area.id);
+  if (row === undefined || !sib.area.hasData) return [];
+  return [{
+    key: sib.key,
+    id: sib.area.id,
+    name: sib.area.name,
+    kind: sib.area.descriptor.split(' · ')[0],
+    swatch: swatch(row.veg),
+  }];
+});
+
+/* THE OTHER CITY, for the dock's cross-city chip (spec §3.6): the first data-shipping area of another registered city.
+   null when none, and the chip is then not drawn. */
+const otherArea = AREA_KEYS.map(resolve).find((s) => s.city.id !== scope.city.id && s.area.hasData);
+const otherCity = otherArea ? { href: areaPath(otherArea.key), name: otherArea.city.name } : null;
+
+
+/* THE OTHER CITY, ANNOUNCED ONCE. Server-rendered rather than drawn by the app:
+   the markup is identical for every reader, and the two reader-specific facts —
+   whether they dismissed it, and whether the window is still open on THEIR clock —
+   are applied by console-shell.ts on mount. Rendering it client-side would mean a
+   badge that pops in after the scene has settled.
+
+   THE ARRIVAL DATE TRAVELS WITH IT, as `data-since`, and that is load-bearing.
+   These pages are prerendered, so the `new Date()` this call uses is the BUILD
+   clock: without the date on the element the shell could not tell a window that
+   is still open from one that closed two months and no deploys ago. */
+/* THE STORE IS PASSED EXPLICITLY AS NULL, not left to default. `newCityToAnnounce`
+   falls back to `defaultStore()`, which returns null here — but only by accident of
+   Node having no `localStorage`. A polyfill, or an adapter that gave the build one,
+   would let a SINGLE dismissal at build time silence the badge for every reader of
+   every prerendered page, silently and until someone redeployed. The server has no
+   reader whose preference it could be consulting; the dismissal is re-checked on
+   the client, which is the only place it exists. */
+const newCity = scope.area.hasData
+  ? newCityToAnnounce(scope.city.id, new Date(), null)
+  : null;
+---
+<main id="main" class="stage obos-v2" data-console data-area={scope.key} style={symbolCssVars()} data-theme="dark" data-cards="plates" data-glass="flat" data-section="overview" data-side="open" data-side-current="explore" data-side-shown="1" data-menu="labels" data-menu-eff="labels">
+  <V2Prefs />
+  {scope.area.hasData && <div id="mlmap"></div>}
+  {scope.area.hasData && <MapChips scope={scope} />}
+  <PhoneChrome sheet={scope.area.hasData} />
+  <RailV2 current="overview" hasData={scope.area.hasData} areaName={scope.area.name} />
+  <ToolbarV2 />
+  <aside class="side-panel" id="v2Side" data-hud aria-label="Section panel">
+    <ExploreSide scope={scope} />
+    <SolarSide scope={scope} />
+    <AirSide scope={scope} />
+  </aside>
+  <div class="st-title" id="v2Title" data-hud><TitleCard scope={scope} />{scope.area.hasData && <CompassV2 />}</div>
+  <div class="mapstack" id="v2MapStack" data-hud><MapStack scope={scope} /></div>
+  <div class="st-dock" id="v2Dock">{scope.area.hasData && <DockV2 currentKey={scope.key} strip={strip} otherCity={otherCity} />}</div>
+  <ToastsV2 newCity={newCity} hasData={scope.area.hasData} />
+  <RightColumn scope={scope} />
+  {/* THE BUILDING CARD STANDS ON THE MAP (brainstorm 04, founder option C), not in the column: v2/card-v2.ts places it beside the selected roof. While a building is
+      selected the column folds away; this pill brings it back. */}
+  {scope.area.hasData && <BuildingCardV2 scope={scope} />}
+  {scope.area.hasData && <button class="readings-pill card" id="v2ReadingsPill" type="button" data-hud hidden aria-expanded="false" aria-controls="legend">Ward readings <span aria-hidden="true">‹</span></button>}
+  <LayersPopover current={scope.key} mapillary={mapillary} hasData={scope.area.hasData} />
+  <Overlays scope={scope} />
+  <StreetViewModal scope={scope} />
+  <SolarSheets scope={scope} />
+</main>

@@ -1,0 +1,51 @@
+---
+// src/components/ClimateEngine/v2/TempCard.astro — OBOS v2 spec §4.1 [H]. Owner: Track A (plan S3.2).
+// Every figure here is written by heat-map-app.ts into the ids below; this file types none. The header chip and the air disc ship in the SAFE state (forecast, outlined)
+// and heat-v2.ts bindAirKind follows the app's own source decision (A-S3 audit F1; supersedes spec §4.1 items 1 and 3). The only plus-or-minus a reader sees is #conf's (spec C4).
+import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+import Sym from './Sym.astro';
+interface Props { scope: ResolvedScope }
+const DELTA = "Modelled land-cover thermal contrast: this ward's mean surface temperature minus a fully-vegetated reference cell under identical forcing. NOT a measured urban heat island — published Kolkata surface UHI is 0.85–1.5 °C from 1 km satellite data, a different quantity.";
+---
+<article class="card tc2" data-v2-card="temp" data-sections="overview heat scenarios" aria-label="Temperature">
+  <div class="row"><span class="micro">Temperature</span><span class="kind modelled" data-v2-airkind>forecast</span></div>
+  <div class="src"><span class="livedot" id="livedot"></span><b id="liveSrc">Air now</b></div>
+  <div class="airrow">
+    <span class="air-sym" data-v2-airsym><Sym shape="disc" c="ink" kind="modelled" size={26} /></span>
+    <p class="big num"><b id="liveT">—</b><span class="u">°C air</span></p>
+    <p class="big sm num"><b id="liveFeel">—</b><span class="u">°C feels</span></p>
+  </div>
+  <p class="foot num"><span id="liveRH">—</span>% RH · <span id="liveWind">—</span> m/s</p>
+
+  <div class="sec">
+    <div class="row"><span class="micro surface-k">Ground &amp; rooftop surface · <span id="lstPhase">modelled now</span></span><span class="kind modelled">modelled</span></div>
+    <div class="surf">
+      <div class="hero lst" id="lst">—<span class="u">°C</span></div>
+      <span class="lst-sym" data-v2-lstsym aria-hidden="true"><Sym shape="ward" c="ink" kind="modelled" size={62} /></span>
+    </div>
+    <div class="conf" id="conf"></div>
+    <p class="season-note fine" id="seasonNote" hidden></p>
+    <p class="ward-scope fine" id="wardScope" hidden></p>
+    <p class="wx-line fine wx" id="wxLine" hidden></p>
+  </div>
+
+  <div class="sec">
+    <dl class="stats">
+      <div><dt class="micro" title={DELTA}>Δ vs all-green ref</dt><dd class="num" id="uhi">—</dd></div>
+      <div><dt class="micro">Surface above 40 °C</dt><dd class="num" id="area">—</dd></div>
+    </dl>
+    <details class="disc">
+      <summary>What the Δ is, and is not<span class="chev" aria-hidden="true">›</span></summary>
+      <div class="body"><p class="body-s">{DELTA}</p></div>
+    </details>
+  </div>
+
+  <div class="sec">
+    <div class="row"><span class="micro">Surface temperature distribution</span><span class="foot">°C</span></div>
+    <div class="histo" id="histo" role="img" aria-label="Modelled surface temperature distribution across the ward"></div>
+    <div class="ramp"></div>
+    <div class="ramp-scale num sc" id="rampSc"><span>26</span><span>32</span><span>37</span><span>42</span><span>48</span></div>
+    <div class="keyrow" aria-label="What the colours mean"><span><i class="hk h1"></i>Comfortable</span><span><i class="hk h2"></i>Warm</span><span><i class="hk h3"></i>Hot</span><span><i class="hk h4"></i>Severe</span><span><i class="hk h5"></i>Extreme</span></div>
+    <p class="foot">Land surface temp · the scale moves with the weather</p>
+  </div>
+</article>

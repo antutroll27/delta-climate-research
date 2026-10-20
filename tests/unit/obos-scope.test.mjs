@@ -856,6 +856,13 @@ test('no module writes a currency by hand', async () => {
   for (const [rel, url] of await engineFiles(ENGINE_ROOT)) {
     if (HAND_WRITTEN.test(stripComments(await readFile(url, 'utf8')))) offenders.push(rel);
   }
+  /* S1 audit F6: the v2 .astro components (S6 writes the Solar and payback cards there) are modules too. */
+  const V2_COMPONENTS = new URL('../../src/components/ClimateEngine/v2/', import.meta.url);
+  for (const name of (await readdir(V2_COMPONENTS)).filter((n) => n.endsWith('.astro') && !n.startsWith('._'))) {
+    const src = (await readFile(new URL(name, V2_COMPONENTS), 'utf8'))
+      .replace(/<!--[\s\S]*?-->/g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '');
+    if (HAND_WRITTEN.test(src)) offenders.push(`components/ClimateEngine/v2/${name}`);
+  }
   assert.deepEqual(offenders.sort(), [],
     'these modules write a currency symbol, grouping locale or scale word by hand; '
     + 'use fmtMoney(amount, costs) and let the country say');

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { clickWard, setViewMode } from './fixtures/obos-nav';
 
 /**
  * A WARD SWITCH IS ATOMIC, ON THE RELIEF PATH, IN CI.
@@ -107,7 +108,7 @@ async function settle(page: Page, ward: string, timeout = 90_000) {
 async function bootRelief(page: Page, url: string, ward: string) {
   await page.goto(url);
   await expect(page.locator('#simBackend')).not.toHaveText(/selecting/i, { timeout: 60_000 });
-  await page.locator('#modechip button[data-m="relief"]').click();
+  await setViewMode(page, 'relief');
   await expect(page.locator('#modechip button[data-m="relief"]')).toHaveClass(/on/);
   /* The relief chunk is fetched and the scene built; wait for the ward's figures. */
   await settle(page, ward);
@@ -173,7 +174,7 @@ test.describe('ward switch on the relief path', () => {
     let from = 'ballygunge';
     for (const ward of walk) {
       await startWatch(page);
-      await page.locator(`#strip .ward[data-w="${ward}"]`).click();
+      await clickWard(page, ward);
       await settle(page, ward);
       await page.waitForTimeout(1200);
       const rec = await stopWatch(page);
@@ -206,7 +207,7 @@ test.describe('ward switch on the relief path', () => {
 
     /* Retry once the file answers. */
     await page.unroute('**/heat-map/data/baruipur.json');
-    await page.locator('#strip .ward[data-w="baruipur"]').click();
+    await clickWard(page, 'baruipur');
     await settle(page, 'baruipur');
     await page.waitForTimeout(1000);
     u = await ui(page);
@@ -227,7 +228,7 @@ test.describe('ward switch on the relief path', () => {
       });
       v.__armed = true;
     });
-    await page.locator('#strip .ward[data-w="barrackpore"]').click();
+    await clickWard(page, 'barrackpore');
     await expectFailed(page, 'Barrackpore');
     await page.waitForTimeout(3000);
     u = await ui(page);
@@ -235,14 +236,14 @@ test.describe('ward switch on the relief path', () => {
     expect.soft(u.sim, 'engine after a commit throw').toBe(before.sim);
 
     /* Clicking back on the ward that is on screen is honoured (not a stuck chip). */
-    await page.locator('#strip .ward[data-w="baruipur"]').click();
+    await clickWard(page, 'baruipur');
     await page.waitForTimeout(1000);
     u = await ui(page);
     expect.soft(u.chipOn, 'the failure chip stands down when the on-screen ward is clicked').toBe(false);
     expectNames(u, 'baruipur');
 
     /* And the failed ward can be retried. */
-    await page.locator('#strip .ward[data-w="barrackpore"]').click();
+    await clickWard(page, 'barrackpore');
     await settle(page, 'barrackpore');
     await page.waitForTimeout(1000);
     u = await ui(page);
@@ -259,13 +260,13 @@ test.describe('ward switch on the relief path', () => {
         return orig(...a);
       };
     });
-    await page.locator('#strip .ward[data-w="ballygunge"]').click();
+    await clickWard(page, 'ballygunge');
     await expectFailed(page, 'Ballygunge');
     await page.waitForTimeout(3000);
     u = await ui(page);
     expectNames(u, 'barrackpore');
     expect.soft(u.sim, 'engine after a projection throw').toBe(before.sim);
-    await page.locator('#strip .ward[data-w="ballygunge"]').click();
+    await clickWard(page, 'ballygunge');
     await settle(page, 'ballygunge');
     await page.waitForTimeout(1000);
     u = await ui(page);

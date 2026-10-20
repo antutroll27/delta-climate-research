@@ -1,0 +1,224 @@
+---
+/**
+ * THE PAIRED WARD BENCH IN THE v2 SHELL (OBOS v2 D7, plan S9.2). Owner: Track C (plan amendment A1).
+ *
+ * THE SAME CONTROLLER, A DIFFERENT SKIN. paired-controller.ts owns scenario state, the model run, the canvases and every
+ * number on this page; it finds its nodes by `data-*` through `[data-compare-root]`. This file moves those nodes into the
+ * v2 chrome and invents nothing: every `data-value`, `data-role`, `data-action`, `data-input`, `data-output`, `data-map-*`,
+ * `data-view-mode`, `data-sheet`, `data-tab` and `data-panel` of PairedBench.astro is here, and the contract test
+ * (tests/unit/obos-v2-compare-contract.test.mjs) fails if one goes missing. The controller is untouched.
+ *
+ *   · the Compare menu item is a <button aria-current="page">: the current route is never a self-link (spec §3.1);
+ *   · the A/B pickers ARE this route's scope control, so they sit in the side panel where Explore keeps its Location
+ *     selects. They are filled at runtime from `areaKeysInCity`, which is what keeps the pair inside one city;
+ *   · v1's sidebar panes for Layers, Reports, Solar, Air and Scenarios are gone. The v2 menu links to the map for those, and
+ *     the notes that explained why each was empty here have nothing left to explain;
+ *   · every honesty line of v1 (spec H25) is kept word for word and pinned by the contract test;
+ *   · no style element (Astro would stamp data-astro-cid on the elements) and no script element (template scripts never run);
+ *   · the heat ramp is the only warm colour: the cooling figures are ink, not v1's green.
+ *
+ * The v2 sheets are imported here, in the same order as HeatMapStageV2.astro, because this route never loads that file.
+ */
+import RailV2 from '../v2/RailV2.astro';
+import ToolbarV2 from '../v2/ToolbarV2.astro';
+import PhoneChrome from '../v2/PhoneChrome.astro';
+import V2Prefs from '../v2/V2Prefs.astro';
+import Sym from '../v2/Sym.astro';
+import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
+import { SENTINEL_CREDIT, WATER_CREDIT } from '../../../scripts/climate-engine/v2/credits.ts';
+---
+<main id="main" class="heat-compare obos-v2" data-compare-root data-console data-renderer="canvas" aria-busy="true" style={symbolCssVars()} data-theme="dark" data-cards="plates" data-glass="flat" data-section="overview" data-side="open" data-side-current="explore" data-side-shown="1" data-menu="labels" data-menu-eff="labels">
+  <V2Prefs />
+  <h1 class="sr-only" id="compare-title">Same policy. Different fabric.</h1>
+  <!-- outside the sheet: the collapsed phone sheet cannot open without JS and rendered this 0 px tall (flip audit F2) -->
+  <noscript>
+    <p class="body-s cmp-noscript">Compare results need JavaScript to run the model. The method, scope, and limits remain available in the <a href="/heat-map/brief/">research brief</a>.</p>
+  </noscript>
+  <PhoneChrome />
+  <RailV2 current="compare" hasData={true} areaName="Compare" />
+  <ToolbarV2 />
+
+  <aside class="side-panel heat-compare__controls" data-hud data-sheet="collapsed" aria-label="Comparison workspace">
+    <button class="cmp-handle" type="button" data-action="sheet-toggle" aria-expanded="false">
+      <span class="cmp-handle-line" aria-hidden="true"></span>
+      <span><b>Comparison workspace</b><small data-role="mobile-summary">Illustrative package</small></span>
+      <span aria-hidden="true">⌃</span>
+    </button>
+    <div class="sp-head">
+      <div>
+        <h2>Compare</h2>
+        <p class="sp-sub">One package, two study areas, one pinned forcing record</p>
+      </div>
+    </div>
+    <div class="sp-scroll heat-compare__sheet-content">
+      <div class="seg cmp-tabs" role="tablist" aria-label="Comparison workspace sections">
+        <button type="button" role="tab" aria-selected="true" data-tab="settings">Settings</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="evidence">Evidence</button>
+      </div>
+
+      <section class="cmp-panel" data-panel="settings" role="tabpanel" aria-label="Pair and shared package">
+        <p class="body-s">One intervention package, two study areas on the same 7.3 m model cell, one pinned forcing record. Ballygunge is KMC Ward 68: its figures are taken inside the ward boundary, the rest of its 1.8 km square is context. Results show each ward’s response from its own baseline. They are not a ward ranking.</p>
+
+        <p class="micro cmp-gap">The pair</p>
+        <div class="cmp-pair">
+          <label class="cmp-pick"><span class="cmp-ab" aria-hidden="true">A</span><span class="cmp-pick-body"><span class="micro">Ward A</span><select data-input="ward-a" aria-label="Ward A"></select></span><Sym shape="ward" c="ink" kind="modelled" size={18} /></label>
+          <label class="cmp-pick"><span class="cmp-ab" aria-hidden="true">B</span><span class="cmp-pick-body"><span class="micro">Ward B</span><select data-input="ward-b" aria-label="Ward B"></select></span><Sym shape="dome" c="ink" kind="modelled" size={18} /></label>
+        </div>
+        <div class="pills cmp-acts"><button type="button" class="pill" data-action="swap">Swap wards <span aria-hidden="true">↔</span></button></div>
+        <p class="foot cmp-note">Both sides come from one city. A pair drawn across two of them would compare two climates and two currencies, and would price the result in neither.</p>
+
+        <div class="row cmp-gap"><span class="micro">Shared package</span><span class="chip line">Illustrative, editable</span></div>
+        <ul class="cmp-pkg">
+          <li><label class="cmp-range"><Sym shape="quarter" c="green" kind="modelled" size={20} /><span class="cmp-range-t"><b>Tree corridors</b><span class="foot">Modelled corridor-cell coverage</span></span><output class="cmp-v" data-output="trees">55%</output><input data-input="trees" type="range" min="0" max="100" step="1" value="55" /></label></li>
+          <li><label class="cmp-range"><Sym shape="square" c="ink" kind="modelled" size={20} /><span class="cmp-range-t"><b>Cool roofs</b><span class="foot">Mapped roof-stock coverage</span></span><output class="cmp-v" data-output="roofs">65%</output><input data-input="roofs" type="range" min="0" max="100" step="5" value="65" /></label></li>
+          <li><label class="cmp-range"><Sym shape="bar" c="green" kind="modelled" size={20} /><span class="cmp-range-t"><b>Green façades</b><span class="foot">Modelled programme intensity</span></span><output class="cmp-v" data-output="facades">35.0%</output><input data-input="facades" type="range" min="0" max="100" step="0.1" value="35" /></label></li>
+        </ul>
+
+        <fieldset class="cmp-phase">
+          <legend class="micro">Diurnal phase</legend>
+          <div class="seg">
+            <label><input data-input="phase" type="radio" name="compare-phase" value="peak" checked /><span>13:00 peak</span></label>
+            <label><input data-input="phase" type="radio" name="compare-phase" value="retained" /><span>22:00 retained</span></label>
+          </div>
+        </fieldset>
+
+        <div class="pills cmp-acts">
+          <button type="button" class="pill" data-action="reset">Reset</button>
+          <button type="button" class="pill" data-action="undo" disabled>Undo</button>
+          <button type="button" class="pill" data-action="share">Share state</button>
+          <a class="pill" data-role="brief-link" href="/heat-map/brief/">Open brief <span aria-hidden="true">→</span></a>
+        </div>
+        <label class="cmp-share" data-role="share-field" hidden>
+          <span class="micro">Shareable URL</span>
+          <input data-role="share-url" type="text" readonly />
+        </label>
+      </section>
+
+      <section class="cmp-panel" data-panel="evidence" role="tabpanel" aria-label="Integrity stamp" hidden>
+        <div class="row"><span class="micro">Integrity stamp</span><span class="chip line">Screening grade</span></div>
+        <ul class="method">
+          <li><span class="micro">Forcing</span><span class="foot" data-role="forcing-label">Loading record</span></li>
+          <li><span class="micro">Grid</span><span class="foot">192 × 192, canonical</span></li>
+          <li><span class="micro">Backend</span><span class="foot" data-role="backend-label">Selecting execution host</span></li>
+          <li><span class="micro">Scale</span><span class="foot">26–48°C, fixed</span></li>
+        </ul>
+        <p class="foot cmp-note">This interim reference is explicitly labelled until a sourced regional heat-day record is supplied. It is not live ward weather.</p>
+      </section>
+    </div>
+  </aside>
+
+  <section class="cmp-stage heat-compare__workbench" aria-label="Paired modelled surface-temperature maps">
+    {/* C audit F5: at <= 699 px the workspace is a collapsed bottom sheet, so its three caveats (the method paragraph, "not a ward ranking",
+        "both sides come from one city") would sit unseen. This is the same text in the stage, above the maps; display:none above 699 px so it never
+        doubles for assistive tech on a desktop. */}
+    <p class="body-s cmp-phone-note">One intervention package, two study areas on the same 7.3 m model cell, one pinned forcing record. Ballygunge is KMC Ward 68: its figures are taken inside the ward boundary, the rest of its 1.8 km square is context. Results show each ward’s response from its own baseline. They are not a ward ranking. Both sides come from one city. A pair drawn across two of them would compare two climates and two currencies, and would price the result in neither.</p>
+    {/* FINAL visual V3: the workspace is a collapsed sheet on a phone, so the way to the brief is also here (drawn on a phone only; compare-v2.ts keeps its href equal to the workspace link's) */}
+    <a class="pill cmp-phone-brief" data-v2-brief-link href="/heat-map/brief/">Open brief <span aria-hidden="true">→</span></a>
+    <div class="cmp-stagebar card" data-hud>
+      <div class="cmp-status" role="status" aria-live="polite" data-role="status">Preparing the paired model.</div>
+      <button type="button" class="pill" data-action="retry" hidden>Retry model</button>
+      <div class="seg cmp-views" role="group" aria-label="Linked map view">
+        <span class="cmp-renderer"><i aria-hidden="true"></i><b data-role="renderer-label">Canvas relief</b></span>
+        <button type="button" data-view-mode="relief" aria-pressed="true">Relief</button>
+        <button type="button" data-view-mode="top" aria-pressed="false">Top</button>
+        <button type="button" data-action="motion" aria-pressed="false" disabled>Motion</button>
+      </div>
+    </div>
+    <p class="sr-only" id="compare-3d-help">The optional animated view uses linked cameras. Drag horizontally to orbit both wards, use the mouse wheel to zoom, arrow keys to rotate, plus and minus to zoom, and zero to reset. All evidence is also available as text.</p>
+    <div class="cmp-maps">
+      <figure class="card cmp-map" data-map-card="a">
+        <div class="cmp-map-head"><span class="cmp-ab">A</span><div><h2 data-value="a-name">Ward A</h2><p class="foot" data-value="a-descriptor">Loading study area</p></div><strong data-value="a-cooling">—</strong></div>
+        <div class="cmp-surface">
+          <canvas data-map-field="a" aria-hidden="true"></canvas>
+          <canvas class="heat-compare__three" data-map-three="a" tabindex="-1" aria-hidden="true" aria-describedby="compare-3d-help"></canvas>
+          <output class="cmp-probe" data-map-probe="a" hidden></output>
+          <div class="cmp-tools"><span data-role="map-mode-label">Canvas relief · adaptive fallback</span><button type="button" data-action="map-reset" data-map-reset="a">Reset linked</button></div>
+        </div>
+        <figcaption class="foot"><span data-value="a-extent">Study square</span><span>Thermal relief illustrative</span><span>26–48°C fixed scale</span></figcaption>
+        <p class="foot cmp-pattern" data-value="a-pattern">Preparing spatial summary.</p>
+      </figure>
+      <figure class="card cmp-map" data-map-card="b">
+        <div class="cmp-map-head"><span class="cmp-ab">B</span><div><h2 data-value="b-name">Ward B</h2><p class="foot" data-value="b-descriptor">Loading study area</p></div><strong data-value="b-cooling">—</strong></div>
+        <div class="cmp-surface">
+          <canvas data-map-field="b" aria-hidden="true"></canvas>
+          <canvas class="heat-compare__three" data-map-three="b" tabindex="-1" aria-hidden="true" aria-describedby="compare-3d-help"></canvas>
+          <output class="cmp-probe" data-map-probe="b" hidden></output>
+          <div class="cmp-tools"><span data-role="map-mode-label">Canvas relief · adaptive fallback</span><button type="button" data-action="map-reset" data-map-reset="b">Reset linked</button></div>
+        </div>
+        <figcaption class="foot"><span data-value="b-extent">Study square</span><span>Thermal relief illustrative</span><span>26–48°C fixed scale</span></figcaption>
+        <p class="foot cmp-pattern" data-value="b-pattern">Preparing spatial summary.</p>
+      </figure>
+    </div>
+    <div class="cmp-legend card" data-hud aria-label="Surface temperature scale"><span class="foot">26°C</span><i class="ramp" aria-hidden="true"></i><span class="foot">48°C</span><b class="micro">Modelled surface temperature</b></div>
+  </section>
+
+  <aside class="cmp-col heat-compare__evidence" data-hud aria-label="Comparison evidence">
+    <article class="card">
+      <div class="row"><span class="micro">Comparison evidence</span><span class="kind modelled">modelled</span></div>
+      <table class="cmp-ev" aria-label="Paired evidence metrics">
+        <thead><tr><th scope="col">Measure</th><th scope="col" data-value="a-name">A</th><th scope="col" data-value="b-name">B</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Baseline surface mean</th><td data-value="a-baseline">—</td><td data-value="b-baseline">—</td></tr>
+          <tr><th scope="row">Scenario surface mean</th><td data-value="a-scenario">—</td><td data-value="b-scenario">—</td></tr>
+          <tr class="key"><th scope="row">Surface cooling from baseline</th><td data-value="a-cooling">—</td><td data-value="b-cooling">—</td></tr>
+          <tr><th scope="row">Grid area, surface &gt;40°C</th><td data-value="a-hot-area">—</td><td data-value="b-hot-area">—</td></tr>
+          <tr><th scope="row">Hot-area change</th><td data-value="a-hot-change">—</td><td data-value="b-hot-change">—</td></tr>
+          <tr><th scope="row" title="Modelled ward mean minus a fully vegetated reference cell under identical forcing. This is not a measured urban–rural heat-island value.">Δ vs all-green ref</th><td data-value="a-green-reference">—</td><td data-value="b-green-reference">—</td></tr>
+          <tr><th scope="row">Indicative capital</th><td data-value="a-cost">—</td><td data-value="b-cost">—</td></tr>
+        </tbody>
+      </table>
+      <p class="foot cmp-note">Δ vs all-green ref. Modelled ward mean minus a fully vegetated reference cell under identical forcing. This is not a measured urban–rural heat-island value.</p>
+      <div class="cmp-delivery">
+        <span class="micro">Delivered quantities</span>
+        <div><span class="foot" data-value="a-delivered">—</span><span class="foot" data-value="b-delivered">—</span></div>
+      </div>
+    </article>
+    <article class="card">
+      <div class="row"><span class="micro">Integrity and limits</span><span class="kind modelled">modelled</span></div>
+      <ul class="method cmp-method">
+        <li><span class="micro">Forcing</span><span class="foot" data-role="forcing-label">Loading record</span></li>
+        <li><span class="micro">Model</span><span class="foot">heat-model-v1</span></li>
+        <li><span class="micro">Grid</span><span class="foot" data-role="grid-label">Loading record</span></li>
+        <li><span class="micro">Data</span><span class="foot">ward-geometry-v1</span></li>
+        <li><span class="micro">Metrics</span><span class="foot">heat-metrics-v2</span></li>
+        <li><span class="micro">Backend</span><span class="foot" data-role="backend-label">Selecting execution host</span></li>
+      </ul>
+      <p class="foot cmp-note">Screening-grade output. It does not assess vulnerability, equity, feasibility, ownership, operations, maintenance, or investment priority.</p>
+    </article>
+  </aside>
+
+  <div class="key-pop card" id="v2Key" role="dialog" aria-label="How to read the marks" tabindex="-1" data-open="false" data-hud>
+    <div class="row"><h2 class="name-xl"><b>How</b><span> to read the marks</span></h2><button class="sp-close" type="button" data-pop-close aria-label="Close the key">×</button></div>
+    <div class="key-cols">
+      <div><h3>Colour<span> · what is measured</span></h3><ul>
+        <li><span class="ramp" style="width:44px;height:8px"></span><span><b>Heat ramp</b> · temperature only</span></li>
+        <li><Sym shape="disc" c="green" size={14} /><span><b>Green</b> · trees, green cover</span></li>
+        <li><Sym shape="disc" c="ink" size={14} /><span><b>Ink</b> · buildings, people, money</span></li></ul></div>
+      <div><h3>Shape<span> · what kind of place</span></h3><ul>
+        <li><Sym shape="square" c="ink" size={14} /><span><b>Square</b> · a roof, a building</span></li>
+        <li><Sym shape="quarter" c="ink" size={14} /><span><b>Quarter</b> · canopy, park</span></li>
+        <li><Sym shape="bar" c="ink" size={14} /><span><b>Bar</b> · a street</span></li>
+        <li><Sym shape="dome" c="ink" size={14} /><span><b>Dome</b> · a reference to compare with</span></li>
+        <li><Sym shape="ward" c="ink" size={14} /><span><b>Tile</b> · the ward as a whole</span></li></ul></div>
+      <div><h3>Fill<span> · how we know</span></h3><ul>
+        <li><Sym shape="disc" c="ink" size={14} /><span><b>Solid</b> · measured or observed</span></li>
+        <li><Sym shape="disc" c="ink" kind="modelled" size={14} /><span><b>Outlined</b> · modelled or estimated (the heat field, the scenario package)</span></li>
+        <li><span class="kind modelled">modelled</span></li></ul>
+      <p class="foot">Everything on this page is modelled. Red and orange belong to the heat ramp.</p></div>
+    </div>
+  </div>
+
+  <div class="st-attrib" data-hud><button class="attrib" type="button" data-pop-open="credits" aria-expanded="false" aria-controls="v2Credits">Ward data · Credits</button></div>
+  <div class="credits-pop card" id="v2Credits" role="dialog" aria-label="Data and credits" tabindex="-1" data-open="false" data-hud>
+    <div class="row"><span class="micro">Data and credits</span><button class="sp-close" type="button" data-pop-close aria-label="Close credits">×</button></div>
+    <ul>
+      <li>Footprints © <a href="https://overturemaps.org" target="_blank" rel="noopener noreferrer">Overture Maps Foundation</a><small>ODbL</small></li>
+      <li>Heights Google Open Buildings 2.5D<small><a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></small></li>
+      <li>Roads © OpenStreetMap<small>ODbL</small></li>
+      <li>{WATER_CREDIT.lead}<small>{WATER_CREDIT.licence}</small></li>
+      <li>Surface vegetation and albedo · {SENTINEL_CREDIT.lead}<small><a href={SENTINEL_CREDIT.url ?? undefined} target="_blank" rel="noopener noreferrer">{SENTINEL_CREDIT.licence}</a></small></li>
+      <li>Where a ward has an official boundary (KMC Ward 68), the boundary is © DataMeet (Municipal_Spatial_Data), CC BY-SA 2.5 India, <a href="https://creativecommons.org/licenses/by-sa/2.5/in/" target="_blank" rel="noopener noreferrer">creativecommons.org/licenses/by-sa/2.5/in</a>.</li>
+      <li class="foot">Compare draws no basemap: both wards are rendered from one model run over these sources.</li>
+    </ul>
+  </div>
+</main>

@@ -112,7 +112,7 @@ test('deriving the ward coordinate labels reproduces the six shipped strings', a
 
 test('the card asks for the coordinate row it now populates', async () => {
   const markup = await readFile(
-    join(ROOT, 'src/components/ClimateEngine/HeatMapStage.astro'), 'utf8');
+    join(ROOT, 'src/components/ClimateEngine/v2/BuildingCardV2.astro'), 'utf8');
   assert.match(markup, /id="bcLL"/,
     'the building card lost its coordinate row; paintCard still writes to it');
   const app = await readFile(

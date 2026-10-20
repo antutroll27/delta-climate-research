@@ -77,6 +77,21 @@ test.describe('live reading freshness', () => {
   // runner needs room for that (see runtime-performance.spec.ts).
   test.setTimeout(180_000);
 
+  /* `.livedot.on{animation:hmPulse}` (0,2,0) used to out-rank the reduced-motion `.livedot{animation:none}`
+     (0,1,0), so the live dot pulsed for people who asked for no motion (OBOS v2 S0 audit F7). */
+  /* FLIP: v2's live dot is a static dot (screens/overview.css: no animation at all), so the no-preference half, which expected v1's hmPulse, retired. What it protected, "a reader who asked for no motion
+     gets none", is the 'reduce' half below, kept. */
+  for (const [motion, want] of [['reduce', 'none']] as const) {
+    test(`the live dot's animation is ${want} under prefers-reduced-motion: ${motion}`, async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: motion });
+      await stubMet(page, 0);
+      await page.goto('/heat-map/in/kolkata/ballygunge/');
+      await expect(page.locator(dial)).toHaveAttribute('data-age', 'fresh', { timeout: 60_000 });
+      await expect(page.locator('#livedot')).toHaveClass(/\bon\b/);
+      expect(await page.locator('#livedot').evaluate((e) => getComputedStyle(e).animationName)).toBe(want);
+    });
+  }
+
   test('a fresh reading is shown as fresh, and the dot may say live', async ({ page }) => {
     await stubMet(page, 0);
     await page.goto('/heat-map/in/kolkata/ballygunge/');
@@ -172,7 +187,8 @@ test.describe('live reading freshness', () => {
        contrast is the point: one widget depends on the feed, the others do not. */
     await expect(page.locator('#clockw')).toBeHidden();
     await expect(page.locator('#vegw')).toBeVisible();
-    await expect(page.locator('#vegw button[data-v="1"]')).toBeVisible();
+    /* v2: the On/Off chip opens with the Trees tab; what matters is that the toggle is still THERE, not removed with the clock */
+    await expect(page.locator('#vegw button[data-v="1"]')).toHaveCount(1);
   });
 
   test('a reading missing a number costs the reading, never the ward', async ({ page }) => {
@@ -218,30 +234,7 @@ test.describe('live reading freshness', () => {
     await expect(page.locator('#liveT')).toHaveText('—');
   });
 
-  test('the readout clears the evidence rail it sits beside', async ({ page }) => {
-    await stubMet(page, 0);
-    await page.goto('/heat-map/in/kolkata/ballygunge/');
-    await expect(page.locator(dial)).toBeVisible({ timeout: 60_000 });
-    const m = await page.evaluate(() => {
-      const box = (s: string) => document.querySelector(s)?.getBoundingClientRect() ?? null;
-      const c = box('.clockw'), rail = box('.rail-r'), banner = box('.synthetic');
-      return {
-        gapToRail: c && rail ? rail.left - c.right : null,
-        // The banner is centred and grows with its own text, so at narrower
-        // widths it reaches UNDER this readout horizontally. Only the vertical
-        // gap separates them, which makes that gap the thing to assert.
-        gapBelowBanner: c && banner ? c.top - banner.bottom : null,
-      };
-    });
-    expect(m.gapToRail).not.toBeNull();
-    expect(m.gapToRail!).toBeGreaterThan(8);
-    // A MARGIN, NOT MERE NON-OVERLAP. This first shipped with 3px of clearance,
-    // which passed on macOS and collided on CI's Linux font metrics — the
-    // banner renders a hair taller there. Anything under ~10px is luck, and a
-    // test that only forbids overlap would have let it through again.
-    expect(m.gapBelowBanner).not.toBeNull();
-    expect(m.gapBelowBanner!).toBeGreaterThan(10);
-  });
+  /* FLIP (plan B.2.2): 'the readout clears the evidence rail' pinned v1's .rail-r/.synthetic geometry and retired with it. Holder: obos-v2-shell rc3 reflow (the dock and clock clear every other chrome). */
 
   test('the face toggles 12/24-hour, remembers it, and never re-fetches', async ({ page }) => {
     // THE TILE CARRIES TWO ACTIONS AND THEY MUST NOT BLEED. The face changes how

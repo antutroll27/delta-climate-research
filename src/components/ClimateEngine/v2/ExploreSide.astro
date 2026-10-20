@@ -1,0 +1,40 @@
+---
+// src/components/ClimateEngine/v2/ExploreSide.astro — OBOS v2 spec §3.3, §4.2 [H]. Owner: Track A (plan S5.1).
+// Every control here is the app's own (ScopeSwitcher, InterventionPane: every id once, v1's ranges and steps); the hero is a read-only mirror
+// of #lst / #conf / #lstPhase (heat-v2.ts bindMirrors, aria-hidden, no ids). Resilience Score is withdrawn: InterventionPane says "Coming soon" and draws no number.
+import ScopeSwitcher from '../shell/ScopeSwitcher.astro';
+import InterventionPane from '../shell/InterventionPane.astro';
+import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+interface Props { scope: ResolvedScope }
+const { scope } = Astro.props;
+---
+<div class="sp-body ov-panel" data-side-pane="explore">
+  <div class="sp-head">
+    <div><h2>Explore the ward</h2>{scope.area.hasData && <p class="sp-sub">Every result is the live map’s own.</p>}</div>
+    <button class="sp-close" type="button" data-side-close aria-label="Close the controls"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3 3 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+  </div>
+  <div class="sp-scroll">
+    {scope.area.hasData && (
+      <div class="ov-hero" aria-hidden="true">
+        <span class="micro"><span data-v2-mirror="area"></span> · surface · <span data-v2-mirror="phase"></span></span>
+        <p class="hero md num"><span data-v2-mirror="lst"></span><span class="u">°C</span></p>
+        <p class="foot" data-v2-mirror="conf"></p>
+      </div>
+    )}
+    <div class="ov-grp ov-loc v1-bridge"><ScopeSwitcher current={scope.key} /></div>   {/* S8 (axe landmark-unique): ScopeSwitcher is already the "Location" region, labelled by its own heading */}
+    {scope.area.hasData
+      ? <section class="ov-grp ov-tools">
+          <div class="row"><h3 class="micro">Green infrastructure toolbox</h3><span class="kind modelled">modelled</span></div>
+          <InterventionPane scope={scope} />
+        </section>
+      : <section class="ov-grp ov-none" aria-labelledby="pane-map-h">
+          <p class="pane-h" id="pane-map-h">Interventions</p>
+          <p class="pane-note">There is nothing to intervene in here. The toolbox plants
+            canopy, raises albedo and greens facades over a MEASURED surface, and
+            {' '}{scope.area.name} ships none — so a slider would move a number that stands
+            for nothing.</p>
+          <p class="pane-note">It comes back with the artefacts, unchanged: the model is not
+            per-city, only the observations are.</p>
+        </section>}
+  </div>
+</div>

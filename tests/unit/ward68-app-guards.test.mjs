@@ -47,7 +47,7 @@ test('the greenery tag is placed first; ring labels avoid it and the HUD, and th
   assert.match(place, /if \(\(tagBox && overlaps\(box, \{ left: tagBox\[0\], top: tagBox\[1\], right: tagBox\[2\], bottom: tagBox\[3\] \}\)\)\s*\|\| hud\.some\(\(rect\) => overlaps\(box, rect\)\)\) continue;/, 'a ring label may land on the tag or the HUD');
   assert.match(place, /if \(!clearOfHud\(q\.x, y\)\) return false;/, 'the tag may land on the HUD');
   assert.match(place, /if \(!clearOfHud\(tx, ty\)\) ty = null;/, 'the docked tag may land on the HUD');
-  assert.match(CODE, /const HUD_KEEP_OUT = '\.rail-r > \*, #clockw, #vegw, #svw, \.chiprow, \.synthetic, \.stamp-slot, #sunLine, #compass';/);
+  assert.match(CODE, /const HUD_KEEP_OUT = '\.rail-r > \*, #clockw, #vegw, #svw, \.chiprow, \.synthetic, \.stamp-slot, #sunLine, #compass, \[data-hud\]';/);
 });
 
 test('overlaps: a shared edge is not an overlap, a pixel of intrusion is', () => {
@@ -60,4 +60,8 @@ test('overlaps: a shared edge is not an overlap, a pixel of intrusion is', () =>
   assert.equal(overlaps([20, 10, 30, 20], b), false);
   assert.equal(overlaps([0, 0, 10.5, 10.5], b), true);
   assert.equal(overlaps([12, 12, 14, 14], b), true);
+});
+
+test('the landmark keep-out also avoids every v2 HUD box (OBOS v2 E2)', () => {
+  assert.match(CODE, /const LM_KEEP_OUT = '[^']*,\[data-hud\]';/);
 });

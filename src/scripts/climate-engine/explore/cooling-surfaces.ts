@@ -99,6 +99,13 @@ export function findCoolingSurfaces(
 }
 
 /**
+ * THE ONE ROUNDING of a walk distance, to the nearest 10 m: the grid cell is 7.3 m, so a finer figure would claim precision the raster does not have.
+ * The building card's sentence, its range line and the map's greenery tag all print through this, so the same distance can never read two ways
+ * (rc3 bug: the card said "≈0 m" and the tag "≈10 m" for a measured 1.53 m, because the tag floored a 0 up to 10; the card was the true one).
+ */
+export const walkRoundM = (distM: number): number => Math.round(distM / 10) * 10;
+
+/**
  * Straight-line distance to the nearest cooling cell.
  *
  * Pass `ring` (the building's footprint, flat [x,z,…]) to measure from the

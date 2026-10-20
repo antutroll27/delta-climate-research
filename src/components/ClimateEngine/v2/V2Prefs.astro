@@ -1,0 +1,5 @@
+---
+// src/components/ClimateEngine/v2/V2Prefs.astro — flip plan A.2.3. The FIRST child of each v2 root: runs before any child is parsed, so stored Light/Glass/menu/side are on the root before first paint.
+import { V2_PREFS_JS } from '../../../scripts/climate-engine/v2/ui-flag.ts';
+---
+<script is:inline data-astro-rerun set:html={V2_PREFS_JS} />

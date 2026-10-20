@@ -1,0 +1,7 @@
+---
+// src/components/ClimateEngine/v2/Sym.astro — spec §2.5: server-rendered mark
+import { symSvg, type SymColour, type SymKind, type SymShape } from '../../../scripts/climate-engine/v2/symbols.ts';
+interface Props { shape: SymShape; c: SymColour; kind?: SymKind; size?: number }
+const { shape, c, kind = 'measured', size = 20 } = Astro.props;
+---
+<Fragment set:html={symSvg(shape, c, kind, size)} />

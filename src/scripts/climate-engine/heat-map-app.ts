@@ -40,7 +40,8 @@ import {
   LABEL_SOURCE, LABEL_LAYER, REPLACED_ROAD_GEOMETRY, isReplacedRoadLabel,
   labelLayerSpec, EMPTY_LABELS, ensureLabelsOnTop,
 } from './road-labels';
-import { findCoolingSurfaces, nearestCooling, type CoolingSurfaces } from './explore/cooling-surfaces';
+import { cardSink, type CardBox } from './card-sink';
+import { findCoolingSurfaces, nearestCooling, walkRoundM, type CoolingSurfaces } from './explore/cooling-surfaces';
 import { createWardSession, type WardRequestToken } from './ward-session';
 import { createLoadChip } from './load-chip';
 import { createExploreFrameScheduler } from './explore/frame-scheduler';
@@ -626,6 +627,13 @@ export function mountHeatMap(): () => void {
     sunTextEl.textContent = sun.placement.up
       ? `sun ${Math.round(sun.placement.azimuthDeg)}° · ${Math.round(sun.placement.elevationDeg)}° up · sets ${hhmm(day.sunset)}`
       : `sun below horizon · rises ${hhmm(day.sunrise)}`;
+    /* OBOS v2 (spec C10): the same placement and day, as data, so the v2 Sun card never
+       parses the sentence above. Additive: nothing reads these in v1. */
+    sunLineEl.dataset.up = sun.placement.up ? '1' : '0';
+    sunLineEl.dataset.az = String(Math.round(sun.placement.azimuthDeg));
+    sunLineEl.dataset.el = String(Math.round(sun.placement.elevationDeg));
+    sunLineEl.dataset.sets = hhmm(day.sunset);
+    sunLineEl.dataset.rises = hhmm(day.sunrise);
     sunNoteEl?.setAttribute('title',
       'Solar geometry only, in local solar time. The surface-temperature model uses a '
       + 'single ward-wide sun term, not per-building shadow: adding shade was tested over '
@@ -746,7 +754,7 @@ export function mountHeatMap(): () => void {
     } else if (svThumb) {
       svThumb.setAttribute('hidden', '');
     }
-    setHTML('bcLL', `${formatLatLon(ll.lat, ll.lon, '<br>')}<small>centroid · WGS-84</small>`);
+    setHTML('bcLL', `${formatLatLon(ll.lat, ll.lon, cardSink.current ? ' · ' : '<br>')}<small>centroid · WGS-84</small>`);   // v2's card is wide enough for one line
     /* WHO DREW THIS BUILDING. Overture conflates three sources and they are not
        equally trustworthy: OSM footprints are traced by a person against imagery,
        the other two are model output. Google publishes a confidence; the others do
@@ -811,14 +819,13 @@ export function mountHeatMap(): () => void {
         return `about ${mins} minute${mins === 1 ? '' : 's'} away`;
       };
       setHTML('bcRings', `${intro} The nearest greenery is <b>${say(d)}</b>.`);
-      /* Rounded to 10 m: the grid cell is 7.3 m, so a finer figure would be
-         claiming precision the raster does not have. */
-      const rnd = (m: number) => Math.round(m / 10) * 10;
-      parts.push(`Nearest greenery ≈<b>${rnd(d)} m</b> · straight line from the building edge`);
+      /* Rounded to 10 m by walkRoundM, the same function the map tag reads: the grid
+         cell is 7.3 m, so a finer figure would be claiming precision the raster does not have. */
+      parts.push(`Nearest greenery ≈<b>${walkRoundM(d)} m</b> · straight line from the building edge`);
       /* The spread across greenery definitions, stated rather than buried. It is
          usually larger than every other error in this card combined. */
-      if (coolRangeM && rnd(coolRangeM[1]) - rnd(coolRangeM[0]) >= 20) {
-        parts.push(`${rnd(coolRangeM[0])}–${rnd(coolRangeM[1])} m depending on how dense “green” must be`);
+      if (coolRangeM && walkRoundM(coolRangeM[1]) - walkRoundM(coolRangeM[0]) >= 20) {
+        parts.push(`${walkRoundM(coolRangeM[0])}–${walkRoundM(coolRangeM[1])} m depending on how dense “green” must be`);
       }
     } else {
       setHTML('bcRings', intro);
@@ -1396,9 +1403,20 @@ export function mountHeatMap(): () => void {
     const ll = wardLatLon(wardOf(state.ward), b.cx, b.cz);
     /* A row click is an interaction, so it pauses the idle orbit like a touch of the
        map does; the orbit also yields while this ease runs (advanceOrbit). */
+    if (cardSink.current) { easeRowToFreeGround(b, ll); return; }
     nudgeOrbit();
     map.easeTo({ center: [ll.lon, ll.lat], duration: reduceMotion ? 0 : 700, essential: true });
   };
+  /* v2: land a roof picked from the list where its card has room and no chrome covers it (the bottom-left stack sits on the canvas centre).
+     `offset` puts the ground point at that spot; the apex stands above the ground by its own height on screen, which is added back. */
+  function easeRowToFreeGround(b: BuildingMeta, ll: { lat: number; lon: number }): void {
+    nudgeOrbit();
+    const w = cv.clientWidth, h = cv.clientHeight;
+    const to = cardSink.current?.target(w, h, !!relief);
+    const g = to && relief ? relief.project(b.cx, 0, b.cz, w, h) : null, a = g ? relief?.project(b.cx, b.h, b.cz, w, h) : null;
+    const lift = g && a && g.w > 0 && a.w > 0 ? g.y - a.y : 0;
+    map.easeTo({ center: [ll.lon, ll.lat], ...(to ? { offset: [to.x - w / 2, to.y + lift - h / 2] as [number, number] } : {}), duration: reduceMotion ? 0 : 700, essential: true });
+  }
   const tariffInput = el('solTariff') as HTMLInputElement | null;
   if (tariffInput) tariffInput.value = tariff.toFixed(2);
   setText('solCur', currencyMark(COSTS));   // the country names the currency; never typed into a template
@@ -1454,7 +1472,8 @@ export function mountHeatMap(): () => void {
      unit, a ring label on the tag at 3.64:1. They are placed clear of these boxes, and
      hidden when nowhere is clear. Read at most every 250 ms: the HUD moves on a pane
      toggle or a resize, not per frame, and placeCard runs per frame. */
-  const HUD_KEEP_OUT = '.rail-r > *, #clockw, #vegw, #svw, .chiprow, .synthetic, .stamp-slot, #sunLine, #compass';
+  /* [data-hud]: every OBOS v2 chrome box (spec §1.6); no v1 element carries it. */
+  const HUD_KEEP_OUT = '.rail-r > *, #clockw, #vegw, #svw, .chiprow, .synthetic, .stamp-slot, #sunLine, #compass, [data-hud]';
   let hudRects: DOMRect[] = [], hudReadAt = -Infinity;
   function hudKeepOut(): DOMRect[] {
     const now = performance.now();
@@ -1483,7 +1502,9 @@ export function mountHeatMap(): () => void {
        selection, so "topmost on screen" walked the labels straight underneath
        it. Score candidates that clear the card first and only fall back to a
        covered one if the ring has nowhere else to put its label. */
-    const cardBox = bcard.hasAttribute('hidden') ? null : bcard.getBoundingClientRect();
+    /* v2: the card's box is the shell's cached one (it places the card itself); v1 reads it. */
+    const sink = cardSink.current;
+    const cardBox: CardBox | null = bcard.hasAttribute('hidden') ? null : sink ? sink.box() : bcard.getBoundingClientRect();
     const cvBox = cv.getBoundingClientRect();
     const clearsCard = (x: number, y: number) => {
       if (!cardBox) return true;
@@ -1503,7 +1524,9 @@ export function mountHeatMap(): () => void {
        both land under the card does it hide — the card carries the same fact
        in prose, so nothing is lost. Exact rectangles, no slop margins: a
        near-miss is not a collision. */
-    const hud = hudKeepOut();
+    /* v2: the card's lead line is a keep-out too, or it would run through the tag's text. */
+    const leadBox = sink?.lead();
+    const hud: ReadonlyArray<{ left: number; top: number; right: number; bottom: number }> = leadBox ? [...hudKeepOut(), leadBox] : hudKeepOut();
     /* The tag is placed FIRST, and its box is what the ring labels then avoid. */
     let tagBox: number[] | null = null;
     if (nearestCool) {
@@ -1513,7 +1536,7 @@ export function mountHeatMap(): () => void {
         if (q.w <= 0) tag.style.visibility = 'hidden';
         else {
           const cvB = cv.getBoundingClientRect();
-          const cardB = bcard.hasAttribute('hidden') ? null : bcard.getBoundingClientRect();
+          const cardB: CardBox | null = bcard.hasAttribute('hidden') ? null : sink ? sink.box() : bcard.getBoundingClientRect();
           /* .cooltag box, kept in step with the CSS: margin -16px 0 0 -73px,
              146 wide, ~41 tall. These are the chip's real dimensions — a stale
              width here silently tests a rectangle the tag no longer occupies. */
@@ -1589,6 +1612,14 @@ export function mountHeatMap(): () => void {
       lab.style.transform = `translate3d(${Math.round(bx)}px, ${Math.round(by)}px, 0)`;
     }
     const p = relief?.project(selected.cx, selected.h, selected.cz, w, h) ?? { x: 0, y: 0, w: -1 };
+    if (sink) {
+      /* v2 (brainstorm 04): the shell places the card from the apex, by a keep-out search; this file only moves the brackets. */
+      sink.place(p.w > 0 ? { x: p.x + cvBox.left, y: p.y + cvBox.top } : null, !!relief);
+      if (p.w <= 0) { bsel.style.opacity = '0'; return; }
+      bsel.style.opacity = '1';
+      bsel.style.transform = `translate3d(${Math.round(p.x)}px, ${Math.round(p.y)}px, 0)`;
+      return;
+    }
     if (p.w <= 0) { bcard.style.opacity = '0'; bsel.style.opacity = '0'; return; }
     bcard.style.opacity = '1'; bsel.style.opacity = '1';
     bsel.style.transform = `translate3d(${Math.round(p.x)}px, ${Math.round(p.y)}px, 0)`;
@@ -1688,10 +1719,11 @@ export function mountHeatMap(): () => void {
       const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, simN(), currentWardSizeM, b.ring) : null;
       coolRangeM = lo && hi ? [Math.min(lo.distM, hi.distM), Math.max(lo.distM, hi.distM)] : null;
       /* The tag's value is written HERE, once per selection — placeCard only
-         moves it. Rounded to 10 m because the grid cell is 7.3 m. */
+         moves it. Rounded by walkRoundM, the card's own function, in v1 and v2 alike:
+         a measured 1.5 m reads "≈0 m" on both (the old `|| 10` floor overstated it). */
       if (nearestCool) {
         el('coolTag')?.removeAttribute('hidden');
-        popCoolTag(Math.round(nearestCool.distM / 10) * 10 || 10);
+        popCoolTag(walkRoundM(nearestCool.distM));
       } else {
         el('coolTag')?.setAttribute('hidden', '');
       }
@@ -1729,6 +1761,14 @@ export function mountHeatMap(): () => void {
   cv.addEventListener('pointerup', onPickUp);
   const onPickKey = (e: KeyboardEvent) => {
     if (e.key !== 'Escape') return;
+    if (cardSink.current) {
+      /* v2: one press, one thing, topmost first: the brief, the street view, then the card (the payback sheet and the popovers stop their own Esc). */
+      if (!el('solBrief')?.hasAttribute('hidden')) { closeBrief(); return; }
+      if (el('svModal') && !el('svModal')?.hasAttribute('hidden')) { closeStreetView(); return; }
+      paySheet?.close();
+      if (selected) select(null);
+      return;
+    }
     closeBrief();                       // the sheet first: it is the topmost thing on screen
     paySheet?.close();                  // normally already closed by its own Escape, which stops here
     if (selected) select(null);
@@ -1788,7 +1828,8 @@ export function mountHeatMap(): () => void {
    */
   /* `#pname,#pzone,.compass` added after the 2026-09-13 live audit caught
      "M. Chinnaswamy Stadium" across the MG Road title and "Tower C" on the compass. */
-  const LM_KEEP_OUT = '.top,.stamp-slot,.vegw,.chiprow,.rail-r,.legend,.strip,.bcard,.tiphint,.cooltag,#pname,#pzone,.compass';
+  /* [data-hud]: every OBOS v2 chrome box (spec §1.6); no v1 element carries it. */
+  const LM_KEEP_OUT = '.top,.stamp-slot,.vegw,.chiprow,.rail-r,.legend,.strip,.bcard,.tiphint,.cooltag,#pname,#pzone,.compass,[data-hud]';
 
   /** Paint the card's landmark block, and mark which chip the open card is about. */
   function paintLandmark(lm: LandmarkPick | null): void {
@@ -2990,6 +3031,12 @@ export function mountHeatMap(): () => void {
   const istLike = (iso: string) => wardHm.format(new Date(Date.parse(iso))).replace('GMT+5:30', 'IST');
 
   function paintWeatherLine(L: M.Ambient | null): void {
+    /* OBOS v2 (spec C9): the observation this line paints, and its station's reports,
+       for the v2 Weather screen. Additive: nothing listens in v1. */
+    const wxCity = splitKey(state.ward).city;
+    document.dispatchEvent(new CustomEvent('obos:observed', { detail: { observed, reports: observed
+      ? (metarCache[wxCity]?.reports ?? []).filter((m) => m.station === observed!.station.icao).sort((a, b) => Date.parse(a.time) - Date.parse(b.time))
+      : [] } }));
     const line = el('wxLine');
     setText('liveSrc', observed ? `Air now · ${observed.station.name} (${Math.round(observed.km)} km)`
       : L ? 'Air now · Met Norway forecast' : 'Air now · no reading');
@@ -3150,7 +3197,7 @@ export function mountHeatMap(): () => void {
   cleanup.push(() => clearInterval(metarTick));
 
   /* ── readouts ── */
-  const lstColor = (t: number) => t >= 40 ? 'var(--red)' : t >= 37 ? '#d46b4a' : t >= 33 ? 'var(--bronze)' : 'var(--cyan)';
+  const lstColor = (t: number) => t >= 40 ? 'var(--red)' : t >= 37 ? 'var(--orange)' : t >= 33 ? 'var(--bronze)' : 'var(--cyan)';
 
   /**
    * Show how much to trust the number on screen. Night is calibratable against

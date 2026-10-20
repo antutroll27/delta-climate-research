@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { clickWard } from './fixtures/obos-nav';
 
 /**
  * THE CITY'S OTHER WARDS ARE FETCHED IN THE BACKGROUND — AND NOT UNDER SAVE-DATA.
@@ -67,7 +68,7 @@ test('a switch before the warm-up runs does not cancel it for the rest of the vi
   await page.goto(OPEN, { waitUntil: 'domcontentloaded' });
   await waitForWard(page);
   const first = (await page.locator('#bcount').textContent()) ?? '';
-  await page.click('#strip .ward[data-w="mg-road"]');
+  await clickWard(page, 'mg-road');
   await expect(page.locator('#bcount')).not.toHaveText(first, { timeout: 30_000 });
   await page.evaluate(() => (window as unknown as { releaseIdle: () => void }).releaseIdle());
   await expect.poll(() => seen.includes('/heat-map/data/whitefield.json'), { timeout: 20_000 }).toBe(true);

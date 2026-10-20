@@ -1,0 +1,115 @@
+/* OBOS v2 — screens/mapstack.css (spec §3.8). Owner: Track A (plan A1). Ported from the preview's system.css :536–641, :677–763 (the 214 px pass);
+   .tw-root[data-rail]/[data-side] → the v2 root's data-menu-eff / data-side-shown, [data-device="laptop"] → the 700–1365 px band. NO colour literal. */
+
+/* the stack: left of the map area, clear of the dock. It follows the title column's rules: --col-x (beside the menu), --lead beside the side panel when it shows (tokens.css). */
+html[data-ui="v2"] .obos-v2 .mapstack { position: absolute; z-index: 19; left: var(--lead); bottom: var(--ms-bottom, 132px); width: 214px;
+  display: flex; flex-direction: column; gap: 7px; }
+html[data-ui="v2"] .obos-v2[data-side-shown="1"] .mapstack { --ms-bottom: 84px; }
+html[data-ui="v2"] .obos-v2 .mapstack .card { padding: 10px 12px 9px; border-radius: 16px; }
+html[data-ui="v2"] .obos-v2 .mapstack .card[hidden] { display: none; }
+@media (min-width: 700px) and (max-width: 1365px) {
+  html[data-ui="v2"] .obos-v2 .mapstack { width: 196px; }
+  html[data-ui="v2"] .obos-v2 .mapstack .card { padding: 9px 11px 8px; }
+  html[data-ui="v2"] .obos-v2 .geo[open] p { width: 196px; }
+}
+/* plates keyline for light fills (the twin's rule) */
+html[data-ui="v2"] .obos-v2[data-cards="plates"] .mapstack svg.sym path.f:not([fill="none"]) { stroke: var(--ink-1); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+
+/* ── the Sun card ── */
+html[data-ui="v2"] .obos-v2 .sunc .row { align-items: center; }
+html[data-ui="v2"] .obos-v2 .sun-lab { display: inline-flex; align-items: center; gap: 6px; }
+html[data-ui="v2"] .obos-v2 .sun-row { display: flex; align-items: flex-end; gap: 8px; }
+html[data-ui="v2"] .obos-v2 .sun-row .sun-v { flex: 1; min-width: 0; }
+html[data-ui="v2"] .obos-v2 .sun-v { margin-top: 4px; line-height: 1; white-space: nowrap; }
+html[data-ui="v2"] .obos-v2 .sun-v .n { font-size: 25px; font-weight: 200; letter-spacing: -0.035em; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .sun-v .n.thin-w { font-size: 19px; font-weight: 300; letter-spacing: -0.02em; }
+html[data-ui="v2"] .obos-v2 .sun-v .u { font-size: 12px; font-weight: 300; color: var(--unit); margin-left: 4px; }
+html[data-ui="v2"] .obos-v2 .sun-s { margin-top: 4px; font-size: 11.5px; font-weight: 300; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .sun-glyph { width: 38px; height: 24px; flex: none; overflow: visible; }
+html[data-ui="v2"] .obos-v2 .sun-glyph.az { width: 24px; height: 24px; }
+html[data-ui="v2"] .obos-v2 .sun-glyph[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .sg-h { stroke: var(--ink-3); stroke-width: 1.2; stroke-linecap: round; }
+html[data-ui="v2"] .obos-v2 .sg-arc { fill: none; stroke: var(--ink-3); stroke-width: 1.2; stroke-dasharray: 2 2.4; opacity: .7; }
+html[data-ui="v2"] .obos-v2 .sg-sun { fill: var(--sym-solar); stroke: var(--ink-1); stroke-width: 0.9; }
+html[data-ui="v2"] .obos-v2 .sg-sun.down { fill: none; stroke: var(--sym-solar); stroke-width: 1.6; }
+html[data-ui="v2"] .obos-v2 .sg-ring { fill: none; stroke: var(--ink-3); stroke-width: 1.2; opacity: .6; }
+html[data-ui="v2"] .obos-v2 .sg-n { font: 700 5.5px/1 var(--sans); fill: var(--compass-n-ink); }
+html[data-ui="v2"] .obos-v2 .sg-needle { stroke: var(--ink-2); stroke-width: 1.3; stroke-linecap: round; }
+html[data-ui="v2"] .obos-v2 .sg-hub { fill: var(--ink-1); }
+/* "geometry only": the disclosure's own control, always visible, never under 24 px (S2 a11y rule); its body opens upward over the map */
+html[data-ui="v2"] .obos-v2 .geo { position: relative; }
+html[data-ui="v2"] .obos-v2 .geo summary { list-style: none; cursor: pointer; }
+html[data-ui="v2"] .obos-v2 .geo summary::-webkit-details-marker { display: none; }
+html[data-ui="v2"] .obos-v2 .geo summary.kind { min-height: 24px; text-transform: none; letter-spacing: 0; font-size: 10.5px; font-weight: 500; padding: 1px 7px 1px 5px; }
+html[data-ui="v2"] .obos-v2 .geo[open] p { position: absolute; z-index: 5; right: -12px; bottom: calc(100% + 8px); width: 214px; box-sizing: border-box; padding: 10px 12px; border-radius: 14px;
+  background: var(--glass-fallback); box-shadow: var(--shadow-float); color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2[data-cards="plates"] .geo[open] p { background: var(--plate); }
+/* the scale bar: MapLibre's own control, moved here by sun-card.ts; it keeps updating in place (it rewrites its text and sets its pixel width on every zoom).
+   rc3: the distance is a label ABOVE the bar, --scale-gap (7 px) clear of it, "0" at the left end and the distance at the right. The bar is .scale-ticks, a sibling the grid stretches
+   to the control's own width, so its five divisions (0, 1/4, 1/2, 3/4, 1; the middle one taller) follow the live width. Tokens only: --ink-1 for the bar, --unit for the words. */
+html[data-ui="v2"] .obos-v2 .scale { --scale-gap: 7px; --scale-tick: 5px; --scale-tick-mid: 9px; --scale-line: 2px;
+  display: grid; grid-template-columns: max-content; justify-content: start; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line); }
+html[data-ui="v2"] .obos-v2 .scale .maplibregl-ctrl-scale { grid-area: 1 / 1; position: relative; float: none; margin: 0 0 var(--scale-gap); padding: 0; background: transparent; box-sizing: border-box; border: 0;
+  color: var(--unit); font: 300 11px/1.1 var(--sans); text-align: right; white-space: nowrap; overflow: visible; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .scale .maplibregl-ctrl-scale::before { content: "0"; content: "0" / ""; position: absolute; left: 0; top: 0; }
+/* a short window (1366 x 640): the stack grows up from the dock and the Sun card's top edge is 2 px under the compass tile with the old one-line scale. The label-above-bar footer is 12 px taller,
+   so below 701 px of height the footer and the stack tighten by 12 px (divider spacing, the Sun card's foot, the gap between the two cards); the 7 px label-to-bar gap is kept. */
+@media (min-width: 700px) and (max-height: 700px) {
+  html[data-ui="v2"] .obos-v2 .mapstack { gap: 5px; }
+  html[data-ui="v2"] .obos-v2 .mapstack .sunc { padding-bottom: 6px; }
+  html[data-ui="v2"] .obos-v2 .scale { margin-top: 4px; padding-top: 4px; }
+}
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks { grid-area: 2 / 1; position: relative; height: var(--scale-tick-mid); }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--scale-line); background: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i { position: absolute; bottom: 0; width: var(--scale-line); height: var(--scale-tick); margin-left: calc(var(--scale-line) / -2); background: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i:nth-child(1) { left: 0; }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i:nth-child(2) { left: 25%; }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i:nth-child(3) { left: 50%; height: var(--scale-tick-mid); }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i:nth-child(4) { left: 75%; }
+html[data-ui="v2"] .obos-v2 .scale .scale-ticks > i:nth-child(5) { left: 100%; }
+
+/* ── the Ward card ── */
+html[data-ui="v2"] .obos-v2 .wardc > .row { gap: 6px; min-width: 0; align-items: center; }
+html[data-ui="v2"] .obos-v2 .crumb { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0 2px; min-height: 24px;
+  font: 400 11px/1.2 var(--sans); letter-spacing: -0.005em; text-transform: none; color: var(--ink-2); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+html[data-ui="v2"] .obos-v2 .crumb b { font-weight: 700; color: var(--ink-1); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+html[data-ui="v2"] .obos-v2 .crumb > span:not(.crumb-g) { flex: none; }
+html[data-ui="v2"] .obos-v2 .crumb .sep { color: var(--ink-3); font-weight: 200; margin: 0; }
+html[data-ui="v2"] .obos-v2 .crumb-g { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-right: 2px; color: var(--ink-1); flex: none; }
+html[data-ui="v2"] .obos-v2 .crumb-g svg { height: 15px; width: auto; max-width: 15px; display: block; }
+html[data-ui="v2"] .obos-v2 .crumb-g svg[hidden] { display: none; }   /* the per-area switch sets the hidden ATTRIBUTE (a-01); an SVG's display is ours to say */
+/* the toggle is a 24 px chevron (its text stays for screen readers via aria-label); up = open, down = collapsed */
+html[data-ui="v2"] .obos-v2 .wc-more { flex: none; width: 24px; height: 24px; min-height: 24px; padding: 0; border: 0; border-radius: 99px; background: var(--well); color: var(--ink-2);
+  font-size: 0; display: inline-grid; place-items: center; cursor: pointer; }
+html[data-ui="v2"] .obos-v2 .wc-more::before { content: ""; width: 7px; height: 7px; border: solid var(--ink-2); border-width: 1.6px 1.6px 0 0; transform: translateY(2px) rotate(-45deg); }
+html[data-ui="v2"] .obos-v2 .wardc[data-more="false"] .wc-more::before { transform: translateY(-2px) rotate(135deg); }
+html[data-ui="v2"] .obos-v2 .wardc[data-more="false"] .wc-body { display: none; }
+html[data-ui="v2"] .obos-v2 .wc-fig { display: flex; align-items: center; gap: 7px; margin-top: 6px; font-size: 11.5px; color: var(--ink-2); line-height: 1.25; text-wrap: balance; }
+html[data-ui="v2"] .obos-v2 .wc-t { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: color-mix(in oklch, var(--ink-1) 7%, transparent); flex: none; }
+html[data-ui="v2"] .obos-v2 .wc-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .wc-sub .chip { height: 20px; font-size: 10.5px; }
+/* the build-status stamp: a visible chip under the header, OUTSIDE the fold (a folded card on a laptop still says it). No bronze: that is a heat-ramp colour. */
+html[data-ui="v2"] .obos-v2 .wc-stamp { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+html[data-ui="v2"] .obos-v2 .wc-heat { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; line-height: 1.3; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .wc-heat .sym-tile.sm { width: 24px; height: 24px; border-radius: 7px; }
+html[data-ui="v2"] .obos-v2 .wc-stamp .wc-heat + .wc-heat { flex-basis: 100%; }   /* rc1 R1: the second honesty row takes its own line */
+html[data-ui="v2"] .obos-v2 .wardc .con-stamp { display: inline-block; flex: none; transform: none; animation: none; opacity: 1; box-shadow: none; border: 1px solid var(--ink-1); border-radius: 4px; padding: 0 6px;
+  font: 600 9.5px/18px var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .wc-prov { margin-top: 4px; }
+html[data-ui="v2"] .obos-v2 .wc-prov > li { grid-template-columns: 26px minmax(0, 1fr); gap: 8px; padding: 4px 0; font-size: 11.5px; line-height: 1.3; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .wc-prov .sym-tile.sm { width: 24px; height: 24px; border-radius: 7px; }
+/* the app writes progress, refusal and "X could not load." here; shown only while it has something to say */
+html[data-ui="v2"] .obos-v2 #loadchip { margin-top: 4px; }
+html[data-ui="v2"] .obos-v2 #loadchip:not(.on):not(.fail) { display: none; }
+html[data-ui="v2"] .obos-v2 #loadchip.fail { color: var(--ink-1); font-weight: 600; }
+@media (min-width: 700px) and (max-width: 1365px) { html[data-ui="v2"] .obos-v2 .wc-fig { font-size: 11px; } }
+
+/* A-S4 audit F1: on a short window (measured at 1366 x 640) the title column's tip toast would sit on the Sun card; the first-run tip steps aside there,
+   the Sun card never does. The app still dismisses and remembers it as before. */
+@media (max-height: 700px) { html[data-ui="v2"] .obos-v2 #tiphint { display: none; } }
+/* rc1 R1: the ward card's header holds TWO always-visible honesty rows now (24 px taller). On a short window (a 1366 x 768 laptop's viewport is about 640) that put the Sun card on the compass
+   (0.6 px of clearance before). The stack sits nearer the chips and the two rows use 18 px tiles; the Sun card and the honesty rows never step aside. The side-open stack already sits at 84 px. */
+@media (max-height: 700px) {
+  html[data-ui="v2"] .obos-v2:not([data-side-shown="1"]) .mapstack { --ms-bottom: 118px; }
+  html[data-ui="v2"] .obos-v2 .wc-heat .sym-tile.sm { width: 18px; height: 18px; border-radius: 5px; }
+}

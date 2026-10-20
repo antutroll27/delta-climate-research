@@ -17,6 +17,8 @@ interface Props {
   structuredData?: object;
   // og:type — 'website' (default) or 'article' for published papers.
   ogType?: 'website' | 'article';
+  /** OBOS pages pass 'v2': rendered as <html data-ui="v2">, which every v2 selector is keyed on. Pages without it carry no data-ui. */
+  ui?: 'v2';
 }
 
 const BRAND_DESCRIPTION =
@@ -29,6 +31,7 @@ const {
   nativeScroll = false,
   structuredData,
   ogType = 'website',
+  ui,
 } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname, Astro.site);
@@ -93,7 +96,7 @@ const jsonLd = {
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-ui={ui}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />

@@ -1,0 +1,93 @@
+// tests/unit/obos-v2-colour.test.mjs
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+/* THE v2 COLOUR CENSUS (spec §2, H24). Stricter than obos-layers.test.mjs:109 on
+   purpose: a v2 file that disappears FAILS (no `catch { continue; }`), and a hex may
+   live only in tokens.css (stylesheets) or symbols.ts (marks), each at most once. */
+const STYLES = 'src/styles/obos-v2';
+const REQUIRED = ['tokens.css', 'atoms.css', 'shell.css', 'screens.css', 'phone.css', 'print.css',
+  ...['overview', 'heat', 'mapstack', 'building', 'explore', 'scenarios', 'solar', 'air', 'weather', 'methods', 'compare', 'brief'].map((p) => `screens/${p}.css`),
+  'print/solar.css', 'print/brief.css'];
+const SHEETS = readdirSync(STYLES, { recursive: true }).map(String).filter((f) => f.endsWith('.css') && !f.split('/').pop().startsWith('._')).sort();
+const COMPONENTS = 'src/components/ClimateEngine/v2';
+const SCRIPTS = 'src/scripts/climate-engine/v2';
+/* hex AND functional colours (S1 audit F5): rgb(a), hsl(a), oklch, oklab, lch, lab, color(). color-mix(... var() ...) does not match. */
+const HEX = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lch|lab|color)\([^()]*\)/g;
+const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/<!--[\s\S]*?-->/g, '');
+
+test('every v2 sheet exists', () => { for (const f of REQUIRED) assert.ok(existsSync(join(STYLES, f)), f); });
+
+test('colour literals only in tokens.css (sheets) and symbols.ts (marks), each spelled once', () => {
+  const offences = [];
+  for (const f of SHEETS.filter((x) => x !== 'tokens.css')) {
+    const h = strip(readFileSync(join(STYLES, f), 'utf8')).match(HEX) ?? [];
+    if (h.length) offences.push(`${f}: ${h.join(' ')}`);
+  }
+  /* A1 S2.9: Track C's Compare and brief components would otherwise escape the census */
+  const compo = [...readdirSync(COMPONENTS).filter((x) => x.endsWith('.astro') && !x.startsWith('._')).map((f) => join(COMPONENTS, f)),
+    'src/components/ClimateEngine/compare/PairedBenchV2.astro', 'src/components/ClimateEngine/brief/HeatMapBriefV2.astro'].filter(existsSync);
+  for (const path of compo) {
+    const f = path;
+    const src = strip(readFileSync(path, 'utf8')).replace(/href="[^"]*"/g, '');
+    const h = src.match(HEX) ?? [];
+    if (h.length) offences.push(`${f}: ${h.join(' ')}`);
+  }
+  for (const f of readdirSync(SCRIPTS).filter((x) => x.endsWith('.ts') && x !== 'symbols.ts')) {
+    const h = strip(readFileSync(join(SCRIPTS, f), 'utf8')).match(HEX) ?? [];
+    if (h.length) offences.push(`${f}: ${h.join(' ')}`);
+  }
+  for (const f of [join(STYLES, 'tokens.css'), join(SCRIPTS, 'symbols.ts')]) {
+    const h = (strip(readFileSync(f, 'utf8')).match(HEX) ?? []).map((x) => x.toLowerCase().replace(/\s+/g, ''));
+    const twice = [...new Set(h.filter((x, i) => h.indexOf(x) !== i))];
+    if (twice.length) offences.push(`${f} spells ${twice.join(' ')} more than once`);
+  }
+  assert.deepEqual(offences, []);
+});
+
+/* S1 audit F8: the AA token values are pinned now, not at S8. Light-Glass grey units and labels must stay #5C5B58 (4.67:1 on the worst ground). */
+test('Light --ink-3 and --unit are #5C5B58 (AA, spec §7.1)', () => {
+  const css = strip(readFileSync(join(STYLES, 'tokens.css'), 'utf8'));
+  assert.match(css, /--hx-quiet-light: #5C5B58;/i);
+  const light = css.slice(css.indexOf('[data-theme="light"] {'), css.indexOf('[data-theme="dark"] {'));
+  assert.match(light, /--ink-3: var\(--hx-quiet-light\); --unit: var\(--hx-quiet-light\);/);
+});
+
+/* S1 audit F7: opacity on a text node halves its contrast (2.57:1 in Light); only the dot may fade. */
+test('.kind.stale fades the dot, never the text (AA)', () => {
+  const css = strip(readFileSync(join(STYLES, 'atoms.css'), 'utf8'));
+  assert.ok(!/\.kind\.stale\s*\{[^}]*opacity/.test(css), '.kind.stale must not set opacity on the text');
+  assert.match(css, /\.kind\.stale\s*\{\s*color: var\(--ink-3\);\s*\}/);
+  assert.match(css, /\.kind\.stale::before\s*\{\s*opacity: \.55;\s*\}/);
+});
+
+const hsl = (hex) => {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, l = (max + min) / 2;
+  if (d === 0) return { h: 0, s: 0, l };
+  const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return { h: (h * 60 + 360) % 360, s: d / (1 - Math.abs(2 * l - 1)), l };
+};
+
+test('warm reds and oranges belong only to the heat ramp, the AQI bands and the compass conventions; no violet in tokens', () => {
+  const css = strip(readFileSync(join(STYLES, 'tokens.css'), 'utf8'));
+  const decl = [...css.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})\b/g)];
+  const ALLOWED_WARM = new Set(['--heat-3', '--heat-4', '--heat-5', '--compass-red', '--compass-n-ink', '--compass-sun']);   // S8: --compass-n-ink is the compass N's deeper red on Light (AA)
+  const bad = [];
+  for (const [, name, hex] of decl) {
+    const { h, s, l } = hsl(hex);
+    const warm = (h <= 45 || h >= 330) && s > 0.35 && l > 0.2 && l < 0.85;
+    const violet = h >= 260 && h <= 320 && s > 0.25;
+    if (warm && !ALLOWED_WARM.has(name)) bad.push(`${name} ${hex} is warm`);
+    if (violet) bad.push(`${name} ${hex} is violet`);
+  }
+  assert.deepEqual(bad, []);
+});
+
+/* E3 (lstColor reads var(--orange)): landed in S2.8 by plan amendment A1 (was S3.1). */
+test('the app no longer writes #d46b4a (E3)', () => {
+  const app = readFileSync('src/scripts/climate-engine/heat-map-app.ts', 'utf8');
+  assert.ok(!/#d46b4a/i.test(app), 'lstColor still spells the Severe hex by hand');
+});

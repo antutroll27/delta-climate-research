@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { clickWard, openLayers, setMapLook } from './fixtures/obos-nav';
 
 test.describe('heat-map runtime resilience', () => {
   test('Explore selects a real engine and produces analytical readouts', async ({ page }) => {
@@ -61,7 +62,7 @@ test.describe('heat-map runtime resilience', () => {
     await expect(tile).not.toContainText('—', { timeout: 20_000 });
 
     planetFetches = 0;
-    await page.locator('#envchip button[data-e="studio"]').click();
+    await setMapLook(page, 'studio');
     await expect.poll(() => styleFetches, {
       timeout: 20_000,
       message: 'the Clay studio button never caused the new style to be fetched, so '
@@ -94,7 +95,7 @@ test.describe('heat-map runtime resilience', () => {
 
     /* And back, because a restore written for one direction is one that has been
        checked once. */
-    await page.locator('#envchip button[data-e="dark"]').click();
+    await setMapLook(page, 'dark');
     const beforeDay = await tile.textContent();
     await page.locator('#segPhase button[data-p="peak"]').click();
     await expect(tile).not.toHaveText(beforeDay ?? '', { timeout: 20_000 });
@@ -123,7 +124,7 @@ test.describe('heat-map runtime resilience', () => {
     await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
 
-    await page.locator('[data-rail="layers"]').click();
+    await openLayers(page);
     const trees = page.locator('input[data-layer="green/trees"]');
     /* Ticked, because the trees ship for this ward — and enabled, which is the
        state in which a click can prove anything at all. */
@@ -152,8 +153,8 @@ test.describe('heat-map runtime resilience', () => {
        and it is gone. The strip stays because it shows every ward's live mean at
        once, and it carries the same `data-w` it always did — so the race being
        tested here is unchanged. */
-    await page.locator('#strip .ward[data-w="baruipur"]').click();
-    await page.locator('#strip .ward[data-w="barrackpore"]').click();
+    await clickWard(page, 'baruipur');
+    await clickWard(page, 'barrackpore');
     await expect(page.locator('#pname')).toHaveText('Barrackpore', { timeout: 20_000 });
     releaseBaruipur();
     await page.waitForTimeout(500);

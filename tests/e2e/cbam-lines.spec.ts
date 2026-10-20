@@ -1378,6 +1378,39 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(cards.nth(1)).not.toContainText('€');
   });
 
+  /* THE CARET ACROSS A REBUILD THAT LANDS WHILE THE BOX IS FOCUSED. The mass field re-renders the
+     whole strip on a 250 ms debounce (cbam-app.ts, `bounce`), so a visitor who tabs into the price
+     box right after editing the mass has the box replaced under them. paintOutlook() refocuses the
+     new box, but a type=number input cannot be given a selection, and Firefox puts the caret at the
+     START of a refocused number input: '80' then '.5' read '.580'. It surfaced as a CI-only failure
+     of the test above (setLine ends on fill('#cbMass'), so its 250 ms timer was still pending when
+     the box was typed into); that test only passed where the rebuild happened to land first. Here
+     the rebuild is forced to land between the two keystrokes. */
+  test('a strip rebuild that lands while the price box is focused keeps the caret at the end of the typed number', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, TUBE_LINE);
+    const strip = page.locator('#cbOutlook .cb-ol');
+    const box = page.locator('#cbOlPrice');
+    await expect(strip.locator('.cb-ol-yr')).toHaveCount(3);
+    await expect(page.locator('#cbGraphs .cg-board')).toBeVisible();
+    // Let the debounce armed by setLine's fill('#cbMass') fire and settle, so the one forced below is the only rebuild left.
+    await page.waitForTimeout(600);
+    await page.evaluate(() => {
+      (window as unknown as { __rebuilds: number }).__rebuilds = 0;
+      new MutationObserver(() => { (window as unknown as { __rebuilds: number }).__rebuilds += 1; })
+        .observe(document.querySelector('#cbOutlook')!, { childList: true });
+    });
+
+    await box.focus();
+    await page.keyboard.type('80');
+    // A mass `input` with no focus change: arms the same 250 ms timer a keystroke in the mass box would.
+    await page.evaluate(() => document.querySelector('#cbMass')!.dispatchEvent(new Event('input', { bubbles: true })));
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __rebuilds: number }).__rebuilds)).toBeGreaterThan(0);
+    await expect(box).toBeFocused();
+    await page.keyboard.type('.5');
+    await expect(box).toHaveValue('80.5');
+  });
+
   test('the strip is about one previewed line: absent when idle, past the corpus, and in a document', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await expect(page.locator('#cbOutlook')).toBeEmpty();

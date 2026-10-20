@@ -1,0 +1,79 @@
+---
+// src/components/ClimateEngine/v2/DockV2.astro — OBOS v2 spec §3.6
+import Sym from './Sym.astro';
+import { ICON } from './icons.ts';
+interface Row { key: string; id: string; name: string; kind: string }
+interface Props { currentKey: string; strip: readonly Row[]; otherCity: { href: string; name: string } | null }
+const { currentKey, strip, otherCity } = Astro.props;
+---
+<div class="dock" data-hud>
+  <div class="places" role="group" aria-label="Places">
+    <div class="strip" id="strip">
+      {strip.map((row) => (
+        <div class:list={['ward', 'place', 'two', { on: row.key === currentKey }]} data-w={row.id} role="button" tabindex="0">
+          <span class="pl-g"><Sym shape="ward" c="ink" size={14} /></span>
+          <span class="pl-t"><span><span class="nm">{row.name}</span> <small class="big num" id={`big-${row.id}`}>—<span>°C surface</span></small></span><span class="pl-sub ty">{row.kind}</span></span>
+        </div>))}
+    </div>
+    {otherCity && <a class="place place-city" href={otherCity.href} title="Switch city"><b>{otherCity.name}</b><span>&nbsp;→</span></a>}
+  </div>
+  <div class="bar">
+    <!-- Live-reading freshness.
+         NOT A CLOCK FOR THE MAP. The simulation is steady-state at one of two
+         representative phases; it has no 14:32. This dial describes the DATA —
+         the hour met.no's reading is valid for, and how long ago that was — which
+         matters because that reading sets the sim's boundary conditions and was,
+         until now, fetched once per ward per session and never refreshed. A tab
+         left open overnight showed a pulsing green "live" dot over yesterday's
+         weather. Click to re-read. -->
+    <!-- TWO CONTROLS, NOT ONE. The tile used to be a single button whose click
+         forced a live re-read — and that click is the ONLY re-read in the app
+         (fetchLive runs on ward load and from here; the 60s timer just
+         repaints). Handing the whole tile to a format toggle would leave a dial
+         that reports data is 14 hours stale and offers no way to fix it. So the
+         face toggles the format and the age line re-reads, each saying which. -->
+    <div class="clockw" id="clockw" hidden>
+      <!-- Stacked state indicator, the Braun/Rams idiom: BOTH halves of the day
+           are always present and only the emphasis moves, so you read "PM out of
+           AM/PM" rather than trusting a single changing label.
+
+           The day above them is not decoration. These digits are the WARD's
+           clock, not the viewer's — from London at 18:30 GMT this reads 00:00,
+           and nothing said it was already tomorrow in Kolkata. This dial exists
+           because a tab left open overnight showed a live dot over yesterday's
+           weather; without the day it still could not name which day. -->
+      <button class="k-face" id="clockFace" type="button" aria-pressed="false">
+        <span class="k-stack" aria-hidden="true">
+          <span class="k-day" id="clockDay">—</span>
+          <!-- In 24-hour mode the meridiem is meaningless, so the pair is
+               replaced by the mode itself rather than left dimmed and lying. -->
+          <span class="k-mer" id="clockAm">AM</span>
+          <span class="k-mer" id="clockPm">PM</span>
+          <span class="k-mer k-h24" id="clock24">24H</span>
+        </span>
+        <span class="k-time" id="clockTime">--:--</span>
+      </button>
+      <button class="k-age" id="clockAge" type="button">
+        <span class="k-sub"><span class="k-age-lab" id="clockAgeLab">—</span></span>
+        <!-- Freshness survives the move to digits as a draining rule along the
+             bottom edge: the digits say WHEN, the bar says HOW STALE, and the bar
+             is the only thing that animates (one transform, no layout). -->
+        <span class="k-bar" aria-hidden="true"><i id="clockBar"></i></span>
+        <span class="k-map" data-v2-kmap hidden></span>
+      </button>
+    </div>
+    <span class="vsep" aria-hidden="true"></span>
+    <div class="tabs" role="group" aria-label="Layers">
+      <div class="vegw" id="vegw" hidden>
+        <button class="tab" type="button" data-v2-proxy="vegchip:v" aria-pressed="true"><svg viewBox="0 0 20 20" aria-hidden="true" set:html={ICON.trees} /><span>Trees</span></button>
+        <div class="modechip" id="vegchip" hidden><button class="on" data-v="1" type="button">On</button><button data-v="0" type="button">Off</button></div>
+      </div>
+      <div class="vegw" id="svw" hidden>
+        <button class="tab" type="button" data-v2-proxy="streetchip:s" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true" set:html={ICON.street} /><span>Street</span></button>
+        <div class="modechip" id="streetchip" hidden><button class="on" data-s="0">Off</button><button data-s="1">On</button></div>
+      </div>
+      <button class="tab" type="button" data-pop-open="layers" aria-expanded="false" aria-controls="v2Layers">
+        <svg viewBox="0 0 20 20" aria-hidden="true" set:html={ICON.layers} /><span>Layers <span class="tab-n" data-layers-count>–/6</span></span></button>
+    </div>
+  </div>
+</div>

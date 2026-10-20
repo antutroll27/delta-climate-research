@@ -70,7 +70,7 @@ export function mountPairedBench(): () => void {
   let enhancementPromise: Promise<void> | null = null;
   let latestResult: PairedResult | null = null;
   let presentedResult: PairedResult | null = null;
-  const pairedClient = createPairedScenarioClient();
+  let pairedClient = createPairedScenarioClient();
   const cleanup: Array<() => void> = [];
   const mapCleanup = new Map<HTMLCanvasElement, () => void>();
 
@@ -399,7 +399,16 @@ export function mountPairedBench(): () => void {
   if (undo) cleanup.push(() => undo.removeEventListener('click', onUndo));
 
   const retry = one<HTMLButtonElement>('[data-action="retry"]');
-  const onRetry = () => { void run(); };
+  const onRetry = () => {
+    /* OBOS v2 ONLY (founder, 19 Oct): the worker memoises a ward whose data failed to load (ward-loader and paired-core cache the rejected promise), so a Retry against the SAME worker re-ran the
+       model on the same dead promise. Under v2, Retry starts a fresh worker, so a transient failure recovers without a reload. v1 (no data-ui="v2") is untouched: it keeps its behaviour. */
+    if (document.documentElement.getAttribute('data-ui') === 'v2') {
+      runController?.abort();
+      pairedClient.dispose();
+      pairedClient = createPairedScenarioClient();
+    }
+    void run();
+  };
   retry?.addEventListener('click', onRetry);
   if (retry) cleanup.push(() => retry.removeEventListener('click', onRetry));
 

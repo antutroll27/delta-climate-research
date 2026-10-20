@@ -1,4 +1,26 @@
 import { defineConfig, devices } from '@playwright/test';
+import { PW_ORIGIN, PW_PORT } from './tests/e2e/fixtures/ui-v2-state';
+import { V2_PART_A, V2_PART_B, v2Match } from './tests/e2e/fixtures/v2-split';
+
+/** Chromium args for the perf runs (BRIEF.md, founder rule 17 Oct: NO window ever appears on his screen). The off-screen
+    variant (--window-position=-32000,-32000 --no-startup-window ...) was tried on 17 Oct and macOS CLAMPED the window back onto
+    the display (CDP Browser.getWindowBounds: left 0, top 30), so the committed default is the brief's fallback, new headless on
+    Metal. The JSON is labelled "headless". One list, shared with the glass spec. */
+const PERF_METAL = ['--headless=new', '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'];
+
+/** WHICH PROJECTS RUN (FINAL audit F1, founder-approved 19 Oct). Unset = every project, as always (local runs). CI sets it per job, so the @v2 browser suite has a job of its own and the 38-minute stop
+    below never has to hold both suites:
+      main  -> everything except chromium-v2-a and chromium-v2-b (the existing job);
+      v2-a  -> chromium-v2-a only;      v2-b  -> chromium-v2-b only (the obos-v2-browser matrix, verify.yml).
+    Any other value is refused: a typo must not quietly run nothing, or everything. */
+const SCOPE = process.env.OBOS_PW_SCOPE;
+const V2_PARTS = ['chromium-v2-a', 'chromium-v2-b'];
+function scopeProjects<T extends { name: string }>(projects: T[]): T[] {
+  if (SCOPE === undefined || SCOPE === '') return projects;
+  if (SCOPE === 'main') return projects.filter((p) => !V2_PARTS.includes(p.name));
+  if (SCOPE === 'v2-a' || SCOPE === 'v2-b') return projects.filter((p) => p.name === `chromium-${SCOPE}`);
+  throw new Error(`OBOS_PW_SCOPE must be unset, "main", "v2-a" or "v2-b" (got "${SCOPE}")`);
+}
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -79,10 +101,10 @@ export default defineConfig({
      on record (32.5) has 5.5 min, about 17%. */
   globalTimeout: process.env.CI ? 38 * 60_000 : undefined,
   use: {
-    baseURL: 'http://127.0.0.1:4322',
+    baseURL: PW_ORIGIN,
     trace: 'on-first-retry',
   },
-  projects: [
+  projects: scopeProjects([
     /* THE DEFAULT PROJECT IS TIER 0, AND NOBODY KNEW.
        Headless Chromium reports `ANGLE (Google, Vulkan … SwiftShader Device …)`,
        which src/utils/render-quality.ts matches as LOW_GPU -> tier 0 -> isotherm.
@@ -97,7 +119,7 @@ export default defineConfig({
        and reported timeouts, which reads as a slow machine.
 
        The name says the tier now, so the gap cannot be re-opened by accident. */
-    { name: 'chromium-tier0', use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium-tier0', testIgnore: ['**/._*', '**/obos-v2-*.spec.ts'], use: { ...devices['Desktop Chrome'] } },
 
     /* THE RELIEF PATH, on a real GPU. `--use-angle=metal` gets Apple Silicon's
        Metal backend instead of SwiftShader, which lifts render-quality.ts to tier 2
@@ -117,6 +139,42 @@ export default defineConfig({
         launchOptions: {
           args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'],
         },
+      },
+    }]),
+    /* OBOS v2 (spec §9.2). v2 is the default UI (flip), so every spec opens it with no query and no storage state. SwiftShader = tier 0 = Plates: no backdrop-filter in CI.
+       TWO PROJECTS, ONE SUITE (S8). chromium-v2 had grown to 95 specs and 8.8 minutes against the 9-minute global timeout of one e2e tool run, so it is split by spec file into
+       chromium-v2-a and chromium-v2-b (tests/e2e/fixtures/v2-split.ts; tests/unit/obos-v2-ci-split.test.mjs fails if a spec belongs to neither part or to both).
+       MEASURED AT S8 (dev machine, M-series, CPU-marginal, 1 worker, 18 Oct): part A 54 tests, 6.2 min; part B 73 tests, 6.1 min; the pair 127 tests, 12.3 min (the old project's
+       95 specs were 8.8). BUDGET: each part <= 6.5 min on the dev machine, so neither is near the 9-minute stop; the pair is the @v2 budget, 12.5 min.
+       CI ARITHMETIC, STATED AND NOT HIDDEN (spec 9.4 set <= 6 min for 22 tests; that no longer holds). On the 2-CPU runner the same tests take about 1.5x: ~18.5 min for the pair. The last
+       full CI run was 28.7 min for 197 tests (13 Oct) against the 38-minute stop above, so 28.7 + 18.5 = 47.2 does not fit. Spec 9.4's fallback, moving obos-v2-contrast and
+       obos-v2-phone (2.1 min here, ~3.2 on CI) to local-only, gets to ~44 and still does not fit. So the flip PR must give the @v2 suite its own CI job (a matrix leg per part, which
+       also halves the wall time) or raise the stop and the job limit; neither was done at S8. FINAL audit F1 (founder-approved 19 Oct): the @v2 parts have their own CI job (verify.yml, `obos-v2-browser`, a matrix leg per part, each ~9-10 CI-min), selected by OBOS_PW_SCOPE above; the existing job runs OBOS_PW_SCOPE=main.
+       Fold checks into one engine load (openV2 ~20 s locally) before adding a load. */
+    {
+      name: 'chromium-v2-a',
+      testMatch: v2Match(V2_PART_A),
+      grep: /@v2/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'chromium-v2-b',
+      testMatch: v2Match(V2_PART_B),
+      grep: /@v2/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    ...(process.env.CI ? [] : [{
+      name: 'chromium-v2-relief',
+      testMatch: ['**/obos-v2-glass.spec.ts', '**/obos-v2-boot.spec.ts', '**/obos-v2-contrast.spec.ts', '**/obos-v2-shots.spec.ts'],
+      use: {
+        ...devices['Desktop Chrome'],
+        /* HEADED: a headless Chromium has no display vsync (the perf gate read 1.2 ms frames, 210 fps, for
+           everything), so Glass would look free. Brainstorm 02 measured vsync-on, headed.
+           FOUNDER RULE (17 Oct): NO WINDOW EVER APPEARS ON HIS SCREEN. Playwright's headless:false plus --headless=new gives
+           Chromium's new headless mode (no window at all) with the real Metal GPU path. Every other project stays headless.
+           The perf spec asserts the frame rate stayed at display rate and labels its JSON "headless". */
+        headless: false,
+        launchOptions: { args: [...PERF_METAL] },
       },
     }]),
     {
@@ -146,7 +204,7 @@ export default defineConfig({
       testMatch: '**/cbam-lines.spec.ts',
       use: { ...devices['Desktop Safari'] },
     }]),
-  ],
+  ]),
   webServer: {
     /* Browser contracts exercise the exact static output that will ship. A
        dedicated port prevents an existing development server masking it.
@@ -171,8 +229,8 @@ export default defineConfig({
        requests per run at an endpoint whose terms cap the entire application at
        20 a second. A spec's own page.route still intercepts first, so
        heat-map-live-freshness.spec.ts goes on driving age with its own payloads. */
-    command: 'node scripts/preview-with-api.mjs --port 4322 --canned',
-    url: 'http://127.0.0.1:4322',
+    command: `node scripts/preview-with-api.mjs --port ${PW_PORT} --canned`,
+    url: PW_ORIGIN,
     reuseExistingServer: false,
     timeout: 120_000,
   },

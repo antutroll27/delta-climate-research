@@ -1,0 +1,106 @@
+---
+// src/components/ClimateEngine/v2/BuildingCardV2.astro — OBOS v2 spec §4.8 (keeps every bc* id). Owner: Track A (plan S4.3).
+// v1's #bcard: every id and every word. 20 Oct (brainstorm 04, founder option C): it stands ON THE MAP beside the selected roof (HeatMapStageV2.astro mounts it, not the
+// right column; v2/place-card.ts and v2/card-v2.ts place it), in three parts: the building, rooftop solar (always open, each floor beside its own headline, H13), and ONE
+// fold for the notes (rings, greenery, sources). On a phone the same card is a short peek above the sheet that grows (#bcExpand, #bcGrip); nothing is cloned.
+import Sym from './Sym.astro';
+import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+interface Props { scope: ResolvedScope }
+---
+<div class="bcard card" id="bcard" hidden role="dialog" aria-label="Selected building" data-peek="1">
+  <span class="lead" aria-hidden="true"></span>
+  <i class="lead-dot" aria-hidden="true"></i>
+  <button class="bc-grip" id="bcGrip" type="button" aria-expanded="false" aria-controls="bcBody" aria-label="Show all building details"><span aria-hidden="true"></span></button>
+  <div class="bcard-in" id="bcBody">
+    <section class="bc-part bc-building">
+      <div class="bc-top">
+        <div>
+          <h2 class="micro bc-head" id="bcHead" tabindex="-1">Selected building</h2>
+          <div class="bc-h"><span class="sr-only">Building</span><span id="bcId">—</span></div>
+        </div>
+        <button class="bc-x" id="bcX" type="button" aria-label="Close building details">Close ✕</button>
+      </div>
+      <dl class="bc-ll"><dt class="sr-only">Coordinates</dt><dd id="bcLL">—</dd></dl>
+      <dl class="bc-stats">
+        <div class="bc-s-h"><dt>Height</dt><dd id="bcH">—</dd></div>
+        <div class="bc-s-f"><dt>Floors ≈</dt><dd id="bcF">—</dd></div>
+        <div class="bc-s-a"><dt>Footprint</dt><dd id="bcA">—</dd></div>
+        <div class="bc-s-v"><dt>Vegetation</dt><dd id="bcV">—</dd></div>
+        <div class="bc-s-al"><dt>Albedo</dt><dd id="bcAl">—</dd></div>
+        <div class="bc-s-t"><dt>Surface</dt><dd id="bcT">—</dd></div>
+      </dl>
+      {/* LANDMARK — shown only when the selected building is one of the ward's
+          named buildings, and then it prints the published height AND where
+          that height came from. The source row is not decoration: a height
+          with no stated source is not drawn as a landmark at all, so this row
+          is the reason the rest of the block is allowed to exist.
+
+          ABOVE the rooftop-solar block and ruled off in cyan rather than the
+          screening amber, because this is the best-evidenced number on the
+          card and must never read as a sibling of the estimate below it. */}
+      <div class="bc-lm" id="bcLm" hidden>
+        <div class="bc-h"><span>Landmark</span></div>
+        <p class="bc-lm-name" id="bcLmName">—</p>
+        <dl>
+          <dt>Published height</dt><dd id="bcLmH">—</dd>
+          <dt>Source</dt><dd id="bcLmSrc">—</dd>
+        </dl>
+      </div>
+    </section>
+    {/* ROOFTOP SOLAR — a screening estimate ABOUT the building, under the
+        measured rows and in a different ink, ALWAYS OPEN (founder, 20 Oct). Painted by
+        paintSolarCard from the ward's solar file; hidden when none ships. "At least" is the
+        strict-mask floor: the mask rule is the largest lever in the estimate, so the
+        headline never prints without it (spec §2.4). */}
+    <section class="bc-sol bc-part" id="bcSol" hidden>
+      <div class="bc-h"><span class="bleed" aria-hidden="true"><Sym shape="square" c="solar" kind="modelled" size={40} /></span><span>Rooftop solar</span><span id="bcSolTier" class="bc-tier">screened</span></div>
+      <dl>
+        <div class="sol-kwp"><dt>Installable</dt><dd id="bcSolKwp" class="sun">—</dd></div>
+        <div class="sol-kwh"><dt>Yield</dt><dd id="bcSolKwh">—</dd></div>
+        {/* H13 (A-S4 audit F2; spec correction 18 Oct): the strict-mask floor is the floor of the SHADING loss (pv.loss_strict), so it sits BESIDE "Shaded", in one row.
+            The capacity floor is printed by the app inside #bcSolKwp's own <small>. */}
+        <div class="interval"><dt>Shaded</dt><dd id="bcSolLoss">—</dd><dt>At least</dt><dd id="bcSolFloor">—</dd></div>
+        <div class="sol-raised"><dt>Raised 2 m</dt><dd id="bcSolRaised">—</dd></div>
+        <div class="sol-worth"><dt>Worth</dt><dd id="bcSolRs">—</dd></div>
+      </dl>
+      <p class="bc-sol-note" id="bcSolNote">Screening estimate · not bankable · canopy Meta/WRI CHM v2 · 0.5 m grid · NASA POWER irradiance</p>
+      {/* THE HOW-SURE LADDER (spec 2026-09-07-solar-guide §2.3). Every rung names a
+          limit, the fix for it, and what the fix narrows it to — the middle <b>
+          is this roof's own band, painted by paintSolarCard. The buttons open a
+          pre-filled email and nothing else: the survey app does not exist, and a
+          button that pretended it did would be the one dishonest thing on the card. */}
+      <details class="bc-sure" id="bcSure">
+        <summary>How sure, and what would make it surer</summary>
+        <ul>
+          <li data-limit="roof">Roof obstacles unknown: tanks, stair rooms, parapets. <b id="bcSureRoof"></b> A ten-minute walk of the roof with a phone narrows it to about ±10%. <button type="button" class="bc-ask" data-limit="roof" aria-label="Ask about roof obstacles">Ask about this</button></li>
+          <li data-limit="canopy">Canopy over the roof: usable or not. <b id="bcSureCanopy"></b> One photo from the roof settles it. <button type="button" class="bc-ask" data-limit="canopy" aria-label="Ask about canopy over the roof">Ask about this</button></li>
+          <li data-limit="irradiance">Sunlight from a coarse satellite cell. <b id="bcSureIrr"></b> The ground station inside that cell narrows yield to about ±5%, city-wide. <button type="button" class="bc-ask" data-limit="irradiance" aria-label="Ask about sunlight data">Ask about this</button></li>
+          <li data-limit="height">Building height unverified for this roof. A survey or a drone pass fixes it. <button type="button" class="bc-ask" data-limit="height" aria-label="Ask about building height">Ask about this</button></li>
+          <li data-limit="validation" id="bcSureValid">Never compared with real rooftops yet. The validation study is under way. <button type="button" class="bc-ask" data-limit="validation">Join the study</button></li>
+        </ul>
+      </details>
+      <div class="bc-acts">
+        {/* THE PAYBACK SHEET'S DOOR (spec 2026-09-30-solar-roi D7). Painted by
+            paintSolarCard: hidden when the city has no sourced cost basis, disabled
+            with its own reason when the roof takes under 1 kW. */}
+        <button class="bc-brief" id="bcPay" type="button" hidden>Work out payback</button>
+        {/* THE WAY OFF THE SCREEN. It renders #solBrief from this roof and hands the
+            page to the browser's own print dialogue — no PDF library, no server.
+            It was born `hidden`, because a styled button that does nothing is a lie
+            the reader can click; the renderer exists now, so it does not stay one. */}
+        <button class="bc-brief" id="bcBrief" type="button">Print the installer brief</button>
+      </div>
+    </section>
+    {/* THE BUILDING'S NOTES, FOLDED INTO ONE DISCLOSURE (brainstorm 04 §6): the walk rings, the greenery and context lines, who drew the footprint, and the
+        street-view thumbnail. Every sentence is v1's and the app still writes it; the fold only keeps the solar figures on one screen. */}
+    <details class="bc-fold" id="bcFold">
+      <summary>Rings, greenery and sources</summary>
+      <div class="sv-thumb" id="svThumb" hidden></div>
+      <p class="bc-rings" id="bcRings"></p>
+      <p class="bc-ins" id="bcIns"></p>
+      <p class="bc-prov" id="bcSrc"></p>
+    </details>
+    {/* PHONE ONLY: the peek's one door to the whole card (the same #bcard grows; nothing is cloned). Hidden off a phone. */}
+    <button class="bc-expand" id="bcExpand" type="button" aria-controls="bcBody" aria-expanded="false">All details and payback</button>
+  </div>
+</div>

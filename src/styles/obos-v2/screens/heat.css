@@ -1,0 +1,13 @@
+/* OBOS v2 — screens/heat.css (spec §4.3). Owner: Track A (plan A1). Ported from the preview's screens/heat.html <style> (.classes), selectors re-rooted
+   under html[data-ui="v2"] .obos-v2. The ramp, #histo and #rampSc live once, in the temperature card (overview.css). NO colour literal. */
+html[data-ui="v2"] .obos-v2 [data-v2-card="heat-legend"] .classes { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 3px 8px; margin-top: 8px; font-size: 10.5px; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 [data-v2-card="heat-legend"] .classes span { display: inline-flex; align-items: center; gap: 4px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="heat-legend"] .classes .hk { width: 8px; height: 8px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="heat-legend"] .foot { margin-top: 8px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="heat-legend"] .pattern-note:empty { display: none; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="method"] details.disc:first-child { border-top: 0; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="method"] details.disc .body { padding-bottom: 8px; }
+html[data-ui="v2"] .obos-v2 [data-v2-card="method"] .sym-list { margin-top: 0; }
+/* A-S3 audit F4: the column scrolls with its bar hidden, so a fade at its foot says there is more below (heat-v2.ts bindScrollCue lifts it at the end).
+   `black` is the mask's alpha, not a colour. */
+html[data-ui="v2"] .obos-v2 #legend.heat-panel[data-v2-scroll="1"] { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent); }

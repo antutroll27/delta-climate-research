@@ -107,22 +107,25 @@ test('a completed roadmap item must name the artefact that proves it', async () 
 
 test('the heat-map card has no dead controls, and its record link is real', async () => {
   const { readFile } = await import('node:fs/promises');
-  const stage = await readFile('src/components/ClimateEngine/HeatMapStage.astro', 'utf8');
+  /* OBOS v2 is the served UI (flip): the stage, and the Methods card that holds the record link. */
+  const stage = await readFile('src/components/ClimateEngine/v2/HeatMapStageV2.astro', 'utf8');
+  const methods = await readFile('src/components/ClimateEngine/v2/MethodsCards.astro', 'utf8');
   const app = await readFile('src/scripts/climate-engine/heat-map-app.ts', 'utf8');
 
   // The primary action shipped to production as <button class="cta"> with no
   // handler anywhere in src/. Any <button> carrying .cta must be wired.
-  const bareCta = stage.match(/<button[^>]*class="cta"[^>]*>/g) ?? [];
+  const { readdir } = await import('node:fs/promises');
+  const v2Src = (await Promise.all((await readdir('src/components/ClimateEngine/v2')).filter((f) => f.endsWith('.astro')).map((f) => readFile(`src/components/ClimateEngine/v2/${f}`, 'utf8')))).join('\n');
+  const bareCta = v2Src.match(/<button[^>]*class="cta"[^>]*>/g) ?? [];
   for (const b of bareCta) {
     const id = /id="([^"]+)"/.exec(b)?.[1];
     assert.ok(id && app.includes(id), `dead control: ${b} has no handler`);
   }
 
   // and the link that replaced it must point at an endpoint that exists
-  const href = /<a[^>]*id="report-link"[^>]*href=\{([^}]+)\}/.exec(stage)?.[1];
+  const href = /<a[^>]*id="report-link"[^>]*href=\{([^}]+\}[^}]*)\}/.exec(methods)?.[1];
   assert.ok(href, 'report-link must be an anchor whose href is an expression');
-  assert.equal(href.trim(), 'reportHref');
-  assert.match(stage, /const reportHref = `\/api\/wards\/\$\{scope\.area\.id\}\/metadata\.json`;/,
+  assert.equal(href.trim(), '`/api/wards/${scope.area.id}/metadata.json`',
     'the record href must be built from the route\'s own area id');
 
   /* The record link must name the ward the instrument opened, or the first click
@@ -162,7 +165,7 @@ test('the heat-map card has no dead controls, and its record link is real', asyn
      actually guards are still required exactly as before: that the tag is the
      stage's own <main>, and that its area is `scope.key` rather than a literal.
      Only the assumption that nothing else could ever sit between them is gone. */
-  assert.match(stage, /<main id="main" class="stage"[^>]*\sdata-area=\{scope\.key\}>/,
+  assert.match(stage, /<main id="main" class="stage obos-v2"[^>]*\sdata-area=\{scope\.key\}[\s>]/,
     'the stage must state its area for the app to read');
   assert.match(app, /const INITIAL_AREA = bootArea\(\);/);
   assert.match(app, /const state: State = \{ ward: INITIAL_AREA,/,

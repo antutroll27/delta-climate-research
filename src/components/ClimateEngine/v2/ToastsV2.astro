@@ -1,0 +1,29 @@
+---
+// src/components/ClimateEngine/v2/ToastsV2.astro — OBOS v2 spec §3.10. Owner: frozen. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
+import type { newCityToAnnounce } from '../../../scripts/climate-engine/shell/new-city.ts';
+interface Props { newCity: ReturnType<typeof newCityToAnnounce>; hasData: boolean }
+const { newCity, hasData } = Astro.props;
+---
+<div class="toasts" id="v2Toasts" data-hud>
+{newCity && (
+  <div class="newcity toast" id="newCity" data-city={newCity.id} data-since={newCity.since} hidden>
+    {/* NO aria-label. The visible text already reads "New city Bengaluru", and a
+        label of "Bengaluru — newly added city" replaced it with a string those
+        visible words are not contained in — Label in Name (WCAG 2.5.3), so
+        "click New city" matched nothing by speech. The eyebrow is CLIPPED rather
+        than display:none on phones, so the name keeps "New city" there too. */}
+    <a href={newCity.href}>
+      <span class="t-eyebrow">New city</span>
+      <span class="t-go">{newCity.name} <span aria-hidden="true">→</span></span>
+    </a>
+    <button type="button" id="newCityHide" class="t-x" aria-label="Dismiss">×</button>
+  </div>
+)}
+{hasData && <Fragment>
+  <!-- First-run affordance: the buildings became clickable and nothing said so. -->
+  <div class="tiphint toast" id="tiphint" hidden>
+    <span>Click any building for its data</span>
+    <button type="button" id="tipX" class="t-x" aria-label="Dismiss hint">✕</button>
+  </div>
+</Fragment>}
+</div>

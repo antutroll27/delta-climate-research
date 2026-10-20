@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
+import { clickWard, openSection, setViewMode } from './fixtures/obos-nav';
 
 /* THE SOLAR SCREEN ON THE REAL PAGE. The panel and the pane render from the ward
    file, so they are asserted directly; the card is reached through a ranked row,
@@ -19,12 +20,12 @@ async function boot(page: Page) {
   await expect(page.locator('#lst')).not.toContainText('—', { timeout: 30_000 });
 }
 async function withRelief(page: Page) {
-  await page.locator('#modechip button[data-m="relief"]').click();
+  await setViewMode(page, 'relief');
   await page.waitForTimeout(4_000);
 }
 async function openSolar(page: Page) {
-  await page.locator('[data-rail="solar"]').click();
-  await expect(page.locator('.pane[data-pane="solar"]')).toHaveClass(/is-on/);
+  await openSection(page, 'solar');
+  await expect(page.locator('[data-side-pane="solar"]')).toBeVisible();
   await expect(page.locator('#solList tr')).toHaveCount(10, { timeout: 15_000 });
 }
 const canvasBox = async (page: Page) => (await page.locator('#mlmap canvas').first().boundingBox())!;
@@ -33,8 +34,16 @@ test.describe('the solar screen', () => {
   /* THE DEFAULT 30s IS A WALL, NOT A BUDGET. Booting a ward, forcing the 3D layer
      the software renderer skips, and easing the camera twice is 46s measured — the
      ranked-row test failed on the clock, not on an assertion. Raised so the test
-     can finish saying what it came to say. */
-  test.setTimeout(120_000);
+     can finish saying what it came to say.
+     240 s FROM 120 s, MEASURED ON PR #62 (OBOS v2 as the default UI). On the 2-CPU CI runner
+     every tier-0 spec that boots a ward ran 1.53x its v1 time (median over 156 tests, run
+     38589391745 on v1 against run 39486305229 on v2): v2's map is full-bleed (1280x720 =
+     2.1x the pixels of v1's 778x570 canvas, which SwiftShader rasterises on the CPU). This
+     test took 79.7 s on v1 and so ~122 s on v2: it timed out three times in a row mid-way
+     through its own assertions (the `#bcSolRs` "Received: ''" was the 120 s stop landing
+     inside a 5 s expect, not the card's text), and 'the card prints a one-page installer
+     brief' sat at 106 s. Nothing here is asserted any looser; the clock is what moved. */
+  test.setTimeout(240_000);
   /* A test that must intercept a file BEFORE the page loads boots itself and is
      tagged @own-boot. Booting it here first cost a whole extra ward load, about
      15-20 s on a 2-CPU CI runner (measured 2026-09-14). */
@@ -43,30 +52,7 @@ test.describe('the solar screen', () => {
     await boot(page);
   });
 
-  test('the legend folds the ward block under the colour key, and lifts it above on the Solar screen', async ({ page }) => {
-    /* Entering the console: the colour key first, the solar block folded under it. */
-    await expect(page.locator('#solBlock')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('#solBody')).toBeHidden();
-    expect(await page.locator('#solBlock').evaluate((b) => b.nextElementSibling?.className)).toBe('attr');
-    const rail = (await page.locator('.rail-r').boundingBox())!;
-    const head = (await page.locator('.legend .legend-head').first().boundingBox())!;
-    expect(head.y).toBeLessThan(rail.y + rail.height);
-    await page.locator('#solToggle').click();
-    await expect(page.locator('#solBody')).toBeVisible();
-    await expect(page.locator('#solKwp')).toHaveText(/\d+\.\d\s*MWp/);
-    await expect(page.locator('#solFloor')).toContainText('strict roof mask');
-    await page.locator('#solToggle').click();
-    await expect(page.locator('#solBody')).toBeHidden();
-    /* On the Solar screen the block moves above the key and unfolds. */
-    await openSolar(page);
-    await expect(page.locator('#solPaneKwp')).toHaveText(/\d+\.\d\s*MWp/, { timeout: 15_000 });
-    await expect(page.locator('#solPaneConf')).toContainText('Screening');
-    await expect(page.locator('#solPaneFloor')).toContainText('strict roof mask');
-    await expect(page.locator('#solPaneFloor')).toContainText('GWh');
-    await expect(page.locator('#solPaneBigK')).toContainText('3 kWp');
-    expect(await page.locator('#legend > :first-child').getAttribute('id')).toBe('solBlock');
-    await expect(page.locator('#solBody')).toBeVisible();
-  });
+  /* FLIP (plan B.2.2): 'the legend folds the ward block under the colour key' pinned a v1 layout that no longer exists; no v2 holder is needed (the v2 right column is a different arrangement). */
 
   test('the Solar pane ranks ten roofs, remembers the tariff, and hands over every roof', async ({ page }) => {
     await openSolar(page);
@@ -238,7 +224,7 @@ test.describe('the solar screen', () => {
        click on the showing pane closes the panel). The pane's own ward heading is
        the anchor instead; waiting on the row count alone would pass instantly
        against Ballygunge's ten rows. */
-    await page.locator('#strip .ward[data-w="baruipur"]').click();
+    await clickWard(page, 'baruipur');
     await expect(page.locator('#solPaneArea')).toHaveText(/Baruipur/i, { timeout: 30_000 });
     await expect(page.locator('#solList tr')).toHaveCount(10, { timeout: 15_000 });
     await expect(page.locator('#solPaneTier')).toHaveText('screened');

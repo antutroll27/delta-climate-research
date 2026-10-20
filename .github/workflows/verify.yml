@@ -18,8 +18,15 @@ permissions:
 
 jobs:
   quality:
-    name: Build and browser contracts
+    name: Build and browser contracts (shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
+    # PR #62: with v2 the default, its full-bleed map makes the tier-0 specs ~1.5x slower on the 2-CPU runner,
+    # and the main scope ran past its 38-minute stop (178 passed, 23 never ran). Split in two by test with
+    # --shard, as the v2 job is. ponytail: each leg repeats verify:static (~10 min); split it out if minutes matter.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     # Measured 2026-09-05: this job has taken 17.5-20.0 min on every push to main since
     # 0355181 (e2e on SwiftShader is the bulk), so 20 had no headroom and the run for
     # c2b7bbb was cancelled at 21.8 min once test:py grew by the tree-shading self-check.
@@ -171,8 +178,16 @@ jobs:
       # In CI the browser contracts print one line per test with its duration (the `list`
       # reporter beside `github`; see playwright.config.ts), so this step's log says where the
       # time went even when the run is cancelled before its summary.
+      # OBOS_PW_SCOPE=main: this job runs every Playwright project EXCEPT the two @v2 parts, which have
+      # their own job below (FINAL audit F1, founder-approved 19 Oct). See playwright.config.ts.
       - name: Verify build, publication and browser contracts
-        run: npm run ${{ steps.scope.outputs.browser == 'true' && 'verify' || 'verify:static' }}
+        env:
+          OBOS_PW_SCOPE: main
+          BROWSER: ${{ steps.scope.outputs.browser }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          npm run verify:static
+          if [ "$BROWSER" = true ]; then npx playwright test --shard="$SHARD/2"; fi
 
       # ON SUCCESS TOO (it was `if: failure()`), for one file: test-results/durations.json, the
       # json reporter's record of how long every test took. A passing run is the baseline a slow
@@ -188,7 +203,104 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-results
+          name: playwright-results-main-${{ matrix.shard }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # THE OBOS v2 BROWSER SUITE, in its own job (FINAL audit F1, founder-approved 19 Oct 2026).
+  # The @v2 specs add about 18.5 CI-minutes (127 tests; 12.3 min on the dev machine, ~1.5x on the 2-CPU runner) to the ~28.7 the other
+  # browser contracts already take, which does not fit the 38-minute Playwright stop in playwright.config.ts (28.7 + 18.5 = 47.2). Two
+  # matrix legs (part a: shell, building, honesty, a11y; part b: compare, solar, air-weather, methods, phone, states, contrast, boot, merged,
+  # keyboard; tests/e2e/fixtures/v2-split.ts) run in parallel (measured on PR #62: ~33-37 CI-minutes of tests each, not 9-10, so each part is split into two --shard legs of ~17-19), so the 38-minute stop is kept as it is. It runs
+  # only when the existing job's browser contracts run (the same changed-files rule), and installs Chromium only (no Firefox, no WebKit).
+  obos-v2-browser:
+    name: OBOS v2 browser contracts (part ${{ matrix.part }}, shard ${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    # 40, with Playwright's own stop at 30 below (setup before it has taken up to ~8 minutes on slow runners, so 30 + 8 + upload needs the headroom). PR #62's first run (one leg per part, 25-minute stop) timed out at 1500 s in BOTH parts: part a had run 49 of 75 tests, part b 60 of 93, i.e.
+    # ~37 and ~33 CI-minutes of tests, far over the 9-10 estimated at S8 (the on-map card specs and the runner's speed). Each part is therefore split in two with Playwright's --shard
+    # (by test, so the halves are even): 4 legs of ~17-19 minutes of tests plus ~5 of setup.
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [a, b]
+        shard: [1, 2]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # The same rule as the `quality` job's scope step: pull requests that change something the site is built from only; main never (the PR
+      # already ran it). Fails OPEN: if the changed files cannot be listed, the suite runs.
+      - name: Decide whether the browser contracts run
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          browser=true
+          changed="$RUNNER_TEMP/changed.txt"
+          if [ "$EVENT" != "pull_request" ]; then
+            browser=false
+          elif ! gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate \
+              -q '.[] | .filename, (.previous_filename // empty)' > "$changed"; then
+            echo "Could not list the changed files; running the browser contracts."
+          elif [ -s "$changed" ] && ! grep -qvE '^docs/|\.md$' "$changed"; then
+            browser=false
+          fi
+          echo "browser=$browser" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: steps.scope.outputs.browser == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.scope.outputs.browser == 'true'
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        if: steps.scope.outputs.browser == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      # Best effort and bounded, for the reason spelt out in the `quality` job (an apt mirror stall once cost three runs their whole budget).
+      - name: Install Chromium system libraries (best effort)
+        if: steps.scope.outputs.browser == 'true'
+        timeout-minutes: 4
+        continue-on-error: true
+        run: npx playwright install-deps chromium
+
+      - name: Install Chromium
+        if: steps.scope.outputs.browser == 'true'
+        timeout-minutes: 6
+        run: npx playwright install chromium
+
+      # The browser contracts serve the exact static output that ships (playwright.config.ts webServer), so the site is built first.
+      - name: Build
+        if: steps.scope.outputs.browser == 'true'
+        run: npm run build
+
+      # --global-timeout (30 min) overrides the config's CI 38: Playwright stops itself 5 minutes before this job's 40-minute limit, so a hang ends as a failure with a summary and durations, not a bare cancellation (rc1 R4).
+      - name: OBOS v2 browser contracts, part ${{ matrix.part }}, shard ${{ matrix.shard }}/2
+        if: steps.scope.outputs.browser == 'true'
+        env:
+          OBOS_PW_SCOPE: v2-${{ matrix.part }}
+        run: npx playwright test --project=chromium-v2-${{ matrix.part }} --shard=${{ matrix.shard }}/2 --global-timeout=1800000
+
+      # test-results/durations.json (the json reporter's record) on passing runs too, as in `quality`: one artifact per part.
+      - name: Upload browser results and durations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-v2-${{ matrix.part }}-${{ matrix.shard }}
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7

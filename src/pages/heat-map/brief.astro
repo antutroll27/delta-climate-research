@@ -1,26 +1,39 @@
 ---
 import Base from '../../layouts/Base.astro';
-import HeatMapBrief from '../../components/ClimateEngine/brief/HeatMapBrief.astro';
+import HeatMapBriefV2 from '../../components/ClimateEngine/brief/HeatMapBriefV2.astro';
+/* OBOS v2 is the default UI (flip plan A.2): its one stylesheet is the LAST import. */
+import '../../styles/obos-v2/index.css';
 ---
 <Base
   title="Urban Heat Scenario Brief — Delta Climate Research"
   description="A printable screening-grade record for an Urban Heat Explorer comparison scenario."
   noindex={true}
   nativeScroll={true}
+  ui="v2"
 >
-  <HeatMapBrief />
+  <HeatMapBriefV2 />
 </Base>
 
 <script>
   let dispose: (() => void) | null = null;
   let bootGeneration = 0;
+  let disposeV2: (() => void) | null = null;
+  /* OBOS v2: the page is rendered as v2, so this is always true. mountShellV2 binds the frame; it runs AFTER the mounts above. */
+  const bootV2 = async (generation: number) => {
+    if (document.documentElement.getAttribute('data-ui') !== 'v2' || disposeV2) return;
+    const { mountShellV2 } = await import('../../scripts/climate-engine/v2/shell-v2');
+    if (generation === bootGeneration && !disposeV2) disposeV2 = mountShellV2();
+  };
   const boot = async () => {
     const generation = ++bootGeneration;
-    if (!document.querySelector('[data-brief-root]') || dispose) return;
-    const { mountPairedBrief } = await import('../../scripts/climate-engine/compare/paired-brief');
-    if (generation === bootGeneration && document.querySelector('[data-brief-root]') && !dispose) dispose = mountPairedBrief();
+    if (!document.querySelector('[data-brief-root]')) return;
+    if (!dispose) {
+      const { mountPairedBrief } = await import('../../scripts/climate-engine/compare/paired-brief');
+      if (generation === bootGeneration && document.querySelector('[data-brief-root]') && !dispose) dispose = mountPairedBrief();
+    }
+    await bootV2(generation);
   };
   void boot();
   document.addEventListener('astro:page-load', () => { void boot(); });
-  document.addEventListener('astro:before-swap', () => { dispose?.(); dispose = null; });
+  document.addEventListener('astro:before-swap', () => { dispose?.(); dispose = null; disposeV2?.(); disposeV2 = null; });
 </script>

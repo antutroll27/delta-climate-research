@@ -1,0 +1,2 @@
+/* src/styles/obos-v2/print/page.css — flip plan A.2.5. Paper size and margins for every OBOS print: A4 with a 16 mm margin, exactly what rc6 printed (it used to come from v1's sheet, which the page no longer carries). */
+@media print { @page { size: A4; margin: 16mm; } }

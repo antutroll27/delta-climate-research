@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { clickWard, openSection } from './fixtures/obos-nav';
 
 /**
  * ONE URL PER AREA — the contract Task 8 exists to create, checked in a browser.
@@ -40,6 +41,12 @@ async function pickArea(page: Page, key: string): Promise<void> {
      on it here keeps a failure to commit from being reported three assertions
      later as a map that did not move. */
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+}
+
+/* v2: the receipts button lives in Data & methods, so open that section first (once: clicking the current section again must not close it). */
+async function openReceipts(page: Page): Promise<void> {
+  if (!(await page.locator('#srcBtn').isVisible())) await openSection(page, 'reports');
+  await page.locator('#srcBtn').click();
 }
 
 test('each area URL renders its OWN ward, not the default', async ({ page }) => {
@@ -95,7 +102,7 @@ test('switching ward moves the address bar with it', async ({ page }) => {
      not navigate. */
   await page.goto(BALLYGUNGE);
   await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
-  await page.locator('#strip .ward[data-w="barrackpore"]').click();
+  await clickWard(page, 'barrackpore');
   await expect(page.locator('#pname')).toHaveText('Barrackpore', { timeout: 20_000 });
   await expect(page).toHaveURL(/\/heat-map\/in\/kolkata\/barrackpore\/$/);
   /* The scope switcher has to follow too, or the console shows one ward and its
@@ -364,7 +371,7 @@ test('the ward strip never prints two scenarios side by side', async ({ page }) 
 
   /* BOTH TILES UNDER ONE SCENARIO — the arrangement the strip exists for, and the
      one a fix must not destroy. Blanking on a WARD change would clear this. */
-  await page.locator('#strip .ward[data-w="baruipur"]').click();
+  await clickWard(page, 'baruipur');
   await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
   await expect(baruipur).not.toContainText('—', { timeout: 20_000 });
   await expect(bally).not.toContainText('—');
@@ -393,7 +400,7 @@ test('the ward strip never prints two scenarios side by side', async ({ page }) 
 
   /* ACT TWO — THE PHASE, with the OTHER ward open, so the tile that gets spared
      and the tile that gets blanked swap places. */
-  await page.locator('#strip .ward[data-w="ballygunge"]').click();
+  await clickWard(page, 'ballygunge');
   await expect(page.locator('#pname')).toHaveText('Ballygunge', { timeout: 20_000 });
   await expect(bally).not.toContainText('—', { timeout: 20_000 });
   await expect(baruipur).not.toContainText('—');
@@ -426,7 +433,7 @@ test('the breadcrumb follows the ward', async ({ page }) => {
   await expect(page.locator('.crumb b')).toHaveText('Ballygunge');
   await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
 
-  await page.locator('#strip .ward[data-w="baruipur"]').click();
+  await clickWard(page, 'baruipur');
   await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
   await expect(page.locator('.crumb b'),
     'the breadcrumb is still naming the ward the page was opened at, beside a '
@@ -434,7 +441,7 @@ test('the breadcrumb follows the ward', async ({ page }) => {
     .toHaveText('Baruipur');
   /* The cells that CANNOT change stay put, which is what proves the writer moved
      the right one rather than repainting the whole crumb from somewhere. */
-  await expect(page.locator('.crumb span')).toHaveText(['India', 'Kolkata']);
+  await expect(page.locator('.crumb span:not(.sep):not(.crumb-g)')).toHaveText(['India', 'Kolkata']);
 });
 
 test('the document title, canonical and social tags follow the ward', async ({ page }) => {
@@ -537,14 +544,14 @@ test('the data receipts follow the ward while the panel is open', async ({ page 
   await page.goto(BALLYGUNGE);
   await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
 
-  await page.locator('#srcBtn').click();
+  await openReceipts(page);
   const panel = page.locator('#srcPanel');
   await expect(panel).toContainText('ballygunge', { timeout: 20_000 });
   const rowsAtBallygunge = await panel.locator('.src-row').count();
   expect(rowsAtBallygunge, 'the receipts panel rendered no rows at all, so the '
     + 'assertions below would be comparing two empty panels').toBeGreaterThan(0);
 
-  await page.locator('#strip .ward[data-w="baruipur"]').click();
+  await clickWard(page, 'baruipur');
   await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
   await expect(panel, 'the open receipts panel is still headed with the ward the '
     + 'reader has left, over that ward\'s rows, on a page where the name, the URL, '
@@ -562,7 +569,7 @@ test('the data receipts follow the ward while the panel is open', async ({ page 
      a deliberately broken build. `loadLayerManifest` also caches, so a ward already
      opened would issue no request whatever the rule did. Barrackpore has not been
      touched in this test, so its manifest can only be requested by a render. */
-  await page.locator('#srcBtn').click();
+  await openReceipts(page);
   await expect(panel).toBeHidden();
 
   let manifestFetches = 0;
@@ -571,7 +578,7 @@ test('the data receipts follow the ward while the panel is open', async ({ page 
     await route.continue();
   });
 
-  await page.locator('#strip .ward[data-w="barrackpore"]').click();
+  await clickWard(page, 'barrackpore');
   await expect(page.locator('#pname')).toHaveText('Barrackpore', { timeout: 20_000 });
   await expect(panel).toBeHidden();
   expect(manifestFetches, 'the receipts panel is closed and its manifest was '
@@ -581,7 +588,7 @@ test('the data receipts follow the ward while the panel is open', async ({ page 
   /* And opening it gets the ward that is now open, not the one it last held — which
      is also what proves the wait above was long enough for a fetch to have happened
      if the rule had been broken. */
-  await page.locator('#srcBtn').click();
+  await openReceipts(page);
   await expect(panel).toContainText('barrackpore', { timeout: 20_000 });
   expect(manifestFetches, 'opening the panel did not fetch the manifest either, so '
     + 'the check above was measuring a request that never happens at all')
@@ -617,15 +624,15 @@ test('a slow manifest cannot overwrite the ward the reader stopped on', async ({
   await page.goto(BALLYGUNGE);
   await expect(page.locator('#lst')).not.toContainText('—', { timeout: 20_000 });
   const panel = page.locator('#srcPanel');
-  await page.locator('#srcBtn').click();
+  await openReceipts(page);
   await expect(panel).toContainText('ballygunge', { timeout: 20_000 });
 
   /* Baruipur's render starts here and blocks on its delayed manifest. */
-  await page.locator('#strip .ward[data-w="baruipur"]').click();
+  await clickWard(page, 'baruipur');
   await expect(page.locator('#pname')).toHaveText('Baruipur', { timeout: 20_000 });
 
   /* Barrackpore's render starts second and finishes first. */
-  await page.locator('#strip .ward[data-w="barrackpore"]').click();
+  await clickWard(page, 'barrackpore');
   await expect(page.locator('#pname')).toHaveText('Barrackpore', { timeout: 20_000 });
   await expect(panel).toContainText('barrackpore', { timeout: 20_000 });
 
@@ -638,318 +645,9 @@ test('a slow manifest cannot overwrite the ward the reader stopped on', async ({
   await expect(panel).not.toContainText('baruipur');
 });
 
-test('no rail section is a link to the page it is already on', async ({ page }) => {
-  /* The defect this closes, in both of its historical forms: the Explore tab
-     carried aria-current="page" while its href pointed elsewhere (a lie to a
-     screen reader), and the fix for that left a link to the page you were already
-     standing on. The rail takes the href away from the current ROUTE, so the
-     section renders as a <button> — and it does so whichever PANE is open, which
-     is the half a single `active` prop could not express.
-     Checked at BOTH pane states, because the whole point of the split is that
-     opening a pane must not put the link back. */
-  await page.goto(BALLYGUNGE);
-  const map = page.locator('[data-rail="map"]');
-  await expect(map).toHaveJSProperty('tagName', 'BUTTON');
-  await expect(map).toHaveAttribute('aria-current', 'page');
-  // Analysis goes somewhere else, so it stays a link.
-  await expect(page.locator('[data-rail="analysis"]')).toHaveJSProperty('tagName', 'A');
-
-  await page.locator('[data-rail="layers"]').click();
-  await expect(page.locator('.pane[data-pane="layers"]')).toHaveClass(/is-on/);
-  await expect(map).toHaveJSProperty('tagName', 'BUTTON');
-  await expect(map).toHaveAttribute('aria-current', 'page');
-
-  /* Clicking the OPEN pane collapses the sidebar; clicking another reopens it. */
-  await page.locator('[data-rail="layers"]').click();
-  await expect(page.locator('.sidebar')).toHaveClass(/is-collapsed/);
-  await page.locator('[data-rail="map"]').click();
-  await expect(page.locator('.sidebar')).not.toHaveClass(/is-collapsed/);
-  await expect(page.locator('.pane[data-pane="map"]')).toHaveClass(/is-on/);
-});
-
-/**
- * THE RAIL'S WIDTH, MEASURED RATHER THAN READ.
- *
- * Source cannot see a computed width, and the width is now the product of a
- * declaration on `:root`, an attribute on <html>, a media query and whatever the
- * viewport happens to be. The unit suite proves there is only ONE declaration of
- * it; only a browser can say what that declaration resolves to on each route in
- * each state, which is the fact the reader actually gets.
- */
-/**
- * WHETHER THE LABEL IS A WORD ON THE ROW OR A TOOLTIP WAITING FOR A POINTER.
- *
- * NOT `toBeVisible()`, and the difference is the whole point of the collapsed
- * state. Playwright reads visibility as "has a box and is not display:none /
- * visibility:hidden" -- and the collapsed label deliberately keeps its box, at
- * `opacity: 0`, because that is what leaves the accessible name in the tree while
- * taking the pixels away. So `toBeVisible()` is TRUE in both states, and the
- * first draft of these tests asserted `not.toBeVisible()` against a collapsed
- * rail and failed for the right reason. The two computed properties below are
- * what actually separate the states.
- */
-const labelStyle = (page: Page) => page.locator('[data-rail="layers"] .rail-label')
-  .evaluate((el) => {
-    const s = getComputedStyle(el);
-    return { opacity: Number(s.opacity), position: s.position };
-  });
-
-const railBox = (page: Page) => page.locator('nav.rail').evaluate((el) => {
-  const rail = el.getBoundingClientRect();
-  /* The accent bar is a ::before, so it has no box of its own to measure. Its
-     `left` is resolved against the button it hangs off, which does. */
-  const pressed = el.querySelector('[aria-pressed="true"]');
-  const barLeft = pressed === null ? null
-    : pressed.getBoundingClientRect().left
-      + parseFloat(getComputedStyle(pressed, '::before').left);
-  return { left: rail.left, width: rail.width, barLeft };
-});
-
-test('the rail shows its labels, remembers being collapsed, and keeps its names', async ({ page }) => {
-  /* REDUCED MOTION, because the width is transitioned: without it every
-     measurement below is a race against 180ms of easing, and the first draft of
-     this test read 141px — a number neither state has. */
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.setViewportSize({ width: 1400, height: 900 });
-  await page.goto(BALLYGUNGE);
-
-  const label = page.locator('[data-rail="layers"] .rail-label');
-  const toggle = page.locator('button[data-rail-toggle]');
-
-  /* EXPANDED IS WHAT A FIRST VISIT GETS. Nothing is stored, so this is the
-     default arriving through the CSS rather than through any script. */
-  expect(await labelStyle(page)).toEqual({ opacity: 1, position: 'static' });
-  await expect(label).toHaveText('Layers');
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  const open = await railBox(page);
-  expect(open.width, 'the rail is not wide enough to hold a word beside an icon')
-    .toBeGreaterThan(120);
-
-  /* THE ACCENT BAR IS FLUSH AT THIS WIDTH. It is offset from the rail's own
-     width, and the last time that width moved the bar was left reading a stale
-     copy and floated half the difference off the edge. */
-  await page.locator('[data-rail="layers"]').click();
-  const openPressed = await railBox(page);
-  expect(openPressed.barLeft, 'no section is showing its open-pane accent bar')
-    .not.toBeNull();
-  expect(Math.abs(openPressed.barLeft! - openPressed.left),
-    'the open-pane accent bar is not flush against the expanded rail\'s edge')
-    .toBeLessThan(1);
-
-  /* COLLAPSED. The labels go from the eye and stay in the accessibility tree —
-     an icon-only rail whose sections announce nothing is the regression this
-     replaces, not the state it collapses to. */
-  await toggle.click();
-  expect((await labelStyle(page)).opacity,
-    'the label is still painted after the rail collapsed').toBe(0);
-  expect((await labelStyle(page)).position,
-    'the collapsed label is not the floating tooltip -- it is still taking a row '
-    + "of the rail's own layout, in a column too narrow to hold it").toBe('absolute');
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.locator('[data-rail="layers"]'))
-    .toHaveAccessibleName(/Layers/);
-  const shut = await railBox(page);
-  expect(shut.width, 'the rail did not narrow when it was collapsed')
-    .toBeLessThan(open.width);
-  expect(Math.abs(shut.barLeft! - shut.left),
-    'the accent bar is flush when the rail is expanded and not when it is '
-    + 'collapsed — it is offset from a width that only tracks one of the two')
-    .toBeLessThan(1);
-
-  /* THE NAME FOLLOWS THE STATE. A disclosure that still says "Collapse" while
-     collapsed is worse than one that says nothing. */
-  const collapsedName = await toggle.getAttribute('aria-label');
-  expect(collapsedName).toMatch(/expand/i);
-
-  /* AND IT SURVIVES A RELOAD, which is the whole reason it is in localStorage.
-     Measured after `load`, so a rail that came back expanded and then collapsed
-     itself would show up as the flash it is rather than passing on the settled
-     value. */
-  await page.reload({ waitUntil: 'load' });
-  expect((await railBox(page)).width).toBe(shut.width);
-  expect((await labelStyle(page)).opacity).toBe(0);
-  await expect(page.locator('button[data-rail-toggle]'))
-    .toHaveAttribute('aria-expanded', 'false');
-
-  /* EXPANDING AGAIN IS REMEMBERED TOO. A preference that can only be set one way
-     is a door that locks — and it is exactly what a handler toggling the STORED
-     value rather than the rendered one produces where storage is unavailable. */
-  await page.locator('button[data-rail-toggle]').click();
-  await page.reload({ waitUntil: 'load' });
-  expect((await railBox(page)).width).toBe(open.width);
-});
-
-test('below the console breakpoint the rail is collapsed whatever was stored', async ({ page }) => {
-  /* THE STORED PREFERENCE IS OVERRIDDEN, NOT FORGOTTEN. At this width the stage
-     has already dropped the sidebar; a 172px navigation column over what is left
-     of the map would be the same trade made worse. The chevron goes with it,
-     because a control that cannot change anything is one this project deletes. */
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.setViewportSize({ width: 1400, height: 900 });
-  await page.goto(BALLYGUNGE);
-
-  const wide = await railBox(page);
-  expect(await labelStyle(page)).toEqual({ opacity: 1, position: 'static' });
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  const narrow = await railBox(page);
-  expect(narrow.width, 'the rail keeps its expanded width on a phone, over a map '
-    + 'that has already given up its sidebar').toBeLessThan(wide.width);
-  expect((await labelStyle(page)).opacity,
-    'the labels are still painted on a 390px rail').toBe(0);
-  await expect(page.locator('button[data-rail-toggle]')).not.toBeVisible();
-
-  /* THE SECTIONS ARE STILL NAMED. This is the width with no hover at all, so the
-     tooltip that used to be the only label is unreachable by definition. */
-  await expect(page.locator('[data-rail="layers"]')).toHaveAccessibleName(/Layers/);
-
-  /* AND THE PREFERENCE IS INTACT: widening brings the labels back without the
-     reader having to ask for them again. */
-  await page.setViewportSize({ width: 1400, height: 900 });
-  expect(await labelStyle(page)).toEqual({ opacity: 1, position: 'static' });
-  expect((await railBox(page)).width).toBe(wide.width);
-});
-
-test('the panel closes by either door, and both doors leave the same state', async ({ page }) => {
-  /* THE WIDTH IS PINNED WIDE FOR EVERY ASSERTION HERE. Below 820px this column is
-     `display:none` by media query, so a "the panel is hidden" check would pass
-     over a chevron that does nothing at all -- the exact shape of guard this
-     project has been caught shipping. Nothing below is read at a width where the
-     stylesheet would answer for the control. */
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.setViewportSize({ width: 1400, height: 900 });
-  await page.goto(BALLYGUNGE);
-
-  const sidebar = page.locator('.sidebar');
-  const chevron = page.locator('button[data-panel-toggle]');
-  const mapSection = page.locator('[data-rail="map"]');
-  const layers = page.locator('[data-rail="layers"]');
-
-  await expect(sidebar).toBeVisible();
-  await expect(chevron).toBeVisible();
-  await expect(chevron).toHaveAttribute('aria-expanded', 'true');
-  await expect(mapSection).toHaveAttribute('aria-pressed', 'true');
-
-  /* DOOR ONE: the chevron. Every part of the state has to move, not just the
-     column -- the rail's pressed section is a claim about a pane that is no
-     longer on the page. */
-  await chevron.click();
-  await expect(sidebar).toBeHidden();
-  await expect(page.locator('html')).toHaveAttribute('data-panel', 'collapsed');
-  await expect(mapSection).toHaveAttribute('aria-pressed', 'false');
-  await expect(chevron).toHaveAttribute('aria-expanded', 'false');
-
-  /* THE WAY BACK IS THE RAIL, which is the whole reason the chevron does not need
-     to reopen anything. A different section than the one that was showing, so
-     this cannot pass by the panel simply never having closed. */
-  await layers.click();
-  await expect(sidebar).toBeVisible();
-  await expect(page.locator('.pane[data-pane="layers"]')).toHaveClass(/is-on/);
-  await expect(layers).toHaveAttribute('aria-pressed', 'true');
-  await expect(chevron).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.locator('html')).toHaveAttribute('data-panel', 'expanded');
-
-  /* DOOR TWO: the rail's own gesture, clicking the section already showing. It
-     must land in exactly the state the chevron produced -- if the two write
-     different things, one of them is a second copy of the fact. */
-  await layers.click();
-  await expect(sidebar).toBeHidden();
-  await expect(page.locator('html')).toHaveAttribute('data-panel', 'collapsed');
-  await expect(layers).toHaveAttribute('aria-pressed', 'false');
-  await expect(chevron).toHaveAttribute('aria-expanded', 'false');
-
-  await mapSection.click();
-  await expect(sidebar).toBeVisible();
-  await expect(chevron).toHaveAttribute('aria-expanded', 'true');
-});
-
-test('a collapsed panel survives a reload, and 820px overrides an open one', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.setViewportSize({ width: 1400, height: 900 });
-  await page.goto(BALLYGUNGE);
-
-  await page.locator('button[data-panel-toggle]').click();
-  await expect(page.locator('.sidebar')).toBeHidden();
-
-  /* REMEMBERED. Read after `load` at the SAME width, so nothing here can be the
-     viewport answering instead of the preference. */
-  await page.reload({ waitUntil: 'load' });
-  await expect(page.locator('.sidebar')).toBeHidden();
-  await expect(page.locator('button[data-panel-toggle]'))
-    .toHaveAttribute('aria-expanded', 'false');
-
-  /* AND THE PANE IDENTITY IS STILL NOT REMEMBERED, which is the decision
-     console-shell.ts made and this one deliberately does not overturn: bringing
-     the panel back gives the DEFAULT pane, not whatever was showing when it was
-     put away. Layers was never opened in this test, so Map coming back is the
-     server's render rather than a restored choice. */
-  await page.locator('[data-rail="reports"]').click();
-  await expect(page.locator('.pane[data-pane="reports"]')).toHaveClass(/is-on/);
-  await page.reload({ waitUntil: 'load' });
-  await expect(page.locator('.pane[data-pane="map"]')).toHaveClass(/is-on/);
-
-  /* THE BREAKPOINT WINS OVER A STORED *OPEN*. The panel is open at this point, so
-     a hidden sidebar at 390px can only be the media query -- and it must come
-     back when there is room, without the reader asking again. */
-  await expect(page.locator('.sidebar')).toBeVisible();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('.sidebar')).toBeHidden();
-  await expect(page.locator('button[data-panel-toggle]')).toBeHidden();
-  await page.setViewportSize({ width: 1400, height: 900 });
-  await expect(page.locator('.sidebar')).toBeVisible();
-});
-
-test('both stored preferences are applied before any module script runs', async ({ page }) => {
-  /* THE NO-FLASH GUARD, AND IT HAD TO BE WRITTEN THIS WAY. The obvious version —
-     collapse, reload, assert collapsed — passes whether the preference is applied
-     before first paint or three hundred milliseconds later by the shell's mount,
-     because Playwright waits for the settled state either way. Measured: deleting
-     the rule that applies the stored panel collapse early left that test green.
-     What it costs a reader is a 300px column and a 114px rail appearing and then
-     being taken away on every single load.
-     So every bundled module is BLOCKED. What is left is the server's HTML and the
-     one inline script the rail embeds, which is exactly the state the page is in
-     at first paint — and both preferences must already be honoured in it. */
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.setViewportSize({ width: 1400, height: 900 });
-
-  await page.addInitScript(() => {
-    try {
-      localStorage.setItem('obos:rail', 'collapsed');
-      localStorage.setItem('obos:panel', 'collapsed');
-    } catch { /* the test cannot run without storage; the assertions below say so */ }
-  });
-  await page.route('**/_astro/*.js', (route) => route.abort());
-  await page.goto(BALLYGUNGE, { waitUntil: 'commit' });
-
-  const html = page.locator('html');
-  await expect(html, 'the rail preference is not on the document before the '
-    + 'bundle runs — the inline pre-paint script is missing or threw')
-    .toHaveAttribute('data-rail', 'collapsed');
-  await expect(html).toHaveAttribute('data-panel', 'collapsed');
-
-  /* AND THE PIXELS FOLLOW, which is the half the attributes alone do not prove:
-     an attribute nothing selects on is a preference recorded and ignored. */
-  await expect(page.locator('.sidebar'),
-    'the panel is still on screen with its collapse stored and no script running '
-    + '— the attribute is set but no stylesheet reads it, so the column will '
-    + 'appear on every load and vanish once the bundle mounts').toBeHidden();
-  expect(await page.locator('nav.rail').evaluate((el) => el.getBoundingClientRect().width),
-    'the rail is at its expanded width with the collapse stored and no script '
-    + 'running, so it will be seen wide and then animate shut on every load')
-    .toBeLessThan(120);
-
-  /* THE SECTIONS ARE STILL NAMED WITH NO JAVASCRIPT AT ALL. */
-  await expect(page.locator('[data-rail="layers"]')).toHaveAccessibleName(/Layers/);
-});
-
-test('the console carries exactly one brand mark', async ({ page }) => {
-  /* Two brands eight pixels apart, both linking to `/`, is what composing the rail
-     with the old top bar produced. Counted in the built page rather than in either
-     source, because that is the only place the two could ever have met. */
-  await page.goto(BALLYGUNGE);
-  await expect(page.locator('.stage a[href="/"]')).toHaveCount(1);
-});
+/* FLIP (plan B.2.2): the seven v1-chrome tests that stood here (rail never a self-link, rail labels and collapse, rail forced collapsed under the breakpoint, the panel's two doors, the stored
+   panel surviving a reload, both stored preferences before any module script, exactly one brand mark) retired with v1's rail and panel chrome. Their v2 holders: obos-v2-shell (menu and side-panel
+   independence, the pin, prefs before paint), obos-v2-compare ("never a self-link": the Compare item is a <button aria-current="page">), and obos-v2-boot (the stored Light/Glass choice on the root at DOMContentLoaded). */
 
 test('/heat-map still reaches the tool', async ({ page }) => {
   // It is a prerendered meta-refresh stub, not a server redirect — the build is
@@ -995,8 +693,9 @@ test('an area with no data states its tier instead of half-rendering', async ({ 
      assertion green. The claim is that a reader is TOLD what is true here, and a
      sentence present in the DOM but never painted is exactly the silent
      degradation this whole test exists against. */
-  await expect(page.locator('.rig')).toBeVisible();
-  await expect(page.locator('.rig')).toContainText('no artefacts · geometry tier');
+  /* v2: the map stack's ward card (MapStack.astro) is not drawn where nothing ships; the statement a reader SEES is the centred not-yet card (obos-v2-states.spec.ts holds its wording and position) */
+  await expect(page.locator('.notyet')).toBeVisible();
+  await expect(page.locator('.notyet')).toContainText('Nothing here would be a reading, so nothing is drawn.');
 
   /* THE CONSOLE IS STILL AROUND THE STATEMENT, and every control in it tells the
      truth about this place. The header tab strip used to be checked here — its
@@ -1096,14 +795,15 @@ test('an area with no data states its tier instead of half-rendering', async ({ 
      It works on this page exactly as it works on every other, which is why it is
      counted rather than excluded — a `:not()` that merely stepped over it would
      also step over a second one arriving with nothing behind it. */
-  await expect(page.locator('.sidebar button[data-select-trigger]')).toHaveCount(3);
-  await expect(page.locator('.sidebar button[data-panel-toggle]')).toHaveCount(1);
+  await expect(page.locator('#v2Side button[data-select-trigger]')).toHaveCount(3);
+  /* v2: one close button per side pane (explore, solar, air): the named way to fold the panel, counted so a fourth cannot arrive unnoticed */
+  await expect(page.locator('#v2Side button[data-side-close]')).toHaveCount(3);
   await expect(page.locator(
-    '.sidebar button:not([data-select-trigger]):not([data-panel-toggle])')).toHaveCount(0);
-  await expect(page.locator('.sidebar a')).toHaveCount(0);
-  await expect(page.locator('.sidebar input:not(:disabled)')).toHaveCount(0);
-  await expect(page.locator('.sidebar select:not([data-scope])')).toHaveCount(0);
-  await expect(page.locator('.sidebar select[data-scope]')).toHaveCount(3);
+    '#v2Side button:not([data-select-trigger]):not([data-side-close])')).toHaveCount(0);
+  await expect(page.locator('#v2Side a')).toHaveCount(0);
+  await expect(page.locator('#v2Side input:not(:disabled)')).toHaveCount(0);
+  await expect(page.locator('#v2Side select:not([data-scope])')).toHaveCount(0);
+  await expect(page.locator('#v2Side select[data-scope]')).toHaveCount(3);
 
   await page.waitForTimeout(1_500);
   expect(requests).toEqual([]);

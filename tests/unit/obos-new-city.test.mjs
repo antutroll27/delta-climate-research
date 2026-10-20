@@ -204,8 +204,13 @@ import { readFile } from 'node:fs/promises';
    .astro component cannot be imported under `node --import tsx --test`. Each one
    names the property of the source it reads and why that forces the property of
    the rendered page that matters. */
+/* FLIP: v2 is the served UI. `stage` stays the v1 stage for the CSS pins below (they retire with v1's source in PR 2); the MARKUP and honesty pins read the v2 files. */
 const stage = await readFile(
   new URL('../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url), 'utf8');
+const toastsV2 = await readFile(
+  new URL('../../src/components/ClimateEngine/v2/ToastsV2.astro', import.meta.url), 'utf8');
+const stageV2 = await readFile(
+  new URL('../../src/components/ClimateEngine/v2/HeatMapStageV2.astro', import.meta.url), 'utf8');
 const flat = (s) => s.replace(/\s+/g, ' ').trim();
 
 /* THE BADGE'S OWN MARKUP, AND NOT A CHARACTER MORE. Slicing to `</div>` alone
@@ -214,7 +219,7 @@ const flat = (s) => s.replace(/\s+/g, ' ').trim();
    markup the badge does not own. Stop at whichever comes first — the close, or the
    next element — so a nested div FAILS these tests instead of escaping them. */
 const badgeInner = (markup) => {
-  const start = markup.indexOf('<div class="newcity"');
+  const start = markup.indexOf('<div class="newcity');
   assert.notEqual(start, -1, 'the badge container is missing');
   const block = markup.slice(start);
   const ends = [block.indexOf('</div>'), block.indexOf('<div', 1)].filter((i) => i !== -1);
@@ -222,8 +227,8 @@ const badgeInner = (markup) => {
 };
 
 test('the badge is a link with a SIBLING dismiss button, never a button inside a link', () => {
-  const markup = flat(stage);
-  assert.match(markup, /<div class="newcity" id="newCity"[^>]*>/,
+  const markup = flat(toastsV2);
+  assert.match(markup, /<div class="newcity toast" id="newCity"[^>]*>/,
     'the badge container is missing');
   const inner = badgeInner(markup);
   assert.match(inner, /<a [^>]*href=/, 'the badge must contain a real link');
@@ -239,8 +244,8 @@ test('the badge is a link with a SIBLING dismiss button, never a button inside a
 });
 
 test('the link keeps its own visible text as its name, and the phone rule keeps the eyebrow', () => {
-  const markup = flat(stage);
-  const inner = badgeInner(markup);
+  const inner = badgeInner(flat(toastsV2));
+  const markup = flat(stage); /* v1 CSS pins below: retire with v1's source (PR 2) */
   /* LABEL IN NAME (WCAG 2.5.3, level A). The visible text is "New city Bengaluru →";
      an aria-label of "Bengaluru — newly added city" REPLACED that with a string the
      visible words are not contained in, so a speech-input user saying "click New
@@ -318,7 +323,7 @@ test('the centred overlays berth around the badge rather than under it', () => {
 });
 
 test('the badge renders only where it can be true', () => {
-  const markup = flat(stage);
+  const markup = flat(stageV2 + toastsV2);
   /* `[,)]` so the call may take arguments. It now passes the store explicitly as
      null — the server must never consult a reader's dismissal — and pinning the
      one-argument spelling would have failed that correction while the rule it

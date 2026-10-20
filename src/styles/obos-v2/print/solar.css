@@ -1,0 +1,17 @@
+/* OBOS v2 — print/solar.css (spec §3.10, §4.6 print). Owner: Track B (plan A1; S6.2 Step 3).
+   The installer brief is the only thing that belongs on paper. v1's logic (stage :1792–1814), re-scoped to the v2 root: `.obos-v2` IS the `.stage`.
+   `[hidden]` is declared `display: none !important` inside the base LAYER, and a layered important beats an unlayered one whatever its
+   specificity (measured, v1 stage :1796–1806), so the brief is un-hidden by script before window.print(); a cold Ctrl+P prints a blank page. */
+@media print {
+  /* THE AREA STAGE ONLY. These rules say "everything in the root except the installer brief is chrome", which is true on the area page and
+     blanks Compare and the paired brief (they have their own print rules: print/brief.css). Scoped by the routes' own markers (merge gate, 18 Oct). */
+  html[data-ui="v2"], html[data-ui="v2"] body { background: none; }
+  html[data-ui="v2"] body { overflow: visible; }
+  html[data-ui="v2"] body > *:not(.obos-v2) { display: none !important; }
+  html[data-ui="v2"] .obos-v2:not([data-brief-root]):not([data-compare-root]) { position: static; overflow: visible; height: auto; background: var(--print-paper); }
+  html[data-ui="v2"] .obos-v2:not([data-brief-root]):not([data-compare-root]) > *:not(#solBrief) { display: none !important; }
+  html[data-ui="v2"] .obos-v2:not([data-brief-root]):not([data-compare-root]) #solBrief { display: block !important; position: static; overflow: visible; padding: 0; color: var(--print-ink); background: var(--print-paper); font: 11pt/1.4 var(--sans);
+    transform: none; width: auto; max-height: none; border-radius: 0; box-shadow: none; }
+  html[data-ui="v2"] .obos-v2:not([data-brief-root]):not([data-compare-root]) #solBrief[hidden] { display: none !important; }
+  html[data-ui="v2"] .obos-v2:not([data-brief-root]):not([data-compare-root]) #brClose { display: none !important; }
+}
