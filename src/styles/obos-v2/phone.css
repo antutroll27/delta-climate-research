@@ -132,7 +132,7 @@ html[data-ui="v2"] .obos-v2 .rnudge .rn-x { width: 44px; height: 44px; min-width
   html[data-ui="v2"] .obos-v2[data-phone] #bcard .bcard-in { flex: 1 1 auto; min-height: 0; max-height: none !important; gap: 8px; padding: 14px 14px 12px; }
   html[data-ui="v2"] .obos-v2[data-phone] #bcard .bc-grip { position: absolute; z-index: 3; top: 0; left: 50%; display: flex; align-items: center; justify-content: center; width: 72px; height: 24px; min-height: 24px; margin-left: -36px; padding: 0; border: 0; background: transparent; cursor: pointer; }
   html[data-ui="v2"] .obos-v2[data-phone] #bcard .bc-grip span { display: block; width: 40px; height: 4px; border-radius: 4px; background: var(--well-2); }
-  html[data-ui="v2"] .obos-v2[data-phone] #bcard .bc-expand { display: inline-flex; align-self: flex-start; min-height: 34px; background: var(--ink-1); color: var(--on-ink); }
+  html[data-ui="v2"] .obos-v2[data-phone] #bcard .bc-expand { display: inline-flex; align-items: center; justify-content: center; align-self: flex-start; min-height: 34px; margin: 0; padding: 0 11px; border: 0; border-radius: 99px; background: var(--ink-1); color: var(--on-ink); font: 500 12px/1 var(--sans); cursor: pointer; white-space: nowrap; }
   html[data-ui="v2"] .obos-v2[data-phone] #bcard .bc-top > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
   html[data-ui="v2"] .obos-v2[data-phone] #bcard .bc-top .bc-h { margin: 0; font-size: 22px; }
   /* the peek: the roof, its measured rows that matter, the capacity and the shading each with its OWN floor, and the door to the rest (220 px at most, measured) */

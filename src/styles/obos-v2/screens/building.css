@@ -94,7 +94,7 @@ html[data-ui="v2"] .obos-v2 #bcard .bc-sure li { margin: 0 0 8px; font-size: 11.
 html[data-ui="v2"] .obos-v2 #bcard .bc-sure li b { font-weight: 600; color: var(--ink-1); }
 html[data-ui="v2"] .obos-v2 #bcard .bc-ask { display: inline-flex; align-items: center; min-height: 24px; margin-top: 4px; padding: 0 10px; border: 0; border-radius: 99px; background: var(--well); color: var(--ink-1); font: 500 11px/1 var(--sans); cursor: pointer; }
 html[data-ui="v2"] .obos-v2 #bcard .bc-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-html[data-ui="v2"] .obos-v2 #bcard :is(.bc-brief, .bc-x, .bc-expand) { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; margin: 0; padding: 0 11px; border: 0; border-radius: 99px;
+html[data-ui="v2"] .obos-v2 #bcard :is(.bc-brief, .bc-x) { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; margin: 0; padding: 0 11px; border: 0; border-radius: 99px;
   background: var(--well); color: var(--ink-1); font: 500 12px/1 var(--sans); cursor: pointer; white-space: nowrap; }
 html[data-ui="v2"] .obos-v2 #bcard .bc-brief[hidden] { display: none; }
 html[data-ui="v2"] .obos-v2 #bcard #bcPay { background: var(--ink-1); color: var(--on-ink); }

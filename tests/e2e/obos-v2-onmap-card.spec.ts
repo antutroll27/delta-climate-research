@@ -22,6 +22,7 @@ test.describe('@v2 on-map building card: placement', () => {
       await placed(page);
       await page.waitForTimeout(1500);   // the 700 ms camera move, and the app's 250 ms chrome read
       expect(await clash(page)).toEqual([]);
+      await expect(page.locator('#bcExpand'), 'F1: the phone-only "All details and payback" bar is not on a desktop card').toBeHidden();
       const g = await page.evaluate(() => {
         const r = (id: string) => document.getElementById(id)!.getBoundingClientRect();
         const dot = document.querySelector('#bcard .lead-dot')!.getBoundingClientRect();
