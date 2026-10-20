@@ -50,7 +50,7 @@ test.describe.serial('the payback sheet', () => {
   test.afterAll(async () => { await page?.context().close(); });
 
   test('a remembered tariff of 1e308 is refused at load; the ward line states its whole-ward case', async () => {
-    await tap(page, '[data-rail="solar"]');
+    await tap(page, '.nav-item[data-section="solar"]');
     await expect(page.locator('#solTariff')).toHaveValue('8.00');
     const ward = page.locator('#solPanePay');
     await expect(ward).toBeVisible({ timeout: 15_000 });

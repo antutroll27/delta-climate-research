@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openSection } from './fixtures/obos-nav';
 
 test('the ward-record link is live and follows the ward selection', async ({ page }) => {
   await page.goto('/heat-map/in/kolkata/ballygunge/');
@@ -9,13 +10,14 @@ test('the ward-record link is live and follows the ward selection', async ({ pag
      than dropping the visibility assertion — a link that renders but cannot be
      REACHED is exactly what this test exists to catch, and "it is in the DOM"
      would not have caught it. */
-  await page.locator('[data-rail="reports"]').click();
+  await openSection(page, 'reports');
+  await page.locator('#srcBtn').click();   /* v2: the link sits with the receipts, one click inside Data & methods (obos-v2-methods.spec.ts reaches it the same way) */
   const link = page.locator('#report-link');
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute('href', '/api/wards/ballygunge/metadata.json');
 
   // switching ward must move the link with it
-  await page.locator('#big-barrackpore').click();
+  await page.locator('#big-barrackpore').evaluate((e) => (e as HTMLElement).click());
   await expect(link).toHaveAttribute('href', '/api/wards/barrackpore/metadata.json');
 
   // and the target must actually serve a record for that ward

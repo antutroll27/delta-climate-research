@@ -60,7 +60,7 @@ test.describe('observed weather', () => {
       .map((id) => document.getElementById(id)!)
       .every((e, i, a) => i === 0 || (a[i - 1].compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING)));
     expect(order).toBe(true);
-    await expect(page.locator('.metric .k', { hasText: 'Ground & rooftop surface' })).toBeVisible();
+    await expect(page.locator('.surface-k', { hasText: 'Ground & rooftop surface' })).toBeVisible();
     // and the number itself: near the 31 °C air, nowhere near 46.7
     await expect.poll(() => surfaceMean(page), { timeout: 60_000 }).toBeLessThan(36);
     expect(await surfaceMean(page)).toBeGreaterThan(30);

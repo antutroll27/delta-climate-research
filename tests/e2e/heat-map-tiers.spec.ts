@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { clickWard, openLayers } from './fixtures/obos-nav';
 
 /**
  * THE TWO RENDER TIERS, EACH IN THE BROWSER THAT ACTUALLY PRODUCES IT.
@@ -169,8 +170,11 @@ test.describe('tier 0 — the canvas raster is the whole picture', () => {
     await settled(page);
     const withField = await rampFraction(page);
 
-    await page.locator('button[data-rail="layers"]').click();
+    await openLayers(page);
     await page.locator('input[data-layer="thermal/surface"]').uncheck();
+    /* v2: the Layers popover sits over the map, so it is closed (Esc closes only itself) before the pixels are read: both readings then see the same chrome */
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#v2Layers')).toBeHidden();
     await page.waitForTimeout(2_500);
     const withoutField = await rampFraction(page);
 
@@ -246,7 +250,7 @@ test.describe('the relief tier — the scene the founder looks at', () => {
     await page.goto(BALLYGUNGE);
     await settled(page);
     for (const ward of ['baruipur', 'ballygunge', 'barrackpore', 'ballygunge']) {
-      await page.locator(`#strip .ward[data-w="${ward}"]`).click();
+      await clickWard(page, ward);
       await expect(page).toHaveURL(new RegExp(`/kolkata/${ward}/`), { timeout: 30_000 });
       await expect(page.locator('#simBackend')).not.toHaveText(/selecting/i, { timeout: 40_000 });
       await page.waitForTimeout(4_000);
