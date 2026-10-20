@@ -96,6 +96,31 @@ test.describe('@v2 on-map building card: placement', () => {
     }
   });
 
+  test('@v2 [H] F3: a roof panned under chrome or off the screen: the lead never crosses chrome (the card docks), and a roof off the top or bottom hides the card', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openV2(page, LAB);
+    await relief(page);
+    await pick(page);
+    await placed(page);
+    await page.waitForTimeout(1500);
+    for (const id of ['v2MapStack', 'v2Title', 'v2ReadingsPill']) {
+      const b = (await page.locator('#' + id).boundingBox())!;
+      await panRoofTo(page, b.x + b.width / 2, b.y + b.height / 2);
+      const st = await cardState(page);
+      expect(!st.visible || st.side === 'dock', `roof under #${id}: the card hides or docks (no lead): ${JSON.stringify(st)}`).toBe(true);
+    }
+    const dock = (await page.locator('.dock').boundingBox())!;
+    await panRoofTo(page, dock.x + dock.width / 2, dock.y + dock.height / 2);
+    const sd = await cardState(page);
+    expect(!sd.visible || sd.side === 'dock', `roof under the dock: ${JSON.stringify(sd)}`).toBe(true);
+    for (const y of [-114, 900 + 114]) {
+      await panRoofTo(page, 900, y);
+      expect((await cardState(page)).visible, `roof at y=${y}, off the canvas: the card hides`).toBe(false);
+    }
+    await panRoofTo(page, 900, 450);
+    expect((await cardState(page)).visible, 'back on open map: the card is back').toBe(true);
+  });
+
   test('@v2 [H] a flat map (no relief, so no apex): the card docks at the right and still clears the chrome; no lead line is drawn', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openV2(page, LAB);

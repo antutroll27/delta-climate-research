@@ -44,15 +44,21 @@ export const clash = (page: Page): Promise<string[]> => page.evaluate(`(() => {
 /** the picked roof is carried by the map: pan the camera so the SAME roof stands at screen (x, y). It stashes the roof's lng/lat on first use, so a roof panned off screen can be panned back. */
 export async function panRoofTo(page: Page, x: number, y: number): Promise<void> {
   await page.evaluate(`(() => {
-    const map = window.__obosMap, w = innerWidth, h = innerHeight;
+    const map = window.__obosMap;
+    map.setMaxBounds(null);   // the ward's bounds would stop a roof from being panned off the top or bottom
     if (!window.__roofLL) { const s = document.getElementById('bsel').getBoundingClientRect(); window.__roofLL = map.unproject([s.left + s.width / 2, s.top + s.height / 2]); }
-    const now = map.project(window.__roofLL), c = map.getCenter(), at = map.project(c);
-    map.jumpTo({ center: map.unproject([at.x + (now.x - ${x}), at.y + (now.y - ${y})]) });
+    /* the camera is pitched, so one translation undershoots: walk the centre until the roof is within 1.5 px */
+    for (let i = 0; i < 25; i++) {
+      const now = map.project(window.__roofLL), at = map.project(map.getCenter());
+      if (Math.hypot(now.x - ${x}, now.y - ${y}) < 1.5) break;
+      map.jumpTo({ center: map.unproject([at.x + (now.x - ${x}), at.y + (now.y - ${y})]) });
+    }
   })()`);
   await page.waitForTimeout(700);   // a map render, the app's 250 ms chrome read, the card's own write
 }
 /** the card's state after a pan: hidden, or its size and side (the lead is hidden with data-side="dock") */
-export const cardState = (page: Page): Promise<{ visible: boolean; side: string | undefined; h: number }> => page.evaluate(() => {
+export const cardState = (page: Page): Promise<{ visible: boolean; side: string | undefined; h: number; apex: { x: number; y: number } }> => page.evaluate(() => {
   const c = document.getElementById('bcard')!;
-  return { visible: getComputedStyle(c).visibility !== 'hidden', side: c.dataset.side, h: c.getBoundingClientRect().height };
+  const s = document.getElementById('bsel')!.getBoundingClientRect();
+  return { visible: getComputedStyle(c).visibility !== 'hidden', side: c.dataset.side, h: c.getBoundingClientRect().height, apex: { x: Math.round(s.left + s.width / 2), y: Math.round(s.top + s.height / 2) } };
 });

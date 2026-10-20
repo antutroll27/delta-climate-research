@@ -5,8 +5,9 @@
  *   1. the card's near edge is LEAD_MIN past the selection brackets, on the right of the roof, and it slides vertically toward the apex;
  *   2. if a chrome box is in the way it moves out in STEP px (up to MAX_PUSH), then tries the left of the roof;
  *   3. only when neither side fits whole is it CAPPED to the tallest free band (and scrolls inside); the right side may go on past the push before it gives up;
- *   4. rc4 audit F2: a card is never a sliver. When there is no usable spot beside the roof the card DOCKS (no apex, no lead) if the dock fits; otherwise
- *      nothing is drawn (height 0).
+ *   4. rc4 audit F2/F3: a card is never a sliver, and its lead never crosses chrome. When there is no usable spot beside the roof, or the roof is UNDER chrome, or the
+ *      lead would cross a chrome box, the card DOCKS (no apex, no lead) if the dock fits; otherwise nothing is drawn (height 0). A roof off the canvas by more than half
+ *      the brackets has no card.
  * A card keeps its side while that side still fits (`prev`), so a slow orbit never flips it back and forth. With no apex (a flat map has no relief to project
  * from) the card docks at the right edge. Every box is [l, t, r, b] in one coordinate space; the chrome boxes are inflated by GAP here, the caller passes them raw.
  */
@@ -25,6 +26,18 @@ export const GAP = 12;
 export const EDGE = 12;
 const STEP = 8, MAX_PUSH = 200, MIN_H = 240, LEAD_INSET = 18;
 const NOTHING = (left: number, top: number): Placement => ({ side: null, left, top, height: 0, capped: true, fits: false });
+const inside = (b: Box, x: number, y: number): boolean => x >= b.l && x <= b.r && y >= b.t && y <= b.b;
+/** does the segment cross the box (Liang-Barsky)? */
+function segmentHits(x0: number, y0: number, x1: number, y1: number, b: Box): boolean {
+  let t0 = 0, t1 = 1;
+  const dx = x1 - x0, dy = y1 - y0;
+  for (const [p, q] of [[-dx, x0 - b.l], [dx, b.r - x0], [-dy, y0 - b.t], [dy, b.b - y0]] as const) {
+    if (p === 0) { if (q < 0) return false; continue; }
+    const t = q / p;
+    if (p < 0) { if (t > t1) return false; t0 = Math.max(t0, t); } else { if (t < t0) return false; t1 = Math.min(t1, t); }
+  }
+  return true;
+}
 
 export interface PlaceInput {
   /** the roof apex in the same space as the boxes, or null when there is nothing to anchor to (dock) */
@@ -67,10 +80,14 @@ function gaps(x0: number, x1: number, blockers: readonly Box[], lo: number, hi: 
 
 export function solveCard(input: PlaceInput): Placement {
   const { apex, canvas } = input;
+  if (apex && (apex.x < canvas.l - BRACKET / 2 || apex.x > canvas.r + BRACKET / 2 || apex.y < canvas.t - BRACKET / 2 || apex.y > canvas.b + BRACKET / 2)) return NOTHING(canvas.r - EDGE, canvas.t + EDGE);
   const dock = (): Placement => { const d = solveBeside({ ...input, apex: null }, apex); return d.fits ? d : NOTHING(d.left, d.top); };
   if (!apex) return dock();
+  if (input.avoid.some((b) => inside(b, apex.x, apex.y))) return dock();   // the roof is under chrome: nothing to point at
   const p = solveBeside(input);
   if (!p.fits) return dock();   // no usable spot beside the roof: dock, never a sliver
+  const l = leadFor(p, apex, input.card.w);
+  if (input.avoid.some((b) => segmentHits(p.left + l.sx, p.top + l.sy, p.left + l.ex, p.top + l.ey, b))) return dock();   // the lead would run across chrome
   return p;
 }
 

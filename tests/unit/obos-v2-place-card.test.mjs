@@ -125,6 +125,21 @@ test('a lead whose start would sit off the card\'s corner slides back inside it 
 
 /* ── rc4 audit F2 and F3 ── */
 const MIN_H = 240;
+/** does the segment (x0,y0)-(x1,y1) cross the box (Liang-Barsky)? */
+const segHits = (x0, y0, x1, y1, b) => {
+  let t0 = 0, t1 = 1;
+  const dx = x1 - x0, dy = y1 - y0;
+  for (const [p, q] of [[-dx, x0 - b.l], [dx, b.r - x0], [-dy, y0 - b.t], [dy, b.b - y0]]) {
+    if (p === 0) { if (q < 0) return false; } else { const t = q / p; if (p < 0) { if (t > t1) return false; t0 = Math.max(t0, t); } else { if (t < t0) return false; t1 = Math.min(t1, t); } }
+  }
+  return true;
+};
+const leadCrosses = (p, apex, avoid) => {
+  if (!p.side) return null;
+  const l = leadFor(p, apex, CARD.w);
+  return avoid.find((c) => segHits(p.left + l.sx, p.top + l.sy, p.left + l.ex, p.top + l.ey, c)) ?? null;
+};
+
 test('F2: an apex near the left edge (140, h/2, the rc4 sliver) finds a whole card, docks, or reports nothing: never a card of 0 < height < MIN_H', () => {
   for (const [w, h] of [[1440, 900], [1366, 768], [1920, 1080], [1280, 720]]) {
     const avoid = CHROME_1440.map((c) => box(c.l, c.t, c.r, Math.min(c.b, h - 4)));
@@ -142,4 +157,33 @@ test('F2: the right side sweeps past the 200 px push, so a card far right of a r
   assert.ok(p.fits && !p.capped, 'whole');
   assert.equal(p.side, 'right');
   assert.ok(p.left >= 1000 + GAP, `far right of the wall: ${p.left}`);
+});
+
+test('F3: an apex INSIDE a chrome box (the roof panned under the title card, the rail, the stack) docks the card: no lead', () => {
+  for (const c of CHROME_1440) {
+    const apex = { x: (c.l + c.r) / 2, y: (c.t + c.b) / 2 };
+    const p = solveCard({ apex, canvas: CANVAS, avoid: CHROME_1440, card: CARD, prev: null });
+    assert.equal(p.side, null, `apex under ${JSON.stringify(c)}`);
+    assert.ok(p.fits && !p.capped);
+  }
+});
+
+test('F3: an apex off the canvas by more than half the brackets hides the card; inside that margin it stays', () => {
+  for (const apex of [{ x: 700, y: -60 }, { x: 700, y: 900 + 60 }, { x: -60, y: 450 }, { x: 1440 + 60, y: 450 }]) {
+    const p = solveCard({ apex, canvas: CANVAS, avoid: CHROME_1440, card: CARD, prev: null });
+    assert.equal(p.height, 0, JSON.stringify(apex));
+    assert.equal(p.fits, false);
+  }
+  assert.ok(solveCard({ apex: { x: 846, y: -10 }, canvas: CANVAS, avoid: CHROME_1440, card: CARD, prev: null }).fits, 'a roof just over the edge keeps its card');
+});
+
+test('F3 property: across 800 random apexes (on and off the chrome) the lead never crosses a chrome box', () => {
+  let seed = 777; const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+  for (let i = 0; i < 800; i++) {
+    const apex = { x: 20 + rnd() * 1400, y: 20 + rnd() * 860 };
+    const p = solveCard({ apex, canvas: CANVAS, avoid: CHROME_1440, card: CARD, prev: rnd() < 0.5 ? 'left' : 'right' });
+    if (!p.fits) continue;
+    const hit = leadCrosses(p, apex, CHROME_1440);
+    assert.equal(hit, null, `apex ${JSON.stringify(apex)} side ${p.side}: lead crosses ${JSON.stringify(hit)}`);
+  }
 });
