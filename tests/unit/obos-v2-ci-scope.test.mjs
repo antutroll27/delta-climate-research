@@ -5,8 +5,13 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import YAML from 'yaml';
 
-const names = (scope) => JSON.parse(execFileSync('node', ['--import', 'tsx', '-e', "import('./playwright.config.ts').then((m) => console.log(JSON.stringify(m.default.projects.map((p) => p.name))))"],
-  { env: { ...process.env, ...(scope === undefined ? {} : { OBOS_PW_SCOPE: scope }), OBOS_PW_SCOPE_TEST: '1' }, encoding: 'utf8' }));
+/* "Unset" must mean unset. The CI step that runs this test sets OBOS_PW_SCOPE=main for its own Playwright run, and spreading process.env
+   carried that into the child, so the "unset" case ran as 'main' and lost the two v2 projects (PR #62, CI only). Strip it first. */
+const names = (scope) => {
+  const { OBOS_PW_SCOPE: _inherited, ...base } = process.env;
+  return JSON.parse(execFileSync('node', ['--import', 'tsx', '-e', "import('./playwright.config.ts').then((m) => console.log(JSON.stringify(m.default.projects.map((p) => p.name))))"],
+    { env: { ...base, ...(scope === undefined ? {} : { OBOS_PW_SCOPE: scope }), OBOS_PW_SCOPE_TEST: '1' }, encoding: 'utf8' }));
+};
 const V2 = ['chromium-v2-a', 'chromium-v2-b'];
 
 test('OBOS_PW_SCOPE unset: every project, as before (local)', () => {

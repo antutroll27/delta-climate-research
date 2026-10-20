@@ -93,9 +93,10 @@ test('F8 (B-S7 audit): the forecast state does not describe rings that are not d
 });
 
 test('F6 (B-S7 audit): the solar binder was a recorded request (b-01) and now lives in solar-v2.ts, with no TODO left behind', () => {
-  assert.ok(existsSync('/Volumes/OBOSLab/obos-v2/requests/b-01-solar-binder.md'), 'requests/b-01-solar-binder.md');
+  // Repo files only: the recorded request itself (requests/b-01-solar-binder.md) lives in the OBOSLab hub, which CI cannot see.
   assert.ok(existsSync('src/scripts/climate-engine/v2/solar-v2.ts'), 'b-01 applied: solar-v2.ts');
-  assert.ok(!/TODO\(request b-01\)/.test(readFileSync('src/scripts/climate-engine/v2/weather-v2.ts', 'utf8')));
+  for (const f of ['weather-v2.ts', 'solar-v2.ts'])
+    assert.ok(!/TODO\(request b-01\)/.test(readFileSync(`src/scripts/climate-engine/v2/${f}`, 'utf8')), `${f}: no TODO(request b-01) left behind`);
 });
 
 test('F1 (B-S7 audit): the brief link mirrors the app\'s own Compare query', () => {
