@@ -1,13 +1,13 @@
 // tests/e2e/obos-v2-glass.spec.ts — OBOS v2 spec §8.2. LOCAL ONLY (needs a real GPU).
 /* D2 REVISED (founder, 17 Oct): PLATES is the default card style on every device and tier, so the BINDING perf gate is the default
-   path (Plates, on the real chrome, against v1). Glass is a manual choice: its cost is INFORMATIONAL (the JSON's glassWhenChosen,
+   path (Plates, on the real chrome; flip: the v1 arm is gone, v1 is no longer served). Glass is a manual choice: its cost is INFORMATIONAL (the JSON's glassWhenChosen,
    judged against the unchanged 6.0 ms reference, never failing the run) and the demotion test below proves a chosen Glass still goes
    flat when the governor says so. Why: the S2 audit measured live Glass at +6.2 ms at DSF 2 on a loaded M4 with ~62 % of the final
    blurred area built. S2 numbers, as a range (S2 audit F2): +1.9 to +3.1 ms at DSF 1, +4.6 to +6.2 ms at DSF 2, 12 surfaces, 494k px2. */
 import { chromium, expect, test, type Browser, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
-import { PW_ORIGIN, V2_STORAGE_STATE } from './fixtures/ui-v2-state';
+import { PW_ORIGIN } from './fixtures/ui-v2-state';
 
 const SLICE = process.env.OBOS_V2_SLICE ?? 's1';
 const OUT = `/Volumes/OBOSLab/obos-v2/audits/perf-${SLICE}${process.env.OBOS_PERF_THEME ? `-${process.env.OBOS_PERF_THEME}` : ''}.json`;
@@ -18,7 +18,7 @@ const SECS = Number(process.env.OBOS_PERF_SECS ?? 5), REPS = Number(process.env.
    SAME LIST as PERF_METAL in playwright.config.ts. Every JSON says "headless": true. */
 const METAL = ['--headless=new', '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'];
 const HEADLESS = METAL.includes('--headless=new');
-type Mode = 'v1' | 'bare' | 'plates' | 'flat' | 'live';
+type Mode = 'bare' | 'plates' | 'flat' | 'live';
 /* S2 audit F2: with DUMMY=0 the "bare" page is the REAL chrome in flat, not a bare page, so the JSON calls it what it is. */
 const CHROME_ONLY = process.env.DUMMY === '0';
 const BARE_KEY = CHROME_ONLY ? 'chrome-flat' : 'bare';
@@ -50,15 +50,15 @@ interface Cfg { readonly cores?: number; readonly stress?: number }
    The window is OFF-SCREEN (founder rule), so nothing here calls bringToFront; the --disable-* flags keep it rendering.
    The v2 page boots as shipped (tier 2 => Glass live, monitor running) and the fills are switched with the two
    attributes the toolbar will write. */
-async function boot(browser: Browser, ui: 'v1' | 'v2', dsf: number, cfg: Cfg): Promise<Page> {
+async function boot(browser: Browser, dsf: number, cfg: Cfg): Promise<Page> {
   const ctx = await browser.newContext({ baseURL: PW_ORIGIN, viewport: { width: 1440, height: 900 }, deviceScaleFactor: dsf,
-    storageState: ui === 'v1' ? undefined : process.env.OBOS_PERF_THEME ? { cookies: [], origins: [{ origin: PW_ORIGIN, localStorage: [...V2_STORAGE_STATE.origins[0].localStorage, { name: 'obos:v2:theme', value: process.env.OBOS_PERF_THEME }] }] } : V2_STORAGE_STATE });
+    storageState: process.env.OBOS_PERF_THEME ? { cookies: [], origins: [{ origin: PW_ORIGIN, localStorage: [{ name: 'obos:v2:theme', value: process.env.OBOS_PERF_THEME }] }] } : undefined });
   const page = await ctx.newPage();
   await page.addInitScript((cores) => {
     try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ }
     if (cores) Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, value: cores });
   }, cfg.cores ?? 0);
-  await page.goto(`/heat-map/in/kolkata/ballygunge/?lab=1${ui === 'v1' ? '&ui=v1' : ''}`);
+  await page.goto(`/heat-map/in/kolkata/ballygunge/?lab=1`);
   await expect(page.locator('#simBackend')).not.toHaveText('SELECTING ENGINE', { timeout: 90_000 });
   await page.waitForFunction(() => !!(window as unknown as { __obosMap?: unknown }).__obosMap, null, { timeout: 90_000 });
   await page.waitForTimeout(6000);
@@ -131,7 +131,7 @@ async function measure(browser: Browser, page: Page, want: Shipped | null): Prom
   const iv = das.slice(1).map((e, k) => (e.ts - das[k].ts) / 1000).sort((a, b) => a - b);
   const q = (p: number): number => iv[Math.min(iv.length - 1, Math.floor(p * iv.length))] ?? Number.NaN;
   const span = das.length > 1 ? (das[das.length - 1].ts - das[0].ts) / 1e6 : SECS;
-  /* the governor can demote the v2 page while it sits behind the v1 page; a run whose fill changed mid-run is flagged */
+  /* the governor can demote the page mid-run; a run whose fill changed mid-run is flagged */
   const flipped = !!want && !!after && (after.glass !== want.glass || after.cards !== want.cards);
   return { p50: q(0.5), p95: q(0.95), fps: (das.length - 1) / span, over20: iv.filter((x) => x > 20).length / Math.max(1, iv.length), n: das.length, flipped, blurred: after?.blurred ?? 0 };
 }
@@ -146,21 +146,18 @@ async function bench(browser: Browser, dsf: number, cfg: Cfg): Promise<{ sum: Re
   const t0 = Date.now();
   browser.on('disconnected', () => console.log(`[browser] disconnected after ${Date.now() - t0} ms`));
   const fills: Mode[] = ['plates', 'flat', 'live'];
-  const res = new Map<Mode, Run[]>((['v1', 'bare', ...fills] as Mode[]).map((m) => [m, []]));
+  const res = new Map<Mode, Run[]>((['bare', ...fills] as Mode[]).map((m) => [m, []]));
   let asShipped: Shipped | null = null; let gpu = '?'; let pr = dsf; const env: Env = { window: null, probed: false, displayHz: Number.NaN, loadavg: loadavg() };
   for (let r = 0; r < REPS; r++) {
-    for (const ui of (r % 2 ? ['v2', 'v1'] : ['v1', 'v2']) as Array<'v1' | 'v2'>) {
-      console.log(`[bench] ${ui} r${r} boots at ${Date.now() - t0} ms`);
-      const page = await boot(browser, ui, dsf, cfg);
-      if (ui === 'v1') res.get('v1')!.push(await measure(browser, page, null));
-      else {
+    {
+      console.log(`[bench] r${r} boots at ${Date.now() - t0} ms`);
+      const page = await boot(browser, dsf, cfg);
+      {
         asShipped ??= await shipped(page);
         gpu = await page.evaluate(() => (window as unknown as { __deltaRenderQualityController?: { current?: { gpuLabel?: string } } }).__deltaRenderQualityController?.current?.gpuLabel ?? '?');
         pr = await page.evaluate(() => devicePixelRatio);
         if (!env.probed) { env.probed = true; env.window = await windowBounds(page); env.displayHz = await rafHz(page); }
-        /* BARE: the same v2 page with no surfaces at all. It is the honest baseline for the chrome: v1's map is
-           938x764 (a sidebar layout) with 11 blurred surfaces of its own, v2's is the full 1440x900, so v1 is a
-           different workload and is kept in the JSON for reference only. */
+        /* BARE: the same v2 page with no surfaces at all. It is the honest baseline for the chrome. */
         const order: Mode[] = r % 2 ? [...fills].reverse() : fills;
         for (const m of r % 2 ? [...order, 'bare' as Mode] : ['bare' as Mode, ...order]) {
           if (m === 'bare') await removeDummies(page);
@@ -194,12 +191,9 @@ for (const dsf of [1, 2]) {
     if (!HEADLESS) expect(env.window && offScreen(env.window), `the browser window is on screen: ${JSON.stringify(env.window)}`).toBe(true);
     /* frames stayed at the display rate: an off-screen window that the OS throttled reads low for everything (S2 audit F9) */
     expect(sum.bare.fps, `off-screen window throttled: ${sum.bare.fps.toFixed(0)} fps against ${env.displayHz.toFixed(0)} Hz`).toBeGreaterThan(0.9 * env.displayHz);
-    /* S2 audit F2(3): a loaded machine moves the cost by ~1.5 ms; v1's own p50 is the yardstick (7.0 quiet, 9.9 loaded) */
-    if (dsf === 1) expect(sum.v1.p50, `environment loaded (loadavg ${env.loadavg.map((x) => x.toFixed(1)).join(' ')}), re-run`).toBeLessThanOrEqual(8.0);
     /* D2 revised: the shipped decision on a tier-2 desktop is PLATES (flat, nothing blurred); Glass is a manual choice */
     expect(asShipped, 'v2 on a tier-2 desktop boots as Plates').toMatchObject({ tier: 'full', cards: 'plates', glass: 'flat', blurred: 0 });
     /* S1 audit F1(4): an occluded or throttled headed window reads low fps for everything and would pass vacuously */
-    expect(sum.v1.fps, 'the headed window was occluded or throttled').toBeGreaterThan(50);
     /* From S2 the shell is real: with the 14 dummies ON TOP of it every surface would blur twice, so the S2+ measurement is DUMMY=0
        (the real chrome alone). The dummies remain for a chrome-less tree. */
     if (CHROME_ONLY) expect(sum.live.blurred, 'the real chrome blurs under live Glass').toBeGreaterThan(8);
@@ -207,8 +201,6 @@ for (const dsf of [1, 2]) {
     expect(sum.flat.blurred + sum.plates.blurred, 'nothing is blurred in flat or Plates').toBe(0);
     for (const m of ['plates', 'flat', 'live'] as const) expect(sum[m].flipped, `${m}: the fill changed during a measured run (governor demotion)`).toBe(0);
     for (const m of ['plates', 'flat'] as const) {
-      expect(sum[m].p50, `${m} p50 vs v1`).toBeLessThanOrEqual(sum.v1.p50 * 1.05);
-      expect(sum[m].p95, `${m} p95 vs v1`).toBeLessThanOrEqual(sum.v1.p95 * 1.10);
       /* With DUMMY=0 the "bare" page is the real chrome in flat, so these would compare flat with flat: skipped (a true bare
          baseline needs the chrome removed). */
       if (CHROME_ONLY) continue;

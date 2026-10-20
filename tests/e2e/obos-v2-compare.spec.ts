@@ -1,100 +1,11 @@
 // tests/e2e/obos-v2-compare.spec.ts — OBOS v2 D7 (Compare and the paired brief rebuilt in v2). Owner: Track C (plan amendment A1).
-import { chromium, expect, test, type Browser, type Page } from '@playwright/test';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { chromium, expect, test, type Page } from '@playwright/test';
 import { PW_ORIGIN } from './fixtures/ui-v2-state';
 import { duplicateIds, openV2 } from './obos-v2-helpers';
 
 /* ════════════════════════════════════════════════════════════════════════════════════════════
-   1. v1 STAYS v1 (flag off). The S0 baseline already holds compare-dark and both pages' markup.
-      This extends the proof to what it did not cover: the paired brief (style + pixels) and
-      Compare on a phone. Recorded ONCE on the S2 head (318511e), before any Track C edit, with
-      V2_COMPARE_V1=record; compared at every gate. Local only: the baseline lives on /Volumes/OBOSLab.
-   ════════════════════════════════════════════════════════════════════════════════════════════ */
-const BASE = '/Volumes/OBOSLab/obos-v2/shots/v1-compare-baseline';
-const RECORD = process.env.V2_COMPARE_V1 === 'record';
-const NO_FLAG = { cookies: [], origins: [] };
-const FIXED_NOW = '2026-10-07T06:05:00Z';
-const PROPS = ['display', 'position', 'visibility', 'opacity', 'z-index', 'color', 'background-color',
-  'border-top-color', 'font-family', 'font-size', 'font-weight'] as const;
-
-async function settleV1(page: Page, path: string): Promise<void> {
-  await page.clock.setFixedTime(new Date(FIXED_NOW));
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
-  await page.goto(`/${path}/`);
-  await expect(page.locator('main#main:not(.obos-v2)')).toHaveCount(1);
-  await expect(page.locator('[data-compare-root], [data-brief-root]')).toHaveAttribute('aria-busy', 'false', { timeout: 90_000 });
-  await page.addStyleTag({ content: '[data-compare-root] canvas { visibility: hidden !important; }' });
-  await page.waitForTimeout(2000);
-  await page.evaluate(() => { for (const a of document.getAnimations()) { a.pause(); a.currentTime = 0; } });
-  await page.waitForTimeout(250);
-}
-
-async function v1Lines(page: Page): Promise<string[]> {
-  return page.evaluate((props) => {
-    const r = (n: number) => Math.round(n * 2) / 2;
-    const root = document.querySelector('main#main');
-    if (!root) throw new Error('no main#main');
-    return [document.body, root, ...Array.from(root.querySelectorAll('*'))].map((el, i) => {
-      const cs = getComputedStyle(el); const b = el.getBoundingClientRect();
-      const cls = typeof el.className === 'string' ? el.className : '';
-      return `${i}|${el.tagName.toLowerCase()}#${el.id}.${cls}|${r(b.x)},${r(b.y)},${r(b.width)},${r(b.height)}|` + props.map((p) => cs.getPropertyValue(p)).join('|');
-    });
-  }, [...PROPS]);
-}
-
-type V1View = { name: string; path: string; mobile: boolean };
-const V1_VIEWS: readonly V1View[] = [
-  { name: 'compare-phone', path: 'heat-map/compare', mobile: true },
-  { name: 'brief-desktop', path: 'heat-map/brief', mobile: false },
-  { name: 'brief-phone', path: 'heat-map/brief', mobile: true },
-];
-
-async function captureV1(browser: Browser, v: V1View): Promise<{ lines: string[]; png: Buffer }> {
-  /* browser.newContext() DOES inherit the project's storageState here (the S2 head had no Compare v2 tree, so it never showed): the empty state keeps the v2 flag OFF. */
-  const ctx = await browser.newContext(v.mobile
-    ? { storageState: NO_FLAG, baseURL: PW_ORIGIN, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 }
-    : { storageState: NO_FLAG, baseURL: PW_ORIGIN, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
-  const page = await ctx.newPage();
-  await settleV1(page, v.path);
-  const lines = await v1Lines(page);
-  const png = await page.screenshot();
-  await ctx.close();
-  return { lines, png };
-}
-
-test.describe('@v2 compare: v1 unchanged with the flag off', () => {
-  test.skip(!!process.env.CI, 'local only: the baseline lives on /Volumes/OBOSLab');
-  test.setTimeout(240_000);
-
-  for (const v of V1_VIEWS) {
-    test(`@v2 v1 ${v.name} is unchanged: computed style and pixels`, async ({ browser }) => {
-      mkdirSync(join(BASE, 'style'), { recursive: true });
-      mkdirSync(join(BASE, 'png'), { recursive: true });
-      const styleFile = join(BASE, 'style', `${v.name}.json`);
-      const pngFile = join(BASE, 'png', `${v.name}.png`);
-      const a = await captureV1(browser, v);
-      if (RECORD) {
-        const b = await captureV1(browser, v);
-        expect(a.lines.filter((l, i) => l !== b.lines[i]), 'NON-DETERMINISTIC nodes: stop and report').toEqual([]);
-        expect(a.png.equals(b.png), 'NON-DETERMINISTIC pixels: stop and report').toBe(true);
-        writeFileSync(styleFile, JSON.stringify(a.lines));
-        writeFileSync(pngFile, a.png);
-        return;
-      }
-      expect(existsSync(styleFile) && existsSync(pngFile), `baseline missing for ${v.name}`).toBe(true);
-      const want = JSON.parse(readFileSync(styleFile, 'utf8')) as string[];
-      expect(a.lines.length, 'element count changed').toBe(want.length);
-      expect(a.lines.map((l, i) => (l === want[i] ? null : `got  ${l}\nwant ${want[i]}`)).filter(Boolean).slice(0, 20)).toEqual([]);
-      expect(a.png.equals(readFileSync(pngFile)), `${v.name}: pixels changed`).toBe(true);
-    });
-  }
-});
-
-/* ════════════════════════════════════════════════════════════════════════════════════════════
-   2. THE v2 COMPARE PAGE AND THE PAIRED BRIEF. The flag comes from the project's storageState.
-      Every test names the v1 behaviour it keeps; the v1 specs (heat-map-compare*.spec.ts) keep running against v1.
+   2. THE v2 COMPARE PAGE AND THE PAIRED BRIEF. v2 is the default UI (flip): no flag, no storageState.
+      Every test names the v1 behaviour it keeps; the v1 specs (heat-map-compare*.spec.ts) now run against v2. The v1-unchanged proofs retired with the flip (v1 is the obos-beta-ui tag).
    ════════════════════════════════════════════════════════════════════════════════════════════ */
 const METAL = ['--headless=new', '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'];
 
@@ -243,7 +154,7 @@ test.describe('@v2 compare', () => {
   });
 
   /* FINAL (founder, 19 Oct): the old v1 Retry bug is fixed IN V2 ONLY. A ward whose data failed to load was memoised as failed, so Retry re-ran the model against the same dead promise. In v2, Retry starts a
-     fresh model worker, so a ward that failed to load recovers without a page reload. The v1 twin of this test (flag off) pins that v1 is exactly as it was. */
+     fresh model worker, so a ward that failed to load recovers without a page reload. (The v1 twin retired with the flip.) */
   test('@v2 Retry model: a failed run says so and offers Retry, and Retry RECOVERS the ward without a reload (v2)', async ({ page }) => {
     /* the first ward-data request of the page fails (a dropped connection); every later one succeeds. */
     let seen = 0;
@@ -260,26 +171,7 @@ test.describe('@v2 compare', () => {
     await expect(retry).toBeHidden();
   });
 
-  test('@v2 flag off: v1 Retry is exactly as it was (a ward that failed to load stays failed until a reload)', async ({ browser }) => {
-    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, storageState: NO_FLAG });
-    const page = await ctx.newPage();
-    let seen = 0;
-    await page.route(/\/heat-map\/data\//, (route) => { seen += 1; return seen === 1 ? route.abort() : route.continue(); });
-    await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
-    await page.goto('/heat-map/compare/');
-    await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
-    const retry = page.locator('[data-action="retry"]');
-    await expect(page.locator('[data-role="status"]').first()).toContainText('Comparison unavailable', { timeout: 90_000 });
-    await expect(retry).toBeVisible();
-    const before = seen;
-    await retry.click();
-    await expect.poll(() => seen, { timeout: 30_000 }).toBeGreaterThanOrEqual(before);
-    await expect(page.locator('[data-compare-root]')).toHaveAttribute('aria-busy', 'false', { timeout: 90_000 });
-    await expect(page.locator('[data-role="status"]').first(), 'v1 keeps its known behaviour').toContainText('Comparison unavailable');
-    await ctx.close();
-  });
-
-  /* FINAL (founder, 19 Oct): the "Open brief" link follows phase changes IN V2 (v1's link is stale after a phase change until some other control rewrites it). */
+  /* FINAL (founder, 19 Oct): the "Open brief" link follows phase changes (v1's link was stale after a phase change). */
   test('@v2 "Open brief" follows the phase: both the workspace link and the phone link carry the phase in the URL', async ({ page }) => {
     await openCompare(page);
     const brief = page.locator('[data-role="brief-link"]'), phone = page.locator('[data-v2-brief-link]');
@@ -296,7 +188,7 @@ test.describe('@v2 compare', () => {
 
   /* FINAL visual V3: on a phone the workspace is a collapsed bottom sheet, so "Open brief" was out of sight. It is now on the page, under the method note. */
   test('@v2 [V3] phone: "Open brief" is visible on the page, a 44 px target, and opens the brief with the state', async ({ browser }) => {
-    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, storageState: { cookies: [], origins: [{ origin: PW_ORIGIN, localStorage: [{ name: 'obos:ui', value: 'v2' }] }] }, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const page = await ctx.newPage();
     await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); sessionStorage.setItem('obos:entry-note-seen', '1'); sessionStorage.setItem('obos:rotate-nudge-dismissed', '1'); } catch { /* none */ } });
     await page.goto('/heat-map/compare/?a=ballygunge&b=baruipur&trees=40');
@@ -364,17 +256,6 @@ test.describe('@v2 compare', () => {
     }
   });
 
-  test('@v2 flag off, Compare is v1 (no v2 tree, v1 console)', async ({ browser }) => {
-    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, storageState: NO_FLAG });
-    const page = await ctx.newPage();
-    await page.goto('/heat-map/compare/');
-    await expect(page.locator('main#main.heat-compare:not(.obos-v2)')).toHaveCount(1);
-    await expect(page.locator('template#obos-v2-tree')).toHaveCount(0);
-    await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
-    await expect(page.locator('[data-pane="analysis"]')).toHaveCount(1);
-    await ctx.close();
-  });
-
   test('@v2 a soft (ClientRouter) hop from an area to Compare keeps v2, one tree, unique ids, and the bench settles', async ({ page }) => {
     await openV2(page, '/heat-map/in/kolkata/ballygunge/');
     await page.evaluate(() => { const a = document.createElement('a'); a.href = '/heat-map/compare/'; a.id = 'softnav'; a.textContent = 'soft nav'; a.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;padding:8px;background:#fff'; document.body.append(a); });
@@ -425,8 +306,7 @@ test.describe('@v2 compare', () => {
   });
 
   test('@v2 on a phone the workspace is a bottom sheet that has the page width (the rail is the drawer), opens to half and full, and holds the Evidence tab', async ({ browser }) => {
-    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
-      storageState: { cookies: [], origins: [{ origin: PW_ORIGIN, localStorage: [{ name: 'obos:ui', value: 'v2' }] }] } });
+    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const page = await ctx.newPage();
     await page.goto('/heat-map/compare/');
     await expect(page.locator('main.obos-v2')).toHaveAttribute('aria-busy', 'false', { timeout: 120_000 });
@@ -528,10 +408,9 @@ test.describe('@v2 compare cameras', () => {
   test.setTimeout(240_000);
 
   test('@v2 linked cameras: Relief/Top/Motion, arrow keys, plus, minus, 0, and Reset linked drive both maps', async () => {
-    /* its own browser: launch args cannot differ inside one file's project, and the flag-off proofs above must keep the project's own renderer */
+    /* its own browser: launch args cannot differ inside one file's project, so the project's own renderer is kept for the other tests */
     const browser = await chromium.launch({ headless: true, args: METAL });
-    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, viewport: { width: 1440, height: 900 },
-      storageState: { cookies: [], origins: [{ origin: PW_ORIGIN, localStorage: [{ name: 'obos:ui', value: 'v2' }] }] } });
+    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
     try { await cameras(page); } finally { await ctx.close(); await browser.close(); }
   });

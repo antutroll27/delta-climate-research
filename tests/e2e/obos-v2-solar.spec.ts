@@ -1,4 +1,5 @@
 // tests/e2e/obos-v2-solar.spec.ts — OBOS v2 spec §4.6, §3.10 [H] (Track B, plan S6.1 and S6.2)
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
@@ -188,59 +189,40 @@ test.describe('@v2 solar', () => {
     for (const sel of ['.sl-tariff', '#solTariffNote', '.sl-listh', '.roofs-scroll', '#solCsv']) await expect(page.locator(sel), `${sel} stays hidden`).toBeHidden();
   });
 
-  test('@v2 [H] the roof CSV and the year CSV are byte-identical to v1\'s for the same inputs', async ({ page }) => {
+  /* FLIP: v1 is no longer served, so v1's half of this proof is frozen. These are the SHA-256 of the three CSVs v1 produced at obos-v2-rc6 for Ballygunge's first roof (#3736) and the default inputs,
+     recorded headless from the rc6 build with ?ui=v1 (/Volumes/OBOSLab/obos-v2/flip/record-v1-csv.mjs). The exports are the most money-sensitive path, so parity stays pinned. */
+  const V1_AT_RC6 = {
+    roofCsv: { len: 2772706, sha256: 'd8d856a06bc45786df852a57fed68e67a7bd05de2e7805d0927eb5c9237344eb', name: 'solar-ballygunge.csv' },
+    roofId: '#3736',
+    yearCsv: { len: 10233, sha256: '32480bbc05d67531f2ca40adec4c8afd8ac18129fbe58d19326aa8483b3018f8', name: 'solar-payback-ballygunge-3736.csv' },
+    billCsv: { len: 10383, sha256: '72e8db92b858b01c0923b5c0b7d879dea616ffb79ee5bac9bf7a2522acb3ccec', name: 'solar-payback-ballygunge-3736.csv' },
+  } as const;
+  const sha = async (dl: { path(): Promise<string | null>; suggestedFilename(): string }): Promise<{ len: number; sha256: string; name: string }> => {
+    const t = await read(dl);
+    return { len: t.length, sha256: createHash('sha256').update(t).digest('hex'), name: dl.suggestedFilename() };
+  };
+
+  test('@v2 [H] the roof CSV and the year CSV are byte-identical to what v1 produced at rc6 for the same inputs', async ({ page }) => {
     test.slow();
     await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } window.print = () => undefined; });
-    /* v1: the sticky flag is cleared by ?ui=v1 (spec D3). In-page clicks, as solar-roi.spec.ts does: a frame is slow on the software renderer. */
-    const tap = (sel: string) => page.locator(sel).evaluate((e) => (e as HTMLElement).click());
-    await page.goto(`${BALLYGUNGE}?ui=v1`);
-    await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
-    await expect(page.locator('#lst')).not.toContainText('—', { timeout: 60_000 });
-    await tap('[data-rail="solar"]');
-    await expect(page.locator('#solList tr')).toHaveCount(10, { timeout: 30_000 });
-    const v1Roofs = page.waitForEvent('download');
-    await tap('#solCsv');
-    const v1RoofCsv = await read(await v1Roofs);
-    await page.locator('#solList tr').first().evaluate((e) => (e as HTMLElement).click());
-    await expect(page.locator('#bcPay')).toBeVisible({ timeout: 15_000 });
-    const idx = await page.locator('#bcId').textContent();
-    await tap('#bcPay');
-    await expect(page.locator('#solPay')).toBeVisible();
-    const v1Year = page.waitForEvent('download');
-    await tap('#spCsv');
-    const v1YearDl = await v1Year;
-    const v1YearCsv = await read(v1YearDl);
-    /* B-S6 audit F8: the bill-mode year CSV, the most money-sensitive path */
-    await page.locator('#spUnits').evaluate((e, v) => { (e as HTMLInputElement).value = v; e.dispatchEvent(new Event('input', { bubbles: true })); }, '300');
-    const v1Bill = page.waitForEvent('download');
-    await tap('#spCsv');
-    const v1BillCsv = await read(await v1Bill);
-    /* v2: the same ward, the same first roof, the same defaults */
-    await openV2(page, `${BALLYGUNGE}?ui=v2`);
+    await openV2(page, BALLYGUNGE);
     await openSolar(page);
     await expect(page.locator('#solList tr[data-idx]').first()).toBeVisible({ timeout: 60_000 });
-    const v2Roofs = page.waitForEvent('download');
+    const roofs = page.waitForEvent('download');
     await page.locator('#solCsv').click();
-    const v2RoofCsv = await read(await v2Roofs);
+    expect(await sha(await roofs), 'the roof CSV differs from v1 at rc6').toEqual(V1_AT_RC6.roofCsv);
     await page.locator('#solList tr[data-idx]').first().click();
     await expect(page.locator('#bcPay')).toBeVisible({ timeout: 15_000 });
-    expect(await page.locator('#bcId').textContent(), 'the same roof was selected in both').toBe(idx);
+    expect(await page.locator('#bcId').textContent(), 'the same roof as the recording').toBe(V1_AT_RC6.roofId);
     await page.locator('#bcPay').click();
-    const v2Year = page.waitForEvent('download');
+    const year = page.waitForEvent('download');
     await page.locator('#spCsv').click();
-    const v2YearDl = await v2Year;
-    const v2YearCsv = await read(v2YearDl);
+    expect(await sha(await year), 'the year CSV differs from v1 at rc6').toEqual(V1_AT_RC6.yearCsv);
+    /* B-S6 audit F8: the bill-mode year CSV, the most money-sensitive path */
     await page.locator('#spUnits').fill('300');
     await page.locator('#spUnits').dispatchEvent('input');
-    const v2Bill = page.waitForEvent('download');
+    const bill = page.waitForEvent('download');
     await page.locator('#spCsv').click();
-    const v2BillCsv = await read(await v2Bill);
-    expect(v1RoofCsv.length).toBeGreaterThan(100_000);
-    expect(v2RoofCsv === v1RoofCsv, 'the roof CSV differs from v1').toBe(true);
-    expect(v1YearCsv.length).toBeGreaterThan(500);
-    expect(v2YearCsv === v1YearCsv, 'the year CSV differs from v1').toBe(true);
-    expect(v2YearDl.suggestedFilename()).toBe(v1YearDl.suggestedFilename());
-    expect(v1BillCsv).not.toBe(v1YearCsv);
-    expect(v2BillCsv === v1BillCsv, 'the bill-mode year CSV differs from v1').toBe(true);
+    expect(await sha(await bill), 'the bill-mode year CSV differs from v1 at rc6').toEqual(V1_AT_RC6.billCsv);
   });
 });

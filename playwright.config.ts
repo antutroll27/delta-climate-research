@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { PW_ORIGIN, PW_PORT, V2_STORAGE_STATE } from './tests/e2e/fixtures/ui-v2-state';
+import { PW_ORIGIN, PW_PORT } from './tests/e2e/fixtures/ui-v2-state';
 import { V2_PART_A, V2_PART_B, v2Match } from './tests/e2e/fixtures/v2-split';
 
 /** Chromium args for the perf runs (BRIEF.md, founder rule 17 Oct: NO window ever appears on his screen). The off-screen
@@ -119,7 +119,7 @@ export default defineConfig({
        and reported timeouts, which reads as a slow machine.
 
        The name says the tier now, so the gap cannot be re-opened by accident. */
-    { name: 'chromium-tier0', testIgnore: ['**/._*', '**/obos-v2-*.spec.ts', '**/obos-v1-unchanged.spec.ts'], use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium-tier0', testIgnore: ['**/._*', '**/obos-v2-*.spec.ts'], use: { ...devices['Desktop Chrome'] } },
 
     /* THE RELIEF PATH, on a real GPU. `--use-angle=metal` gets Apple Silicon's
        Metal backend instead of SwiftShader, which lifts render-quality.ts to tier 2
@@ -141,15 +141,7 @@ export default defineConfig({
         },
       },
     }]),
-    /* THE v1-UNCHANGED PROOF (OBOS v2 spec §8.3). Local only: its baseline is on
-       /Volumes/OBOSLab and was recorded on the untouched 7eb32e8 tree. */
-    ...(process.env.CI ? [] : [{
-      name: 'chromium-v1-baseline',
-      testMatch: '**/obos-v1-unchanged.spec.ts',
-      snapshotPathTemplate: '/Volumes/OBOSLab/obos-v2/shots/v1-baseline/png/{arg}{ext}',
-      use: { ...devices['Desktop Chrome'] },
-    }]),
-    /* OBOS v2 (spec §9.2). The flag comes from storage, so every v2 spec opens the v2 tree with no query. SwiftShader = tier 0 = Plates: no backdrop-filter in CI.
+    /* OBOS v2 (spec §9.2). v2 is the default UI (flip), so every spec opens it with no query and no storage state. SwiftShader = tier 0 = Plates: no backdrop-filter in CI.
        TWO PROJECTS, ONE SUITE (S8). chromium-v2 had grown to 95 specs and 8.8 minutes against the 9-minute global timeout of one e2e tool run, so it is split by spec file into
        chromium-v2-a and chromium-v2-b (tests/e2e/fixtures/v2-split.ts; tests/unit/obos-v2-ci-split.test.mjs fails if a spec belongs to neither part or to both).
        MEASURED AT S8 (dev machine, M-series, CPU-marginal, 1 worker, 18 Oct): part A 54 tests, 6.2 min; part B 73 tests, 6.1 min; the pair 127 tests, 12.3 min (the old project's
@@ -163,20 +155,19 @@ export default defineConfig({
       name: 'chromium-v2-a',
       testMatch: v2Match(V2_PART_A),
       grep: /@v2/,
-      use: { ...devices['Desktop Chrome'], storageState: V2_STORAGE_STATE },
+      use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'chromium-v2-b',
       testMatch: v2Match(V2_PART_B),
       grep: /@v2/,
-      use: { ...devices['Desktop Chrome'], storageState: V2_STORAGE_STATE },
+      use: { ...devices['Desktop Chrome'] },
     },
     ...(process.env.CI ? [] : [{
       name: 'chromium-v2-relief',
       testMatch: ['**/obos-v2-glass.spec.ts', '**/obos-v2-boot.spec.ts', '**/obos-v2-contrast.spec.ts', '**/obos-v2-shots.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
-        storageState: V2_STORAGE_STATE,
         /* HEADED: a headless Chromium has no display vsync (the perf gate read 1.2 ms frames, 210 fps, for
            everything), so Glass would look free. Brainstorm 02 measured vsync-on, headed.
            FOUNDER RULE (17 Oct): NO WINDOW EVER APPEARS ON HIS SCREEN. Playwright's headless:false plus --headless=new gives

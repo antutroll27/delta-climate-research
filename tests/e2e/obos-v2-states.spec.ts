@@ -94,13 +94,19 @@ test.describe('@v2 states', () => {
 
 test.describe('@v2 states without JavaScript', () => {
   test.use({ javaScriptEnabled: false });
-  test('@v2 noscript: the v2 tree stays inert and v1 shows; Compare keeps its own words (spec §6, v2 adds nothing)', async ({ page }) => {
+  test('@v2 noscript: v2 is visible with the server defaults (Dark + Plates, side open); Compare keeps its sentence (flip plan B.2.3 (iv))', async ({ page }) => {
     await page.goto(BALLY);
-    await expect(page.locator('main.obos-v2'), 'the template is inert').toHaveCount(0);
-    await expect(page.locator('main#main.stage')).toBeVisible();
+    const root = page.locator('main.obos-v2');
+    await expect(root).toHaveCount(1);
+    await expect(root).toHaveAttribute('data-theme', 'dark');
+    await expect(root).toHaveAttribute('data-cards', 'plates');
+    await expect(root).toHaveAttribute('data-side', 'open');
+    await expect(page.locator('main#main.stage:not(.obos-v2)')).toHaveCount(0);
+    await expect(page.locator('#v2Side')).toBeVisible();
     await page.goto('/heat-map/compare/');
-    await expect(page.locator('main.obos-v2')).toHaveCount(0);
-    await expect(page.locator('.heat-compare__noscript')).toContainText('Compare results need JavaScript to run the model.');
+    await expect(page.locator('main.obos-v2[data-compare-root]')).toHaveCount(1);
+    await expect(page.locator('.cmp-noscript')).toContainText('Compare results need JavaScript to run the model.');
+    await expect(page.locator('.cmp-noscript a')).toHaveAttribute('href', '/heat-map/brief/');
   });
 });
 

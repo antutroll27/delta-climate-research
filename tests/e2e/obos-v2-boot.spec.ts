@@ -1,6 +1,5 @@
 // tests/e2e/obos-v2-boot.spec.ts
 import { expect, test } from '@playwright/test';
-import { PW_ORIGIN } from './fixtures/ui-v2-state';
 import { duplicateIds, openV2 } from './obos-v2-helpers';
 
 test.describe('@v2 boot', () => {
@@ -10,7 +9,7 @@ test.describe('@v2 boot', () => {
      SwiftShader runner), so the boot checks that need a live engine share ONE load. The @v2 suite is two Playwright projects
      (chromium-v2-a and -b, tests/e2e/fixtures/v2-split.ts), each budgeted at <= 6.5 min on the dev machine (S8); fold new checks
      into existing loads before adding one. */
-  test('@v2 boot: the flag swaps the tree before mount (one main, unique ids, live readouts, no page errors), writes no v1 preference, and an in-place ward switch still works', async ({ page }) => {
+  test('@v2 boot: the page IS v2 (one main, unique ids, live readouts, no page errors), writes no v1 preference, and an in-place ward switch still works', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(String(e)));
     await openV2(page);
@@ -26,21 +25,19 @@ test.describe('@v2 boot', () => {
     expect(errors).toEqual([]);
   });
 
-  test('@v2 ?ui=v1 clears the sticky flag; ?ui=v2 sets it again', async ({ page }) => {
-    /* the storage state makes v2 sticky: a plain URL is already v2 (no engine wait needed) */
+  /* FLIP (plan A.1, option b): v1 is not served. ?ui=v1 is ignored and a stale obos:ui key in a reader's storage does nothing. */
+  test('@v2 ?ui=v1 is ignored: the page is v2, and a stale obos:ui key changes nothing', async ({ page }) => {
+    await page.addInitScript(() => { try { localStorage.setItem('obos:ui', 'v1'); } catch { /* none */ } });
     await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator('html')).toHaveAttribute('data-ui', 'v2');
     await expect(page.locator('main.obos-v2')).toHaveCount(1);
     await page.goto('/heat-map/in/kolkata/ballygunge/?ui=v1');
-    await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
-    await expect(page.locator('main#main.stage:not(.obos-v2)')).toHaveCount(1);
-    expect(await page.evaluate(() => localStorage.getItem('obos:ui'))).toBeNull();
-    await page.goto('/heat-map/in/kolkata/ballygunge/?ui=v2');
+    await expect(page.locator('html')).toHaveAttribute('data-ui', 'v2');
     await expect(page.locator('main.obos-v2')).toHaveCount(1);
-    expect(await page.evaluate(() => localStorage.getItem('obos:ui'))).toBe('v2');
+    await expect(page.locator('main#main.stage:not(.obos-v2)')).toHaveCount(0);
   });
 
-  test('@v2 the flag survives a hard navigation (cross-city) and a soft (ClientRouter) one; a soft hop to a page with no v2 tree drops it', async ({ page }) => {
+  test('@v2 v2 survives a hard navigation (cross-city) and a soft (ClientRouter) one; a soft hop to a page that is not OBOS drops data-ui', async ({ page }) => {
     await openV2(page, '/heat-map/in/bengaluru/mg-road/');
     const soft = async (href: string): Promise<void> => {
       await page.evaluate((h) => { document.getElementById('softnav')?.remove(); const a = document.createElement('a'); a.href = h; a.id = 'softnav'; a.textContent = 'soft nav'; a.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;padding:8px;background:#fff'; document.body.append(a); }, href);
@@ -51,63 +48,65 @@ test.describe('@v2 boot', () => {
     await expect(page.locator('html')).toHaveAttribute('data-ui', 'v2');
     await expect(page.locator('main.obos-v2')).toHaveCount(1);
     expect(await duplicateIds(page)).toEqual([]);
-    /* S0 audit F4: a page with no v2 tree (here /team/; Compare and the brief have one since S9) must not keep data-ui="v2" */
+    /* a page that is not OBOS (here /team/) must not keep data-ui="v2": Astro's root-attribute swap takes it from the new document, with no listener of ours */
     await soft('/team/');
     await expect(page).toHaveURL(/\/team/);
     await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
-    expect(await page.evaluate(() => localStorage.getItem('obos:ui')), 'the sticky flag itself must survive').toBe('v2');
   });
 
-  /* FINAL audit F5 (founder: "v1 visitors pay nothing until the flip"): the v2 stylesheet and the v2 tree are separate files, fetched ONLY when the flag is on. A flag-off page carries neither
-     in its HTML nor in a request; a flag-on page asks for each once. If either fails, the reader gets v1, not a half-built page. */
-  test('@v2 [F5] flag off: no v2 stylesheet, no v2 tree, no /obos-v2/ request; the v1 page is whole', async ({ browser }) => {
-    const ctx = await browser.newContext({ baseURL: PW_ORIGIN, storageState: { cookies: [], origins: [] } });
-    const page = await ctx.newPage();
+  /* FLIP (plan B.2.3 (ii)): the sync XHR and the two /obos-v2/ fetches are gone. Not one XMLHttpRequest is constructed before load, and no /obos-v2/ request is made, on any of the three OBOS pages. */
+  test('@v2 [flip] no /obos-v2/ request and no XMLHttpRequest before load, on the area page, Compare and the brief; the v2 sheet is a linked stylesheet', async ({ page }) => {
     const asked: string[] = [];
     page.on('request', (r) => asked.push(new URL(r.url()).pathname));
-    await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
+    await page.addInitScript(() => {
+      try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ }
+      const w = window as unknown as { __xhrBeforeLoad: number };
+      w.__xhrBeforeLoad = 0;
+      const Real = window.XMLHttpRequest;
+      window.XMLHttpRequest = class extends Real { constructor() { super(); if (document.readyState !== 'complete') w.__xhrBeforeLoad += 1; } } as typeof XMLHttpRequest;
+    });
     for (const path of ['/heat-map/in/kolkata/ballygunge/', '/heat-map/compare/', '/heat-map/brief/']) {
-      const html = await (await page.request.get(path)).text();
-      expect(html, `${path}: no v2 template in the HTML`).not.toContain('obos-v2-tree');
-      expect(html, `${path}: no v2 markup in the HTML`).not.toMatch(/class="[^"]*\bobos-v2\b/);
-      await page.goto(path);
-      await expect(page.locator('main#main:not(.obos-v2)')).toHaveCount(1);
-      await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
+      await page.goto(path, { waitUntil: 'load' });
+      await expect(page.locator('html')).toHaveAttribute('data-ui', 'v2');
+      await expect(page.locator('main.obos-v2')).toHaveCount(1);
+      expect(await page.evaluate(() => (window as unknown as { __xhrBeforeLoad: number }).__xhrBeforeLoad), `${path}: an XMLHttpRequest was constructed before load`).toBe(0);
       const sheets = await page.evaluate(async () => Promise.all([...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')].map(async (l) => (await fetch(l.href)).text())));
-      expect(sheets.filter((t) => t.includes('.obos-v2')).length, `${path}: no stylesheet carries v2 rules`).toBe(0);
+      expect(sheets.filter((t) => t.includes('.obos-v2')).length, `${path}: exactly one linked stylesheet carries the v2 rules`).toBe(1);
       expect(await page.locator('style[data-v2-css]').count()).toBe(0);
+      expect(await page.locator('main.obos-v2').evaluate((e) => getComputedStyle(e).getPropertyValue('--card').trim() !== ''), `${path}: the v2 rules apply`).toBe(true);
     }
-    expect(asked.filter((p) => p.startsWith('/obos-v2/')), 'not one request for a v2 file').toEqual([]);
-    await ctx.close();
+    expect(asked.filter((p) => p.startsWith('/obos-v2/')), 'not one request for /obos-v2/').toEqual([]);
   });
 
-  test('@v2 [F5] flag on: the stylesheet and the area tree are each fetched once and the page is styled before it shows; a soft hop to Compare brings its own tree and keeps ONE stylesheet', async ({ page }) => {
+  test('@v2 [flip] a soft hop from an area to Compare keeps ONE v2 stylesheet and asks for no /obos-v2/ file', async ({ page }) => {
     const asked: string[] = [];
     page.on('request', (r) => asked.push(new URL(r.url()).pathname));
     await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
     await page.goto('/heat-map/in/kolkata/ballygunge/');
-    await expect(page.locator('html')).toHaveAttribute('data-ui', 'v2');
     await expect(page.locator('main.obos-v2')).toHaveCount(1);
-    expect(asked.filter((p) => p === '/obos-v2/obos-v2.css')).toHaveLength(1);
-    expect(asked.filter((p) => p === '/obos-v2/area/in/kolkata/ballygunge.html')).toHaveLength(1);
-    expect(await page.locator('style[data-v2-css]').count()).toBe(1);
-    expect(await page.locator('main.obos-v2').evaluate((e) => getComputedStyle(e).getPropertyValue('--card').trim() !== ''), 'the v2 rules apply').toBe(true);
     await page.evaluate(() => { const a = document.createElement('a'); a.href = '/heat-map/compare/'; a.id = 'softnav'; a.textContent = 'soft'; a.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;padding:8px;background:#fff'; document.body.appendChild(a); });
     await page.locator('#softnav').click();
     await expect(page).toHaveURL(/\/heat-map\/compare\//);
     await expect(page.locator('main.obos-v2[data-compare-root]')).toHaveCount(1);
-    expect(asked.filter((p) => p === '/obos-v2/compare.html')).toHaveLength(1);
-    expect(await page.locator('style[data-v2-css]').count(), 'one v2 stylesheet after the soft hop').toBe(1);
+    const v2Links = await page.evaluate(async () => (await Promise.all([...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')].map(async (l) => (await fetch(l.href)).text()))).filter((t) => t.includes('.obos-v2')).length);
+    expect(v2Links, 'one v2 stylesheet after the soft hop').toBe(1);
     expect(await page.locator('main.obos-v2').evaluate((e) => getComputedStyle(e).getPropertyValue('--card').trim() !== '')).toBe(true);
+    expect(asked.filter((p) => p.startsWith('/obos-v2/'))).toEqual([]);
   });
 
-  test('@v2 [F5] if the v2 files cannot be fetched the reader gets v1, whole, not a half-built page', async ({ page }) => {
-    await page.route(/\/obos-v2\//, (route) => route.abort());
-    await page.addInitScript(() => { try { sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ } });
-    await page.goto('/heat-map/in/kolkata/ballygunge/');
-    await expect(page.locator('main#main:not(.obos-v2)')).toHaveCount(1);
-    await expect(page.locator('html')).not.toHaveAttribute('data-ui', 'v2');
-    await expect(page.locator('#mlmap')).toHaveCount(1);
+  /* FLIP (plan B.2.3 (iii)): stored Light + Glass are on the root as soon as the root's first child has run, so by DOMContentLoaded (and before the first paint) there is no dark-plates flash. */
+  test('@v2 [flip] a stored Light + Glass choice is on the root at DOMContentLoaded (no flash)', async ({ page }) => {
+    await page.addInitScript(() => {
+      try { localStorage.setItem('obos:v2:theme', 'light'); localStorage.setItem('obos:v2:cards', 'glass'); sessionStorage.setItem('delta:loaded', '1'); } catch { /* none */ }
+      document.addEventListener('DOMContentLoaded', () => {
+        const r = document.querySelector<HTMLElement>('main.obos-v2');
+        (window as unknown as { __atDcl: Record<string, string | undefined> }).__atDcl = { theme: r?.dataset.theme, cards: r?.dataset.cards, glass: r?.dataset.glass };
+      });
+    });
+    await page.goto('/heat-map/in/kolkata/ballygunge/', { waitUntil: 'load' });
+    const at = await page.evaluate(() => (window as unknown as { __atDcl: Record<string, string | undefined> }).__atDcl);
+    expect(at.theme, 'Light is on the root at DOMContentLoaded').toBe('light');
+    expect(at.cards, 'Glass is on the root at DOMContentLoaded').toBe('glass');
   });
 
   test('@v2 SwiftShader (tier 0): Plates by default, flat glass, no backdrop-filter anywhere', async ({ page }, testInfo) => {
