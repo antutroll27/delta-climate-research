@@ -241,6 +241,9 @@ test.describe('@v2 phone 390x844', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('#solPay')).toBeHidden();
     await expect(page.locator('#bcard'), 'Esc closed the sheet only').toBeVisible();
+    expect(await page.locator('.skip-link').getAttribute('inert'), 'the grown card under the sheet is a modal too (rc4 F4): the page stays behind it').not.toBeNull();
+    await page.keyboard.press('Escape');   // the grown card folds to its peek, which is not modal
+    await expect(page.locator('#bcard')).toHaveAttribute('data-peek', '1');
     expect(await page.locator('.skip-link').getAttribute('inert')).toBeNull();
   });
 

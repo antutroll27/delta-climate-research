@@ -6,12 +6,13 @@
  *     (the card, its lead line, the lead's dot) — no layout read per frame: the chrome boxes come from a 250 ms cache and the card's size from observers;
  *   · the right column folds away while a building is selected, and a "Ward readings" pill brings it back (deselecting restores it);
  *   · selecting a building moves focus to the card's heading; Esc (the app's one handler) closes the card and focus goes back to where the reader came from;
- *   · on a phone the same card is a short peek above the sheet (data-peek="1") that grows to the whole card by tap, grip or drag (data-peek="0").
+ *   · on a phone the same card is a short peek above the sheet (data-peek="1") that grows to the whole card by tap, grip or drag (data-peek="0"). The peek is not modal; the
+ *     GROWN card covers the screen, so it is: aria-modal, everything behind it inert, Tab wrapped inside it (rc4 audit F4).
  */
 import { cardSink, type CardBox } from '../card-sink.ts';
 import { solveCard, leadFor, BRACKET, EDGE, MIN_TOP, type Box, type Side } from './place-card.ts';
 import { $, $$, observe, on } from './dom.ts';
-import { holdInert } from './inert.ts';
+import { holdInert, pageFurniture } from './inert.ts';
 import { PHONE_QUERY } from './phone-v2.ts';
 import type { ShellCtx } from './shell-ctx.ts';
 
@@ -21,6 +22,9 @@ const GRID_PX = 24;
 const DRAG_PX = 36;
 /** the lead's keep-out for the greenery tag and the ring labels: a few px each side of the hairline */
 const LEAD_PAD = 6;
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])';
+/** the sheets the card opens (payback, installer brief, street view) are modals of their own, on top of it: the grown card's trap leaves them alone */
+const SHEETS = '#solPay, #solBrief, #svModal';
 
 export function bindCard(ctx: ShellCtx): void {
   const { root, cleanup } = ctx;
@@ -170,7 +174,7 @@ export function bindCard(ctx: ShellCtx): void {
     }
     paintColumn();
   });
-  on(cleanup, mq, 'change', () => { paintColumn(); stale(); });
+  on(cleanup, mq, 'change', () => { paintColumn(); stale(); syncPeek(); });
   paintColumn();
 
   /* ── the phone: a peek above the sheet that grows ── */
@@ -178,7 +182,37 @@ export function bindCard(ctx: ShellCtx): void {
     const peek = card.dataset.peek !== '0';
     for (const b of [grip, expand]) b?.setAttribute('aria-expanded', String(!peek));
     grip?.setAttribute('aria-label', peek ? 'Show all building details' : 'Show fewer building details');
+    modal(!peek && mq.matches && !card.hidden);
   };
+  /* the grown card is a modal (audit F4): the page behind it is inert and Tab wraps inside it; the peek, the closed card and every desktop state are not */
+  let releaseModal: (() => void) | null = null;
+  const modal = (grown: boolean): void => {
+    if (grown === (releaseModal !== null)) return;
+    if (grown) {
+      releaseModal = holdInert([...[...root.children].filter((c) => c !== card && !c.matches(SHEETS)), ...pageFurniture(root)]);
+      card.setAttribute('aria-modal', 'true');
+    } else {
+      releaseModal?.(); releaseModal = null;
+      card.removeAttribute('aria-modal');
+    }
+  };
+  cleanup.push(() => modal(false));
+  const shown = (e: HTMLElement): boolean => e.getClientRects().length > 0;
+  on(cleanup, card, 'keydown', (e) => {
+    const k = e as KeyboardEvent;
+    if (k.key !== 'Tab' || !releaseModal) return;
+    const f = $$<HTMLElement>(card, FOCUSABLE).filter(shown);
+    if (!f.length) { k.preventDefault(); return; }
+    const first = f[0], last = f[f.length - 1], at = document.activeElement;
+    if (k.shiftKey && (at === first || at === card || at === head)) { k.preventDefault(); last.focus(); }
+    else if (!k.shiftKey && at === last) { k.preventDefault(); first.focus(); }
+  });
+  /* belt: focus that lands outside the grown card (a script, a screen reader's virtual cursor) comes back to its heading, unless a sheet the card opened has it */
+  on(cleanup, document, 'focusin', (e) => {
+    const t = e.target as Element | null;
+    if (!releaseModal || !t || card.contains(t) || t.closest(SHEETS)) return;
+    head?.focus({ preventScroll: true });
+  });
   const setPeek = (peek: boolean, focus: HTMLElement | null): void => {
     card.dataset.peek = peek ? '1' : '0';
     syncPeek(); dirty();

@@ -187,4 +187,36 @@ test.describe('@v2 on-map building card: phone', () => {
     await page.mouse.up();
     await expect(card).toHaveAttribute('data-peek', '0');
   });
+  test('@v2 [H] F4: the grown phone card is a modal: aria-modal, everything behind it inert, Tab and Shift+Tab never leave it; the peek is not modal; Esc, Esc keep their order', async ({ page }) => {
+    await seen(page);
+    await openV2(page, LAB);
+    await relief(page);
+    await pick(page);
+    const card = page.locator('#bcard');
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    await expect(card, 'the peek is not modal').not.toHaveAttribute('aria-modal', 'true');
+    expect(await page.locator('#v2Sheet').evaluate((e) => (e as HTMLElement).inert), 'nor does it inert the page').toBe(false);
+    await page.locator('#bcExpand').click();
+    await expect(card).toHaveAttribute('data-peek', '0');
+    await expect(card).toHaveAttribute('aria-modal', 'true');
+    expect(await page.locator('#v2Sheet').evaluate((e) => (e as HTMLElement).inert), 'the sheet behind the grown card is inert').toBe(true);
+    expect(await page.locator('.skip-link').getAttribute('inert'), 'so is the page furniture').not.toBeNull();
+    const inside = (): Promise<boolean> => page.evaluate(() => document.getElementById('bcard')!.contains(document.activeElement));
+    /* the card has ten-odd stops: two laps forwards and one back are 30 presses, and every one of them must land inside it */
+    const stops: boolean[] = [];
+    for (let i = 0; i < 24; i++) { await page.keyboard.press('Tab'); stops.push(await inside()); }
+    for (let i = 0; i < 14; i++) { await page.keyboard.press('Shift+Tab'); stops.push(await inside()); }
+    expect(stops.filter((x) => !x).length, `${stops.length} Tab and Shift+Tab presses; the ones that left the card: ${stops.map((x, i) => (x ? '' : i + 1)).filter(Boolean)}`).toBe(0);
+    await page.keyboard.press('Escape');
+    await expect(card).toHaveAttribute('data-peek', '1');
+    await expect(card).not.toHaveAttribute('aria-modal', 'true');
+    expect(await page.locator('#v2Sheet').evaluate((e) => (e as HTMLElement).inert)).toBe(false);
+    expect(await page.locator('.skip-link').getAttribute('inert')).toBeNull();
+    await expect(page.locator('#bcExpand')).toBeFocused();
+    await page.locator('#bcExpand').click();
+    await expect(card).toHaveAttribute('aria-modal', 'true');
+    await page.locator('#bcX').click();
+    await expect(card).toBeHidden();
+    expect(await page.locator('#v2Sheet').evaluate((e) => (e as HTMLElement).inert), 'closing releases the page').toBe(false);
+  });
 });
