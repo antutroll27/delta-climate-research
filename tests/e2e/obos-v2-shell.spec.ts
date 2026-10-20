@@ -8,6 +8,9 @@ test.describe('@v2 shell', () => {
   test('@v2 eight menu items; each section is reachable and publishes data-open-pane', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });   // desktop: labels by default (≥1366 px, spec §1.5)
     await openV2(page);
+    /* the retired v1 routing test "exactly one brand mark" (heat-map-routing.spec.ts) is held HERE (flip audit F3): one logo image and one wordmark */
+    await expect(page.locator('main.obos-v2 .rail-logo')).toHaveCount(1);
+    await expect(page.locator('main.obos-v2 .wm')).toHaveCount(1);
     await expect(page.locator('.rail .nav-label')).toHaveText(
       ['Overview', 'Heat', 'Air', 'Solar', 'Weather', 'Scenarios', 'Analysis · Compare', 'Data & methods', 'Collapse menu']);
     for (const [id, pane] of [['heat', 'heat'], ['air', 'air'], ['solar', 'solar'], ['weather', 'weather'], ['scenarios', 'scenarios'], ['methods', 'reports'], ['overview', 'map']]) {
