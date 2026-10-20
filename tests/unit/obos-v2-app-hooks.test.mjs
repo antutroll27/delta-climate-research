@@ -37,5 +37,5 @@ test('E7: a roof row lands where the card has room (v2 only); v1\'s ease is the 
 
 test('E8: the card reads one lat/lon line in v2 (it is wide enough) and the old two-line form in v1; the tag\'s metres are the card\'s in v2 only', () => {
   assert.match(app, /formatLatLon\(ll\.lat, ll\.lon, cardSink\.current \? ' · ' : '<br>'\)/);
-  assert.match(app, /popCoolTag\(cardSink\.current \? walkRoundM\(nearestCool\.distM\) : Math\.round\(nearestCool\.distM \/ 10\) \* 10 \|\| 10\)/);
+  assert.match(app, /popCoolTag\(walkRoundM\(nearestCool\.distM\)\)/); // founder 20 Oct: v1 drops its `|| 10` floor too
 });

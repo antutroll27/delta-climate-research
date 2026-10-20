@@ -16,8 +16,9 @@ test('walkRoundM rounds the measured distance to the nearest 10 m (the grid cell
   assert.equal(walkRoundM(5), 10, 'half rounds up, as Math.round does');
 });
 
-test('the card line, its range line and (in v2) the map tag all take their metres from walkRoundM; v1 keeps its floor, byte for byte', () => {
-  assert.match(app, /popCoolTag\(cardSink\.current \? walkRoundM\(nearestCool\.distM\) : Math\.round\(nearestCool\.distM \/ 10\) \* 10 \|\| 10\)/);
+test('the card line, its range line and the map tag (v1 and v2) all take their metres from walkRoundM; no `|| 10` floor survives', () => {
+  assert.match(app, /popCoolTag\(walkRoundM\(nearestCool\.distM\)\)/);
+  assert.ok(!/distM \/ 10\) \* 10 \|\| 10/.test(app), 'the old tag floor of 10 m is back');
   assert.match(app, /Nearest greenery ≈<b>\$\{walkRoundM\(d\)\} m<\/b>/);
   assert.ok(!/const rnd = \(m: number\) => Math\.round\(m \/ 10\) \* 10;/.test(app), 'a second rounding function is still defined on the card');
 });

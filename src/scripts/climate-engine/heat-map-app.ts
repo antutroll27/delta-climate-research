@@ -1719,12 +1719,11 @@ export function mountHeatMap(): () => void {
       const hi = coolingHi ? nearestCooling(coolingHi, b.cx, b.cz, simN(), currentWardSizeM, b.ring) : null;
       coolRangeM = lo && hi ? [Math.min(lo.distM, hi.distM), Math.max(lo.distM, hi.distM)] : null;
       /* The tag's value is written HERE, once per selection — placeCard only
-         moves it. v2 (the card sink is mounted) rounds with walkRoundM, the card's own
-         function: a measured 1.5 m reads "≈0 m" on both. v1 keeps its old floor of 10 m
-         on the tag, byte for byte, while the flag is off. */
+         moves it. Rounded by walkRoundM, the card's own function, in v1 and v2 alike:
+         a measured 1.5 m reads "≈0 m" on both (the old `|| 10` floor overstated it). */
       if (nearestCool) {
         el('coolTag')?.removeAttribute('hidden');
-        popCoolTag(cardSink.current ? walkRoundM(nearestCool.distM) : Math.round(nearestCool.distM / 10) * 10 || 10);
+        popCoolTag(walkRoundM(nearestCool.distM));
       } else {
         el('coolTag')?.setAttribute('hidden', '');
       }
