@@ -84,7 +84,7 @@ export function bindCard(ctx: ShellCtx): void {
     if (sizeDirty || id !== lastId || size.h === 0) { lastId = id; measure(); }
     const p = solveCard({ apex, canvas: { l: 0, t: 0, r: view.w, b: view.h }, avoid: readHud(), card: size, prev: side });
     side = p.side;
-    if (!p.fits && p.height <= 0) { setVisible(false); placed = null; return; }
+    if (!p.fits) { setVisible(false); placed = leadBox = null; return; }   // no usable spot (audit F2): hidden, never a sliver; a roof off the canvas has no card (F3)
     setVisible(true);
     const max = p.capped ? `${Math.floor(p.height)}px` : '';
     if (max !== lastMax) { inner.style.maxHeight = max; lastMax = max; }
@@ -120,7 +120,8 @@ export function bindCard(ctx: ShellCtx): void {
       const near = (o: Box): boolean => b.l < o.r + EDGE && b.r > o.l - EDGE && b.t < o.b + EDGE && b.b > o.t - EDGE;
       if (avoid.some(near)) return false;
       if (dock) return !near({ l: dock.left, t: dock.top, r: dock.left + size.w, b: dock.top + dock.height });
-      return solveCard({ apex: { x, y }, canvas: { l: 0, t: 0, r: cw, b: ch }, avoid, card: size, prev: null }).fits;
+      const beside = solveCard({ apex: { x, y }, canvas: { l: 0, t: 0, r: cw, b: ch }, avoid, card: size, prev: null });
+      return beside.fits && beside.side !== null;   // a picked roof gets its card BESIDE it, with a lead: a dock is the fallback, not the target
     };
     const cx = cw / 2, cy = ch / 2, spots: Array<{ x: number; y: number; d: number }> = [];
     for (let y = MIN_TOP; y <= ch - EDGE; y += GRID_PX) for (let x = EDGE; x <= cw - EDGE; x += GRID_PX) spots.push({ x, y, d: Math.hypot(x - cx, y - cy) });

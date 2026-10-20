@@ -8,7 +8,7 @@
  */
 import { expect, test } from '@playwright/test';
 import { openV2, duplicateIds, stubWeather } from './obos-v2-helpers';
-import { LAB, ROOT, pick, relief, placed, HUD, clash } from './obos-v2-onmap-helpers';
+import { LAB, ROOT, pick, relief, placed, HUD, clash, panRoofTo, cardState } from './obos-v2-onmap-helpers';
 
 test.describe('@v2 on-map building card: placement', () => {
   test.setTimeout(300_000);
@@ -77,6 +77,23 @@ test.describe('@v2 on-map building card: placement', () => {
     expect(r.bad).toEqual([]);
     expect(r.sides.length, `the card changed side during the orbit: ${r.sides}`).toBe(1);
     expect(r.props.filter((p) => !['transform', 'opacity', 'visibility'].includes(p)), 'every per-frame write is transform, opacity or visibility: no layout').toEqual([]);
+  });
+
+  test('@v2 [H] F2: a roof just right of the side panel never draws a card sliver: whole (clear of the chrome) or docked, or hidden', async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await openV2(page, LAB);
+    await relief(page);
+    await pick(page);
+    await placed(page);
+    await page.waitForTimeout(1500);
+    const side = (await page.locator('#v2Side').boundingBox())!;
+    for (const dx of [40, 8, 90]) {
+      await panRoofTo(page, side.x + side.width + dx, 540);
+      const st = await cardState(page);
+      if (!st.visible) continue;
+      expect(st.h, `a visible card is a card (apex ${dx} px right of the panel): ${JSON.stringify(st)}`).toBeGreaterThanOrEqual(240);
+      expect(await clash(page), `apex ${dx} px right of the panel`).toEqual([]);
+    }
   });
 
   test('@v2 [H] a flat map (no relief, so no apex): the card docks at the right and still clears the chrome; no lead line is drawn', async ({ page }) => {

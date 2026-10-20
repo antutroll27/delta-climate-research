@@ -4,7 +4,9 @@
  * card, a compass, a bottom-left stack, a dock, a toolbar and an attribution chip, so the card is placed by search instead:
  *   1. the card's near edge is LEAD_MIN past the selection brackets, on the right of the roof, and it slides vertically toward the apex;
  *   2. if a chrome box is in the way it moves out in STEP px (up to MAX_PUSH), then tries the left of the roof;
- *   3. only when neither side fits whole is it CAPPED to the tallest free band (and scrolls inside).
+ *   3. only when neither side fits whole is it CAPPED to the tallest free band (and scrolls inside); the right side may go on past the push before it gives up;
+ *   4. rc4 audit F2: a card is never a sliver. When there is no usable spot beside the roof the card DOCKS (no apex, no lead) if the dock fits; otherwise
+ *      nothing is drawn (height 0).
  * A card keeps its side while that side still fits (`prev`), so a slow orbit never flips it back and forth. With no apex (a flat map has no relief to project
  * from) the card docks at the right edge. Every box is [l, t, r, b] in one coordinate space; the chrome boxes are inflated by GAP here, the caller passes them raw.
  */
@@ -22,6 +24,7 @@ export const GAP = 12;
 /** the canvas margin */
 export const EDGE = 12;
 const STEP = 8, MAX_PUSH = 200, MIN_H = 240, LEAD_INSET = 18;
+const NOTHING = (left: number, top: number): Placement => ({ side: null, left, top, height: 0, capped: true, fits: false });
 
 export interface PlaceInput {
   /** the roof apex in the same space as the boxes, or null when there is nothing to anchor to (dock) */
@@ -63,9 +66,19 @@ function gaps(x0: number, x1: number, blockers: readonly Box[], lo: number, hi: 
 }
 
 export function solveCard(input: PlaceInput): Placement {
+  const { apex, canvas } = input;
+  const dock = (): Placement => { const d = solveBeside({ ...input, apex: null }, apex); return d.fits ? d : NOTHING(d.left, d.top); };
+  if (!apex) return dock();
+  const p = solveBeside(input);
+  if (!p.fits) return dock();   // no usable spot beside the roof: dock, never a sliver
+  return p;
+}
+
+/** `bracket` is the roof whose brackets the card keeps clear of: the apex, or (docked, no lead) the roof it no longer points at */
+function solveBeside(input: PlaceInput, bracket: PlaceInput['apex'] = input.apex): Placement {
   const { apex, canvas, card } = input;
   const blockers: Box[] = input.avoid.map((b) => ({ l: b.l - GAP, t: b.t - GAP, r: b.r + GAP, b: b.b + GAP }));
-  if (apex) blockers.push({ l: apex.x - BRACKET / 2, t: apex.y - BRACKET / 2, r: apex.x + BRACKET / 2, b: apex.y + BRACKET / 2 });
+  if (bracket) blockers.push({ l: bracket.x - BRACKET / 2, t: bracket.y - BRACKET / 2, r: bracket.x + BRACKET / 2, b: bracket.y + BRACKET / 2 });
   const freeL = canvas.l + EDGE, freeR = canvas.r - EDGE, freeT = Math.max(canvas.t + EDGE, MIN_TOP), freeB = canvas.b - EDGE;
   const ideal = apex ? apex.y - card.h / 2 : freeT;   // the card's wanted top
 
@@ -81,10 +94,10 @@ export function solveCard(input: PlaceInput): Placement {
   };
 
   /** candidate left edges, nearest the roof first */
-  const sweep = (side: Side): number[] => {
+  const sweep = (side: Side, push = MAX_PUSH): number[] => {
     const xs: number[] = [];
     if (!apex) { for (let x = freeR - card.w; x >= freeL; x -= STEP) xs.push(x); return xs; }
-    for (let k = 0; k * STEP <= MAX_PUSH; k++) {
+    for (let k = 0; k * STEP <= push; k++) {
       const x = side === 'right' ? apex.x + BRACKET / 2 + LEAD_MIN + k * STEP : apex.x - BRACKET / 2 - LEAD_MIN - k * STEP - card.w;
       if (x < freeL || x + card.w > freeR) break;
       xs.push(x);
@@ -100,6 +113,11 @@ export function solveCard(input: PlaceInput): Placement {
       if (whole !== null) return { side, left: x, top: whole, height: card.h, capped: false, fits: true };
       if (!tallest || tall.len > tallest.len) tallest = { ...tall, side };
     }
+  }
+  /* nothing whole within the push on either side: the right may go on past it (a far card beats a sliver) */
+  if (apex) for (const x of sweep('right', Infinity)) {
+    const { whole } = at(x);
+    if (whole !== null) return { side: 'right', left: x, top: whole, height: card.h, capped: false, fits: true };
   }
   if (!tallest || tallest.len <= 0) return { side: sides[0], left: apex ? apex.x + BRACKET / 2 + LEAD_MIN : freeR - card.w, top: freeT, height: 0, capped: true, fits: false };
   return { side: tallest.side, left: tallest.left, top: tallest.top, height: tallest.len, capped: true, fits: tallest.len >= MIN_H };

@@ -34,7 +34,7 @@ test('an apex near the right edge flips the card to the LEFT (the near side), wi
 });
 
 test('a chrome box in the way PUSHES the card out in 8 px steps, never onto the box (up to 200 px), before it gives up the side', () => {
-  const wall = box(900, 66, 960, 800);   // a tall box right of the apex
+  const wall = box(900, 66, 960, 380);   // a box right of the apex, above the lead (a lead that crossed it would dock the card instead, F3)
   const p = solveCard({ apex: { x: 846, y: 450 }, canvas: CANVAS, avoid: [wall], card: CARD, prev: null });
   assert.equal(p.side, 'right');
   assert.ok(p.left >= 960 + GAP, 'right of the wall + gap');
@@ -121,4 +121,25 @@ test('a lead whose start would sit off the card\'s corner slides back inside it 
   const p = solveCard({ apex, canvas: CANVAS, avoid: [], card: CARD, prev: null });
   const l = leadFor(p, apex, CARD.w);
   assert.ok(l.sy >= 18 && l.sy <= p.height - 18, `sy ${l.sy} of ${p.height}`);
+});
+
+/* ── rc4 audit F2 and F3 ── */
+const MIN_H = 240;
+test('F2: an apex near the left edge (140, h/2, the rc4 sliver) finds a whole card, docks, or reports nothing: never a card of 0 < height < MIN_H', () => {
+  for (const [w, h] of [[1440, 900], [1366, 768], [1920, 1080], [1280, 720]]) {
+    const avoid = CHROME_1440.map((c) => box(c.l, c.t, c.r, Math.min(c.b, h - 4)));
+    for (const x of [140, 220, 300, 556, 600]) {
+      const p = solveCard({ apex: { x, y: h / 2 }, canvas: box(0, 0, w, h), avoid, card: CARD, prev: null });
+      assert.ok(p.fits || p.height === 0, `${w}x${h} apex x=${x}: fits ${p.fits} height ${p.height}`);
+      if (p.fits && !p.capped) for (const c of avoid) assert.ok(!hits(boxOf(p, CARD), inflate(c, GAP)), 'clear of the chrome');
+    }
+  }
+});
+
+test('F2: the right side sweeps past the 200 px push, so a card far right of a roof beats a sliver or no card', () => {
+  const walls = [box(0, 0, 560, 1080), box(660, 66, 1000, 400)];   // nothing within 200 px right, nothing left: only the far right is whole
+  const p = solveCard({ apex: { x: 600, y: 450 }, canvas: box(0, 0, 1920, 1080), avoid: walls, card: CARD, prev: null });
+  assert.ok(p.fits && !p.capped, 'whole');
+  assert.equal(p.side, 'right');
+  assert.ok(p.left >= 1000 + GAP, `far right of the wall: ${p.left}`);
 });
