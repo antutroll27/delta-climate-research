@@ -121,3 +121,29 @@ root.setAttribute('data-glass','flat');
 root.setAttribute('data-section','overview');
 v1.replaceWith(frag);
 })();`;
+
+/** Runs as the first child of a v2 root (document.currentScript.parentElement), before any of the root's children are parsed. Applies the stored prefs and the derived layout attributes
+ *  with exactly resolvePrefs / effectiveMenu's rules. Blocked storage means the defaults, which the server already wrote on the root. */
+export const V2_PREFS_JS = `(function(){
+var s=document.currentScript;var root=s&&s.parentElement;if(!root)return;
+function g(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+var w=window.innerWidth||1440;
+var th=g(${J(V2_KEYS.theme)}),cd=g(${J(V2_KEYS.cards)}),mn=g(${J(V2_KEYS.menu)}),sd=g(${J(V2_KEYS.side)});
+var menu=mn==='labels'||mn==='icons'?mn:(w>=${DESKTOP_MIN_PX}?'labels':'icons');
+var side=sd==='closed'?'closed':'open',shown=side==='open';
+root.setAttribute('data-theme',th==='light'?'light':'dark');
+root.setAttribute('data-cards',cd==='glass'?'glass':'plates');
+root.setAttribute('data-menu',menu);
+root.setAttribute('data-side',side);
+root.setAttribute('data-side-current','explore');
+root.setAttribute('data-side-shown',shown?'1':'0');
+root.setAttribute('data-menu-eff',shown&&w>=${LAPTOP_MIN_PX}&&w<${DESKTOP_MIN_PX}?'icons':menu);
+root.setAttribute('data-glass','flat');
+root.setAttribute('data-section','overview');
+})();`;
+
+/** What the server writes on every v2 root: the same values V2_PREFS_JS writes for an empty store at desktop width, so no-JS and an early paint are a valid state. */
+export const V2_ROOT_DEFAULTS = Object.freeze({
+  'data-theme': 'dark', 'data-cards': 'plates', 'data-glass': 'flat', 'data-section': 'overview', 'data-side': 'open',
+  'data-side-current': 'explore', 'data-side-shown': '1', 'data-menu': 'labels', 'data-menu-eff': 'labels',
+} as const);

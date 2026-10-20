@@ -17,11 +17,13 @@
 import RailV2 from '../v2/RailV2.astro';
 import ToolbarV2 from '../v2/ToolbarV2.astro';
 import PhoneChrome from '../v2/PhoneChrome.astro';
+import V2Prefs from '../v2/V2Prefs.astro';
 import Sym from '../v2/Sym.astro';
 import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
 import { SENTINEL_CREDIT, WATER_CREDIT } from '../../../scripts/climate-engine/v2/credits.ts';
 ---
-<main id="main" class="heat-brief obos-v2" data-brief-root aria-busy="true" style={symbolCssVars()}>
+<main id="main" class="heat-brief obos-v2" data-brief-root aria-busy="true" style={symbolCssVars()} data-theme="dark" data-cards="plates" data-glass="flat" data-section="overview" data-side="open" data-side-current="explore" data-side-shown="1" data-menu="labels" data-menu-eff="labels">
+  <V2Prefs />
   <PhoneChrome />
   <RailV2 current="compare" hasData={true} areaName="Compare" />
   <ToolbarV2 />

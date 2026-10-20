@@ -107,6 +107,18 @@ test('the v2 components carry no <style> and no <script> (template scripts never
   }
 });
 
+test('the ONE inline script a v2 root carries is V2Prefs, its first child (flip plan A.2.3): prefs on the root before any child is parsed', () => {
+  for (const f of [V2F, V2BF, 'src/components/ClimateEngine/v2/HeatMapStageV2.astro']) {
+    const src = readFileSync(f, 'utf8');
+    const m = /<main id="main"[^>]*>\s*<V2Prefs \/>/.exec(src);
+    assert.ok(m, `${f}: <V2Prefs /> must be the first child of the root`);
+    for (const a of ['data-theme="dark"', 'data-cards="plates"', 'data-glass="flat"', 'data-section="overview"', 'data-side="open"', 'data-side-current="explore"', 'data-side-shown="1"', 'data-menu="labels"', 'data-menu-eff="labels"']) assert.ok(m[0].includes(a), `${f}: server default ${a}`);
+    assert.equal((src.match(/<V2Prefs/g) ?? []).length, 1, f);
+  }
+  const prefs = readFileSync('src/components/ClimateEngine/v2/V2Prefs.astro', 'utf8');
+  assert.match(prefs, /<script is:inline data-astro-rerun set:html=\{V2_PREFS_JS\} \/>/);
+});
+
 test('Compare: the A/B pickers, the sliders and the actions sit inside the root the controller queries (it queries through [data-compare-root])', () => {
   const v2 = readFileSync(V2F, 'utf8');
   const root = v2.slice(v2.indexOf('<main id="main"'), v2.lastIndexOf('</main>'));
