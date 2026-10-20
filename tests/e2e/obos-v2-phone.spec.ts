@@ -107,6 +107,22 @@ test.describe('@v2 phone 390x844', () => {
 
   /* FINAL audit F8: v1's phone-console.ts settles ITS sheet once per session under key obos:phone-sheet-settled. v2 has its own (obos:v2:sheet-settled), so v2 must not write v1's:
      a reader who goes on to ?ui=v1 in the same tab would otherwise get v1's sheet open over the map. */
+  test('@v2 [rail-gap] the drawer\'s menu items are 9 px apart (founder, 20 Oct) and the whole list is on screen without scrolling', async ({ page }) => {
+    await seenNote(page);
+    await openV2(page);
+    await menu(page).click();
+    await expect(page.locator('#v2Drawer')).toBeVisible();
+    await page.waitForTimeout(500);
+    const m = await page.evaluate(() => {
+      const items = [...document.querySelectorAll<HTMLElement>('#v2Drawer .nav-list .nav-item')].map((e) => { const r = e.getBoundingClientRect(); return { t: r.top, b: r.bottom, h: r.height }; });
+      return { items, bottom: items[items.length - 1].b, vh: innerHeight };
+    });
+    expect(m.items.length).toBe(8);
+    for (let i = 1; i < m.items.length; i++) expect(m.items[i].t - m.items[i - 1].b, `gap above item ${i}`).toBeCloseTo(9, 0);
+    for (const it of m.items) expect(it.h).toBeGreaterThanOrEqual(40);
+    expect(m.bottom, 'the last item is on screen').toBeLessThanOrEqual(m.vh);
+  });
+
   test('@v2 [F8] a v2 phone does not write the v1 sheet key', async ({ page }) => {
     await seenNote(page);
     await openV2(page);

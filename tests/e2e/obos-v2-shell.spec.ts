@@ -493,6 +493,25 @@ test.describe('@v2 shell', () => {
     expect(clip.w - right, 'icons mode still shows 72 px of rail').toBeCloseTo(72, 0);
   });
 
+  /* founder, 20 Oct: the rail's menu items sat too tight; +6 px between them (3 -> 9), pills, alignment and 40 px targets untouched, and it still fits without scrolling */
+  for (const [w, h] of [[1440, 900], [1280, 720]] as const) {
+    test(`@v2 [rail-gap] at ${w} x ${h} the menu items are 9 px apart (was 3), 40 px tall, and the rail fits without scrolling`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await openV2(page);
+      const m = await page.evaluate(() => {
+        const rail = document.querySelector<HTMLElement>('#v2Rail')!, rr = rail.getBoundingClientRect();
+        const items = [...rail.querySelectorAll<HTMLElement>('.nav-list .nav-item')].map((it) => { const r = it.getBoundingClientRect(); return { t: r.top, b: r.bottom, h: r.height, icon: it.querySelector('svg')!.getBoundingClientRect().left - r.left }; });
+        const stack = document.getElementById('v2MapStack')!.getBoundingClientRect();
+        return { items, bottom: rr.bottom, scroll: rail.scrollHeight - rail.clientHeight, stackLeft: stack.left, railRight: rr.right };
+      });
+      expect(m.items.length).toBe(8);
+      for (let i = 1; i < m.items.length; i++) expect(m.items[i].t - m.items[i - 1].b, `gap above item ${i}`).toBeCloseTo(9, 0);
+      for (const it of m.items) { expect(it.h).toBeGreaterThanOrEqual(40); expect(it.icon, 'the icon column is unchanged').toBeCloseTo(18, 0); }
+      expect(m.scroll, 'the rail needs no scrolling').toBeLessThanOrEqual(0);
+      expect(m.bottom, 'and ends inside the window').toBeLessThanOrEqual(h - 12);
+    });
+  }
+
   /* rc3: everything positioned from the rail follows it. At every desktop and laptop size, with the side panel open and closed, nothing overlaps, nothing leaves the window,
      and the first column starts 12 px (icons) or 16 px (labels) right of the rail's visible edge. */
   for (const [w, h] of [[1440, 900], [1366, 768], [1280, 720], [1920, 1080], [1420, 900], [1430, 900]] as const) {
