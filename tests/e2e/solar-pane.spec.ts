@@ -34,8 +34,16 @@ test.describe('the solar screen', () => {
   /* THE DEFAULT 30s IS A WALL, NOT A BUDGET. Booting a ward, forcing the 3D layer
      the software renderer skips, and easing the camera twice is 46s measured — the
      ranked-row test failed on the clock, not on an assertion. Raised so the test
-     can finish saying what it came to say. */
-  test.setTimeout(120_000);
+     can finish saying what it came to say.
+     240 s FROM 120 s, MEASURED ON PR #62 (OBOS v2 as the default UI). On the 2-CPU CI runner
+     every tier-0 spec that boots a ward ran 1.53x its v1 time (median over 156 tests, run
+     38589391745 on v1 against run 39486305229 on v2): v2's map is full-bleed (1280x720 =
+     2.1x the pixels of v1's 778x570 canvas, which SwiftShader rasterises on the CPU). This
+     test took 79.7 s on v1 and so ~122 s on v2: it timed out three times in a row mid-way
+     through its own assertions (the `#bcSolRs` "Received: ''" was the 120 s stop landing
+     inside a 5 s expect, not the card's text), and 'the card prints a one-page installer
+     brief' sat at 106 s. Nothing here is asserted any looser; the clock is what moved. */
+  test.setTimeout(240_000);
   /* A test that must intercept a file BEFORE the page loads boots itself and is
      tagged @own-boot. Booting it here first cost a whole extra ward load, about
      15-20 s on a 2-CPU CI runner (measured 2026-09-14). */
