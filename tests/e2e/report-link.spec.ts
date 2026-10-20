@@ -3,6 +3,8 @@ import { openSection } from './fixtures/obos-nav';
 
 test('the ward-record link is live and follows the ward selection', async ({ page }) => {
   await page.goto('/heat-map/in/kolkata/ballygunge/');
+  /* the menu is bound by the shell after the engine boots; a click before that is a no-op (v2's openV2 waits the same way) */
+  await expect(page.locator('#lst')).not.toContainText('—', { timeout: 60_000 });
   /* THE LINK MOVED, and this is where it moved to. It used to end the evidence
      card in the right-hand rail, permanently on screen under a histogram; it is
      now the whole content of the rail's Reports pane. So reaching it is two
