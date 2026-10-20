@@ -2397,10 +2397,14 @@ export function initCbam(): void {
       return;
     }
     const open = outlookEl.querySelector('details')?.open ?? false;
-    const inPriceBox = document.activeElement instanceof HTMLElement
-      && document.activeElement.id === 'cbOlPrice';
+    // THE FOCUSED PRICE BOX IS KEPT, NOT REPLACED. Refocusing a rebuilt <input type=number> puts the
+    // caret at the START in both engines, and a number input takes no selection to put it back, so
+    // '80' then '.5' read '.580'. Moving the live element into the new markup keeps its caret.
+    const live = document.activeElement instanceof HTMLInputElement && document.activeElement.id === 'cbOlPrice'
+      ? document.activeElement : null;
     outlookEl.innerHTML = renderOutlook(outlookView, assumedPriceText, open);
-    if (inPriceBox) outlookEl.querySelector<HTMLInputElement>('#cbOlPrice')?.focus();
+    const fresh = live && outlookEl.querySelector<HTMLInputElement>('#cbOlPrice');
+    if (live && fresh) { fresh.replaceWith(live); live.focus(); }
   }
 
   /**
