@@ -188,6 +188,10 @@ test.describe('@v2 on-map building card: phone', () => {
     await expect(card).toHaveAttribute('data-peek', '0');
   });
   test('@v2 [H] F4: the grown phone card is a modal: aria-modal, everything behind it inert, Tab and Shift+Tab never leave it; the peek is not modal; Esc, Esc keep their order', async ({ page }) => {
+    /* 38 real key presses at ~1.6 s each on the dev machine (the relief render loop is running behind them): 1.8-2.1 min here, and 2.5x that on the 2-CPU runner. In PR #62's
+       CI run it hit the describe's 240 s inside the last click (#bcX; Playwright's log stops at "done scrolling" because the page was starved, not covered). Re-run at CI=1 locally it passes
+       and no handler is slow (the Tab trap is one querySelectorAll), so this is cost, not a CI-only bug: the budget is raised, nothing is skipped or loosened. */
+    test.setTimeout(480_000);
     await seen(page);
     await openV2(page, LAB);
     await relief(page);

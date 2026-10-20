@@ -33,27 +33,28 @@ test('an unknown scope is refused (a typo must not silently run nothing, or ever
 
 const wf = YAML.parse(readFileSync('.github/workflows/verify.yml', 'utf8'));
 
-test('verify.yml: the existing job runs the main scope; a separate obos-v2-browser job runs part a and part b as a matrix, 30 minutes each, with their durations uploaded', () => {
+test('verify.yml: the existing job runs the main scope; a separate obos-v2-browser job runs part a and part b as a matrix of part x shard (two halves each), 40 minutes per leg, with their durations uploaded', () => {
   const q = wf.jobs.quality;
   const verify = q.steps.find((s) => /npm run \$\{\{/.test(s.run ?? ''));
   assert.equal((verify.env ?? q.env ?? {}).OBOS_PW_SCOPE, 'main', 'the existing job is scoped to everything but the @v2 parts');
   const j = wf.jobs['obos-v2-browser'];
   assert.ok(j, 'job obos-v2-browser');
   assert.deepEqual(j.strategy.matrix.part, ['a', 'b']);
-  assert.equal(j['timeout-minutes'], 30);
+  assert.deepEqual(j.strategy.matrix.shard, [1, 2]);
+  assert.equal(j['timeout-minutes'], 40);
   assert.equal(j.strategy['fail-fast'], false);
   const run = j.steps.map((s) => s.run ?? '').join('\n');
   assert.match(run, /npm ci/);
   assert.match(run, /npm run build/);
-  assert.match(run, /npx playwright test --project=chromium-v2-\$\{\{ matrix\.part \}\}/);
+  assert.match(run, /npx playwright test --project=chromium-v2-\$\{\{ matrix\.part \}\} --shard=\$\{\{ matrix\.shard \}\}\/2/);
   const test = j.steps.find((s) => /npx playwright test/.test(s.run ?? ''));
   assert.equal(test.env.OBOS_PW_SCOPE, 'v2-${{ matrix.part }}');
-  /* rc1 R4: Playwright stops itself before the job limit does, so a hang ends as a failure with a summary, not a silent cancellation (the config's own 38 minutes is longer than this job's 30) */
+  /* rc1 R4: Playwright stops itself before the job limit does, so a hang ends as a failure with a summary, not a silent cancellation (the config's own 38 minutes is longer than this job's 40 minus its setup) */
   const gt = /--global-timeout=(\d+)/.exec(test.run);
   assert.ok(gt, 'the v2 step passes --global-timeout');
-  assert.ok(Number(gt[1]) <= (j['timeout-minutes'] - 3) * 60_000, 'it leaves at least 3 minutes of the job limit to print the summary and upload the results');
+  assert.ok(Number(gt[1]) <= (j['timeout-minutes'] - 8) * 60_000, 'it leaves at least 8 minutes of the job limit for setup (up to ~8 on a slow runner) plus the summary and the upload');
   const up = j.steps.find((s) => /upload-artifact/.test(s.uses ?? ''));
-  assert.equal(up.with.name, 'playwright-results-v2-${{ matrix.part }}');
+  assert.equal(up.with.name, 'playwright-results-v2-${{ matrix.part }}-${{ matrix.shard }}');
   assert.match(up.with.path, /test-results\//);
 });
 
