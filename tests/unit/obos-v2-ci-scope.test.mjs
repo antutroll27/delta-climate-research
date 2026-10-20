@@ -35,8 +35,11 @@ const wf = YAML.parse(readFileSync('.github/workflows/verify.yml', 'utf8'));
 
 test('verify.yml: the existing job runs the main scope; a separate obos-v2-browser job runs part a and part b as a matrix of part x shard (two halves each), 40 minutes per leg, with their durations uploaded', () => {
   const q = wf.jobs.quality;
-  const verify = q.steps.find((s) => /npm run \$\{\{/.test(s.run ?? ''));
+  const verify = q.steps.find((s) => /npm run verify:static/.test(s.run ?? ''));
   assert.equal((verify.env ?? q.env ?? {}).OBOS_PW_SCOPE, 'main', 'the existing job is scoped to everything but the @v2 parts');
+  // PR #62: the main scope is split in two by --shard too (it ran past its 38-minute stop once v2 became the default).
+  assert.deepEqual(q.strategy.matrix.shard, [1, 2]);
+  assert.match(verify.run, /npx playwright test --shard="\$SHARD\/2"/);
   const j = wf.jobs['obos-v2-browser'];
   assert.ok(j, 'job obos-v2-browser');
   assert.deepEqual(j.strategy.matrix.part, ['a', 'b']);

@@ -18,8 +18,15 @@ permissions:
 
 jobs:
   quality:
-    name: Build and browser contracts
+    name: Build and browser contracts (shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
+    # PR #62: with v2 the default, its full-bleed map makes the tier-0 specs ~1.5x slower on the 2-CPU runner,
+    # and the main scope ran past its 38-minute stop (178 passed, 23 never ran). Split in two by test with
+    # --shard, as the v2 job is. ponytail: each leg repeats verify:static (~10 min); split it out if minutes matter.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     # Measured 2026-09-05: this job has taken 17.5-20.0 min on every push to main since
     # 0355181 (e2e on SwiftShader is the bulk), so 20 had no headroom and the run for
     # c2b7bbb was cancelled at 21.8 min once test:py grew by the tree-shading self-check.
@@ -176,7 +183,11 @@ jobs:
       - name: Verify build, publication and browser contracts
         env:
           OBOS_PW_SCOPE: main
-        run: npm run ${{ steps.scope.outputs.browser == 'true' && 'verify' || 'verify:static' }}
+          BROWSER: ${{ steps.scope.outputs.browser }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          npm run verify:static
+          if [ "$BROWSER" = true ]; then npx playwright test --shard="$SHARD/2"; fi
 
       # ON SUCCESS TOO (it was `if: failure()`), for one file: test-results/durations.json, the
       # json reporter's record of how long every test took. A passing run is the baseline a slow
@@ -192,7 +203,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-results
+          name: playwright-results-main-${{ matrix.shard }}
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
