@@ -2,8 +2,6 @@
    THE ONLY v2 stylesheet allowed a hex, each hex ONCE (tests/unit/obos-v2-colour.test.mjs).
    Symbol and AQI hexes are NOT here: symbols.ts emits them on the root's style attribute. */
 
-/* Between UiPrepaint and UiSwap no v1 frame may paint under the flag (spec §1.2). */
-html[data-ui="v2"] main#main:not(.obos-v2) { visibility: hidden; }
 html[data-ui="v2"] body { overflow: hidden; }
 html[data-ui="v2"] .obos-v2 { position: fixed; inset: 0; overflow: hidden; isolation: isolate; font: 400 15px/1.45 var(--sans);
   color: var(--ink-1); font-synthesis: none; -webkit-font-smoothing: antialiased; background: var(--card); }

@@ -1,3 +1,4 @@
 /* src/styles/obos-v2/print.css — OBOS v2 print, as a MANIFEST (plan amendment A1). FROZEN: tracks write their partial, never this list. */
+@import './print/page.css';
 @import './print/solar.css';
 @import './print/brief.css';

@@ -10,7 +10,7 @@ export const REGIONS = ['MapChips', 'PhoneChrome', 'RailV2', 'ToolbarV2', 'Explo
   'DockV2', 'ToastsV2', 'RightColumn', 'LayersPopover', 'Overlays', 'StreetViewModal', 'SolarSheets'];
 export const CARDS = ['TempCard', 'HeatCards', 'ScenarioCards', 'SolarCards', 'WeatherCards', 'MethodsCards'];
 export const SCREEN_PARTIALS = ['overview', 'heat', 'mapstack', 'building', 'explore', 'scenarios', 'solar', 'air', 'weather', 'methods', 'compare', 'brief'];
-export const PRINT_PARTIALS = ['solar', 'brief'];
+export const PRINT_PARTIALS = ['page', 'solar', 'brief'];
 
 function inOrder(src, names, what) {
   let at = -1;

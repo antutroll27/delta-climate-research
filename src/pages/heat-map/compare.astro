@@ -1,19 +1,17 @@
 ---
 import Base from '../../layouts/Base.astro';
-import PairedBench from '../../components/ClimateEngine/compare/PairedBench.astro';
-import UiPrepaint from '../../components/ClimateEngine/v2/UiPrepaint.astro';
-import UiSwap from '../../components/ClimateEngine/v2/UiSwap.astro';
-import { v2TreeUrl } from '../../scripts/climate-engine/v2/ui-flag.ts';
+import PairedBenchV2 from '../../components/ClimateEngine/compare/PairedBenchV2.astro';
+/* OBOS v2 is the default UI (flip plan A.2): its one stylesheet is the LAST import. */
+import '../../styles/obos-v2/index.css';
 ---
 <Base
   title="Compare Urban Heat Scenarios — Delta Climate Research"
   description="Compare one modelled green-infrastructure package across two Kolkata study areas under a shared screening contract."
   noindex={true}
   nativeScroll={true}
+  ui="v2"
 >
-  <UiPrepaint />
-  <PairedBench />
-  <UiSwap tree={v2TreeUrl('compare')} />
+  <PairedBenchV2 />
 </Base>
 
 <script>
@@ -32,8 +30,7 @@ import { v2TreeUrl } from '../../scripts/climate-engine/v2/ui-flag.ts';
   let disposeShell: (() => void) | null = null;
   let bootGeneration = 0;
   let disposeV2: (() => void) | null = null;
-  /* OBOS v2 (spec §1.7, plan S9.2): only under the flag, imported dynamically so v1 never fetches it. On this route
-     mountShellV2 binds the frame only (it reads data-compare-root); it runs AFTER the two mounts above, like the area page. */
+  /* OBOS v2: the page is rendered as v2, so this is always true. mountShellV2 binds the frame; it runs AFTER the mounts above. */
   const bootV2 = async (generation: number) => {
     if (document.documentElement.getAttribute('data-ui') !== 'v2' || disposeV2) return;
     const { mountShellV2 } = await import('../../scripts/climate-engine/v2/shell-v2');

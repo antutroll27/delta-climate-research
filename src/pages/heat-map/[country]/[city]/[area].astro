@@ -1,12 +1,11 @@
 ---
 import Base from '../../../../layouts/Base.astro';
-import HeatMapStage from '../../../../components/ClimateEngine/HeatMapStage.astro';
-import UiPrepaint from '../../../../components/ClimateEngine/v2/UiPrepaint.astro';
-import UiSwap from '../../../../components/ClimateEngine/v2/UiSwap.astro';
-import { v2TreeUrl } from '../../../../scripts/climate-engine/v2/ui-flag.ts';
+import HeatMapStageV2 from '../../../../components/ClimateEngine/v2/HeatMapStageV2.astro';
 import { AREA_KEYS, splitKey, type AreaKey } from '../../../../scripts/climate-engine/scope/registry.ts';
 import { resolve } from '../../../../scripts/climate-engine/scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from '../../../../scripts/climate-engine/scope/page-meta.ts';
+/* OBOS v2 is the default UI (flip plan A.2): its one stylesheet is the LAST import, so it follows the other sheets in <head>, the order rc6 had. */
+import '../../../../styles/obos-v2/index.css';
 
 /**
  * ONE PAGE PER AREA — `/heat-map/in/kolkata/ballygunge/`.
@@ -67,10 +66,8 @@ const indexable = scope.area.publishes;
 const title = areaPageTitle(scope);
 const description = areaPageDescription(scope);
 ---
-<Base title={title} description={description} noindex={!indexable} nativeScroll>
-  <UiPrepaint />
-  <HeatMapStage scope={scope} />
-  <UiSwap tree={v2TreeUrl({ areaKey: scope.key })} />
+<Base title={title} description={description} noindex={!indexable} nativeScroll ui="v2">
+  <HeatMapStageV2 scope={scope} />
 </Base>
 
 <script>
@@ -78,7 +75,7 @@ const description = areaPageDescription(scope);
   let disposeShell: (() => void) | null = null;
   let bootGeneration = 0;
   let disposeV2: (() => void) | null = null;
-  /* OBOS v2 (spec §1.7): only under the flag, imported dynamically so v1 never fetches it. */
+  /* OBOS v2: the page is rendered as v2, so this is always true; the check stays so a page without data-ui mounts nothing. */
   const bootV2 = async (generation: number) => {
     if (document.documentElement.getAttribute('data-ui') !== 'v2' || disposeV2) return;
     const { mountShellV2 } = await import('../../../../scripts/climate-engine/v2/shell-v2');

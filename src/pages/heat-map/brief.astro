@@ -1,27 +1,24 @@
 ---
 import Base from '../../layouts/Base.astro';
-import HeatMapBrief from '../../components/ClimateEngine/brief/HeatMapBrief.astro';
-import UiPrepaint from '../../components/ClimateEngine/v2/UiPrepaint.astro';
-import UiSwap from '../../components/ClimateEngine/v2/UiSwap.astro';
-import { v2TreeUrl } from '../../scripts/climate-engine/v2/ui-flag.ts';
+import HeatMapBriefV2 from '../../components/ClimateEngine/brief/HeatMapBriefV2.astro';
+/* OBOS v2 is the default UI (flip plan A.2): its one stylesheet is the LAST import. */
+import '../../styles/obos-v2/index.css';
 ---
 <Base
   title="Urban Heat Scenario Brief — Delta Climate Research"
   description="A printable screening-grade record for an Urban Heat Explorer comparison scenario."
   noindex={true}
   nativeScroll={true}
+  ui="v2"
 >
-  <UiPrepaint />
-  <HeatMapBrief />
-  <UiSwap tree={v2TreeUrl('brief')} />
+  <HeatMapBriefV2 />
 </Base>
 
 <script>
   let dispose: (() => void) | null = null;
   let bootGeneration = 0;
   let disposeV2: (() => void) | null = null;
-  /* OBOS v2 (spec §1.7, plan S9.3): only under the flag, imported dynamically so v1 never fetches it. The brief's root is `[data-brief-root]`,
-     which mountShellV2 binds frame-only (c-02): menu pin, theme and card style, popovers. */
+  /* OBOS v2: the page is rendered as v2, so this is always true. mountShellV2 binds the frame; it runs AFTER the mounts above. */
   const bootV2 = async (generation: number) => {
     if (document.documentElement.getAttribute('data-ui') !== 'v2' || disposeV2) return;
     const { mountShellV2 } = await import('../../scripts/climate-engine/v2/shell-v2');

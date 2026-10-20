@@ -34,45 +34,44 @@ export function scriptIds() {
   return ids;
 }
 
-/* FINAL audit F5: the v2 tree is a FILE (dist/obos-v2/area/<key>.html), not a <template> in the page. The page carries the v1 <main> and nothing of v2. */
+/* FLIP: the built page IS the v2 tree (flip plan B.1). The ids v1 carried and a script binds are frozen in tests/unit/fixtures/obos-v1-bound-ids.json (taken from the rc6 v1 build, so this
+   test no longer needs v1 on the site, and v1's source can be deleted in PR 2). */
+const V1_BOUND = JSON.parse(readFileSync('tests/unit/fixtures/obos-v1-bound-ids.json', 'utf8'));
 function pageParts(path) {
   const file = `dist/${path}/index.html`;
   assert.ok(existsSync(file), `run npm run build first (${file})`);
   const html = readFileSync(file, 'utf8');
-  const v1s = html.indexOf('<main id="main"'); const v1e = html.indexOf('</main>', v1s);
-  assert.ok(!html.includes('obos-v2-tree'), `${path}: the page must carry no v2 template (F5)`);
-  const treeFile = `dist/obos-v2/area/${path.replace(/^heat-map\//, '')}.html`;
-  assert.ok(existsSync(treeFile), `run npm run build first (${treeFile})`);
-  return { v1: html.slice(v1s, v1e), v2: readFileSync(treeFile, 'utf8') };
+  const s = html.indexOf('<main id="main"'); const e = html.indexOf('</main>', s);
+  assert.ok(s >= 0 && e > s, `${path}: no <main id="main">`);
+  return { v1ids: V1_BOUND[path], v2: html.slice(s, e) };
 }
 const idsIn = (s) => [...s.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
 
 for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road', 'heat-map/ae/dubai/al-quoz']) {
   test(`${path}: every bound id is in the v2 tree exactly once`, () => {
-    const { v1, v2 } = pageParts(path);
-    const want = scriptIds();
-    const v1ids = new Set(idsIn(v1));
+    const { v1ids, v2 } = pageParts(path);
+    assert.ok(v1ids.length > 40, 'the frozen v1 id list is present');
     const v2list = idsIn(v2);
     const dup = v2list.filter((id, i) => v2list.indexOf(id) !== i);
     assert.deepEqual([...new Set(dup)], [], `duplicate ids in the v2 tree: ${dup.join(', ')}`);
     const v2ids = new Set(v2list);
-    const required = [...v1ids].filter((id) => want.has(id) || id.startsWith('big-'));
+    const required = v1ids;
     const missing = required.filter((id) => !v2ids.has(id) && !RETIRED_IN_V2.has(id));
     assert.deepEqual(missing, [], `v2 lacks ids the v1 tree carries and a script binds: ${missing.join(', ')}`);
   });
 
   test(`${path}: the v2 root keeps the seams`, () => {
-    const { v1, v2 } = pageParts(path);
-    const area = /data-area="([^"]+)"/.exec(v1)?.[1];
-    assert.ok(area, 'v1 root has no data-area');
+    const { v2 } = pageParts(path);
+    const area = path.replace(/^heat-map\//, '');
+    const hasMap = v2.includes('id="mlmap"');
     assert.match(v2, new RegExp(`<main id="main" class="stage obos-v2"[^>]*\\bdata-console\\b[^>]*data-area="${area}"`));
-    if (v1.includes('id="mlmap"')) {
+    if (hasMap) {
       for (const hook of ['data-rail="analysis"', 'data-w="', 'id="segPhase"', 'data-p="now"', 'data-m="relief"', 'data-e="studio"', 'data-t="2"', 'data-v="1"', 'data-s="1"', 'data-layer="', 'data-entry-close', 'data-rn-dismiss']) {
         assert.ok(v2.includes(hook), `v2 tree lacks the hook ${hook}`);
       }
     }
-    if (v1.includes('id="mlmap"')) assert.match(v2, /<select\b[^>]*\bdata-scope="area"/, 'v2 tree lacks the scope select hook');
-    assert.ok(!/<script/i.test(v2), 'no <script> may sit inside the v2 tree (a tree set through innerHTML never runs scripts)');
+    if (hasMap) assert.match(v2, /<select\b[^>]*\bdata-scope="area"/, 'v2 tree lacks the scope select hook');
+    assert.equal((v2.match(/<script/gi) ?? []).length, 1, 'the only <script> inside the v2 root is V2Prefs, its first child');
   });
 }
 
@@ -82,9 +81,10 @@ test('console-shell paints no pane state on a console that has no panes (E6, spe
   assert.ok(!/\n\s{2}paint\(\);\n/.test(src), 'an unguarded paint() call remains');
 });
 
-test('the area page mounts the v2 shell only under the flag, after the instrument', () => {
+test('the area page renders HeatMapStageV2 as v2 and mounts the v2 shell after the instrument', () => {
   const page = readFileSync('src/pages/heat-map/[country]/[city]/[area].astro', 'utf8');
-  assert.match(page, /getAttribute\('data-ui'\) !== 'v2'/);
+  assert.match(page, /<Base [^>]*\bui="v2"/);
+  assert.match(page, /<HeatMapStageV2 scope=\{scope\} \/>/);
   assert.ok(page.indexOf('mountHeatMap()') < page.lastIndexOf('await bootV2(generation)'), 'v2 shell must mount after mountHeatMap');
   assert.match(page, /disposeV2\?\.\(\); disposeV2 = null;/);
 });
