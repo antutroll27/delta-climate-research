@@ -130,8 +130,13 @@ const DOT: Record<LayerId, string> = {
   'green/trees': '--pine',
   'built/footprints': '--ink',
   'built/heights': '--slate',
-  'ground/street': '--gold',
+  'ground/street': '--ink-2',
 };
+
+/* OUTLINED, NOT FILLED. v2's symbol rule is solid = measured, outlined = modelled or
+   other; Street-level imagery is neither a measured field nor a modelled one, so it
+   takes a ring in an existing ink token rather than a colour of its own. */
+const RING: ReadonlySet<LayerId> = new Set(['ground/street']);
 
 interface Row {
   /** the registry's own id, straight off the walk — never rebuilt from slugs */
@@ -139,6 +144,8 @@ interface Row {
   readonly label: string;
   /** the palette token to paint the dot with */
   readonly dot: string;
+  /** drawn as a hollow ring rather than a filled square */
+  readonly ring: boolean;
   readonly checked: boolean;
   readonly disabled: boolean;
   /** why it cannot be drawn, or null when it can. Never invented here. */
@@ -183,6 +190,7 @@ for (const id of LAYER_IDS) {
     id,
     label: entry.label,
     dot: DOT[id],
+    ring: RING.has(id),
     /* A DEFAULT ONLY COUNTS WHERE IT CAN BE HONOURED. `defaultOn` says what the
        tree starts with drawn; `available` says whether there is anything to draw.
        A row that is one but not the other must render UNCHECKED, or the console
@@ -223,7 +231,7 @@ const headingId = (slug: string): string => `layer-group-${slug}`;
                 checked={row.checked}
                 disabled={row.disabled}
               />
-              <span class="tree-dot" style={`background: var(${row.dot})`} aria-hidden="true"></span>
+              <span class:list={['tree-dot', { 'is-ring': row.ring }]} style={`--dot: var(${row.dot})`} aria-hidden="true"></span>
               <span class="tree-name">{row.label}</span>
               {row.reason !== null && <span class="tree-why">{row.reason}</span>}
             </label>
@@ -241,16 +249,16 @@ const headingId = (slug: string): string => `layer-group-${slug}`;
 </section>
 
 <style>
-  /* SCOPED, NOT is:global, for the reason IconRail.astro and ScopeSwitcher.astro
-     both give: every element here is Astro-rendered and static, the scoping hash
+  /* SCOPED, NOT is:global, for the reason v1's IconRail.astro (deleted; tag obos-beta-ui-v1)
+     and ScopeSwitcher.astro both give: every element here is Astro-rendered and static, the scoping hash
      reaches all of it, and the global surface SHRINKS rather than grows. The
      stage's own block is global because MapLibre injects DOM it never rendered;
      nothing here does.
 
-     Colours are var() throughout. The palette — including --pine, --slate and
-     --gold, added for three of the dots — is declared in HeatMapStage.astro,
+     Colours are var() throughout. The palette — including --pine and
+     --slate, two of the dots — is declared in src/styles/obos-v2/tokens.css,
      because a token resolves from where it is DECLARED: these rules reach it only
-     once the tree is inside .stage, which is where Task 7 puts it. Task 2's guard
+     inside the v2 root, where LayersPopover.astro puts the tree. Task 2's guard
      fails the build on any hex written more than once in a file, comments
      included; this file writes none at all. */
 
@@ -384,9 +392,15 @@ const headingId = (slug: string): string => `layer-group-${slug}`;
   }
 
   .tree-dot {
+    box-sizing: border-box;
     inline-size: 7px;
     block-size: 7px;
     border-radius: 2px;
+    background: var(--dot);
+  }
+  .tree-dot.is-ring {
+    background: transparent;
+    border: 1.5px solid var(--dot);
   }
 
   .tree-name { min-inline-size: 0; }

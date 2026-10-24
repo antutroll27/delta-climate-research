@@ -210,6 +210,7 @@ const toastsV2 = await readFile(
   new URL('../../src/components/ClimateEngine/v2/ToastsV2.astro', import.meta.url), 'utf8');
 const stageV2 = await readFile(
   new URL('../../src/components/ClimateEngine/v2/HeatMapStageV2.astro', import.meta.url), 'utf8');
+const atomsCss = await readFile(new URL('../../src/styles/obos-v2/atoms.css', import.meta.url), 'utf8');
 const flat = (s) => s.replace(/\s+/g, ' ').trim();
 
 /* THE BADGE'S OWN MARKUP, AND NOT A CHARACTER MORE. Slicing to `</div>` alone
@@ -266,6 +267,15 @@ test('the link keeps its own visible text as its name, and the phone rule keeps 
   assert.match(css, /\.toast \.t-eyebrow \{[^}]*\}/, 'the toast eyebrow has a rule');
   assert.doesNotMatch(css, /\.t-eyebrow \{[^}]*display: ?none/,
     "display:none on the eyebrow silently shortens the link's accessible name");
+});
+
+test('the toast link and its dismiss button keep a visible focus ring', () => {
+  /* v1 pinned `.newcity a:focus-visible, .newcity button:focus-visible`. v2 draws the ring for every focusable element from one global rule in atoms.css, so the toast's link and button inherit it; this pins that rule, and that the toast does not switch the outline off. */
+  assert.match(flat(atomsCss),
+    /html\[data-ui="v2"\] \.obos-v2 :focus-visible \{[^}]*outline: 2px solid var\(--focus-accent\)/,
+    'the global v2 :focus-visible ring is gone from atoms.css: the toast link and dismiss button would have no visible focus');
+  assert.doesNotMatch(flat(shellCss), /\.toast[^{]*:focus(-visible)? \{[^}]*outline: ?(none|0)/,
+    'a toast rule removes the focus outline the global ring draws');
 });
 
 /**

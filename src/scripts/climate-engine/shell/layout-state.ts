@@ -8,8 +8,8 @@
  * chevron, and both are a standing preference rather than part of any reading.
  *
  * SEVERAL READERS, WHICH IS WHY THIS IS A MODULE AND NOT SIX STRING LITERALS.
- * shell/IconRail.astro embeds {@link LAYOUT_PREPAINT} in the document, two
- * stylesheets select on the attributes it sets, and shell/console-shell.ts writes
+ * v1's shell/IconRail.astro (deleted; tag obos-beta-ui-v1) embedded {@link LAYOUT_PREPAINT} in the document, two
+ * stylesheets selected on the attributes it set, and shell/console-shell.ts writes
  * both the attributes and the stored values. A key spelled once in the inline
  * script and again in the module that writes it is two keys one edit apart, and
  * the failure is silent: the preference is written where nothing reads it and the
