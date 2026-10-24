@@ -34,8 +34,8 @@ test('the peak chip says on its face that it is the earlier evidence set', () =>
 });
 
 test('the idle orbit and drag inertia never cancel a camera animation; a row click pauses the orbit (solar-pane:129)', () => {
-  assert.match(body('advanceOrbit'), /if \(active && !map\.isEasing\(\)\) map\.setBearing\(/, 'the orbit steps through an ease, and setBearing → jumpTo → stop() kills it');
-  assert.match(body('advanceDrag'), /else if \(map\.isEasing\(\)\) \{ vel\.b = vel\.p = 0; \}\s*else if \(Math\.abs\(vel\.b\) > 0\.02/, 'inertia jumpTo would cancel an ease');
+  assert.match(body('advanceOrbit'), /if \(active && !map\.isMoving\(\)\) map\.setBearing\(/, 'the orbit steps through an ease, and setBearing → jumpTo → stop() kills it');
+  assert.match(body('advanceDrag'), /else if \(map\.isMoving\(\)\) \{ vel\.b = vel\.p = 0; \}\s*else if \(Math\.abs\(vel\.b\) > 0\.02/, 'inertia jumpTo would cancel an ease');
   assert.match(CODE, /nudgeOrbit\(\);\s*map\.easeTo\(\{ center: \[ll\.lon, ll\.lat\], duration: reduceMotion \? 0 : 700, essential: true \}\);/);
 });
 

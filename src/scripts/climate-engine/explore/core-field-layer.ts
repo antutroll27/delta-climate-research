@@ -1,4 +1,4 @@
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import { wardLatLon, type Ward } from '../../../data/wards.ts';
 import { requireGrid } from '../types.ts';
 import type { WardMask } from '../ward-mask.ts';

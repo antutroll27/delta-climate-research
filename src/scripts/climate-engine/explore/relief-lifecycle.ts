@@ -1,4 +1,4 @@
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 
 type ReliefLayerMap = Pick<maplibregl.Map, 'addLayer' | 'getLayer'>;
 

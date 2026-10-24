@@ -8,7 +8,14 @@
  * Pure physics/economics live in ./heat-map-model. Sim engine in ./sim-gpu.
  * `mountHeatMap()` returns a dispose fn (call it on astro:before-swap).
  */
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
+/* maplibre-gl 6 is ESM-only and its parsing worker is a SEPARATE file. A bundler
+   cannot find it from inside the library (`import.meta.url` does not survive
+   bundling), so Vite is asked for a self-contained copy and its URL is handed to
+   `setWorkerUrl` before the first Map. Without it no tile is ever parsed and the
+   basemap stays empty with nothing thrown; `scripts/check-maplibre-worker.mjs`
+   asserts the asset reached dist/. */
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { RENDERABLE_WARD_MAP, wardLatLon, formatLatLon, type Ward } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { greenReferenceContrastC, requireGrid, type ClimateConstants, type PvFile, type SimLayers, type SimParams } from './types';
@@ -348,6 +355,7 @@ export function mountHeatMap(): () => void {
   const MLY_TOKEN = (import.meta.env.PUBLIC_MAPILLARY_TOKEN as string | undefined) ?? '';
 
   /* ── MapLibre basemap ── */
+  maplibregl.setWorkerUrl(maplibreWorkerUrl);
   const map = new maplibregl.Map({
     container: mapContainer, style: STYLES.dark,
     center: [wardOf(INITIAL_AREA).lon, wardOf(INITIAL_AREA).lat], zoom: 15.3, pitch: 60, bearing: -18,
@@ -461,11 +469,18 @@ export function mountHeatMap(): () => void {
      projected behind it, stayed at opacity 0. Deterministic once the orbit runs;
      flaky in the suite, where load decided which side of 2.5 s the click landed.
      The orbit now steps only while no animation owns the camera, and resumes from
-     wherever the move left it. */
+     wherever the move left it.
+
+     THE TEST IS `isMoving()`, NOT `isEasing()`. maplibre-gl 6 composes its camera
+     rather than extending it and `isEasing` is not forwarded to Map: calling it is a
+     TypeError on the first frame. Between frames `isMoving()` is true exactly while an
+     easeTo/flyTo runs (or a gesture handler is active, when the orbit should be quiet
+     anyway); our own `jumpTo`/`panBy` with no duration begin and end inside one call, so
+     they never leave it set. */
   function advanceOrbit(t: number): boolean {
     const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0; lastT = t;
     const active = Boolean(orbit && mode === 'relief' && map.isStyleLoaded());
-    if (active && !map.isEasing()) map.setBearing(map.getBearing() + ORBIT_DEG_PER_SEC * dt);
+    if (active && !map.isMoving()) map.setBearing(map.getBearing() + ORBIT_DEG_PER_SEC * dt);
     return active;
   }
   function nudgeOrbit() { orbit = false; clearTimeout(orbitResume); orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') { orbit = true; requestRuntimeFrame('orbit'); } }, 2500); }
@@ -675,7 +690,7 @@ export function mountHeatMap(): () => void {
     } else if (drag) { vel.b *= 0.5; vel.p *= 0.5; }
     /* Inertia is a jumpTo too: it yields to a camera animation (see advanceOrbit) and
        is spent, not resumed, when one starts. A drag in progress still wins above. */
-    else if (map.isEasing()) { vel.b = vel.p = 0; }
+    else if (map.isMoving()) { vel.b = vel.p = 0; }
     else if (Math.abs(vel.b) > 0.02 || Math.abs(vel.p) > 0.02) { vel.b *= 0.88; vel.p *= 0.88; map.jumpTo({ bearing: map.getBearing() + vel.b, pitch: Math.min(78, Math.max(0, map.getPitch() + vel.p)) }); }
     return !!drag || Math.abs(vel.b) > 0.02 || Math.abs(vel.p) > 0.02;
   }

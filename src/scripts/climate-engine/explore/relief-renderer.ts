@@ -12,7 +12,7 @@
  * The scene composites OVER the basemap and has no background of its own, which is
  * why `scene.background` is never set here and the visible sky is MapLibre's.
  */
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createCloudLayer, type CloudLayer } from '../cloud-layer.ts';
