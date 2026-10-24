@@ -1588,7 +1588,7 @@ test('every dot is a token the palette declares, and the table is exhaustive', a
      `Record<LayerId, string>` in the frontmatter is what makes the table
      exhaustive: a seventh layer fails to compile here rather than rendering a
      dot with no colour. This test checks the runtime half of the same claim. */
-  const { frontmatter, template } = await treeSource();
+  const { frontmatter, template, css } = await treeSource();
   const dots = dotTable(frontmatter);
 
   assert.deepEqual([...dots.keys()].sort(), [...LAYER_IDS].sort(),
@@ -1603,17 +1603,12 @@ test('every dot is a token the palette declares, and the table is exhaustive', a
     [...(await readFile(V2_TOKENS, 'utf8')).matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
   assert.ok(declared.size > 0,
     'no token was found in v2 tokens.css -- the loop below would then accept every dot');
-  /* KNOWN GAP, FOUND BY THIS RE-POINT (PR 2): v1 declared --gold (#c9a227) for the Street-level row; v2 declares no --gold, so that one dot paints nothing in the Layers popover.
-     Listed, not hidden: the assertion below fails the moment v2 declares it, so this exception cannot outlive the fix. */
-  const KNOWN_UNDECLARED_IN_V2 = new Set(['--gold']);
-  for (const t of KNOWN_UNDECLARED_IN_V2) assert.ok(!declared.has(t), `${t} is declared in v2 now: delete it from KNOWN_UNDECLARED_IN_V2`);
-
   const seen = new Set();
   for (const [id, token] of dots) {
     assert.match(token, /^--[a-z][a-z0-9-]*$/,
       `the dot for ${id} is \`${token}\` -- it must be a token NAME, so the colour `
       + 'has exactly one spelling in the codebase');
-    assert.ok(declared.has(token) || KNOWN_UNDECLARED_IN_V2.has(token),
+    assert.ok(declared.has(token),
       `the dot for ${id} names \`${token}\`, which v2's tokens.css declares `
       + 'nowhere -- var() would resolve to nothing and the dot would be invisible');
     seen.add(token);
@@ -1623,9 +1618,26 @@ test('every dot is a token the palette declares, and the table is exhaustive', a
     + [...dots].map(([i, t]) => `${i}=${t}`).join(', ')
     + ') -- the dot is how a row is told from its neighbour at a glance');
 
-  assert.match(flat(template), /style=\{`background: var\(\$\{row\.dot\}\)`\}/,
+  assert.match(flat(template), /style=\{`--dot: var\(\$\{row\.dot\}\)`\}/,
     'the dot is not painted with var(${row.dot}) -- a per-layer literal in the '
     + 'template is a second place the palette has to be kept up to date');
+
+  /* STREET-LEVEL IS AN OUTLINE, NOT A FILL (founder, option B). v1's --gold was never carried into v2, so the dot painted nothing. v2's symbol rule is solid = measured, outlined = modelled/other; the row takes a ring in an existing ink token and adds no colour. */
+  assert.ok(!/--gold/.test(frontmatter + template + css),
+    'LayerTree.astro still references --gold, which v2 never declares');
+  assert.equal(dots.get('ground/street'), '--ink-2',
+    'the Street-level dot is not painted in the existing --ink-2 (text-secondary) token');
+  assert.match(frontmatter, /const\s+RING[^=]*=\s*new Set\(\[\s*'ground\/street'\s*\]\)/,
+    'Street-level is not in the RING set -- it would render as a filled dot');
+  assert.match(flat(template), /is-ring['"]?\s*:\s*RING\.has\(row\.id\)|is-ring['"]?\s*:\s*row\.ring/,
+    'the dot does not take the is-ring class from the row');
+  const ring = css.match(/\.tree-dot\.is-ring\s*\{([^}]*)\}/);
+  assert.ok(ring, 'there is no `.tree-dot.is-ring` rule');
+  assert.match(ring[1], /background:\s*transparent/, 'the ring is not transparent-filled');
+  assert.match(ring[1], /border:\s*1\.5px\s+solid\s+var\(--dot\)/,
+    'the ring is not a 1.5px solid border in the row token');
+  assert.match(css, /\.tree-dot\s*\{[^}]*box-sizing:\s*border-box/,
+    'the dot is not border-box, so the ring would grow past the other dots\' 7px');
 });
 
 test('the tree scopes its styles, casts nothing, and stays usable', async () => {

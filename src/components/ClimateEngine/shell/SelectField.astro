@@ -152,7 +152,7 @@ const selectedNote = selected?.note ?? '';
 </div>
 
 <style>
-  /* SCOPED, for the reason IconRail.astro gives: this markup is Astro-rendered
+  /* SCOPED, for the reason v1's IconRail.astro gave (deleted; tag obos-beta-ui-v1): this markup is Astro-rendered
      and the scoping hash reaches it.
 
      THE ROWS ARE THE EXCEPTION, and they are marked :global for a reason that is
@@ -163,8 +163,8 @@ const selectedNote = selected?.note ?? '';
      the scope still applies where it can — to the list this component rendered —
      and stops at the children it did not.
 
-     Colours are var() throughout and resolve from .stage, where HeatMapStage.astro
-     declares the palette. */
+     Colours are var() throughout and resolve from the v2 root, where
+     src/styles/obos-v2/tokens.css declares the palette. */
 
   /* ── the card ───────────────────────────────────────────────────────────── */
 
