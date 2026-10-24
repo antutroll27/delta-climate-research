@@ -102,6 +102,10 @@ html[data-ui="v2"] .obos-v2 .wc-prov .sym-tile.sm { width: 24px; height: 24px; b
 html[data-ui="v2"] .obos-v2 #loadchip { margin-top: 4px; }
 html[data-ui="v2"] .obos-v2 #loadchip:not(.on):not(.fail) { display: none; }
 html[data-ui="v2"] .obos-v2 #loadchip.fail { color: var(--ink-1); font-weight: 600; }
+/* a device with no WebGL 2 gets this where the map would be (heat-map-app.ts showMapUnavailable); the load chip says the same in the ward card, which can be folded away */
+html[data-ui="v2"] .obos-v2 #mlmap .map-unavailable { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(36ch, calc(100% - 32px)); padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--ink-1); font: 400 13px/1.45 var(--sans); }
+html[data-ui="v2"] .obos-v2 #mlmap .map-unavailable strong { display: block; margin-bottom: 4px; font-weight: 600; }
 @media (min-width: 700px) and (max-width: 1365px) { html[data-ui="v2"] .obos-v2 .wc-fig { font-size: 11px; } }
 
 /* A-S4 audit F1: on a short window (measured at 1366 x 640) the title column's tip toast would sit on the Sun card; the first-run tip steps aside there,

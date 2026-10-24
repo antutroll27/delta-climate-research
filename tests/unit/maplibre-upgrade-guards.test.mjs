@@ -74,3 +74,17 @@ test('the worker is wired for the bundler before the Map is built, and the build
   assert.match(check, /maplibre-gl-worker/, 'the check must look for the worker asset');
 });
 
+test('the GPU preference stays what 4.7.1 used, not v6\'s new high-performance default', () => {
+  assert.match(APP, /canvasContextAttributes:\s*\{\s*antialias:\s*true,\s*powerPreference:\s*'default'\s*\}/);
+});
+
+test('v4 tile behaviour is kept: slicing is switched off so basemap labels stay where they were', () => {
+  assert.match(APP, /zoomLevelsToOverscale:\s*undefined/, "v6's default of 4 slices z15+ tiles of a z14-max source and moves label placement");
+});
+
+test('a WebGL2-less device gets an honest refusal in the load chip, not a thrown mount', () => {
+  const ctor = APP.slice(APP.indexOf('new maplibregl.Map({') - 200, APP.indexOf('const labWindow'));
+  assert.match(ctor, /try\s*\{/, 'new Map throws GPUInitializationError without WebGL2; it must be caught');
+  assert.match(ctor, /loadChip\.fail\(MAP_UNAVAILABLE\);\s*showMapUnavailable\(mapContainer\)/, 'the refusal must be said through the v2 failure chip AND on the map surface (the chip sits in a card that can be folded away)');
+  assert.match(APP, /const MAP_UNAVAILABLE =\s*\n?\s*'[^']*WebGL 2[^']*'/, 'the sentence must name the actual cause');
+});

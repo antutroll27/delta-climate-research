@@ -189,6 +189,25 @@ const { RESET_BURST } = M;
  * Tiles, glyphs and sprites are still served by OpenFreeMap; the OSM/ODbL
  * attribution is unchanged and no Mapbox asset or service is involved.
  */
+/** What a device without WebGL 2 is told. maplibre-gl 6 dropped its WebGL 1 fallback, so
+ *  `new Map` throws there; the 3-D relief already needed WebGL 2, so tier 0 on such a
+ *  device used to show a flat field and now shows nothing. Say so rather than leave a
+ *  blank canvas. The short sentence goes through the load chip (the v2 failure channel);
+ *  the chip lives in the ward card's body, which is folded away on many viewports, so the
+ *  same refusal is also written onto the map surface where the map would have been. */
+const MAP_UNAVAILABLE =
+  'The map is unavailable on this device — it needs WebGL 2, which this browser or GPU does not provide';
+function showMapUnavailable(container: HTMLElement): void {
+  const note = document.createElement('div');
+  note.className = 'map-unavailable';
+  note.setAttribute('role', 'status');
+  const title = document.createElement('strong');
+  title.textContent = 'Map unavailable';
+  const body = document.createElement('span');
+  body.textContent = 'This browser or GPU did not provide WebGL 2, which the map needs. Nothing is drawn here, and the ward readings stay unavailable.';
+  note.append(title, body);
+  container.replaceChildren(note);
+}
 const STYLES = { dark: '/heat-map/styles/obos-slate.json', studio: 'https://tiles.openfreemap.org/styles/positron' };
 
 /**
@@ -356,30 +375,51 @@ export function mountHeatMap(): () => void {
 
   /* ── MapLibre basemap ── */
   maplibregl.setWorkerUrl(maplibreWorkerUrl);
-  const map = new maplibregl.Map({
-    container: mapContainer, style: STYLES.dark,
-    center: [wardOf(INITIAL_AREA).lon, wardOf(INITIAL_AREA).lat], zoom: 15.3, pitch: 60, bearing: -18,
-    /* MSAA for the custom layer: three is handed MapLibre's context, so its own
-       `antialias` is ignored and this is the only place the attribute is decided.
-       MapLibre >= 5 takes it here rather than as a top-level `antialias`; dropping
-       the old key without adding this one silently loses MSAA (jagged building
-       edges, water line and canopy). */
-    canvasContextAttributes: { antialias: true },
-    attributionControl: false, pixelRatio: Math.min(devicePixelRatio, 1.75),
-    /* THE DRAG HANDLER ALREADY ASKED FOR THIS AND WAS BEING IGNORED. Two hundred
-       lines below, the pitch drag clamps to `Math.min(78, ...)`; MapLibre's default
-       `maxPitch` is 60, so it silently clamped again and the last 18 degrees were
-       unreachable. Two places disagreeing about one number, with the quieter one
-       winning.
+  let map: maplibregl.Map;
+  try {
+    map = new maplibregl.Map({
+      container: mapContainer, style: STYLES.dark,
+      center: [wardOf(INITIAL_AREA).lon, wardOf(INITIAL_AREA).lat], zoom: 15.3, pitch: 60, bearing: -18,
+      /* MSAA for the custom layer: three is handed MapLibre's context, so its own
+         `antialias` is ignored and this is the only place the attribute is decided.
+         MapLibre >= 5 takes it here rather than as a top-level `antialias`; dropping
+         the old key without adding this one silently loses MSAA (jagged building
+         edges, water line and canopy). */
+      /* `powerPreference: 'default'` IS 4.7.1'S BEHAVIOUR, written down. v4 passed none,
+         which the browser reads as 'default'; v6 changed its own default to
+         'high-performance', which would move dual-GPU Macs onto the discrete GPU and ask
+         phones for higher clocks (battery and heat). Founder, 25 Oct: keep today's. */
+      canvasContextAttributes: { antialias: true, powerPreference: 'default' },
+      attributionControl: false, pixelRatio: Math.min(devicePixelRatio, 1.75),
+      /* THE DRAG HANDLER ALREADY ASKED FOR THIS AND WAS BEING IGNORED. Two hundred
+         lines below, the pitch drag clamps to `Math.min(78, ...)`; MapLibre's default
+         `maxPitch` is 60, so it silently clamped again and the last 18 degrees were
+         unreachable. Two places disagreeing about one number, with the quieter one
+         winning.
 
-       It is also the only tilt at which the sky is ever seen. MEASURED against
-       4.7.1's own sky shader: the horizon sits at `height/2 + getHorizon()` pixels,
-       which at pitch 60 is 1.24 screen-heights — above the top of the frame, so
-       `setSky` paints exactly zero pixels. It first appears at ~67 deg and reaches
-       a fifth of the frame at 80. The DEFAULT camera is untouched at 60: every
-       easeTo, flyTo and reset in this file still says 60 or 0. */
-    maxPitch: 78,
-  });
+         It is also the only tilt at which the sky is ever seen. MEASURED against
+         4.7.1's own sky shader: the horizon sits at `height/2 + getHorizon()` pixels,
+         which at pitch 60 is 1.24 screen-heights — above the top of the frame, so
+         `setSky` paints exactly zero pixels. It first appears at ~67 deg and reaches
+         a fifth of the frame at 80. The DEFAULT camera is untouched at 60: every
+         easeTo, flyTo and reset in this file still says 60 or 0. */
+      maxPitch: 78,
+      /* KEEPS v4'S TILE HANDLING. OpenFreeMap's vector tiles stop at z14 and this map
+         sits at z15.3+; v6's default of 4 SLICES those overzoomed tiles instead of
+         scaling them, which changes where basemap and polygon-centred labels land.
+         `undefined` is the migration guide's own way back to v4's overscaling
+         (`{...defaults, ...options}` takes the explicit undefined). Founder, 25 Oct:
+         keep today's look. */
+      zoomLevelsToOverscale: undefined,
+    });
+  } catch (error) {
+    /* GPUInitializationError on a WebGL 1-only device, or any other refusal to make a
+       context. Nothing below can run without a map; say why, once, and mount nothing. */
+    console.warn('MapLibre could not start', error);
+    loadChip.fail(MAP_UNAVAILABLE);
+    showMapUnavailable(mapContainer);
+    return () => {};
+  }
   /* The attribution control is REBUILT when the open area's boundary credit changes
      (`setMapCredit`, from paintWardScope): MapLibre reads `customAttribution` only at
      construction. */
