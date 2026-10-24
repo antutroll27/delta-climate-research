@@ -351,7 +351,13 @@ export function mountHeatMap(): () => void {
   const map = new maplibregl.Map({
     container: mapContainer, style: STYLES.dark,
     center: [wardOf(INITIAL_AREA).lon, wardOf(INITIAL_AREA).lat], zoom: 15.3, pitch: 60, bearing: -18,
-    antialias: true, attributionControl: false, pixelRatio: Math.min(devicePixelRatio, 1.75),
+    /* MSAA for the custom layer: three is handed MapLibre's context, so its own
+       `antialias` is ignored and this is the only place the attribute is decided.
+       MapLibre >= 5 takes it here rather than as a top-level `antialias`; dropping
+       the old key without adding this one silently loses MSAA (jagged building
+       edges, water line and canopy). */
+    canvasContextAttributes: { antialias: true },
+    attributionControl: false, pixelRatio: Math.min(devicePixelRatio, 1.75),
     /* THE DRAG HANDLER ALREADY ASKED FOR THIS AND WAS BEING IGNORED. Two hundred
        lines below, the pitch drag clamps to `Math.min(78, ...)`; MapLibre's default
        `maxPitch` is 60, so it silently clamped again and the last 18 degrees were
