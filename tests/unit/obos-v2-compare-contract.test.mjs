@@ -3,14 +3,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 
-const V1 = readFileSync('src/components/ClimateEngine/compare/PairedBench.astro', 'utf8');
-const V1B = readFileSync('src/components/ClimateEngine/brief/HeatMapBrief.astro', 'utf8');
+/* The v1 UI's source is deleted (PR 2). The data hooks its controllers bind were frozen, as they stood on 25 Oct 2026, in this fixture. The sentences below are literals in this file, which is their freeze. */
+const HOOKS = JSON.parse(readFileSync('tests/unit/fixtures/obos-v1-frozen.json', 'utf8')).dataHooks;
 const V2F = 'src/components/ClimateEngine/compare/PairedBenchV2.astro';
 const V2BF = 'src/components/ClimateEngine/brief/HeatMapBriefV2.astro';
-/* markup only: v1's <style> block quotes selectors such as [data-sheet="half"] that no element ever carries */
-const markupOnly = (s) => s.replace(/<style[\s\S]*?<\/style>/g, '');
-const pairs = (s) => new Set([...markupOnly(s).matchAll(/\b(data-[a-z-]+)="([^"{}]*)"/g)].map((m) => `${m[1]}="${m[2]}"`)
-  .filter((p) => !/^data-(pane|rail|rail-toggle|panel-toggle|label-[a-z]+|astro[a-z-]*)=/.test(p)));
 const frontmatterless = (s) => s.replace(/^---[\s\S]*?\n---\n/, '');
 const text = (s) => frontmatterless(s).replace(/<style[\s\S]*?<\/style>/g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
   .replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
@@ -18,7 +14,8 @@ const text = (s) => frontmatterless(s).replace(/<style[\s\S]*?<\/style>/g, '').r
 test('every data hook the bench controller reads exists in PairedBenchV2', () => {
   assert.ok(existsSync(V2F), V2F);
   const v2 = readFileSync(V2F, 'utf8');
-  const missing = [...pairs(V1)].filter((p) => !v2.includes(p));
+  assert.ok(HOOKS.compare.length > 40, 'the frozen hook list is present');
+  const missing = HOOKS.compare.filter((p) => !v2.includes(p));
   assert.deepEqual(missing, []);
   for (const h of ['data-compare-root', 'data-console']) assert.ok(v2.includes(h), h);
   assert.match(v2, /<main id="main" class="heat-compare obos-v2"/);
@@ -27,14 +24,15 @@ test('every data hook the bench controller reads exists in PairedBenchV2', () =>
 test('every data hook the brief reads exists in HeatMapBriefV2', () => {
   assert.ok(existsSync(V2BF), V2BF);
   const v2 = readFileSync(V2BF, 'utf8');
-  assert.deepEqual([...pairs(V1B)].filter((p) => !v2.includes(p)), []);
+  assert.ok(HOOKS.brief.length > 10, 'the frozen hook list is present');
+  assert.deepEqual(HOOKS.brief.filter((p) => !v2.includes(p)), []);
   assert.match(v2, /<main id="main" class="heat-brief obos-v2"[^>]*data-brief-root/);
   assert.doesNotMatch(v2.slice(v2.indexOf('<main')).split('>')[0], /data-compare-root/, 'C audit F1: the brief is not the Compare bench; compare.astro\'s leftover listener would boot a second one on it');
   for (const t of ['Paired scenario brief', 'This is not a ward ranking or an investment-priority recommendation.', 'It is not an observed regional heat-day record.']) assert.ok(v2.includes(t), t);
 });
 
-/* H25 and the brief's honesty (spec §5): v1's sentences, word for word. Each is asserted in v1 FIRST, so this list cannot drift
-   from the source it protects, then in v2 (the rendered text, so a re-indented tag cannot hide a changed word). */
+/* H25 and the brief's honesty (spec §5): v1's sentences, word for word, asserted in v2 (the rendered text, so a re-indented tag cannot hide a changed word).
+   They were each asserted against v1's source until it was deleted; these literals are now the only record of the wording. */
 const COMPARE_SENTENCES = [
   'Illustrative, editable',
   'Thermal relief illustrative',
@@ -70,23 +68,20 @@ const DELTA = 'Modelled ward mean minus a fully vegetated reference cell under i
 
 test('H25: the Δ disclosure is in v1\'s tooltip, and in v2 as a tooltip AND as visible text', () => {
   const v2src = readFileSync(V2F, 'utf8');
-  assert.ok(V1.includes(`title="${DELTA}"`), 'v1 no longer says it');
   assert.ok(v2src.includes(`title="${DELTA}"`), 'v2 lost the tooltip');
   assert.ok(text(v2src).includes(DELTA), 'v2 must print the disclosure, not only tooltip it');
 });
 
 test('H25: every honesty sentence of v1 Compare survives in v2, word for word', () => {
-  const v1 = text(V1), v2 = text(readFileSync(V2F, 'utf8'));
+  const v2 = text(readFileSync(V2F, 'utf8'));
   for (const s of COMPARE_SENTENCES) {
-    assert.ok(v1.includes(s), `v1 no longer says: ${s}`);
     assert.ok(v2.includes(s), `v2 Compare lost: ${s}`);
   }
 });
 
 test('H25: every honesty sentence of the v1 paired brief survives in v2, word for word', () => {
-  const v1 = text(V1B), v2 = text(readFileSync(V2BF, 'utf8'));
+  const v2 = text(readFileSync(V2BF, 'utf8'));
   for (const s of BRIEF_SENTENCES) {
-    assert.ok(v1.includes(s), `v1 no longer says: ${s}`);
     assert.ok(v2.includes(s), `v2 brief lost: ${s}`);
   }
 });
