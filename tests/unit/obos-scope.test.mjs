@@ -938,9 +938,11 @@ test('the markup states no scenario and no citation of its own', async () => {
      pane was suddenly invisible to them. That is the tenth guard in this project
      to be caught watching a place its subject had left, and the first created by
      a refactor rather than written that way. */
+  /* v1's stage is deleted (PR 2): the shared pane plus every v2 component stand in for it, so a literal written in any of them fails. */
+  const v2Dir = new URL('../../src/components/ClimateEngine/v2/', import.meta.url);
   const sources = await Promise.all([
-    'src/components/ClimateEngine/HeatMapStage.astro',
     'src/components/ClimateEngine/shell/InterventionPane.astro',
+    ...(await readdir(v2Dir)).filter((f) => f.endsWith('.astro') && !f.startsWith('._')).map((f) => `src/components/ClimateEngine/v2/${f}`),
   ].map(async (rel) => stripComments(
     await readFile(new URL(`../../${rel}`, import.meta.url), 'utf8'))));
   const stage = sources.join('\n');
@@ -1079,8 +1081,9 @@ test('every area offering the ward-record download has a route to download', asy
   assert.ok(AREA_KEYS.some((k) => resolve(k).area.publishes), 'no area publishes at all');
   assert.ok(AREA_KEYS.some((k) => !resolve(k).area.publishes), 'every area publishes');
 
-  const stage = stripComments(await readFile(
-    new URL('../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url), 'utf8'));
-  assert.match(stage, /\{scope\.area\.publishes \? \([\s\S]{0,400}?id="report-link"/,
+  /* Re-pointed from v1's stage to the v2 Data & methods card, which carries the one #report-link. */
+  const methods = stripComments(await readFile(
+    new URL('../../src/components/ClimateEngine/v2/MethodsCards.astro', import.meta.url), 'utf8'));
+  assert.match(methods, /\{scope\.area\.publishes && <a [^>]*id="report-link"/,
     'the ward-record download is no longer gated on `publishes` — see the comment above it');
 });

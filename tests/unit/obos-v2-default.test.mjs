@@ -1,7 +1,7 @@
 // tests/unit/obos-v2-default.test.mjs — OBOS v2 is the default UI (flip plan A.2 / B.2.3 (i)).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 test('T1: Base takes a ui prop and renders it as data-ui on <html> (server-rendered, so no-JS and soft hops are right)', () => {
@@ -10,9 +10,20 @@ test('T1: Base takes a ui prop and renders it as data-ui on <html> (server-rende
   assert.match(src, /<html lang="en" data-ui=\{ui\}>/);
 });
 
-/* PR 2 deletes the v1 sources. Until then this keeps them unserved: no page may import a v1 tree component, so v1 cannot come back silently (flip plan A.2.7). */
+/* PR 2 deleted the v1 sources (v1 lives at branch obos-beta-ui / tag obos-beta-ui-v1). No page may import a v1 tree component and none of the files may exist, so v1 cannot come back silently (flip plan A.2.7). */
 const walk = (dir) => readdirSync(dir).flatMap((n) => { const p = join(dir, n); return statSync(p).isDirectory() ? walk(p) : /\.astro$/.test(p) ? [p] : []; });
 const V1_TREES = ['HeatMapStage', 'PairedBench', 'HeatMapBrief', 'IconRail', 'PanelToggle'];
+const V1_FILES = [
+  'src/components/ClimateEngine/HeatMapStage.astro',
+  'src/components/ClimateEngine/compare/PairedBench.astro',
+  'src/components/ClimateEngine/brief/HeatMapBrief.astro',
+  'src/components/ClimateEngine/shell/IconRail.astro',
+  'src/components/ClimateEngine/shell/PanelToggle.astro',
+];
+
+test('the v1 tree components are deleted from the source', () => {
+  assert.deepEqual(V1_FILES.filter((f) => existsSync(f)), []);
+});
 
 test('no page imports a v1 tree component (the v1 UI is not served)', () => {
   const offenders = [];

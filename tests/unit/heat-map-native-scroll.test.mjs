@@ -6,7 +6,7 @@ import { join } from 'node:path';
 /*
  * 2026-09-23 audit, item 1. The ward route rendered <Base> without `nativeScroll`,
  * so Lenis started on the OBOS page and cancelled every wheel event inside its side
- * panels — on a page whose own body never scrolls (HeatMapStage sets
+ * panels — on a page whose own body never scrolls (the stage sets
  * body{overflow:hidden}). Base.astro states the rule: interactive tools manage their
  * own native scrolling and must not start Lenis. compare.astro and brief.astro
  * followed it; the ward route, the one people actually use, did not. So every page
@@ -19,8 +19,8 @@ const astroFiles = readdirSync(PAGES, { recursive: true })
 
 test('every heat-map page opts out of Lenis', () => {
   const pages = astroFiles.filter((f) => /<Base\b/.test(readFileSync(f, 'utf8')));
-  assert.ok(pages.some((f) => readFileSync(f, 'utf8').includes('<HeatMapStage')),
-    `no page under ${PAGES} renders <HeatMapStage> — did the route move?`);
+  assert.ok(pages.some((f) => readFileSync(f, 'utf8').includes('<HeatMapStageV2')),
+    `no page under ${PAGES} renders <HeatMapStageV2> — did the route move?`);
   for (const file of pages) {
     // The template only: past the frontmatter's closing ---, with template comments removed,
     // so a <Base …> written in a comment can neither satisfy nor fail the check.

@@ -21,8 +21,6 @@ test('the Sentinel-2 licence label and link are the ones /attribution publishes 
 test('the water credit is OpenStreetMap under ODbL, as in v1\'s attribution line', () => {
   assert.equal(WATER_CREDIT.lead, 'Water © OpenStreetMap');
   assert.equal(WATER_CREDIT.licence, 'ODbL');
-  const v1 = readFileSync('src/components/ClimateEngine/HeatMapStage.astro', 'utf8');
-  assert.ok(v1.includes('Water © OpenStreetMap (ODbL)'), 'v1 still says it this way');
 });
 
 test('the area page credits Sentinel-2 where the area has a model (inside the hasData branch), and uses the shared constant', () => {

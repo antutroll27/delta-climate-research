@@ -124,9 +124,8 @@ test('no stylesheet writes a colour more than once', async () => {
      way to name it in prose is `--sage`, which points AT the single source of
      truth instead of duplicating it. A hex may still appear once in a comment;
      only a second spelling fails. */
+  /* v1's stage, rail and bench were deleted (PR 2); the v2 sheets are held to the same rule by obos-v2-colour.test.mjs. */
   const files = [
-    'src/components/ClimateEngine/HeatMapStage.astro',
-    'src/components/ClimateEngine/shell/IconRail.astro',
     'src/components/ClimateEngine/shell/ScopeSwitcher.astro',
     /* THE CARD THE SWITCHER IS MADE OF. It carries the one colour the console
        wants nowhere else — the caption's step between --ink and --paper — and a
@@ -135,12 +134,6 @@ test('no stylesheet writes a colour more than once', async () => {
     'src/components/ClimateEngine/shell/SelectField.astro',
     'src/components/ClimateEngine/shell/LayerTree.astro',
     'src/components/ClimateEngine/shell/InterventionPane.astro',
-    /* THE SECOND ROUTE TO RENDER THE CONSOLE. It writes no hex today — its palette
-       is oklch throughout — so this costs nothing now and is the point: the rail's
-       token bridge lives in this file, and a hex pasted beside it is exactly how a
-       bridged colour would acquire a second spelling. A census that only watched
-       the Explore route would never have looked. */
-    'src/components/ClimateEngine/compare/PairedBench.astro',
   ];
   const offences = [];
   for (const rel of files) {
@@ -178,8 +171,8 @@ test('the new components use scoped styles, and never :global inside is:global',
 
      The second half matters more than it looks: a :global(...) written INSIDE an
      is:global block ships verbatim and the browser discards the whole rule.
-     HeatMapStage.astro already carries two comments warning about it. */
-  const shell = ['IconRail', 'ScopeSwitcher', 'SelectField', 'LayerTree', 'InterventionPane'];
+     the stage's old stylesheet carried two comments warning about it. */
+  const shell = ['ScopeSwitcher', 'SelectField', 'LayerTree', 'InterventionPane'];
   for (const name of shell) {
     let src;
     try {

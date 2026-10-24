@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const STAGE = readFileSync('src/components/ClimateEngine/HeatMapStage.astro', 'utf8');
 const V2 = (f) => readFileSync(`src/components/ClimateEngine/v2/${f}`, 'utf8');
 /** markup as the reader gets it: comments are not words on a page */
 const noComments = (s) => s.replace(/<!--[\s\S]*?-->/g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '');
@@ -66,8 +65,6 @@ test('the "Use my bill" field exists, once, and the warning that points at it us
   for (const id of ['spUnits', 'spSizing', 'spWarn', 'spFlat', 'spPayback', 'spSaving', 'spAssume', 'spCsv', 'spPrint', 'spClose']) {
     assert.equal(all.filter((x) => x === id).length, 1, `${id} must exist exactly once in SolarSheets`);
   }
-  /* the v1 sheet it was cut from has the same field: v2 may not drop it */
-  assert.ok(STAGE.includes('id="spUnits"'), 'v1 lost #spUnits (unexpected)');
 });
 
 test('the Solar side panel: roof table keeps its aria-label and tbody#solList; tariff, CSV and empty note are in place', () => {
@@ -79,11 +76,10 @@ test('the Solar side panel: roof table keeps its aria-label and tbody#solList; t
   assert.ok(side.includes('<tbody id="solList"></tbody>'));
   assert.match(side, /id="solTariff"[^>]*type="number"|type="number"[^>]*id="solTariff"/);
   assert.ok(side.includes('id="solCur"') && side.includes('id="solTariffNote"') && side.includes('id="solCsv"') && side.includes('id="solPaneSum"'));
-  /* the city-dependent tariff note is v1's, word for word */
+  /* the city-dependent tariff note is v1's sentence, word for word (v1's source is deleted; these literals are the freeze) */
   for (const phrase of ['CESC domestic slabs run 4.07–9.21 per unit (2025-26 tariff order); a solar unit displaces the top of the bill. Not a rate we assert.',
     'No local tariff is sourced for this city yet, so the box above is an assumption you should change. Not a rate we assert.']) {
     assert.ok(side.includes(phrase), `tariff note changed: ${phrase.slice(0, 30)}…`);
-    assert.ok(STAGE.includes(phrase), 'v1 tariff note moved (re-pin)');
   }
   assert.ok(side.includes('No solar screen ships for {scope.area.name}. The screen needs footprints, heights and canopy, and this area ships none.'));
   assert.ok(side.includes('"at least" is the strict-mask floor. Screening only, not bankable.'), 'the method foot lost the floor definition');

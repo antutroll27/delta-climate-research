@@ -7,7 +7,6 @@ import { ACCURACY, SPATIAL, HEIGHTS } from '../../src/scripts/climate-engine/acc
 
 const SRC = readFileSync('src/components/ClimateEngine/v2/MethodsCards.astro', 'utf8');
 const CODE = SRC.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/<!--[\s\S]*?-->/g, '').replace(/^\s*\/\/.*$/gm, '');
-const STAGE = readFileSync('src/components/ClimateEngine/HeatMapStage.astro', 'utf8');
 
 test('Data & methods figures are the ward record\'s own (H23)', () => {
   assert.match(SRC, /allWardRecords\(\)/);
@@ -28,10 +27,6 @@ test('H23: every accuracy figure the card prints is read from accuracy.ts, none 
 });
 
 test('the ward record sentence and the empty sentence are v1\'s, word for word', () => {
-  for (const s of ['What is measured, the out-of-sample error and sample size, every', 'source dataset with its licence, and the analysis CRS and bounding box.',
-    'The ward record states what', 'was measured, with what error, from which datasets', 'to state.']) {
-    assert.ok(STAGE.includes(s), `v1 moved: ${s}`);
-  }
   assert.ok(/What is measured, the out-of-sample error and sample size, every source dataset with its licence, and the analysis CRS and bounding box\./.test(CODE.replace(/\s+/g, ' ')));
   assert.ok(/No record ships for \{s\.name\}\. The ward record states what was measured, with what error, from which datasets — and there is no measurement here to state\./.test(CODE.replace(/\s+/g, ' ')));
 });
@@ -39,7 +34,6 @@ test('the ward record sentence and the empty sentence are v1\'s, word for word',
 test('#report-link: exactly one, outside the per-sibling blocks, with v1\'s download attribute and href pattern', () => {
   assert.equal((CODE.match(/id="report-link"/g) ?? []).length, 1);
   assert.match(CODE, /<a class="[^"]*" id="report-link" href=\{`\/api\/wards\/\$\{scope\.area\.id\}\/metadata\.json`\} download>Download ward record ↓<\/a>/);
-  assert.ok(STAGE.includes('Download ward record ↓') && STAGE.includes('id="report-link" href={reportHref} download'));
   const rec = CODE.indexOf('data-v2-record'), link = CODE.indexOf('id="report-link"');
   assert.ok(CODE.indexOf('</div>', rec) < link, 'the link sits inside a per-sibling block, so a switch would leave it behind');
 });

@@ -5,14 +5,14 @@ import { readFileSync } from 'node:fs';
 import { airKind } from '../../src/scripts/climate-engine/v2/heat-v2.ts';
 import { weatherSource } from '../../src/scripts/climate-engine/v2/weather-panel.ts';
 
-const STAGE = readFileSync('src/components/ClimateEngine/HeatMapStage.astro', 'utf8');
+/* The v1 UI's source is deleted (PR 2). Every sentence these tests compare v2 against was frozen, verbatim, in this fixture. */
+const V1 = JSON.parse(readFileSync('tests/unit/fixtures/obos-v1-frozen.json', 'utf8')).stage;
 const V2 = (f) => readFileSync(`src/components/ClimateEngine/v2/${f}`, 'utf8');
 const CSS = (f) => readFileSync(`src/styles/obos-v2/screens/${f}`, 'utf8');
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '');
 
 test('H5: the Δ disclosure is v1\'s sentence, verbatim, and the label keeps its title', () => {
-  const v1 = /title="(Modelled land-cover thermal contrast:[^"]+)">Δ vs all-green ref/.exec(STAGE)?.[1];
-  assert.ok(v1, 'the v1 Δ title moved');
+  const v1 = V1.deltaTitle;
   const card = V2('TempCard.astro');
   const delta = /const DELTA = "([^"]+)";/.exec(card)?.[1];
   assert.equal(delta, v1, 'the disclosure text is not v1\'s sentence, byte for byte');
@@ -43,7 +43,6 @@ test('H6/H10: surface is not air; the map-face chip survives word for word', () 
   assert.ok(card.includes('Ground &amp; rooftop surface'));
   assert.ok(card.includes('Surface above 40 °C'));
   assert.ok(card.includes('Δ vs all-green ref'));
-  assert.ok(/Live basemap \+ real footprints &amp; Google heights/.test(STAGE));
 });
 
 test('H6: the air disc is ink, never a heat colour (air is not a surface class)', () => {
@@ -71,8 +70,7 @@ test('v2 CSS paints no warm hue by hand: the heat classes ride on tokens only', 
 test('H9/H6: the legend card carries #patternNote, the colour-mode line and the surface-not-air foot', () => {
   const heat = V2('HeatCards.astro');
   assert.ok(heat.includes('id="patternNote"'));
-  const tint = /id="tintchip" title="([^"]+)"/.exec(STAGE)?.[1];
-  assert.ok(tint, 'v1\'s #tintchip title moved');
+  const tint = V1.tintTitle;
   assert.ok(heat.includes(tint), 'the colour-mode line is not v1\'s #tintchip title');
   assert.ok(heat.includes('Satellite-checked surface temperature, not air temperature.'));
 });
@@ -88,9 +86,6 @@ test('H23: the method card prints method-copy rows, and "checked", never "valida
 /* ── S4.2: the ward card ── */
 test('H10: the ward card carries the v1 map-face chip word for word, as three provenance rows', () => {
   const ms = V2('MapStack.astro');
-  const chip = /<span class="full">([^<]+?) · <\/span>heat field modelled<span class="sp"> · block detail illustrative<\/span>/.exec(STAGE);
-  assert.ok(chip, 'v1\'s .synthetic chip moved');
-  assert.equal(chip[1], 'Live basemap + real footprints &amp; Google heights', 'v1 wording changed: re-check the three rows');
   for (const t of ['Live basemap, real footprints &amp; Google heights', 'Heat field · modelled', 'Block detail · illustrative']) assert.ok(ms.includes(t), t);
   assert.ok(/<Sym shape="square" c="ink" size=\{13\} \/><\/span><span>Live basemap/.test(ms), 'the measured row must be SOLID');
   assert.ok(/<Sym shape="ward" c="heat-4" kind="modelled"/.test(ms), 'the heat field row must be OUTLINED');
@@ -120,17 +115,15 @@ test('the loading chip shows only while loading or failed (the app toggles .on a
 });
 
 /* ── S4.3: the building card (A1 §2.4: these pins moved here from Track B's S6.1 test) ── */
-const bcardOf = (src, open) => { const i = src.indexOf(open); return src.slice(i, src.indexOf('<div class="place">', i) > i ? src.indexOf('<div class="place">', i) : undefined); };
 const textsOf = (html) => [...html.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').matchAll(/>([^<>{}]+)</g)].map((m) => m[1].replace(/\s+/g, ' ').trim()).filter(Boolean);
 const attrsOf = (html) => [...html.matchAll(/\b(?:aria-label|title)="([^"]+)"/g)].map((m) => m[1]);
 
 test('H11: v1\'s building-card wording survives, every text node and every label, word for word and as many times (A-S4 audit F5)', () => {
-  const v1 = bcardOf(STAGE, '<div class="bcard" id="bcard"');
   const v2 = V2('BuildingCardV2.astro');
   /* count-aware and exact: a short v1 label ("Building") cannot hide inside a longer one ("Building height unverified…") */
   const count = (xs) => xs.reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map());
   const have = count([...textsOf(v2), ...attrsOf(v2)]);
-  const missing = [...count([...textsOf(v1), ...attrsOf(v1)])].filter(([t, n]) => (have.get(t) ?? 0) < n).map(([t]) => t);
+  const missing = [...count([...V1.bcardTexts, ...V1.bcardAttrs])].filter(([t, n]) => (have.get(t) ?? 0) < n).map(([t]) => t);
   assert.deepEqual(missing, [], 'text v1 prints that the v2 card lost');
 });
 
@@ -148,9 +141,8 @@ test('H13 (A-S4 audit F2): each floor sits beside ITS headline: the strict-mask 
 
 test('H13 (A-S4 audit F2): the rows keep v1\'s order: Installable, Yield, Shaded, At least, Raised 2 m, Worth', () => {
   const order = (html) => [...html.matchAll(/<dt>([^<]+)<\/dt>/g)].map((m) => m[1]).filter((t) => ['Installable', 'Yield', 'Shaded', 'At least', 'Raised 2 m', 'Worth'].includes(t));
-  const v1 = bcardOf(STAGE, '<div class="bcard" id="bcard"');
-  assert.deepEqual(order(V2('BuildingCardV2.astro')), order(v1));
-  assert.deepEqual(order(v1), ['Installable', 'Yield', 'Shaded', 'At least', 'Raised 2 m', 'Worth']);
+  assert.deepEqual(order(V2('BuildingCardV2.astro')), V1.bcardRowOrder);
+  assert.deepEqual(V1.bcardRowOrder, ['Installable', 'Yield', 'Shaded', 'At least', 'Raised 2 m', 'Worth']);
 });
 
 test('H14/H15: no "validated" and no banned money word on the building card; the estimate wording is v1\'s', () => {
@@ -279,10 +271,9 @@ test('H16: Resilience says "Coming soon" and the score block stays withdrawn (in
 });
 
 test('S5.1: no-data Explore carries v1\'s empty-toolbox text word for word', () => {
-  const stageBlock = /<p class="pane-h" id="pane-map-h">Interventions<\/p>([\s\S]*?)<\/section>/.exec(STAGE)?.[1];
-  assert.ok(stageBlock, 'v1\'s no-data pane text moved');
   const norm = (t) => t.replace(/\{' '\}/g, ' ').replace(/\s+/g, ' ').trim();
-  const wanted = [...stageBlock.matchAll(/<p class="pane-note">([\s\S]*?)<\/p>/g)].map((m) => norm(m[1]));
+  const wanted = V1.noDataPaneNotes;
+  assert.ok(wanted.length > 0, 'the frozen v1 empty-toolbox sentences are present');
   const ex = norm(V2('ExploreSide.astro'));
   for (const w of wanted) assert.ok(ex.includes(w), `v1 sentence missing from ExploreSide: ${w.slice(0, 60)}`);
 });
@@ -295,8 +286,7 @@ test('S5.1: v2 restyles the v1 select control without a second copy: the scoped 
 
 test('H16/S5.2: Scenarios keeps v1\'s statement (renamed to v2\'s place) and the withdrawal date from its source', () => {
   const sc = V2('ScenarioCards.astro');
-  const v1 = /<p class="pane-note">(Not built yet\.[\s\S]*?)<\/p>/.exec(STAGE)?.[1].replace(/\s+/g, ' ').trim();
-  assert.ok(v1, 'v1\'s Scenarios text moved');
+  const v1 = V1.scenariosNote;
   assert.ok(sc.includes(v1.replace('under Map', 'under Overview')), 'the statement is not v1\'s, bar the one renamed place (spec §4.7, founder sign-off)');
   assert.ok(sc.includes('The scoring model it would draw on is already here'));
   assert.ok(sc.includes('Withdrawn on 17 Sep 2026. No score is shown until it returns.'));
@@ -305,10 +295,9 @@ test('H16/S5.2: Scenarios keeps v1\'s statement (renamed to v2\'s place) and the
 
 test('S5.2: the no-artefacts card is v1\'s .notyet, word for word, inside the right column on Dubai only', () => {
   const sc = V2('ScenarioCards.astro');
-  const v1 = /<section class="notyet"[\s\S]*?<\/section>/.exec(STAGE)?.[0];
-  assert.ok(v1);
   const norm = (t) => t.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/<[^>]+>/g, '|').replace(/\s+/g, ' ').replace(/\|( \|)+/g, '|').trim();
-  for (const part of norm(v1).split('|').map((x) => x.trim()).filter((x) => x.length > 12)) assert.ok(norm(sc).includes(part), `not-yet text missing: ${part}`);
+  assert.ok(V1.notYetParts.length > 0);
+  for (const part of V1.notYetParts) assert.ok(norm(sc).includes(part), `not-yet text missing: ${part}`);
   assert.match(sc, /scope\.area\.hasData \? \([\s\S]*?\) : \([\s\S]*class="card notyet"/, 'the card shows on no-data areas only');
 });
 

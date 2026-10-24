@@ -204,9 +204,8 @@ import { readFile } from 'node:fs/promises';
    .astro component cannot be imported under `node --import tsx --test`. Each one
    names the property of the source it reads and why that forces the property of
    the rendered page that matters. */
-/* FLIP: v2 is the served UI. `stage` stays the v1 stage for the CSS pins below (they retire with v1's source in PR 2); the MARKUP and honesty pins read the v2 files. */
-const stage = await readFile(
-  new URL('../../src/components/ClimateEngine/HeatMapStage.astro', import.meta.url), 'utf8');
+/* v2 is the served UI and v1's source is deleted (PR 2). The markup and honesty pins read the v2 files; the toast's CSS pins read v2's shell.css. */
+const shellCss = await readFile(new URL('../../src/styles/obos-v2/shell.css', import.meta.url), 'utf8');
 const toastsV2 = await readFile(
   new URL('../../src/components/ClimateEngine/v2/ToastsV2.astro', import.meta.url), 'utf8');
 const stageV2 = await readFile(
@@ -245,7 +244,6 @@ test('the badge is a link with a SIBLING dismiss button, never a button inside a
 
 test('the link keeps its own visible text as its name, and the phone rule keeps the eyebrow', () => {
   const inner = badgeInner(flat(toastsV2));
-  const markup = flat(stage); /* v1 CSS pins below: retire with v1's source (PR 2) */
   /* LABEL IN NAME (WCAG 2.5.3, level A). The visible text is "New city Bengaluru →";
      an aria-label of "Bengaluru — newly added city" REPLACED that with a string the
      visible words are not contained in, so a speech-input user saying "click New
@@ -263,15 +261,11 @@ test('the link keeps its own visible text as its name, and the phone rule keeps 
     'the link must not override its own visible text: the accessible name has to CONTAIN '
     + '"New city", and the visible eyebrow already puts it there');
   assert.match(inner, /<button [^>]*aria-label="Dismiss"/, 'a bare × has no accessible name');
-  assert.match(markup, /\.newcity \.nc-eyebrow\{position:absolute;[^}]*clip-path:inset\(50%\)/,
-    'on phones the eyebrow must be CLIPPED rather than display:none — display:none takes '
-    + '"New city" out of the accessible name as well as off the screen, which is the very '
-    + 'thing the deleted aria-label was papering over');
-  assert.doesNotMatch(markup, /\.newcity \.nc-eyebrow\{display:none\}/,
+  /* v2 keeps the eyebrow in the name another way than v1 did: it never takes it out of the accessible name. (v1 clipped it on phones; v2 shows the toast on desktop and laptop only.) */
+  const css = flat(shellCss);
+  assert.match(css, /\.toast \.t-eyebrow \{[^}]*\}/, 'the toast eyebrow has a rule');
+  assert.doesNotMatch(css, /\.t-eyebrow \{[^}]*display: ?none/,
     "display:none on the eyebrow silently shortens the link's accessible name");
-  assert.match(markup, /\.newcity a:focus-visible,\.newcity button:focus-visible\{outline:/,
-    'both controls need a visible focus ring — they sit on a bronze fill, where the '
-    + "browser's default ring is nearly invisible");
 });
 
 /**
@@ -284,42 +278,9 @@ test('the link keeps its own visible text as its name, and the phone rule keeps 
  * leaving the button exactly as it was.
  */
 test('the dismiss target is big enough to hit, on a desktop and on a phone', () => {
-  const css = flat(stage);
-  assert.match(css, /\.newcity button\{[^}]*min-inline-size:28px/,
-    'the dismiss button needs an explicit minimum width — padding alone left it 23.7px');
-  assert.match(css, /\.newcity button\{min-inline-size:30px/,
-    'and 30px under the coarse-pointer gate, matching .rn-x, the next smallest control '
-    + 'a phone offers');
-});
-
-/**
- * THE BERTH IS A CLASS FIX, AND THE TEST HAS TO GUARD IT AS ONE.
- *
- * Three overlays centre themselves in the map's free space — `.synthetic`,
- * `.stamp-slot`, `.loadchip` — and a fixed-left badge has now collided with two of
- * them: the banner at 1280, then the construction stamp at every width from 600 to
- * 1380 once the badge moved below the banner. Pinning the badge's `top` would guard
- * the instance; this guards the rule, so the third overlay and the fourth are
- * covered before anyone measures them.
- */
-test('the centred overlays berth around the badge rather than under it', () => {
-  const css = flat(stage);
-  const declared = css.match(/\.map:has\(\.newcity:not\(\[hidden\]\)\)\{--badge-berth:(\d+)px\}/);
-  assert.ok(declared,
-    'the berth must be declared on a REVEALED badge — scoping it to :has() keeps the '
-    + 'full width on every page that never shows one');
-  /* DERIVED, NOT COPIED: the badge's 40px left inset + its 118px measured width. A
-     berth under that is a berth the badge sticks out of — and the two move together,
-     so widening the gap to the sidebar without widening the berth would simply take
-     the same pixels back off the other side. */
-  assert.ok(Number(declared[1]) >= 158,
-    `--badge-berth is ${declared[1]}px, under the badge's own 158px extent (40px inset `
-    + '+ 118px measured width) — the overlays would centre straight back into it');
-  for (const sel of ['.synthetic', '.stamp-slot', '.loadchip']) {
-    assert.match(css, new RegExp(`\\${sel}\\{[^}]*inset-inline:var\\(--badge-berth`),
-      `${sel} centres itself in the map's free space, so it must subtract the badge's `
-      + 'berth first — exactly as it already subtracts --instr-berth on the right');
-  }
+  /* v2's toast dismiss is a 24 px square at every width (v1 needed 28/30 px: it was 23.7 px wide). */
+  assert.match(flat(shellCss), /\.toast \.t-x \{ width: 24px; height: 24px; min-width: 24px; min-height: 24px;/,
+    'the dismiss button must stay at the 24 px WCAG 2.5.8 floor in both dimensions');
 });
 
 test('the badge renders only where it can be true', () => {
@@ -343,77 +304,3 @@ test('the badge renders only where it can be true', () => {
     + "reader's own dismissal, so a dismissed reader never sees it flash");
 });
 
-test('the badge is a paper postcard with a torn stub, and no border', () => {
-  const css = flat(stage);
-  assert.ok(css.includes('.newcity{'), 'the badge has no CSS rule');
-  /* TO THE CLOSING BRACE, NOT A FIXED WINDOW. `+ 400` ran 188 characters PAST the
-     rule's closing brace, and would swallow whatever followed as the rule grew.
-
-     MEASURED, BECAUSE THE FIRST VERSION OF THIS COMMENT WAS FALSE. It claimed the
-     window could satisfy `border:0` from `.newcity button{…}` — but in the file that
-     shipped it, that rule began 568 characters after `.newcity{`, far outside a
-     400-character window whose tail ended mid-`.nc-eyebrow`. Deleting `border:0`
-     from the base rule made the old window match neither. The change is still right;
-     the reason given for it was not, and "measure, don't read" is the rule this repo
-     keeps paying to relearn. */
-  const start = css.indexOf('.newcity{');
-  const rule = css.slice(start, css.indexOf('}', start) + 1);
-  assert.match(rule, /var\(--paper\)/,
-    'the card is paper, and it must be the token — a third off-white spelled here would '
-    + 'trip obos-layers.test.mjs and put the card outside the palette the console speaks');
-  /* THE TORN STUB IS THE WHOLE IDEA, so it gets its own guard. It is a gradient
-     LAYER over the flat fill rather than a shape, which keeps the card one box for
-     layout, focus and hit-testing — and makes it exactly the kind of declaration a
-     later tidy-up deletes as decorative noise, with nothing failing. */
-  assert.match(rule, /radial-gradient\(circle at 0 50%,transparent 0 3px/,
-    'the left edge must keep its 3px bite: without it this is a plain rounded label, '
-    + 'not the torn stub the design asks for');
-  /* THE TOKEN, NOT THE HEX. This assertion read /color:#0d0a05/ until the badge
-     shipped: writing the literal here made it the fourth spelling of that colour in
-     HeatMapStage.astro, and obos-layers.test.mjs refuses a second spelling of any
-     hex in this file — a token declaration included, since it counts occurrences.
-     The name still says "bronze-ink" because that is what Footer.astro called this
-     near-black first; the card is paper now, and the ink is the same ink. */
-  assert.match(rule, /color:var\(--bronze-ink\)/,
-    'the text must be the near-black, AS THE TOKEN — off-black on paper, not a second '
-    + 'spelling of the same colour');
-  assert.match(rule, /border:0/, 'the founder asked for no border');
-  assert.match(rule, /position:absolute/, 'it is pinned to the frame, not floating over the model');
-});
-
-/**
- * BELOW 1366 THE CARD STANDS DOWN, AND TAKES ITS BERTH WITH IT.
- *
- * MEASURED 2026-09-17, after CI's own suite caught it: at 1024 the 152px berth put
- * the construction stamp at x603 while the right-anchored ward clock starts at x653
- * — an 88x20px overlap, 42% of the stamp. heat-map-overlap.spec.ts sweeps 1024 and
- * 1280 and `npm run verify` ends in that suite, so the badge would have failed the
- * merge rather than reaching a reader.
- *
- * THE TWO HALVES ARE ONE FIX. `:has(.newcity:not([hidden]))` tests the ATTRIBUTE,
- * not visibility — so hiding the card with `display:none` while leaving a non-zero
- * berth would go on reserving a column for a card nobody can see, which is the same
- * collision with nothing left in the gap to justify it. Neither half is load-bearing
- * alone, so neither is pinned alone.
- */
-test('below 1366 the badge stands down, and its berth goes with it', () => {
-  const css = flat(stage);
-  const at = css.indexOf('(max-width:1365px)');
-  assert.ok(at > 0, 'the sub-1366 block is gone — the badge is back in the stamp\'s lane at 1024');
-
-  /* Everything from that breakpoint to the NEXT media query: the phone rules below
-     restyle the card again, and reading past them would let a later `0px` satisfy a
-     block that no longer declares one. */
-  const next = css.indexOf('@media', at);
-  const block = css.slice(at, next === -1 ? css.length : next);
-
-  assert.match(block, /\.newcity\{[^}]*display:none/,
-    'the card must not render below 1366: at 1024 its berth moves the construction '
-    + 'stamp onto the ward clock, and the berth cannot be dropped instead because it '
-    + 'is what keeps the centred overlays out of the card (see the base rule)');
-  assert.match(block, /--badge-berth:0px/,
-    'the card is hidden below 1366 but its berth is still reserved — `:has()` matches '
-    + 'the [hidden] ATTRIBUTE, not `display`, so the overlays are still displaced');
-  assert.doesNotMatch(block, /--badge-berth:(?!0px)\d+px/,
-    'a non-zero berth below 1366 is the 42%-of-the-stamp collision, measured at 1024');
-});
