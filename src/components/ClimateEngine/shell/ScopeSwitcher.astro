@@ -255,7 +255,7 @@ const fieldId = (id: Field['id']): string => `scope-${id}`;
 </section>
 
 <style>
-  /* SCOPED, NOT is:global, for the reason IconRail.astro gives: every element
+  /* SCOPED, NOT is:global, for the reason v1's IconRail.astro gave (deleted; tag obos-beta-ui-v1): every element
      here is Astro-rendered and static, the scoping hash reaches all of it, and
      the global surface shrinks rather than grows. The stage's own block is
      global because MapLibre injects DOM it never rendered; nothing here does.
@@ -265,9 +265,9 @@ const fieldId = (id: Field['id']): string => `scope-${id}`;
      THIS component, so it carries THIS component's scoping hash. The card around
      it belongs to SelectField and is styled there.
 
-     Colours are var() throughout, and --green is declared beside the rest of the
-     palette in HeatMapStage.astro — a token resolves from where it is DECLARED,
-     so these scoped rules reach it only once the switcher is inside .stage. */
+     Colours are var() throughout, and --green is declared in
+     src/styles/obos-v2/tokens.css — a token resolves from where it is DECLARED,
+     so these scoped rules reach it only inside the v2 root. */
 
   .scope {
     padding: 12px 14px 11px;

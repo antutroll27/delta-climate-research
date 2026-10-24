@@ -249,16 +249,16 @@ const headingId = (slug: string): string => `layer-group-${slug}`;
 </section>
 
 <style>
-  /* SCOPED, NOT is:global, for the reason IconRail.astro and ScopeSwitcher.astro
-     both give: every element here is Astro-rendered and static, the scoping hash
+  /* SCOPED, NOT is:global, for the reason v1's IconRail.astro (deleted; tag obos-beta-ui-v1)
+     and ScopeSwitcher.astro both give: every element here is Astro-rendered and static, the scoping hash
      reaches all of it, and the global surface SHRINKS rather than grows. The
      stage's own block is global because MapLibre injects DOM it never rendered;
      nothing here does.
 
      Colours are var() throughout. The palette — including --pine and
-     --slate, added for two of the dots — is declared in HeatMapStage.astro,
+     --slate, two of the dots — is declared in src/styles/obos-v2/tokens.css,
      because a token resolves from where it is DECLARED: these rules reach it only
-     once the tree is inside .stage, which is where Task 7 puts it. Task 2's guard
+     inside the v2 root, where LayersPopover.astro puts the tree. Task 2's guard
      fails the build on any hex written more than once in a file, comments
      included; this file writes none at all. */
 

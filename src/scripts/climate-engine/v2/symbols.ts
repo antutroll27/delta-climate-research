@@ -25,7 +25,7 @@ export const SYMBOL_HEX = Object.freeze({
   solar: '#E3C02E', water: '#3D7BD9', 'green-light': '#3F8F66', 'green-dark': '#5FA87E', cold: '#2E4E9E', wind: '#6B7F81',
 } as const);
 
-/** India's six NAQI band colours, exactly as OBOS's live Air card (HeatMapStage.astro:1029). Data colour: always beside the band word. */
+/** India's six NAQI band colours, exactly as OBOS's live Air card (v1's HeatMapStage.astro:1029, deleted; tag obos-beta-ui-v1). Data colour: always beside the band word. */
 export const AQ_HEX: Readonly<Record<AqBand, string>> = Object.freeze({
   good: '#2a8f6a', satisfactory: '#6fcf97', moderate: '#f2d03a', poor: '#f2912e', 'very-poor': '#e0404f', severe: '#9b3fa0',
 });
