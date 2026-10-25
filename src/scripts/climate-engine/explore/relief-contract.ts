@@ -1,4 +1,4 @@
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import type { Ambient, RoadsData, WaterData, WardData } from '../heat-map-model.ts';
 import type { TerrainField } from '../terrain.ts';
 import type { TreesFile } from '../vegetation-layer.ts';

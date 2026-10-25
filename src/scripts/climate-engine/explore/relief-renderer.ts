@@ -12,7 +12,7 @@
  * The scene composites OVER the basemap and has no background of its own, which is
  * why `scene.background` is never set here and the visible sky is MapLibre's.
  */
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createCloudLayer, type CloudLayer } from '../cloud-layer.ts';
@@ -213,7 +213,12 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.layer = {
       id: 'delta-city', type: 'custom', renderingMode: '3d',
       onAdd: (map, gl) => this.onAdd(map, gl),
-      render: (_gl, matrix) => this.render(Array.from(matrix)),
+      /* MapLibre >= 5 hands a custom layer ONE options object, not the bare matrix
+         v4 passed. `Array.from(options)` of that object is `[]`, which makes every
+         matrix entry NaN and the whole 3-D scene vanish without a single error.
+         `mainMatrix` is the mercator (0..1) projection v4 called `customLayerMatrix`;
+         from v6 it is a Float64Array. */
+      render: (_gl, options) => this.render(options.defaultProjectionData.mainMatrix),
     };
   }
 
@@ -477,7 +482,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (this.ward) this.rebuildWard(this.ward);
   }
 
-  private render(matrix: number[] | Float32Array): void {
+  private render(matrix: ArrayLike<number>): void {
     if (!this.scene || !this.modelTransform || this.disposed) return;
     const transform = this.modelTransform;
     const frame = transform.frame;
@@ -485,7 +490,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
       .makeTranslation(transform.x, transform.y, transform.z)
       .scale(new THREE.Vector3(frame.east, -frame.north, frame.up))
       .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
-    this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix as number[]).multiply(local);
+    this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix).multiply(local);
     this.pickMatrix.copy(this.camera.projectionMatrix).multiply(this.northFlip);
     if (this.water) {
       this.water.setView(this.options.map.getBearing(), this.options.map.getPitch());

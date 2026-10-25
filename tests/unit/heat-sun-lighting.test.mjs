@@ -148,12 +148,12 @@ test('day of year is the calendar one, at both ends of it', () => {
 /**
  * THE VISIBLE SKY, CHECKED AGAINST THE INSTALLED STYLE SPEC RATHER THAN THE DOCS.
  *
- * maplibre-gl 4.7.1's sky fragment shader reads three properties. The style spec
+ * maplibre-gl's sky fragment shader reads three properties (measured on 4.7.1; the installed style spec re-checks it on every upgrade). The style spec
  * validates seven — the other four feed `terrainUniformValues` only, and this map
  * sets no terrain. This asserts both halves: the object validates, and it carries
  * nothing inert.
  */
-test('the sky spec is one maplibre-gl 4.7.1 both accepts and draws', async () => {
+test('the sky spec is one the installed maplibre-gl both accepts and draws', async () => {
   const spec = await import('@maplibre/maplibre-gl-style-spec');
   const value = maplibreSky(45, 0.2);
   const errors = spec.validate({ value, styleSpec: spec.v8, key: 'sky', valueSpec: spec.v8.sky, style: {} });
@@ -161,7 +161,7 @@ test('the sky spec is one maplibre-gl 4.7.1 both accepts and draws', async () =>
 
   assert.deepEqual(Object.keys(value).sort(), ['horizon-color', 'sky-color', 'sky-horizon-blend']);
   for (const inert of ['fog-color', 'fog-ground-blend', 'horizon-fog-blend', 'atmosphere-blend']) {
-    assert.ok(!(inert in value), `${inert} does nothing without terrain in 4.7.1 — do not set it`);
+    assert.ok(!(inert in value), `${inert} does nothing without terrain or a globe — do not set it`);
   }
 });
 

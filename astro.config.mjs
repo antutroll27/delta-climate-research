@@ -204,7 +204,12 @@ export default defineConfig({
     // That chunk is deliberate — maplibre loads on /heat-map ONLY (verified
     // absent from / and /team), and it imports three from the shared chunk
     // rather than duplicating it.
-    build: { chunkSizeWarningLimit: 850 },
+    //
+    // maplibre-gl 6.15 (the security upgrade) made it ~1189 kB raw / 333 kB gzip
+    // (was ~927 kB / 259 kB on 4.7.1), and moved the tile-parsing worker out of the
+    // bundle into its own ~505 kB raw / 147 kB gzip asset. 1250 is raised
+    // deliberately, above that chunk, so the warning keeps meaning "it grew again".
+    build: { chunkSizeWarningLimit: 1250 },
     // Pre-bundle three + EVERY addon both WebGL islands use (the hero river AND
     // the About ocean's code-split Water.js), so Vite optimizes once at startup
     // and never re-optimizes mid-session — which otherwise 504s ("Outdated

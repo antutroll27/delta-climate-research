@@ -8,7 +8,14 @@
  * Pure physics/economics live in ./heat-map-model. Sim engine in ./sim-gpu.
  * `mountHeatMap()` returns a dispose fn (call it on astro:before-swap).
  */
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
+/* maplibre-gl 6 is ESM-only and its parsing worker is a SEPARATE file. A bundler
+   cannot find it from inside the library (`import.meta.url` does not survive
+   bundling), so Vite is asked for a self-contained copy and its URL is handed to
+   `setWorkerUrl` before the first Map. Without it no tile is ever parsed and the
+   basemap stays empty with nothing thrown; `scripts/check-maplibre-worker.mjs`
+   asserts the asset reached dist/. */
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { RENDERABLE_WARD_MAP, wardLatLon, formatLatLon, type Ward } from '../../data/wards.ts';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { greenReferenceContrastC, requireGrid, type ClimateConstants, type PvFile, type SimLayers, type SimParams } from './types';
@@ -182,6 +189,25 @@ const { RESET_BURST } = M;
  * Tiles, glyphs and sprites are still served by OpenFreeMap; the OSM/ODbL
  * attribution is unchanged and no Mapbox asset or service is involved.
  */
+/** What a device without WebGL 2 is told. maplibre-gl 6 dropped its WebGL 1 fallback, so
+ *  `new Map` throws there; the 3-D relief already needed WebGL 2, so tier 0 on such a
+ *  device used to show a flat field and now shows nothing. Say so rather than leave a
+ *  blank canvas. The short sentence goes through the load chip (the v2 failure channel);
+ *  the chip lives in the ward card's body, which is folded away on many viewports, so the
+ *  same refusal is also written onto the map surface where the map would have been. */
+const MAP_UNAVAILABLE =
+  'The map is unavailable on this device — it needs WebGL 2, which this browser or GPU does not provide';
+function showMapUnavailable(container: HTMLElement): void {
+  const note = document.createElement('div');
+  note.className = 'map-unavailable';
+  note.setAttribute('role', 'status');
+  const title = document.createElement('strong');
+  title.textContent = 'Map unavailable';
+  const body = document.createElement('span');
+  body.textContent = 'This browser or GPU did not provide WebGL 2, which the map needs. Nothing is drawn here, and the ward readings stay unavailable.';
+  note.append(title, body);
+  container.replaceChildren(note);
+}
 const STYLES = { dark: '/heat-map/styles/obos-slate.json', studio: 'https://tiles.openfreemap.org/styles/positron' };
 
 /**
@@ -348,24 +374,52 @@ export function mountHeatMap(): () => void {
   const MLY_TOKEN = (import.meta.env.PUBLIC_MAPILLARY_TOKEN as string | undefined) ?? '';
 
   /* ── MapLibre basemap ── */
-  const map = new maplibregl.Map({
-    container: mapContainer, style: STYLES.dark,
-    center: [wardOf(INITIAL_AREA).lon, wardOf(INITIAL_AREA).lat], zoom: 15.3, pitch: 60, bearing: -18,
-    antialias: true, attributionControl: false, pixelRatio: Math.min(devicePixelRatio, 1.75),
-    /* THE DRAG HANDLER ALREADY ASKED FOR THIS AND WAS BEING IGNORED. Two hundred
-       lines below, the pitch drag clamps to `Math.min(78, ...)`; MapLibre's default
-       `maxPitch` is 60, so it silently clamped again and the last 18 degrees were
-       unreachable. Two places disagreeing about one number, with the quieter one
-       winning.
+  maplibregl.setWorkerUrl(maplibreWorkerUrl);
+  let map: maplibregl.Map;
+  try {
+    map = new maplibregl.Map({
+      container: mapContainer, style: STYLES.dark,
+      center: [wardOf(INITIAL_AREA).lon, wardOf(INITIAL_AREA).lat], zoom: 15.3, pitch: 60, bearing: -18,
+      /* MSAA for the custom layer: three is handed MapLibre's context, so its own
+         `antialias` is ignored and this is the only place the attribute is decided.
+         MapLibre >= 5 takes it here rather than as a top-level `antialias`; dropping
+         the old key without adding this one silently loses MSAA (jagged building
+         edges, water line and canopy). */
+      /* `powerPreference: 'default'` IS 4.7.1'S BEHAVIOUR, written down. v4 passed none,
+         which the browser reads as 'default'; v6 changed its own default to
+         'high-performance', which would move dual-GPU Macs onto the discrete GPU and ask
+         phones for higher clocks (battery and heat). Founder, 25 Oct: keep today's. */
+      canvasContextAttributes: { antialias: true, powerPreference: 'default' },
+      attributionControl: false, pixelRatio: Math.min(devicePixelRatio, 1.75),
+      /* THE DRAG HANDLER ALREADY ASKED FOR THIS AND WAS BEING IGNORED. Two hundred
+         lines below, the pitch drag clamps to `Math.min(78, ...)`; MapLibre's default
+         `maxPitch` is 60, so it silently clamped again and the last 18 degrees were
+         unreachable. Two places disagreeing about one number, with the quieter one
+         winning.
 
-       It is also the only tilt at which the sky is ever seen. MEASURED against
-       4.7.1's own sky shader: the horizon sits at `height/2 + getHorizon()` pixels,
-       which at pitch 60 is 1.24 screen-heights — above the top of the frame, so
-       `setSky` paints exactly zero pixels. It first appears at ~67 deg and reaches
-       a fifth of the frame at 80. The DEFAULT camera is untouched at 60: every
-       easeTo, flyTo and reset in this file still says 60 or 0. */
-    maxPitch: 78,
-  });
+         It is also the only tilt at which the sky is ever seen. MEASURED against
+         4.7.1's own sky shader: the horizon sits at `height/2 + getHorizon()` pixels,
+         which at pitch 60 is 1.24 screen-heights — above the top of the frame, so
+         `setSky` paints exactly zero pixels. It first appears at ~67 deg and reaches
+         a fifth of the frame at 80. The DEFAULT camera is untouched at 60: every
+         easeTo, flyTo and reset in this file still says 60 or 0. */
+      maxPitch: 78,
+      /* KEEPS v4'S TILE HANDLING. OpenFreeMap's vector tiles stop at z14 and this map
+         sits at z15.3+; v6's default of 4 SLICES those overzoomed tiles instead of
+         scaling them, which changes where basemap and polygon-centred labels land.
+         `undefined` is the migration guide's own way back to v4's overscaling
+         (`{...defaults, ...options}` takes the explicit undefined). Founder, 25 Oct:
+         keep today's look. */
+      zoomLevelsToOverscale: undefined,
+    });
+  } catch (error) {
+    /* GPUInitializationError on a WebGL 1-only device, or any other refusal to make a
+       context. Nothing below can run without a map; say why, once, and mount nothing. */
+    console.warn('MapLibre could not start', error);
+    loadChip.fail(MAP_UNAVAILABLE);
+    showMapUnavailable(mapContainer);
+    return () => {};
+  }
   /* The attribution control is REBUILT when the open area's boundary credit changes
      (`setMapCredit`, from paintWardScope): MapLibre reads `customAttribution` only at
      construction. */
@@ -455,11 +509,18 @@ export function mountHeatMap(): () => void {
      projected behind it, stayed at opacity 0. Deterministic once the orbit runs;
      flaky in the suite, where load decided which side of 2.5 s the click landed.
      The orbit now steps only while no animation owns the camera, and resumes from
-     wherever the move left it. */
+     wherever the move left it.
+
+     THE TEST IS `isMoving()`, NOT `isEasing()`. maplibre-gl 6 composes its camera
+     rather than extending it and `isEasing` is not forwarded to Map: calling it is a
+     TypeError on the first frame. Between frames `isMoving()` is true exactly while an
+     easeTo/flyTo runs (or a gesture handler is active, when the orbit should be quiet
+     anyway); our own `jumpTo`/`panBy` with no duration begin and end inside one call, so
+     they never leave it set. */
   function advanceOrbit(t: number): boolean {
     const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0; lastT = t;
     const active = Boolean(orbit && mode === 'relief' && map.isStyleLoaded());
-    if (active && !map.isEasing()) map.setBearing(map.getBearing() + ORBIT_DEG_PER_SEC * dt);
+    if (active && !map.isMoving()) map.setBearing(map.getBearing() + ORBIT_DEG_PER_SEC * dt);
     return active;
   }
   function nudgeOrbit() { orbit = false; clearTimeout(orbitResume); orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') { orbit = true; requestRuntimeFrame('orbit'); } }, 2500); }
@@ -669,7 +730,7 @@ export function mountHeatMap(): () => void {
     } else if (drag) { vel.b *= 0.5; vel.p *= 0.5; }
     /* Inertia is a jumpTo too: it yields to a camera animation (see advanceOrbit) and
        is spent, not resumed, when one starts. A drag in progress still wins above. */
-    else if (map.isEasing()) { vel.b = vel.p = 0; }
+    else if (map.isMoving()) { vel.b = vel.p = 0; }
     else if (Math.abs(vel.b) > 0.02 || Math.abs(vel.p) > 0.02) { vel.b *= 0.88; vel.p *= 0.88; map.jumpTo({ bearing: map.getBearing() + vel.b, pitch: Math.min(78, Math.max(0, map.getPitch() + vel.p)) }); }
     return !!drag || Math.abs(vel.b) > 0.02 || Math.abs(vel.p) > 0.02;
   }

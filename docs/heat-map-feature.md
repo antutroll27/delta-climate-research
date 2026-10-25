@@ -277,7 +277,7 @@ shared from there.
    window reads + per-footprint `np.bincount` zonal means; originals kept as `.synthetic.bak`).
    Ward means: Bally 7.6 m (max 54) · Baruipur 4.6 · Barrackpore 4.9 — correct core→fringe gradient.
 3. **MapLibre pivot (user-chosen)** — the instrument now renders ON a live basemap:
-   MapLibre GL JS 4.7.1 (BSD, keyless) + OpenFreeMap styles (`dark` ↔ `positron`, MIT, no
+   MapLibre GL JS 6.15.0 (BSD, keyless) + OpenFreeMap styles (`dark` ↔ `positron`, MIT, no
    usage caps) + our buildings as a `CustomLayerInterface` three.js layer sharing the GL
    context; GPU sim runs on an offscreen renderer, field bridged via throttled readback into
    a `DataTexture` the draped overlay + facades sample. Georegistration verified against
