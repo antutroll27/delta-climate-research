@@ -110,6 +110,15 @@
           "value": "application/vnd.oai.openapi+json;version=3.1"
         }
       ]
+    },
+    {
+      "source": "/deltaElektron/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
     }
   ],
   "functions": {
@@ -118,5 +127,15 @@
         "bom1"
       ]
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/deltaElektron/app",
+      "destination": "https://delta-elektron.vercel.app/deltaElektron/app/"
+    },
+    {
+      "source": "/deltaElektron/app/:path*",
+      "destination": "https://delta-elektron.vercel.app/deltaElektron/app/:path*"
+    }
+  ]
 }
