@@ -131,7 +131,7 @@
   "rewrites": [
     {
       "source": "/deltaElektron/app",
-      "destination": "https://delta-elektron.vercel.app/deltaElektron/app/"
+      "destination": "https://delta-elektron.vercel.app/deltaElektron/app"
     },
     {
       "source": "/deltaElektron/app/:path*",
