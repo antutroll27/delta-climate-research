@@ -137,5 +137,17 @@
       "source": "/deltaElektron/app/:path*",
       "destination": "https://delta-elektron.vercel.app/deltaElektron/app/:path*"
     }
+  ],
+  "redirects": [
+    {
+      "source": "/deltaElektron/app/",
+      "destination": "/deltaElektron/app",
+      "permanent": false
+    },
+    {
+      "source": "/deltaElektron/app/:path(.*)/",
+      "destination": "/deltaElektron/app/:path",
+      "permanent": false
+    }
   ]
 }
