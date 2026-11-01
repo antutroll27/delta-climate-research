@@ -573,7 +573,7 @@ export function createRiverScene(canvas: HTMLCanvasElement, opts: Opts = {}): Ri
   // ── desktop-only progressive texture upgrade ─────────────────────────────
   // The shipped GLB carries 1k textures so first paint stays ~2MB; once the
   // scene is rendering and the main thread is idle, fetch the original scan's
-  // 2k albedo + normal (~2MB, immutable-cached) and hot-swap them in. Failure
+  // 2k albedo + normal (~2MB, browser-cached, revalidated) and hot-swap them in. Failure
   // or a mid-session tier downgrade silently keeps the 1k set.
   function scheduleTextureUpgrade() {
     if (TIER !== 0) return;
