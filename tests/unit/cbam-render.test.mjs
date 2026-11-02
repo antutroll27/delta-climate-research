@@ -12,6 +12,10 @@ import {
   estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
 } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
 import { csvRows, sumTotals } from '../../src/scripts/cbam-lines.ts';
+import { outlook } from '../../src/scripts/cbam-outlook.ts';
+import {
+  renderDeck, renderEstimateIdle, renderEstimateThrown, renderEstimateTiles,
+} from '../../src/scripts/cbam-ui/tiles-estimate.ts';
 
 /**
  * The CBAM engine is the GeoCBAM SaaS's, copied byte-for-byte. Its UI is not — the
@@ -3612,4 +3616,253 @@ test('H1 follow-up: exponents, oversize numbers and -0 are refused at the form',
 test('C2 follow-up: the exempt amount says it is a what-if when it is one', () => {
   assert.match(renderTotals(C2_OWED, C2_EXEMPT), /a what-if: the CSCF is unpublished/);
   assert.doesNotMatch(renderTotals(C2_OWED, { ...C2_EXEMPT, anyPending: false }), /what-if: the CSCF/);
+});
+
+
+/* ── PHASE 2 (rail redesign): the Estimate tiles carry every assertion the result card carried ──
+ *
+ * Spec §6.1. The preview's result card is now four tiles (tiles-estimate.ts). renderResult still
+ * renders the List view's line card until phase 4, so the tests above stay and guard that card;
+ * each test here is a TWIN of one above, by name, asserting the same property on the tiles.
+ *
+ * TIGHTER, NEVER LOOSER. The tiles carry hooks beside design classes (class="b-mega cb-fig"), so
+ * the originals' literal /class="cb-fig"/ could never match them and a doesNotMatch on it would
+ * pass vacuously. Here the hooks are matched as words, and every absence is preceded by a premise
+ * that the same detector fires on a priced line.
+ */
+const tiles = (e, over = {}) => renderEstimateTiles({
+  estimate: e, importDate: '2026-03-15', threshold: '', attestation: '', ...over,
+});
+const FIG = /\bcb-fig\b/;
+const COST = /\bcb-cost\b/;
+const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+test('tiles — the indirect component is shown as its own line, never folded into embedded', () => {
+  const e = withScope('direct_and_indirect');
+  const html = tiles(e);
+  assert.match(html, /Indirect \(electricity\)/i, 'the indirect term must be visible');
+  assert.match(html, /no free allocation/i, 'and must say it gets no deduction');
+  assert.match(html, /Embedded emissions \(direct\)/i,
+    'the direct term must be labelled direct, or the two read as one number');
+  // The figure beside "direct" is the DIRECT term, never direct + indirect.
+  assert.ok(html.includes(`Embedded emissions (direct) · ${Number(e.emissionsTco2e).toLocaleString('en-GB', { maximumFractionDigits: 3 })} tCO₂e`));
+  assert.ok(!html.includes(`Embedded emissions (direct) · ${Number(e.scenario.totalEmbeddedTco2e).toLocaleString('en-GB', { maximumFractionDigits: 3 })} tCO₂e`),
+    'premise: direct (136.4) and total (140.8) differ on this line, so this would catch a fold');
+});
+
+test('tiles — a direct-only sector is unaffected by the scope control', () => {
+  assert.match(tiles(withScope('direct_and_indirect')), /Indirect \(electricity\)/i,
+    'premise: the detector fires where an indirect term exists');
+  const ask = estimateFromPack(pack, { cn: '72083800', country: 'IN', route: '(C)',
+    massT: '100', date: '2026-03-15', emissionsScope: 'direct_and_indirect' });
+  assert.doesNotMatch(tiles(ask), /Indirect \(electricity\)/i,
+    'no indirect row when there is no indirect default');
+});
+
+test('tiles — NON-NEGOTIABLE 2 — a refusal renders NO figure of any kind', () => {
+  const priced = tiles(run('2523100090', 'DZ', '(A)', '100'));
+  assert.match(priced, FIG, 'premise: the figure hook is detectable on a priced line');
+  assert.match(priced, COST, 'premise: and the cost hook');
+  const html = tiles(run('72052100', 'IN', '(C)', '60'));
+  assert.match(html, /No estimate/i, 'the refusal must be stated, not implied');
+  assert.match(html, /benchmark\/72052100\/column-B\/\(C\)\/2026-03-15/,
+    'the missing rule selector must be shown verbatim');
+  assert.doesNotMatch(html, FIG, 'a refusal must not render the figure block — no number, not even zero');
+  assert.doesNotMatch(html, COST, 'a refusal must not render a cost');
+  assert.doesNotMatch(html, /class="b-mid"/, 'and the Chargeable tile shows no share');
+  assert.doesNotMatch(html, /b-fill|Chargeable/,
+    'the Chargeable tile is not drawn at all on a refusal: no tonnage, no share, no empty plate');
+});
+
+test('tiles — NON-NEGOTIABLE 3 — CSCF-pending is labelled a what-if, never a figure', () => {
+  const e = run('2523100090', 'DZ', '(A)', '100');
+  const html = tiles(e);
+  assert.match(html, /What-if/i, 'the scenario must be labelled as one');
+  assert.match(html, /unpublished/i, 'it must say the factor is unpublished');
+  assert.match(html, /CSCF\s*(&nbsp;)?=(&nbsp;)?\s*1/, 'the assumed CSCF must be stated, not buried');
+  assert.match(html, /Not a final figure/i, 'it must say outright that this is not final');
+  const para = (s) => /<p class="[^"]*\bcb-warn\b[^"]*">([\s\S]*?)<\/p>/.exec(s)?.[1].replace(/\s+/g, ' ').trim();
+  assert.ok(para(renderResult(e)), 'premise: the card has the paragraph');
+  assert.equal(para(html), para(renderResult(e)), 'the same paragraph, word for word — no paraphrase');
+});
+
+test('tiles — NON-NEGOTIABLE 5 — the provenance stamp travels on EVERY branch', () => {
+  for (const [label, e] of [
+    ['priced', run('2523100090', 'DZ', '(A)', '100')],
+    ['refused', run('72241010', 'IN', '(F)', '60')],
+    ['refused (certain)', run('72052100', 'IN', '(C)', '60')],
+  ]) {
+    const html = tiles(e);
+    assert.match(html, /Provenance/, `${label}: the stamp must render`);
+    assert.match(html, /Origin basis/, `${label}: originBasis must be shown`);
+    assert.match(html, /Snapshot/, `${label}: the snapshot hash must be shown`);
+    assert.match(html, /Data tier/, `${label}: the tier must be shown`);
+    assert.match(html, /Rule packages/, `${label}: the rule packages must be shown`);
+  }
+});
+
+test('tiles — NON-NEGOTIABLE 4 — nothing claims a filing or registry validation', () => {
+  const outputs = [
+    tiles(run('2523100090', 'DZ', '(A)', '100')), tiles(run('72241010', 'IN', '(F)', '60')),
+    renderEstimateIdle('Choose a good, origin, route, mass and import date to see the provisional exposure.'),
+    renderEstimateThrown('x'),
+  ];
+  for (const raw of outputs) {
+    const html = raw.toLowerCase();
+    for (const forbidden of ['filed', 'submitted to the', 'validated by', 'registry-approved']) {
+      assert.ok(!html.includes(forbidden),
+        `the readout must never claim "${forbidden}" — it is decision-support, not a declaration`);
+    }
+  }
+});
+
+test('tiles — the residual sheet answers for unlisted ORIGINS, never for a good a listed sheet omits', () => {
+  const unlisted = run('76041010', 'AF', '(K)', '100');
+  assert.equal(unlisted.stamp.originBasis, 'residual', 'premise');
+  const worldAverage = ['210.843', '15,889.09', '355.63', '144.788'];
+  const unlistedTiles = tiles(unlisted);
+  for (const figure of worldAverage) {
+    assert.ok(unlistedTiles.includes(figure),
+      `premise: the residual tiles print ${figure}, so looking for it means something`);
+  }
+  const refused = run('76041010', 'DZ', '(K)', '100');
+  assert.equal(refused.status, 'unavailable', 'premise');
+  const refusedTiles = tiles(refused);
+  assert.doesNotMatch(refusedTiles, FIG, 'a refusal must render no figure block');
+  for (const figure of worldAverage) {
+    assert.ok(!refusedTiles.includes(figure),
+      `the residual world average must not reach a listed origin's tiles — found ${figure}`);
+  }
+  // The deck sits inside #cbOut too, so it is held to the same rule.
+  const deck = renderDeck(outlook(pack, { cn: '76041010', country: 'DZ', route: '(K)', massT: '100',
+    date: '2026-03-15', emissionsScope: 'direct_and_indirect' }), '100');
+  for (const figure of [...worldAverage, '210.8']) {
+    assert.ok(!deck.includes(figure), `nor the deck — found ${figure}`);
+  }
+});
+
+test('tiles — a residual-basis figure says so — it must not read as the origin\'s own value', () => {
+  let residual = null;
+  for (const c of pack.classifications.slice(0, 120)) {
+    for (const country of ['IN', 'TR', 'CN', 'BR']) {
+      const rs = routesFor(pack, c.code, country, 2026);
+      if (!rs.length) continue;
+      const e = run(c.code, country, rs[0], '10');
+      if (e.stamp?.originBasis === 'residual') { residual = e; break; }
+    }
+    if (residual) break;
+  }
+  if (!residual) return; // as the original: none in the sampled slice; covered by the AF line above
+  assert.match(tiles(residual), /Residual bucket/,
+    'a residual-derived figure must name its basis, or a reader believes the Commission '
+    + 'priced their country when it did not');
+});
+
+test('tiles — the renderer handles every status the engine can return', () => {
+  const tagOf = { ok: 'Priced', zero_by_fiat: 'Priced · free allocation nil by law', unavailable: 'No estimate' };
+  const seen = new Set();
+  for (const [cn, country, route] of [['2523100090', 'DZ', '(A)'], ['72052100', 'IN', '(C)'], ['72083800', 'IN', '(C)']]) {
+    const e = run(cn, country, route, '10');
+    seen.add(e.status);
+    const html = tiles(e);
+    assert.ok(html.includes('cb-res'), `${e.status}: must render a result block`);
+    assert.ok(html.length > 200, `${e.status}: output looks empty`);
+    const tag = e.status === 'cscf_pending' ? `What-if · CSCF for ${e.cscfYear} unpublished` : tagOf[e.status];
+    assert.ok(html.includes(`>${tag}</span>`), `${e.status}: the status tag must name the branch`);
+  }
+  assert.ok(seen.size >= 2, `expected several statuses across probes, saw ${[...seen]}`);
+});
+
+test('tiles — the pre-pack fallback text renders in full, never truncated as though it were a hash', () => {
+  const e = decorateSnapshot(run('2523100090', 'DZ', '(A)', '100'), '');
+  const html = tiles(e);
+  assert.match(html, /not yet computed/, 'the fallback text must appear in full');
+  assert.doesNotMatch(html, /not yet comput(?!ed)/, 'must not be cut off mid-word');
+  assert.doesNotMatch(html, /unsealed-pack/);
+  assert.doesNotMatch(html, /class="b-fp/, 'a placeholder is not a hash: no dots are drawn for it');
+});
+
+test('tiles — renderStamp truncates a genuine 64-hex-char snapshotHash to its first 16 chars plus an ellipsis', () => {
+  const realHash = '8bbba79e7f33f0e4943140c28e91a8810612f2fa770bd6dcad33fdb7045e4c05';
+  const html = tiles(decorateSnapshot(run('2523100090', 'DZ', '(A)', '100'), realHash));
+  assert.match(html, new RegExp(`${realHash.slice(0, 16)}…`));
+  assert.doesNotMatch(html, new RegExp(realHash), 'the full digest must not be printed');
+  assert.doesNotMatch(html, new RegExp(realHash.slice(16, 24)), 'nor any hex past the shown prefix');
+  assert.equal((/<div class="b-fp"[^>]*>([\s\S]*?)<\/div>/.exec(html)?.[1].match(/<i\b/g) ?? []).length, 64,
+    'the dots draw the same 64 bits the text shows');
+});
+
+test('tiles — a 2027 or 2028 date counts certificates, with no price and no cost', () => {
+  for (const [date, quarter] of [['2027-03-15', '2027-Q1'], ['2028-12-31', '2028-Q4']]) {
+    const input = { cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date,
+      emissionsScope: 'direct_and_indirect' };
+    const e = estimateFromPack(pack, input);
+    assert.equal(e.status, 'cscf_pending', date);
+    assert.equal(e.scenario.costEur, null, date);
+    const html = tiles(e, { importDate: date });
+    assert.match(html, FIG, `${date}: a count must be shown`);
+    assert.ok(html.includes(`<span>Certificate price · imports in ${quarter}</span><b>none published</b>`),
+      `${date}: the price row must read "imports in ${quarter}" and "none published"`);
+    assert.ok(html.includes(
+      `The Commission has not published a certificate price for imports in ${quarter}, so no cost is shown.`),
+      `${date}: the engine's note, whole`);
+    for (const out of [html, renderDeck(outlook(pack, input), '100')]) {
+      assert.doesNotMatch(out, /Q[1-4] certificate price|Certificate price 20\d\d-Q|quarterly|\(pending\)/i,
+        `${date}: no wording that presents a quarterly price for this year`);
+      assert.doesNotMatch(out, /€/, `${date}: no euro figure of any kind`);
+    }
+  }
+});
+
+test('tiles — the price row: a published price shows it; an unpublished one says "none published", never "pending"', () => {
+  const published = run('2523100090', 'DZ', '(A)', '100');
+  const row = renderPriceRow(published);
+  assert.equal(row, '<div class="cb-row"><span>Certificate price · imports in 2026-Q1</span><b>€75.36</b></div>');
+  assert.ok(tiles(published).includes(row), 'the hero carries the price row, exactly');
+  const pending = estimateFromPack(pack, { cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2027-03-15' });
+  assert.ok(tiles(pending, { importDate: '2027-03-15' })
+    .includes('<div class="cb-row"><span>Certificate price · imports in 2027-Q1</span><b>none published</b></div>'));
+});
+
+test('tiles — §1 marks a verified row and transcribes the reference the importer cited (one tier label)', () => {
+  for (const [l, ref] of [[vline({ verifiedRef: 'DNV-2026-0042' }), 'DNV-2026-0042'],
+    [mline({ verifiedRef: 'BV-2026-0142' }), 'BV-2026-0142']]) {
+    const e = estOf(l);
+    const card = renderResult(e).match(/<span>Data tier<\/span><b>([^<]+)<\/b>/);
+    const tile = tiles(e).match(/<dt>Data tier<\/dt><dd>([^<]+)<\/dd>/);
+    assert.ok(card && tile, 'sanity: both render a Data tier row');
+    assert.equal(tile[1], card[1], 'the tile names the tier in the card\'s own words');
+    assert.ok(docOf([l], [e]).includes(`${tile[1]} — ref ${ref}`),
+      'and in the document\'s, so the screen and the paper agree');
+  }
+});
+
+test('tiles — renderAttestation gates on the TIER: the preview\'s attestation is placed whole, a default line carries none', () => {
+  const v = vline({ verifiedRef: 'DNV-2026-0042' });
+  const e = estOf(v);
+  const att = renderAttestation({ tier: e.stamp.tier, verifiedRef: 'DNV-2026-0042' }, e.status !== 'unavailable');
+  assert.ok(att.includes(ATTESTED_NOTE), 'premise: a verified preview owes the attestation');
+  assert.ok(tiles(e, { attestation: att }).includes(att), 'the tiles place it whole, not trimmed or reworded');
+  const d = run('2523100090', 'DZ', '(A)', '100');
+  assert.doesNotMatch(tiles(d, { attestation: renderAttestation({ tier: d.stamp.tier }, true) }), /cb-attested/);
+});
+
+test('tiles — the preview\'s de minimis card: carried byte for byte, first, and no plate when none is owed', () => {
+  // Twin of: "a year with no published threshold row gets a card on the PREVIEW too, not silence",
+  // "the other three nulls stay silent — an absent card is the right answer for them" and
+  // "a year that HAS a published row is untouched — the same card, byte for byte".
+  const e = run('2523100090', 'DZ', '(A)', '30');
+  for (const [m, date] of [['10', '2026-03-15'], ['100', '2026-03-15'], ['30', '2027-03-15']]) {
+    const card = draft('2523100090', m, date);
+    assert.ok(card.length > 0, `premise: ${m} t on ${date} owes a card`);
+    const html = tiles(e, { threshold: card });
+    assert.ok(html.includes(card), 'the card, byte for byte');
+    assert.ok(html.indexOf(card) < html.indexOf('cb-res'),
+      'first: its own copy says "the exposure below stands"');
+  }
+  for (const silent of [draft('28041000', '10'), draft('99999999', '10'), draft('2523100090', 'abc')]) {
+    assert.equal(silent, '', 'premise: the three nulls stay silent');
+    assert.doesNotMatch(tiles(e, { threshold: silent }), /cb-thresh|b-legacy/, 'and leave no empty plate');
+  }
 });
