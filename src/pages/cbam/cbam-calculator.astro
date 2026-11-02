@@ -258,10 +258,22 @@ import { renderTitleCard } from '../../scripts/cbam-ui/title-card.ts';
       </section>
 
       <section data-view="export" aria-labelledby="cbxH-export" hidden>
-        <h1 id="cbxH-export" class="cbx-h1" tabindex="-1">Export. <span>CSV and document.</span></h1>
-        <div class="cbx-actions">
-          <button id="cbCsv" type="button" class="cb-btn" disabled>Export CSV</button>
-          <button id="cbDoc" type="button" class="cb-btn" disabled>Export document</button>
+        <h1 id="cbxH-export" class="cbx-h1" tabindex="-1">Export. <span>Take the shipment out of the browser.</span></h1>
+        <div class="b-bento b-export">
+          <section class="b-t b-s2" aria-labelledby="cbExpCsvH">
+            <div class="b-t-h"><div><h2 id="cbExpCsvH" class="b-t-ti">CSV.</h2></div></div>
+            <div id="cbExportCsv"><p class="b-lead2">Add a line to the list to export it.</p></div>
+            <button id="cbCsv" type="button" class="cb-btn b-add" disabled>Export CSV</button>
+          </section>
+          <section class="b-t b-s2 b-hero" aria-labelledby="cbExpDocH">
+            <div class="b-t-h"><div><h2 id="cbExpDocH" class="b-t-ti">Document.</h2></div></div>
+            <div id="cbExportDoc"><p class="b-lead2">Add a line to the list to print it.</p></div>
+            <button id="cbDoc" type="button" class="cb-btn b-add" disabled>Export document</button>
+          </section>
+          <section class="b-t b-s4" aria-labelledby="cbExpFpH">
+            <div class="b-t-h"><div><h2 id="cbExpFpH" class="b-t-ti">What travels with it.</h2><p class="b-t-sub">Each line, and the rule pack, carries a fingerprint. Same dots, same inputs and rules.</p></div></div>
+            <div id="cbExportFps"></div>
+          </section>
         </div>
       </section>
 

@@ -46,6 +46,7 @@ import {
   verifiedOnlyRoutes,
 } from '../cbam-ui/inputs-estimate.ts';
 import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
+import { csvTileBody, docTileBody, fingerprintsBody } from '../cbam-ui/tiles-export.ts';
 import {
   AMENDED_BY_2025_2083, attestControl, noRuleSentence, refusedLineNote, sectorList, totalsTag, yearSentence,
   yearVerdictTag, linePlate, listView, refusedLinePlate, shareOfTotal, thresholdErrorTile, totalTile, yearTile,
@@ -1609,6 +1610,9 @@ export function initCbam(): void {
   const titleEl = $('cbTitle'), titlePhone = $('cbTitlePhone');
   const badges = document.querySelectorAll<HTMLElement>('[data-list-badge]');
   const listHeading = $('cbxH-list');
+  const exportCsvEl = $('cbExportCsv'), exportDocEl = $('cbExportDoc'), exportFpsEl = $('cbExportFps');
+  // The static "add a line" copy, kept to restore when the list empties.
+  const exportIdle = [exportCsvEl, exportDocEl].map((el) => el?.innerHTML ?? '');
   // Phase 2 (spec §5.1): the Estimate input column's new controls. All optional, so a stripped
   // page still runs; the hidden #cbRoute and #cbTier stay the source of truth either way.
   const routeSeg = $('cbRouteSeg'), routeVo = $('cbRouteVo'), tierCards = $('cbTierCards');
@@ -2518,6 +2522,31 @@ export function initCbam(): void {
    * deliberate, independent clicks landing within the same fingerprint-hashing window) whose
    * worst outcome is a sub-second flicker. Documented per review guidance, not papered over.
    */
+  /**
+   * The Export view (spec §5.5), repainted whenever the list changes. The CSV preview is built by
+   * the SAME csvRows call onCsv makes, over the same lastPairs, so the table is the file's own
+   * first rows. A throw is shown as the tile's text — onCsv reports the same throw on click.
+   */
+  function paintExport(): void {
+    if (!lines.length || !pack) {
+      if (exportCsvEl) exportCsvEl.innerHTML = exportIdle[0]!;
+      if (exportDocEl) exportDocEl.innerHTML = exportIdle[1]!;
+      if (exportFpsEl) exportFpsEl.innerHTML = '';
+      return;
+    }
+    const ok = lastPairs.filter((p) => p.e !== null);
+    let csv: { rows: Record<string, string>[] } | { error: string };
+    try {
+      csv = { rows: csvRows(ok.map((p) => p.l), ok.map((p) => p.e!), fingerprints, snapshot, pack) };
+    } catch (err) {
+      csv = { error: (err as Error).message };
+    }
+    if (exportCsvEl) exportCsvEl.innerHTML = csvTileBody(csv);
+    if (exportDocEl) exportDocEl.innerHTML = docTileBody(lines.length, new Date().toISOString().slice(0, 10));
+    if (exportFpsEl) exportFpsEl.innerHTML = fingerprintsBody(snapshot,
+      lines.map((l, i) => ({ n: i + 1, hex: fingerprints.get(l.id) ?? null })));
+  }
+
   function renderAll(): void {
     // SPEC §6.3: THE DRAFT ALWAYS PREVIEWS. The list has its own view and container (#cbList),
     // so adding, removing or attesting never touches #cbOut, #cbOutlook or #cbGraphs. Those show
@@ -2530,6 +2559,7 @@ export function initCbam(): void {
       // MUST clear #cbStatus (found on review of f04b95b): a stale summary left here after the list
       // empties is a stale euro figure announced as current to the users who rely on it.
       status!.textContent = '';
+      paintExport();
       return;
     }
     const pairs = safeEstimates(lines);
@@ -2585,6 +2615,7 @@ export function initCbam(): void {
       return renderLineCard(p.l, p.e, i, p.cmp, { goodName: nameOf(p.l.cn), sharePct, exempt: exemptLine });
     }).join('');
     listEl!.innerHTML = listView({ total: totalTile(totals, exempt, shares), years: yearsHtml, plates });
+    paintExport();
     csvBtn && (csvBtn.disabled = false);
     docBtn && (docBtn.disabled = false);
 

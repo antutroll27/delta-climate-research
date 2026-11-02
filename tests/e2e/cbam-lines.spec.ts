@@ -2075,4 +2075,25 @@ test.describe('rail views, phase 4 — List, Export, Rules', () => {
     // 30 t and 60 t of the same good: one third and two thirds.
     expect(shares).toEqual(['33.3%', '66.7%']);
   });
+
+  test('Export: the CSV preview is the downloaded CSV — counts, columns and cells', async ({ page }) => {
+    await page.goto(CALC);
+    await addLine(page);
+    await addLine(page, { mass: '60' });
+    await view(page, 'export');
+    await expect(page.locator('#cbExportCsv th')).toHaveText(['line_id', 'cn_code', 'origin', 'mass_t', 'certificates', 'cost_eur']);
+    const [download] = await Promise.all([page.waitForEvent('download'), page.click('#cbCsv')]);
+    const [headerLine, ...rowLines] = readFileSync(await download.path(), 'utf8').trim().split('\n');
+    const header = parseCsvRow(headerLine!);
+    await expect(page.locator('#cbExportCsv .b-t-sub')).toHaveText(`${header.length} columns · 2 lines · full precision`);
+    const shown = page.locator('#cbExportCsv tbody tr');
+    await expect(shown).toHaveCount(2);
+    for (const [r, line] of rowLines.entries()) {
+      const cells = parseCsvRow(line);
+      const want = ['line_id', 'cn_code', 'origin', 'mass_t', 'certificates', 'cost_eur'].map((c) => cells[header.indexOf(c)]!);
+      await expect(shown.nth(r).locator('td')).toHaveText(want);
+    }
+    await expect(page.locator('#cbExportFps figure')).toHaveCount(3);
+    await expect(page.locator('#cbExportDoc')).toContainText('every line as entered');
+  });
 });
