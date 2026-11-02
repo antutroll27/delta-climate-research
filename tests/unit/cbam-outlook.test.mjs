@@ -14,6 +14,7 @@ import {
 import {
   estimateFromPack, routesFor,
 } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
+import { whatIfTag } from '../../src/scripts/cbam-ui/format.ts';
 
 /**
  * THE THREE-YEAR VIEW, against the real shipped pack — never a pasted copy of it.
@@ -430,16 +431,16 @@ test('cost at an assumed price is the engine\'s own sum: fed a published price, 
 test('a typed price fills only the years with no published price, and never replaces a published one', () => {
   const view = outlook(pack, line());
   const none = text(renderYears(view));
-  assert.match(none, /2026\. 329\.8 certificates €24,855\.80 price published, €75\.36/);
-  assert.match(none, /2027\. \+14\.2% on 2026 376\.8 certificates Certificate price · imports in 2027-Q1 none published as at 14 Oct 2026/);
-  assert.match(none, /2028\. \+29\.6% on 2026 427\.4 certificates Certificate price · imports in 2028-Q1 none published as at 14 Oct 2026/);
+  assert.match(none, /2026\. What-if · CSCF unpublished 329\.8 certificates €24,855\.80 published €75\.36 · 2026-Q1/);
+  assert.match(none, /2027\. What-if · CSCF unpublished \+14\.2% on 2026 376\.8 certificates Certificate price · imports in 2027-Q1 none published as at 14 Oct 2026/);
+  assert.match(none, /2028\. What-if · CSCF unpublished \+29\.6% on 2026 427\.4 certificates Certificate price · imports in 2028-Q1 none published as at 14 Oct 2026/);
 
   const filled = text(renderYears(view, '80'));
-  assert.match(filled, /2026\. 329\.8 certificates €24,855\.80 price published, €75\.36/,
+  assert.match(filled, /2026\. What-if · CSCF unpublished 329\.8 certificates €24,855\.80 published €75\.36 · 2026-Q1/,
     'the published year is untouched: still the engine\'s cost at the Commission\'s price');
   // 376.755 × 80 = 30,140.40 ; 427.41 × 80 = 34,192.80
-  assert.match(filled, /2027\. \+14\.2% on 2026 376\.8 certificates €30,140\.40 at your assumed €80 · not a published price/);
-  assert.match(filled, /2028\. \+29\.6% on 2026 427\.4 certificates €34,192\.80 at your assumed €80 · not a published price/);
+  assert.match(filled, /2027\. What-if · CSCF unpublished \+14\.2% on 2026 376\.8 certificates €30,140\.40 at your assumed €80 · not a published price/);
+  assert.match(filled, /2028\. What-if · CSCF unpublished \+29\.6% on 2026 427\.4 certificates €34,192\.80 at your assumed €80 · not a published price/);
   assert.doesNotMatch(filled, /€26,386|329\.8275 × 80/);
   assert.match(filled, /Cost price × certificates €24,855\.80 published €75\.36 €30,140\.40 your assumed €80 €34,192\.80 your assumed €80/);
 
@@ -456,7 +457,7 @@ test('a typed price fills only the years with no published price, and never repl
   assert.doesNotMatch(cents, /30,349\.50/);
   for (const bad of ['0', '-5', 'abc', '0.004']) {
     const t = text(renderYears(view, bad));
-    assert.match(t, /2027\. \+14\.2% on 2026 376\.8 certificates Certificate price · imports in 2027-Q1 none published/, bad);
+    assert.match(t, /2027\. What-if · CSCF unpublished \+14\.2% on 2026 376\.8 certificates Certificate price · imports in 2027-Q1 none published/, bad);
     assert.match(t, /Enter a price of at least €0\.01\./, bad);
     assert.doesNotMatch(t, /your assumed/, bad);
   }
@@ -479,11 +480,11 @@ test('when the entered date falls in a 2026 quarter with no published price, 202
   const view = outlook(pack, line({ date: '2026-11-15' }));
   assert.deepEqual(unpricedYears(view), [2026, 2027, 2028]);
   const t = text(renderYears(view));
-  assert.match(t, /2026\. 329\.8 certificates Certificate price · imports in 2026-Q4 none published as at 14 Oct 2026/);
+  assert.match(t, /2026\. What-if · CSCF unpublished 329\.8 certificates Certificate price · imports in 2026-Q4 none published as at 14 Oct 2026/);
   assert.match(t, /Fills the cost for 2026, 2027 and 2028, where no certificate price is published for the import's date\./);
   // AUDIT 2, in the strip: a November shipment's 2026 card is about ITS quarter. "2026: none
   // published" was false while three other 2026 quarters have a price.
-  assert.match(t, /2027\. \+14\.2% on 2026 376\.8 certificates Certificate price · imports in 2027-Q4 none published/);
+  assert.match(t, /2027\. What-if · CSCF unpublished \+14\.2% on 2026 376\.8 certificates Certificate price · imports in 2027-Q4 none published/);
   // Each pending row's own locator, once: the 2026 row's and the weekly-price sentence.
   assert.match(t, /Certificate price, 2026: EC certificate price table, 2026-Q4 \(not yet published\)\./);
   assert.match(t, /Certificate price, 2027 and 2028: From 2027 the Commission sets a weekly certificate price/);
@@ -500,7 +501,7 @@ test('a 2026-Q3 import is priced at the published Q3 price, EUR 82.32, and at no
   assert.equal(y.costEur, '27151.40');
   assert.deepEqual(unpricedYears(view), [2027, 2028]);
   const t = text(renderYears(view));
-  assert.match(t, /2026\. 329\.8 certificates €27,151\.40 price published, €82\.32/);
+  assert.match(t, /2026\. What-if · CSCF unpublished 329\.8 certificates €27,151\.40 published €82\.32 · 2026-Q3/);
   assert.doesNotMatch(t, /75\.36|75\.28|24,855/, 'not at the Q1 or Q2 price');
 });
 
@@ -524,8 +525,9 @@ test('the strip says "none published" with the pack\'s date, prints the pack\'s 
   // What it must never say. A 2027 or 2028 row is not a quarterly price; nothing is forecast;
   // nobody is told what they will pay. ("Not a forecast" is the one permitted use of the word.)
   assert.doesNotMatch(t, /quarterly|Q[1-4] (certificate )?price|will pay|pay less|you will|expected|projected|predict|\byet\b/i);
-  // The quarter appears only as the period the import falls in, the way the result card names it.
-  assert.deepEqual([...new Set(t.match(/\S+ \S+ 20\d\d-Q[1-4]/g))], ['imports in 2027-Q1', 'imports in 2028-Q1']);
+  // The quarter appears only as the period the import falls in, the way the result card names it; and,
+  // on a plate whose price IS published, as the reference's own "published €75.36 · 2026-Q1".
+  assert.deepEqual([...new Set(t.match(/\S+ \S+ 20\d\d-Q[1-4]/g))], ['€75.36 · 2026-Q1', 'imports in 2027-Q1', 'imports in 2028-Q1']);
   assert.deepEqual(t.match(/forecast/gi), ['forecast'], 'only in "not a forecast"');
   assert.match(t, /It is your own assumption: not a forecast and not a published price\./);
   assert.match(t, /It stays on this page and is not saved, exported or sent\./);
@@ -591,7 +593,7 @@ test('the rendered strip escapes what it did not write', () => {
 test('the year plates: the hero is the first year, the mark-up is the engine\'s, and the dots light only whole tens', () => {
   const html = renderYearPlates(outlook(pack, line()), null);
   assert.equal((html.match(/class="b-t b-yr cb-ol-yr b-hero"/g) ?? []).length, 1, 'one hero plate, the first');
-  assert.match(text(html), /2026\. 329\.8 certificates €24,855\.80 price published, €75\.36 Mark-up 10%/);
+  assert.match(text(html), /2026\. What-if · CSCF unpublished 329\.8 certificates €24,855\.80 published €75\.36 · 2026-Q1 Mark-up 10%/);
   assert.equal((html.match(/<i class="on"><\/i>/g) ?? []).length, 1 + 2 + 3, 'one dot per 10%: 10%, 20%, 30%');
   assert.equal(markupDots('10'), 1);
   assert.equal(markupDots('30'), 3);
@@ -624,4 +626,52 @@ test('the view holds one details, one summary, one table, one tag: the hooks the
   assert.doesNotMatch(floor, /cb-ol-h"/);
   // Zero first-year count: no percentage on any plate.
   assert.doesNotMatch(floor, /cb-ol-d"/);
+});
+
+/* ── audit H1, L1, L4 (phase-3 review): the plates' what-if, the date stamp's tone, the price line ── */
+
+const platesOf = (view) => renderYearPlates(view, null).split('<li ').slice(1);
+
+test('H1: a plate whose count rests on an unpublished CSCF says what-if in its header; a final figure does not', () => {
+  // Every figure year of this pack is a what-if (no CSCF is published for 2026-2028): the tube's three plates.
+  const tube = platesOf(outlook(pack, line()));
+  assert.equal(tube.length, 3);
+  for (const plate of tube) {
+    assert.match(plate, /What-if · CSCF unpublished/);
+    assert.ok(/<div class="b-t-h"><div><h3[^>]*>\d{4}\.<\/h3>/.test(plate) && plate.includes(whatIfTag()), 'the tag is the Estimate hero\'s own, in the plate header');
+    assert.ok(plate.indexOf('What-if') < plate.indexOf('cb-ol-n'), 'before the count it qualifies');
+  }
+  // A verified line is no less a what-if: its count rests on the same missing factor.
+  for (const plate of platesOf(outlook(pack, line({ verified: { directTco2ePerT: '2.0' } })))) assert.match(plate, /What-if/);
+  // A year the engine priced FINAL (status ok) carries no tag, and its neighbours still do.
+  const view = structuredClone(outlook(pack, line()));
+  view.years[1].status = 'ok';
+  const [a, b, c] = platesOf(view);
+  assert.match(a, /What-if/);
+  assert.doesNotMatch(b, /What-if/);
+  assert.match(c, /What-if/);
+  const zero = structuredClone(outlook(pack, line()));
+  zero.years[0].status = 'zero_by_fiat';
+  assert.doesNotMatch(platesOf(zero)[0], /What-if/);
+  // A refused year shows its reason and no figure, and no what-if either.
+  for (const plate of platesOf(outlook(pack, line({ route: '(D)' })))) assert.doesNotMatch(plate, /What-if|cb-ol-n"/);
+});
+
+test('L1: "Law as published" is a date stamp in a neutral tag, not the bronze pending tone; the e2e hook stays', () => {
+  const html = renderYears(outlook(pack, line()));
+  assert.match(html, /<span class="b-tag cb-tag">Law as published · 18 Aug 2026<\/span>/);
+  assert.doesNotMatch(html, /pending">Law as published/);
+});
+
+test('L4: the published price line reads "published €75.36 · 2026-Q1", and plates span the row when the price box is hidden', () => {
+  const plate = platesOf(outlook(pack, line()))[0];
+  assert.match(text(plate), /€24,855\.80 published €75\.36 · 2026-Q1/);
+  assert.doesNotMatch(plate, /quarterly/i);
+  assert.match(renderYears(outlook(pack, line())), /<ol class="cb-ol-years" data-ol="years">/, 'the price box is shown: three plates and the box share the row');
+  // Every year priced: the box is hidden, and the plates take the whole row (no hole where it was).
+  const priced = structuredClone(outlook(pack, line()));
+  for (const y of priced.years) { y.costEur = '1'; y.price.priceEur = '1'; y.price.status = 'published'; }
+  const html = renderYears(priced);
+  assert.match(html, /<ol class="cb-ol-years b-years-wide" data-ol="years">/);
+  assert.match(html, /<section class="b-t b-own cb-ol-price"[^>]* hidden>/);
 });

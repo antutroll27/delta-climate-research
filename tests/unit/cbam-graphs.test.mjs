@@ -516,3 +516,34 @@ test('M2 (audit 2026-11-02): no legend calls the certificate price the quarter\'
   // falls in, never the price's period.
   assert.doesNotMatch(renderWhy(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE)), /price for this import's quarter/);
 });
+
+/* ── audit M1 (phase-3 review): a count that rests on an unpublished CSCF is a what-if, in Why too ── */
+
+test('M1: the model says whatIf when any year is a what-if, and every Why tile that draws a count wears the tag', () => {
+  assert.equal(TUBE.whatIf, true);
+  assert.equal(modelOf(line({ verified: { directTco2ePerT: '2.0' } })).whatIf, true);
+  const html = renderWhy(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE));
+  const tag = '<span class="b-tag pending">What-if · CSCF unpublished</span>';
+  for (const id of ['share', 'charged', 'markup', 'origins', 'cost']) {
+    const tile = html.split(`data-cg-card="${id}"`)[1].split('</section>')[0];
+    assert.ok(tile.includes(tag), `${id} carries the what-if tag`);
+    assert.ok(tile.indexOf(tag) < tile.indexOf('cg-t'), `${id}: in the header, before its sentence`);
+  }
+  const phase = html.split('data-cg-card="phase"')[1].split('</section>')[0];
+  assert.doesNotMatch(phase, /What-if/, 'the legislated schedule draws no count');
+  assert.equal((html.match(/What-if/g) ?? []).length, 5);
+  // Final figures: no tag anywhere. (No real line is final in this pack, so the flag is cleared on a copy.)
+  const final = { ...TUBE, whatIf: false };
+  assert.doesNotMatch(renderWhy(final, STATE(), WIDTHS, phaseModel(pack, final)), /What-if/);
+});
+
+test('M3: a bar segment too narrow for its label has a container query to hide it; a long label has the wider one', () => {
+  const css = readFileSync(fileURLToPath(new URL('../../src/styles/cbam-bento.css', import.meta.url)), 'utf8');
+  assert.match(css, /\.cbx \.b-sp\{[^}]*container:bsp\/inline-size/);
+  assert.match(css, /@container bsp \(max-width:\d+px\)\{\.cbx \.b-split:not\(\.b-split-sm\) \.b-sp:not\(\[data-long\]\)>span\{display:none\}\}/);
+  assert.match(css, /@container bsp \(max-width:\d+px\)\{\.cbx \.b-split-sm \.b-sp:not\(\[data-long\]\)>span\{display:none\}\}/);
+  // A short label ("86.4") is unmarked; a long one ("1,234.5") carries data-long, on the share bar.
+  assert.doesNotMatch(shareBar(TUBE), /data-long/);
+  const big = { ...TUBE, split: { rise: '2000', markup: '1234.5', factor: '700', benchmark: '65.5', markupSharePct: '61.725' } };
+  assert.match(shareBar(big), /class="b-sp b-sp-bz" style="flex-grow:1234\.5" data-long>/);
+});

@@ -17,7 +17,7 @@
  * <details> (which would close it). See yearsPriceSlots.
  */
 import Decimal from 'decimal.js';
-import { esc } from './format.ts';
+import { esc, whatIfTag } from './format.ts';
 import {
   assumedCost, formatCount, formatEuros, formatPackDate, formatPrice, formatSignedPct, outlookWhy,
   parseAssumedPrice, renderOutlookNotes, renderOutlookPriceNote, renderOutlookRows, unpricedYears,
@@ -52,7 +52,7 @@ function plateCost(y: OutlookFigureYear, view: Outlook, assumed: string | null):
   // is not consulted at all for that year.
   if (y.costEur !== null && y.price.priceEur !== null) {
     return `<span class="b-tag num cb-ol-e">${formatEuros(y.costEur)}</span>
-      <span class="b-t-sub cb-ol-s">price published, ${formatPrice(y.price.priceEur)}</span>`;
+      <span class="b-t-sub cb-ol-s">published ${formatPrice(y.price.priceEur)} · ${esc(y.price.quarter)}</span>`;
   }
   if (assumed !== null) {
     return `<span class="b-tag num cb-ol-e cb-ol-mine">${formatEuros(assumedCost(y.certificates, assumed))}</span>
@@ -77,8 +77,10 @@ export function renderYearPlates(view: Outlook, assumed: string | null): string 
     }
     const delta = y.year !== firstYear && y.riseOnFirstPct !== null
       ? `<span class="b-t-sub cb-ol-d">${formatSignedPct(y.riseOnFirstPct)} on ${firstYear}</span>` : '';
+    // A COUNT THAT RESTS ON AN UNPUBLISHED CSCF IS A WHAT-IF, and the plate says so beside its year.
+    const whatIf = y.status === 'cscf_pending' ? whatIfTag() : '';
     return `<li class="b-t b-yr cb-ol-yr${i === 0 ? ' b-hero' : ''}">
-        <div class="b-t-h"><h3 class="b-t-ti num cb-ol-y">${y.year}.</h3>${delta}</div>
+        <div class="b-t-h"><div><h3 class="b-t-ti num cb-ol-y">${y.year}.</h3>${whatIf}</div>${delta}</div>
         <p class="b-mid num cb-ol-n">${formatCount(y.certificates)}</p>
         <p class="b-t-sub">certificates</p>
         <div class="b-yr-cost cb-ol-p">${plateCost(y, view, assumed)}</div>
@@ -108,8 +110,13 @@ export function renderYearsWhy(view: Outlook): string {
     </section>`;
     case 'split': {
       // A part that is zero draws no segment; its legend row still stands and says so.
-      const bar = why.rows.filter((r) => !new Decimal(r.value).isZero()).map((r) => `<span class="b-sp ${SEGMENT[r.key]}" style="flex-grow:${
-        new Decimal(r.value).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toFixed()}"><span class="num">+${formatCount(r.value)}</span></span>`).join('');
+      // A SEGMENT TOO NARROW FOR ITS LABEL SHOWS NONE (cbam-bento.css, container query on .b-sp): the
+      // legend below keeps every figure. `data-long` marks a label that needs the wider threshold.
+      const bar = why.rows.filter((r) => !new Decimal(r.value).isZero()).map((r) => {
+        const label = `+${formatCount(r.value)}`;
+        return `<span class="b-sp ${SEGMENT[r.key]}" style="flex-grow:${
+          new Decimal(r.value).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toFixed()}"${label.length > 5 ? ' data-long' : ''}><span class="num">${label}</span></span>`;
+      }).join('');
       const aria = why.rows.map((r) => `${r.label} ${formatCount(r.value)}`).join(', ');
       const legend = why.rows.map((r) => `<li>
         <span class="cb-ol-sw ${SWATCH[r.key]}" aria-hidden="true"></span>
@@ -143,9 +150,9 @@ export function renderYears(view: Outlook, priceText = '', workingOpen = false):
   const last = view.years[view.years.length - 1].year;
   return `<section class="cb-ol" aria-labelledby="cbOlTitle">
   <header class="cb-ol-head"><h2 class="cb-card-label" id="cbOlTitle">The same shipment, ${first} to ${last}</h2>
-    <span class="b-tag cb-tag pending">Law as published · ${esc(formatPackDate(view.packDate))}</span></header>
+    <span class="b-tag cb-tag">Law as published · ${esc(formatPackDate(view.packDate))}</span></header>
   <div class="b-bento">
-    <ol class="cb-ol-years" data-ol="years">${renderYearPlates(view, assumed)}</ol>
+    <ol class="cb-ol-years${priceBox ? '' : ' b-years-wide'}" data-ol="years">${renderYearPlates(view, assumed)}</ol>
     <section class="b-t b-own cb-ol-price" aria-labelledby="cbOlPriceT"${priceBox ? '' : ' hidden'}>
       <h3 class="b-t-ti" id="cbOlPriceT">Your own price.</h3>
       <label class="b-t-sub" for="cbOlPrice">Your own price assumption, € per certificate</label>

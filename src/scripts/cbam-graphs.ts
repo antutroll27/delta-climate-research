@@ -67,6 +67,8 @@ export interface GraphsModel {
   years: GraphYear[];
   /** True when any part of the line rests on a default value, so a mark-up is applied. */
   usesDefault: boolean;
+  /** True when any year's count is a what-if: its CSCF is unpublished, so the engine gave a labelled scenario. */
+  whatIf: boolean;
   split: { rise: string; markup: string; factor: string; benchmark: string; markupSharePct: string } | null;
   /**
    * The split of the change from the first year to EACH year, by the outlook's own rule
@@ -151,6 +153,7 @@ export function graphsModel(
     priceAsAt: view.priceAsAt,
     years,
     usesDefault: F.some((y) => y.directMarkupPct !== null || y.indirectMarkupPct !== null),
+    whatIf: F.some((y) => y.status === 'cscf_pending'),
     // A rise of zero has no shares to speak of, so it is treated like a withheld split.
     split: s && !new D(s.rise).isZero() ? {
       rise: s.rise, markup: s.moreEmissions, factor: s.factorPart, benchmark: s.benchmarkPart,
@@ -551,4 +554,4 @@ export function chargedLegend(m: GraphsModel, yearIndex: number): string {
 
 /* ── shared with cbam-ui/tiles-why.ts, so the tiles format and table every figure the same way ── */
 export type { Plot, Table };
-export { esc, listOf, n1, n3, offShared, pct1, plus, sharePct, table as renderTable, unpricedQuarters };
+export { esc, legendDot, listOf, n1, n3, offShared, pct1, plus, sharePct, table as renderTable, unpricedQuarters };

@@ -17,8 +17,9 @@
  */
 import Decimal from 'decimal.js';
 import { formatDecimal, formatPackDate } from '../cbam-outlook.ts';
+import { whatIfTag } from './format.ts';
 import {
-  chargedCells, chargedLegend, chargedTip, costParts, esc, listOf, n1, n3, offShared, pct1, plus,
+  chargedCells, chargedLegend, chargedTip, costParts, esc, legendDot, listOf, n1, n3, offShared, pct1, plus,
   renderTable, secondNote, secondUsable, sentenceCharged, sentenceMarkup, sentenceOrigins,
   sentencePhase, sentenceShare, sharePct, tableCharged, unpricedQuarters,
   type GraphsModel, type GraphsRefusal, type GraphsState, type OriginsModel, type PhaseModel,
@@ -44,7 +45,7 @@ export function shareBar(m: GraphsModel): string {
   if (share <= 0) return fig('b-split b-split-sm', alt, '');
   const grow = (v: Decimal): string => v.toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toFixed();
   const rest = new D(m.split.factor).plus(m.split.benchmark);
-  const inner = `<span class="b-sp b-sp-bz" style="flex-grow:${grow(new D(m.split.markup))}"><span class="num">${n1(m.split.markup)}</span></span>${
+  const inner = `<span class="b-sp b-sp-bz" style="flex-grow:${grow(new D(m.split.markup))}"${n1(m.split.markup).length > 4 ? ' data-long' : ''}><span class="num">${n1(m.split.markup)}</span></span>${
     rest.isZero() ? '' : `<span class="b-sp b-sp-on" style="flex-grow:${grow(rest)}"></span>`}`;
   return fig('', alt, htmlMark('div', 'b-split b-split-sm',
     `${pct1(m.split.markupSharePct)} of the rise\n${n1(m.split.markup)} of ${n1(m.split.rise)} certificates`,
@@ -152,6 +153,8 @@ export type WhyWidths = Record<'cost', number>;
 interface TileOpts {
   span: 2 | 4; hero?: boolean; title: string; sub?: string; head?: string; big?: string;
   sentence: string; plot: string; extra?: string; cap: string; tbl: string; open: boolean;
+  /** The tile draws a count that rests on an unpublished CSCF: the what-if tag stands in its header. */
+  whatIf?: boolean;
 }
 
 /**
@@ -161,7 +164,7 @@ interface TileOpts {
  */
 const tile = (id: string, o: TileOpts): string => `
   <section class="b-t b-s${o.span}${o.hero ? ' b-hero' : ''} cg-card cg-${id}" data-cg-card="${id}" aria-labelledby="cgQ-${id}">
-    <div class="b-t-h"><div><h2 class="b-t-ti cg-q" id="cgQ-${id}">${o.title}</h2>${o.sub ? `<p class="b-t-sub">${o.sub}</p>` : ''}</div>${o.head ?? ''}</div>
+    <div class="b-t-h"><div><h2 class="b-t-ti cg-q" id="cgQ-${id}">${o.title}</h2>${o.sub ? `<p class="b-t-sub">${o.sub}</p>` : ''}${o.whatIf ? `<p class="b-wi">${whatIfTag()}</p>` : ''}</div>${o.head ?? ''}</div>
     ${o.big === undefined ? '' : `<p class="b-mega num cg-big">${o.big}</p>`}
     <p class="b-lead cg-t" data-cg="title">${o.sentence}</p>
     <figure class="cg-plot" data-cg="plot">${o.plot}</figure>
@@ -170,9 +173,6 @@ const tile = (id: string, o: TileOpts): string => `
       <button type="button" class="cg-tbl-btn" aria-expanded="${o.open}" aria-controls="cgTbl-${id}">Show as table</button></div>
     <div class="cg-tbl${o.open ? '' : ' cg-closed'}" id="cgTbl-${id}" data-cg="table" tabindex="0" role="region" aria-label="Table: ${esc(o.title)}">${o.tbl}</div>
   </section>`;
-
-const dot = (fill: string): string => `<svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="${fill}"/></svg>`;
-const ring = (stroke: string): string => `<svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="3.8" fill="none" stroke="${stroke}" stroke-width="1.8"/></svg>`;
 
 /**
  * The whole Why view's content. `widths` are the pixel widths the page measured for the SVG
@@ -193,7 +193,7 @@ export function renderWhy(model: GraphsModel | GraphsRefusal, state: GraphsState
   const share = tile('share', {
     span: 2, hero: true, title: 'Mark-up share.',
     big: m.split ? `${formatDecimal(m.usesDefault ? m.split.markupSharePct : '0', 1, true)}<span class="b-u">%</span>` : '—',
-    sentence: sentenceShare(m), plot: shareBar(m),
+    whatIf: m.whatIf, sentence: sentenceShare(m), plot: shareBar(m),
     cap: m.split ? `${n1(m.split.markup)} of ${n1(m.split.rise)} certificates. The rest is free allocation.` : 'The counts in Three years stand.',
     open: !!state.open.share,
     tbl: renderTable(m.split ? { head: ['Cause', 'Certificates'],
@@ -204,14 +204,14 @@ export function renderWhy(model: GraphsModel | GraphsRefusal, state: GraphsState
   const charged = tile('charged', {
     span: 2, title: 'Charged.', sub: 'Certificates per 100 tCO₂e of emissions counted.',
     head: `<div class="b-seg cg-mini" role="group" aria-label="Year">${Y.map((y, j) => `<button type="button" data-cg-year="${j}" aria-pressed="${j === yi}">${y.year}</button>`).join('')}</div>`,
-    sentence: sentenceCharged(m, yi), plot: waffle(m, yi),
+    whatIf: m.whatIf, sentence: sentenceCharged(m, yi), plot: waffle(m, yi),
     extra: `<div class="cg-legend" data-cg="legend">${chargedLegend(m, yi)}</div>`,
     cap: 'One cell = 1% of the emissions counted for this shipment, rounded to whole cells.',
     open: !!state.open.charged, tbl: renderTable(tableCharged(m)),
   });
 
   const markup = tile('markup', {
-    span: 2, title: 'What the mark-up adds.', sentence: sentenceMarkup(m), plot: markupColumns(m),
+    span: 2, title: 'What the mark-up adds.', whatIf: m.whatIf, sentence: sentenceMarkup(m), plot: markupColumns(m),
     cap: m.usesDefault
       ? "Bronze: what the mark-up adds, as priced. Below it: the engine given the Commission's base value as a verified figure. A real verified figure can be higher or lower than that base."
       : 'The column is the count from your verified figures.',
@@ -222,7 +222,7 @@ export function renderWhy(model: GraphsModel | GraphsRefusal, state: GraphsState
 
   const phaseTile = phase ? tile('phase', {
     span: 2, title: 'Free allocation.', sentence: sentencePhase(phase), plot: phaseColumns(phase),
-    extra: `<div class="cg-legend"><span>${dot('var(--cg-ink)')}Years computed for this line</span><span>${ring('var(--cg-neutral)')}Legislated, not computed here</span></div>`,
+    extra: `<div class="cg-legend"><span>${legendDot('fill')}Years computed for this line</span><span>${legendDot('ring')}Legislated, not computed here</span></div>`,
     cap: 'Directive 2003/87/EC Art 10a(1a): the share of free allocation retained. Default values are published to 2028 only, so no certificate count is drawn after it.',
     open: !!state.open.phase,
     tbl: renderTable({ head: ['Year', 'Share retained', 'Computed for this line'], rows: phase.rows.map((r) => [r.year, sharePct(r.factor), r.computable ? 'yes' : 'no']) }),
@@ -231,12 +231,12 @@ export function renderWhy(model: GraphsModel | GraphsRefusal, state: GraphsState
   // THE ORIGINS ARE COMPUTED AFTER THE REST IS ON SCREEN (one engine call per origin), so the
   // tile is drawn with its question and a placeholder, and the page fills its slots.
   const origins = tile('origins', {
-    span: 4, title: 'Does the origin matter?', sentence: 'Comparing every origin\'s default value…', plot: '', cap: '', tbl: '',
+    span: 4, title: 'Does the origin matter?', whatIf: m.whatIf, sentence: 'Comparing every origin\'s default value…', plot: '', cap: '', tbl: '',
     open: !!state.open.origins,
   });
 
   const costTile = tile('cost', {
-    span: 4, title: 'What would it cost at my own price?', sentence: cost.title, plot: cost.plot,
+    span: 4, title: 'What would it cost at my own price?', whatIf: m.whatIf, sentence: cost.title, plot: cost.plot,
     extra: `<div class="cg-second"><label for="cgSecond">A second price, to see a range</label>
         <input id="cgSecond" type="number" min="0" step="any" inputmode="decimal" autocomplete="off" aria-describedby="cgSecondNote" value="${esc(state.secondText)}"${secondUsable(state) ? '' : ' disabled'} />
         <span id="cgSecondNote" data-cg="second-note">${secondNote(state)}</span></div>

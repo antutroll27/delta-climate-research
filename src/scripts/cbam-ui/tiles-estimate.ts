@@ -19,7 +19,7 @@ import {
 import { MIXED_RESIDUAL_INDIRECT_NOTE, RESIDUAL_BASIS_NOTE } from '../cbam-algos/cbam/certificate-estimate.ts';
 import { renderFingerprint } from './fingerprint.ts';
 import {
-  esc, eur, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
+  esc, eur, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel, whatIfTag,
 } from './format.ts';
 
 type Priced = Exclude<CertificateEstimate, { status: 'unavailable' }>;
@@ -47,7 +47,7 @@ function statusTag(e: CertificateEstimate, hook = 'cb-tag'): string {
   switch (e.status) {
     case 'ok': tone = 'ok'; text = 'Priced'; break;
     case 'zero_by_fiat': tone = 'ok'; text = 'Priced · free allocation nil by law'; break;
-    case 'cscf_pending': tone = 'pending'; text = `What-if · CSCF for ${e.cscfYear} unpublished`; break;
+    case 'cscf_pending': return whatIfTag(e.cscfYear, hook);
     case 'unavailable': tone = 'unavail'; text = 'No estimate'; break;
     default: {
       const _exhaustive: never = e;

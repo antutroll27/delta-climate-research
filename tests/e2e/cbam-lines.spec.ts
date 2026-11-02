@@ -1331,7 +1331,7 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(cards.nth(0)).toContainText('2026');
     await expect(cards.nth(0).locator('.cb-ol-n')).toHaveText('329.8');
     await expect(cards.nth(0)).toContainText('€24,855.80');
-    await expect(cards.nth(0)).toContainText('price published, €75.36');
+    await expect(cards.nth(0)).toContainText('published €75.36 · 2026-Q1');
     await expect(cards.nth(1).locator('.cb-ol-n')).toHaveText('376.8');
     await expect(cards.nth(1)).toContainText('+14.2% on 2026');
     await expect(cards.nth(2).locator('.cb-ol-n')).toHaveText('427.4');
@@ -1442,7 +1442,7 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(cards.nth(2)).toContainText('at your assumed €80 · not a published price');
     // A PUBLISHED PRICE IS NEVER REPLACED: 2026 still shows the Commission's.
     await expect(cards.nth(0)).toContainText('€24,855.80');
-    await expect(cards.nth(0)).toContainText('price published, €75.36');
+    await expect(cards.nth(0)).toContainText('published €75.36 · 2026-Q1');
     await expect(cards.nth(0)).not.toContainText('assumed');
     // The caret never left the box, so a second keystroke lands in it.
     await expect(box).toBeFocused();
@@ -1951,7 +1951,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(page.locator('#cbOut .cb-cost')).toHaveText('€27,151.40');
     await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol-yr').first()).toContainText('€27,151.40');
-    await expect(page.locator('#cbOutlook .cb-ol-yr').first()).toContainText('price published, €82.32');
+    await expect(page.locator('#cbOutlook .cb-ol-yr').first()).toContainText('published €82.32 · 2026-Q3');
     await view(page, 'why');
     await expect(costCard.locator('.cg-t')).toHaveText(
       'No certificate price is published for imports in 2027-Q3 or 2028-Q3. Type your own price in Three years to see a cost.');

@@ -5,9 +5,9 @@
 
 /* Tile tokens. Every text/background pair below is held to WCAG AA in both themes by
    tests/unit/cbam-bento-contrast.test.mjs, which parses these blocks: plain hex only. */
-.cbx{--hero-muted:#BFC1BD;--hero-well:#2A2C2A;--hero-bronze:#E0B766;--hero-cyan:#6FCAD6;--fill-bz:#A87A28;--fill-bz-ink:#141614;--fill-cy:#0B6E7C;--fill-cy-ink:#FFFFFF;--deck-1:#E3D3B1;--deck-ink-1:#141614;--deck-2:#B88A3A;--deck-ink-2:#141614}
-@media (prefers-color-scheme:dark){.cbx:not([data-theme="light"]){--hero-muted:#4A4D49;--hero-well:#DADFDA;--hero-bronze:#6E4E14;--hero-cyan:#095E6A;--fill-bz:#CFA24A;--fill-bz-ink:#141614;--fill-cy:#6FCAD6;--fill-cy-ink:#071A1D;--deck-1:#3A3524;--deck-ink-1:#F1F3F0;--deck-2:#B88A3A;--deck-ink-2:#141614}}
-.cbx[data-theme="dark"]{--hero-muted:#4A4D49;--hero-well:#DADFDA;--hero-bronze:#6E4E14;--hero-cyan:#095E6A;--fill-bz:#CFA24A;--fill-bz-ink:#141614;--fill-cy:#6FCAD6;--fill-cy-ink:#071A1D;--deck-1:#3A3524;--deck-ink-1:#F1F3F0;--deck-2:#B88A3A;--deck-ink-2:#141614}
+.cbx{--seg-3:#4A4D49;--hero-bz:#A87A28;--hero-muted:#BFC1BD;--hero-well:#2A2C2A;--hero-bronze:#E0B766;--hero-cyan:#6FCAD6;--fill-bz:#A87A28;--fill-bz-ink:#141614;--fill-cy:#0B6E7C;--fill-cy-ink:#FFFFFF;--deck-1:#E3D3B1;--deck-ink-1:#141614;--deck-2:#B88A3A;--deck-ink-2:#141614}
+@media (prefers-color-scheme:dark){.cbx:not([data-theme="light"]){--seg-3:#7C8C8B;--hero-muted:#4A4D49;--hero-well:#DADFDA;--hero-bronze:#6E4E14;--hero-cyan:#095E6A;--fill-bz:#CFA24A;--fill-bz-ink:#141614;--fill-cy:#6FCAD6;--fill-cy-ink:#071A1D;--deck-1:#3A3524;--deck-ink-1:#F1F3F0;--deck-2:#B88A3A;--deck-ink-2:#141614}}
+.cbx[data-theme="dark"]{--seg-3:#7C8C8B;--hero-muted:#4A4D49;--hero-well:#DADFDA;--hero-bronze:#6E4E14;--hero-cyan:#095E6A;--fill-bz:#CFA24A;--fill-bz-ink:#141614;--fill-cy:#6FCAD6;--fill-cy-ink:#071A1D;--deck-1:#3A3524;--deck-ink-1:#F1F3F0;--deck-2:#B88A3A;--deck-ink-2:#141614}
 
 /* ===== shared primitives (every view) ===== */
 .cbx .b-bento{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:minmax(232px,auto);gap:12px}
@@ -212,13 +212,32 @@
    Colour law (spec §3): bronze marks only the mark-up. Free allocation and the benchmark are
    ink; the visitor's own price is dashed ink, never a colour that means a source. */
 .cbx .cb-ol{display:flex;flex-direction:column;gap:12px;min-width:0}
+/* rows follow their content here: the plates hold their own height, and the closed working is not padded to 232 px */
+.cbx .cb-ol .b-bento{grid-auto-rows:auto}
 .cbx .cb-ol-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
 .cbx .cb-ol-head .cb-card-label{margin:0;font-size:13px;font-weight:600;color:var(--ink-2)}
+/* "Law as published" is a date stamp, not a status: a neutral pill (the legacy .cb-tag pending tone is bronze,
+   and bronze means the Commission's default or the mark-up only). The cb-tag class stays as the e2e hook. */
+.cbx .cb-ol-head .cb-tag{--c:var(--ink-3);font-family:var(--sans);font-size:12px;letter-spacing:0;text-transform:none;padding:3px 11px;color:var(--ink-2);background:var(--well)}
+.cbx .cb-ol-head .cb-tag::before{display:none}
 .cbx .cb-ol-years{grid-column:span 3;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:12px;list-style:none;margin:0;padding:0;min-width:0}
 .cbx .b-yr{min-height:232px}
+/* Every plate's header and cost block hold one height, so the three numerals share a baseline whether or
+   not a plate carries the what-if tag or a published price. */
+.cbx .b-yr .b-t-h{min-height:56px;flex-wrap:wrap;align-content:flex-start;row-gap:6px}
+/* year and rise on one row, the what-if tag on its own line beneath (it is too wide to share a plate's header) */
+.cbx .b-yr .b-t-h>div{display:contents}
+.cbx .b-yr .b-t-h>.b-t-sub{margin:0 0 0 auto;text-align:right}
+.cbx .b-yr .b-t-h::after{content:"";order:1;flex:0 0 100%;height:0}
+.cbx .b-yr .b-t-h .b-tag{order:2;white-space:nowrap}
+.cbx .b-yr-cost{min-height:72px}
+/* narrower plates wrap "Certificate price · imports in 2027-Q1" onto two lines; the published plate holds the same height */
+@media (max-width:1240px) and (min-width:900px){.cbx .b-yr-cost{min-height:90px}}
+.cbx .b-wi{margin-top:6px}
+.cbx .cb-ol-years.b-years-wide{grid-column:1/-1}
 .cbx .b-yr .b-mid{margin:auto 0 0;font-size:clamp(40px,4.4vw,64px)}
 .cbx .b-yr-cost{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:14px 0}
-.cbx .b-hero .b-tag{background:color-mix(in oklab,var(--on-ink) 12%,transparent);color:inherit}
+.cbx .b-yr.b-hero .b-tag{background:color-mix(in oklab,var(--on-ink) 12%,transparent);color:inherit}
 .cbx .b-hero.b-yr .b-t-sub{color:color-mix(in oklab,var(--on-ink) 72%,transparent)}
 .cbx .cb-ol-e.cb-ol-mine{background:transparent;outline:1.5px dashed currentColor;outline-offset:-1.5px}
 .cbx .b-mk{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0;font-size:11.5px;font-weight:600;color:var(--ink-3)}
@@ -227,6 +246,7 @@
 .cbx .b-d10 i{aspect-ratio:1;border-radius:50%;background:color-mix(in oklab,var(--ink) 16%,transparent)}
 .cbx .b-hero .b-d10 i{background:color-mix(in oklab,var(--on-ink) 22%,transparent)}
 .cbx .b-d10.b-bz i.on{background:var(--bronze-f)}
+.cbx .b-hero .b-d10.b-bz i.on{background:var(--hero-bz)}
 .cbx .cb-ol-refused .cb-ol-none{margin:auto 0 8px;font-size:28px;letter-spacing:-.02em}
 .cbx .cb-ol-reason{font-size:12.5px;line-height:1.5}
 .cbx .b-own{grid-column:span 1}
@@ -241,12 +261,23 @@
 .cbx .b-own .b-t-foot{display:block;line-height:1.5}
 .cbx .b-split{display:flex;gap:6px;height:120px;margin:16px 0 12px}
 .cbx .b-split-sm{height:64px;margin:0 0 12px}
-.cbx .b-sp{flex:0 0 0;min-width:0;overflow:hidden;border-radius:18px;display:flex;align-items:flex-start}
+.cbx .b-sp{flex:0 0 0;min-width:0;overflow:hidden;border-radius:18px;display:flex;align-items:flex-start;container:bsp/inline-size}
 .cbx .b-sp>span{padding:14px 16px;font-size:30px;letter-spacing:-.04em;line-height:1;white-space:nowrap}
 .cbx .b-split-sm .b-sp>span{padding:10px 12px;font-size:20px}
-.cbx .b-sp-bz{background:var(--bronze-f);color:#141614}
+.cbx .b-sp-bz{background:var(--bronze-f);color:var(--fill-bz-ink)}
+/* A segment too narrow for its label shows none: measured at 390 px the small segment clipped to "+". The
+   legend (Three years) and the caption (Why) keep the figure. Thresholds are the label's width: font size,
+   padding and about five glyphs ("+11.2"), eight for a data-long label ("+1,234.5"). */
+@container bsp (max-width:103px){.cbx .b-split:not(.b-split-sm) .b-sp:not([data-long])>span{display:none}}
+@container bsp (max-width:159px){.cbx .b-split:not(.b-split-sm) .b-sp[data-long]>span{display:none}}
+@container bsp (max-width:71px){.cbx .b-split-sm .b-sp:not([data-long])>span{display:none}}
+@container bsp (max-width:99px){.cbx .b-split-sm .b-sp[data-long]>span{display:none}}
+/* On the inverted hero (pearl in dark, near-black in light) the dark theme's card bronze falls to 2.11:1, under
+   the 3:1 a mark needs; the hero draws the light theme's bronze there (3.4:1 on pearl, 4.8:1 on near-black), its label
+   still the dark ink (4.8:1). */
+.cbx .b-hero .b-sp-bz{background:var(--hero-bz)}
 .cbx .b-sp-ink{background:var(--ink);color:var(--on-ink)}
-.cbx .b-sp-ink2{background:var(--ink-3);color:var(--on-ink)}
+.cbx .b-sp-ink2{background:var(--seg-3);color:var(--on-ink)}
 .cbx .b-sp-on{background:color-mix(in oklab,var(--on-ink) 22%,transparent);color:var(--on-ink)}
 .cbx .cb-ol-legend{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .cbx .cb-ol-legend li{display:grid;grid-template-columns:12px 1fr auto;gap:10px;align-items:baseline;font-size:14px;line-height:1.45}
@@ -255,7 +286,7 @@
 .cbx .cb-ol-sw{display:inline-block;width:10px;height:10px;border-radius:3px}
 .cbx .cb-ol-sw.cb-ol-s1{background:var(--bronze-f)}
 .cbx .cb-ol-sw.cb-ol-s2{background:var(--ink)}
-.cbx .cb-ol-sw.cb-ol-s3{background:var(--ink-3)}
+.cbx .cb-ol-sw.cb-ol-s3{background:var(--seg-3)}
 .cbx .cb-ol-nosplit{max-width:72ch}
 .cbx .b-work summary{width:fit-content;margin-top:12px;padding:6px 14px;border-radius:99px;background:var(--well);cursor:pointer;list-style:none;font-size:12px;font-weight:600;color:var(--ink-2)}
 .cbx .b-work summary::-webkit-details-marker{display:none}
@@ -279,7 +310,7 @@
    The --cg-* tokens the SVG plots read are mapped onto the bento tokens here and nowhere else.
    Colour law (spec §3): the mark-up is bronze; free allocation and the benchmark are ink; the
    visitor's own price (cost tile) is ink, dashed where none is published. */
-.cbx .cg-card{--cg-ink:var(--ink);--cg-muted:var(--ink-2);--cg-faint:var(--ink-3);--cg-hair:var(--line);--cg-well:var(--well);--cg-surface:var(--card);--cg-accent:var(--ink);--cg-warm:var(--bronze-f);--cg-neutral:var(--ink-3);--cg-neutral-2:var(--well-2);--cg-markup:var(--bronze-f);--cg-allocation:var(--ink-2);--cg-benchmark:var(--ink-3);}
+.cbx .cg-card{--cg-ink:var(--ink);--cg-muted:var(--ink-2);--cg-faint:var(--ink-3);--cg-hair:var(--line);--cg-accent:var(--ink);--cg-neutral:var(--ink-3);--cg-markup:var(--bronze-f);}
 .cbx .cg-cost{--cg-markup:var(--ink)}
 .cbx .cg-sub{margin:0 0 10px;font-size:12px;color:var(--ink-3)}
 .cbx .cg-card .cg-t{margin:0 0 4px;font-size:15px;line-height:1.45;max-width:46ch}
@@ -327,7 +358,7 @@
 .cbx .b-waffle{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;width:190px}
 .cbx .b-waffle i{aspect-ratio:1;border-radius:50%;background:color-mix(in oklab,var(--ink) 14%,transparent)}
 .cbx .b-waffle i.on{background:var(--ink)}
-.cbx .b-mcols{display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));gap:14px;align-items:end;height:250px;margin:6px 0 4px}
+.cbx .b-mcols{display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));gap:14px;align-items:end;height:290px;margin:6px 0 4px}
 .cbx .b-mc{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
 .cbx .b-mc-top{margin-bottom:6px;font-size:20px;letter-spacing:-.03em}
 .cbx .b-mc-bar{display:flex;flex-direction:column;width:44%}
@@ -365,5 +396,7 @@
   .cbx .cg-tbl,.cbx .cg-tbl.cg-closed{display:block!important}
   .cbx .cg-board{display:block}
   .cbx .cg-card+.cg-card{margin-top:8pt}
+  /* The share tile's numeral is 150 px on screen; on paper it is a figure in a sentence's company. */
+  .cbx .cg-card .cg-big{font-size:20pt;line-height:1.1;margin:0 0 6pt}
 }
 /* ── end Why it changes */
