@@ -179,7 +179,7 @@ export default defineConfig({
     }]),
     {
       name: 'firefox-cbam',
-      testMatch: /cbam-(lines|shell)\.spec\.ts/,
+      testMatch: /cbam-(lines|shell|estimate)\.spec\.ts/,
       use: { ...devices['Desktop Firefox'] },
     },
     // WEBKIT RUNS LOCALLY, NOT IN CI, and the reason is apt rather than the browser.
@@ -201,7 +201,7 @@ export default defineConfig({
     // running against a Playwright container that already has them.
     ...(process.env.CI && !process.env.PLAYWRIGHT_WEBKIT ? [] : [{
       name: 'webkit-cbam',
-      testMatch: /cbam-(lines|shell)\.spec\.ts/,
+      testMatch: /cbam-(lines|shell|estimate)\.spec\.ts/,
       use: { ...devices['Desktop Safari'] },
     }]),
   ]),
