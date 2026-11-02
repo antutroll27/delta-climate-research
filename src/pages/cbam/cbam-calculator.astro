@@ -150,10 +150,10 @@ import Footer from '../../components/layout/Footer.astro';
           <div class="cb-row2">
             <div>
               <label class="cb-label" for="cbMass">Net mass (tonnes)</label>
-              <input id="cbMass" class="cb-field" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="100" />
+              <input id="cbMass" class="cb-field" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="100" aria-describedby="cbMassHint" />
               <!-- H1 (audit 2026-11-02): a text field, read by the engine's own parser. type="number"
                    re-read 0,85 as 085 in Chromium and priced the figure tenfold. -->
-              <p class="cb-hint">Use a decimal point: 0.85, not 0,85.</p>
+              <p class="cb-hint" id="cbMassHint">Use a decimal point: 0.85, not 0,85.</p>
             </div>
             <div>
               <label class="cb-label" for="cbDate">Import date</label>

@@ -3595,3 +3595,21 @@ test('C2: without exempt lines, renderTotals is unchanged', () => {
   assert.doesNotMatch(renderTotals(C2_OWED), /Exempt/);
   assert.match(renderTotals(C2_NONE), /No lines yet/);
 });
+
+/* ── Follow-ups from the independent audit of the H1/C2 fixes (2026-11-02) ── */
+
+test('H1 follow-up: exponents, oversize numbers and -0 are refused at the form', () => {
+  for (const big of ['1e400', '1e100000', '2.5E3', '1e3']) assert.equal(decimalProblem(big), 'unreadable', big);
+  assert.equal(decimalProblem('1' + '0'.repeat(12)), 'too-large', '13 integer digits');
+  assert.equal(decimalProblem('999999999999.5'), null, '12 integer digits is allowed');
+  assert.equal(decimalProblem('000000000000001'), null, 'leading zeros are not size');
+  assert.equal(decimalProblem('-0'), 'negative');
+  assert.match(massRefusal('1' + '0'.repeat(20)), /too large/);
+  assert.match(parseVerifiedFields(vf({ direct: '1e100000' })).error, /is not one/);
+  assert.match(parseVerifiedFields(vf({ direct: '9'.repeat(13) })).error, /too large/);
+});
+
+test('C2 follow-up: the exempt amount says it is a what-if when it is one', () => {
+  assert.match(renderTotals(C2_OWED, C2_EXEMPT), /a what-if: the CSCF is unpublished/);
+  assert.doesNotMatch(renderTotals(C2_OWED, { ...C2_EXEMPT, anyPending: false }), /what-if: the CSCF/);
+});

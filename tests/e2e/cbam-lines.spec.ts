@@ -539,6 +539,19 @@ test.describe('multi-line CBAM estimate — the net-mass gate', () => {
     await expect(page.locator('#cbStatus')).toContainText('exempt if your list is complete');
   });
 
+  test('C2 follow-up: a refused line in an exempt year is still counted as refused', async ({ page }) => {
+    // 25232100 from BH on its single route, direct scope, is offered and refused NO_DIRECT_DEFAULT
+    // (measured by the audit of these fixes). With the year attested it used to read "No lines yet".
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { cn: '25232100', country: 'BH', route: 'default', mass: '30', date: '2026-03-15' });
+    if (await page.locator('#cbScopeRow').isVisible()) await page.selectOption('#cbScope', 'direct');
+    await page.click('#cbAdd');
+    await expect(page.locator('.cb-line')).toHaveCount(1);
+    await page.locator('[data-attest="2026"]').check();
+    await expect(page.locator('.cb-total')).not.toContainText('No lines yet');
+    await expect(page.locator('.cb-total')).toContainText('1 line has no estimate');
+  });
+
   test('M3: a year with no rules is explained in the result, not only inside a disabled select', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await page.fill('#cbCn', GOOD_LINE.cn);

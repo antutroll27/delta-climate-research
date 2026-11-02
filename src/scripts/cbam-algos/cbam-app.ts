@@ -551,7 +551,8 @@ export function renderTotals(t: Totals, exempt: Totals | null = null): string {
   const exemptNote = exempt && exempt.pricedLines > 0
     ? `<p class="cb-sub cb-exempt"><b>Exempt if your list is complete:</b> ${exempt.pricedLines} line${
         exempt.pricedLines === 1 ? '' : 's'} below the de minimis threshold for the year you attested, ${
-        num(exempt.certificates)} certificates${exempt.costEur ? ` · ${eur(exempt.costEur)}` : ''} — not included in the total.</p>`
+        num(exempt.certificates)} certificates${exempt.costEur ? ` · ${eur(exempt.costEur)}` : ''}${
+        exempt.anyPending ? ' (a what-if: the CSCF is unpublished)' : ''} — not included in the total.</p>`
     : '';
   if (t.pricedLines === 0 && t.refusedLines === 0 && exemptNote) return `
     <section class="cb-card cb-res cb-total">
@@ -1332,7 +1333,8 @@ export function buildPrintDocument(input: {
           totals.refusedLines ? `${totals.refusedLines} line(s) refused and excluded.` : ''}</p>`}
     ${exempt?.pricedLines ? `<p>Exempt if your list is complete: ${exempt.pricedLines} line(s) below the de minimis
       threshold for the year you attested, ${num(exempt.certificates)} certificates${
-      exempt.costEur ? ` · ${eur(exempt.costEur)}` : ''} — not included in the total.</p>` : ''}
+      exempt.costEur ? ` · ${eur(exempt.costEur)}` : ''}${
+      exempt.anyPending ? ' (a what-if: the CSCF is unpublished)' : ''} — not included in the total.</p>` : ''}
     <ul>${verdicts || '<li>No de minimis verdict — no eligible lines.</li>'}</ul>
 
     <h2>3 · On what authority</h2>
@@ -1592,12 +1594,20 @@ export function decorateSnapshot(e: CertificateEstimate, snapshotHash: string): 
  * which is parseNonNegativeDecimal. A negative keeps its own class so its message can say
  * "enter zero", and zero stays legal (the best-documented producer attests near-zero).
  */
-export type DecimalProblem = 'comma' | 'negative' | 'unreadable';
+export type DecimalProblem = 'comma' | 'negative' | 'unreadable' | 'too-large';
 export function decimalProblem(text: string): DecimalProblem | null {
-  const parsed = parseNonNegativeDecimal(text);
-  if (parsed.ok) return null;
-  if (text.includes(',')) return 'comma';
-  return parsed.code === 'NEGATIVE_NUMBER' ? 'negative' : 'unreadable';
+  const t = text.trim();
+  if (t.includes(',')) return 'comma';
+  // A form field is stricter than the engine in two ways the engine cannot be (the audit of
+  // these fixes measured both). Exponent notation: type="number" used to blank '1e400', and a
+  // text field let '1e100000' through to a render that froze the tab for minutes. And size: no
+  // real shipment or per-tonne figure needs more than 12 integer digits, while a pasted
+  // 20,000-digit number costs the same freeze. '-0' is refused like any other minus sign.
+  if (/[eE]/.test(t)) return 'unreadable';
+  if (t.startsWith('-')) return parseNonNegativeDecimal(t.slice(1)).ok ? 'negative' : 'unreadable';
+  const parsed = parseNonNegativeDecimal(t);
+  if (!parsed.ok) return parsed.code === 'NEGATIVE_NUMBER' ? 'negative' : 'unreadable';
+  return t.split('.')[0]!.replace(/^0+/, '').length > 12 ? 'too-large' : null;
 }
 
 export const COMMA_HINT = 'Use a decimal point and no thousands separators: 0.85, not 0,85, and 1000, not 1,000.';
@@ -1606,7 +1616,9 @@ export const COMMA_HINT = 'Use a decimal point and no thousands separators: 0.85
 export function massRefusal(text: string): string | null {
   const p = decimalProblem(text);
   if (p === null) return null;
-  return p === 'comma' ? `Net mass: ${COMMA_HINT}` : 'Net mass must be a number of tonnes, zero or greater.';
+  if (p === 'comma') return `Net mass: ${COMMA_HINT}`;
+  if (p === 'too-large') return 'Net mass is too large: enter it in tonnes, at most 12 digits before the decimal point.';
+  return 'Net mass must be a number of tonnes, zero or greater.';
 }
 
 /** What the verified panel contributes to a draft Line, or the reason it cannot.
@@ -1667,6 +1679,7 @@ export function parseVerifiedFields(v: {
   }
   const dp = decimalProblem(direct);
   if (dp === 'comma') return { error: `Verified direct emissions: ${COMMA_HINT}` };
+  if (dp === 'too-large') return { error: 'Verified direct emissions are too large to be a per-tonne figure.' };
   if (dp === 'unreadable') {
     return { error: `Verified direct emissions must be a number of tCO₂e per tonne — `
       + `“${direct}” is not one.` };
@@ -1679,6 +1692,7 @@ export function parseVerifiedFields(v: {
   if (indirect) {
     const ip = decimalProblem(indirect);
     if (ip === 'comma') return { error: `Verified indirect emissions: ${COMMA_HINT}` };
+    if (ip === 'too-large') return { error: 'Verified indirect emissions are too large to be a per-tonne figure.' };
     if (ip === 'unreadable') {
       return { error: `Verified indirect emissions must be a number of tCO₂e per tonne — `
         + `“${indirect}” is not one. Leave the field empty if you are not claiming one.` };
@@ -2594,6 +2608,8 @@ export function initCbam(): void {
    */
   function draftLine(): Line | null {
     draftReason = null;
+    // M3: the Add path names why no route can be offered, as the preview does.
+    if (pack && cn!.value && country!.value && noRoute) { draftReason = `No estimate: ${noRoute}.`; return null; }
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value || !date!.value) return null;
     // THE DATE HERE IS FOR AGREEMENT, NOT FOR DEFENCE — measured, because the obvious reading is
     // wrong. Adding `!date!.value` to run()'s gate is load-bearing (revert it alone and the
@@ -2816,9 +2832,13 @@ export function initCbam(): void {
     }
     // C2: computed AFTER the verdicts, from the same `years` the cards show. If they failed, no
     // line is exempt and the total over-states rather than hides.
+    // Only a PRICED line can be exempt. A refused one stays in the owed set, where sumTotals counts
+    // it as refused: otherwise the refusal vanished from the total, the status and the document.
     const exemptIds = exemptLineIds(years);
-    const totals = sumTotals(ok.filter((p) => !exemptIds.has(p.l.id)).map((p) => p.e!));
-    const exempt = sumTotals(ok.filter((p) => exemptIds.has(p.l.id)).map((p) => p.e!));
+    const isExempt = (p: { l: Line; e: CertificateEstimate | null }) =>
+      exemptIds.has(p.l.id) && p.e!.status !== 'unavailable';
+    const totals = sumTotals(ok.filter((p) => !isExempt(p)).map((p) => p.e!));
+    const exempt = sumTotals(ok.filter(isExempt).map((p) => p.e!));
 
     // MULTI-LINE MODE NARROWS THE LIVE REGION (quality review item 5). #cbOut's aria-live was
     // written for the single-line preview, where one edit replaces one card. In multi-line mode
@@ -3061,6 +3081,8 @@ export function initCbam(): void {
     }
     // C2: the document's total leaves out what the year cards exempt, exactly as the panel does.
     const exemptIds = exemptLineIds(years);
+    const isExempt = (p: { l: Line; e: CertificateEstimate | null }) =>
+      exemptIds.has(p.l.id) && p.e!.status !== 'unavailable';
     const pricedPairs = lastPairs.filter((p) => p.e !== null);
     // Same exposure as onCsv's, found the same way: buildPrintDocument throws on a
     // lines/results length mismatch (its own guard), and an uncaught throw here would leave
@@ -3073,8 +3095,8 @@ export function initCbam(): void {
       html = buildPrintDocument({
         lines, results,
         yearCards: years,
-        totals: sumTotals(pricedPairs.filter((p) => !exemptIds.has(p.l.id)).map((p) => p.e!)),
-        exempt: sumTotals(pricedPairs.filter((p) => exemptIds.has(p.l.id)).map((p) => p.e!)),
+        totals: sumTotals(pricedPairs.filter((p) => !isExempt(p)).map((p) => p.e!)),
+        exempt: sumTotals(pricedPairs.filter(isExempt).map((p) => p.e!)),
         packSnapshot: snapshot,
         rulePackages: priced[0]?.stamp.rulePackages ?? [],
         pack, generatedOn: new Date().toISOString().slice(0, 10),
