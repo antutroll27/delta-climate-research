@@ -23,14 +23,16 @@ export function mountViews(root: HTMLElement): void {
   const ac = new AbortController();
   document.addEventListener('astro:before-swap', () => ac.abort(), { once: true });
 
-  const show = (view: View, focus: boolean): void => {
+  const show = (view: View, focus: boolean, writeHash = true): void => {
     root.querySelectorAll<HTMLElement>('[data-view]').forEach((s) => { s.hidden = s.dataset.view !== view; });
     root.querySelectorAll<HTMLElement>('[data-goto]').forEach((b) => {
       if (b.dataset.goto === view && b.closest('.cbx-rail, .cbx-tabs, .cbx-more')) b.setAttribute('aria-current', 'page');
       else b.removeAttribute('aria-current');
     });
     // replaceState, not location.hash: switching views must not fill the back button's history.
-    if (location.hash !== `#${view}`) history.replaceState(history.state, '', `#${view}`);
+    // The first paint leaves the URL as it came: a bare link stays bare, so nothing is written
+    // until the user actually switches view.
+    if (writeHash && location.hash !== `#${view}`) history.replaceState(history.state, '', `#${view}`);
     root.querySelector<HTMLDetailsElement>('.cbx-more')?.removeAttribute('open');
     if (focus) root.querySelector<HTMLElement>(`[data-view="${view}"] h1`)?.focus();
   };
@@ -53,5 +55,5 @@ export function mountViews(root: HTMLElement): void {
     try { localStorage.setItem(RAIL_KEY, collapsed ? 'collapsed' : 'open'); } catch { /* private mode */ }
   }, { signal: ac.signal });
 
-  show(viewFromHash(location.hash), false);
+  show(viewFromHash(location.hash), false, false);
 }

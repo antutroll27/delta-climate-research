@@ -277,7 +277,10 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
   // The plots are drawn at the pixel width of their cards, so a change of width redraws them.
   let timer = 0;
   new ResizeObserver(() => {
-    if (model === null || Math.abs(el.clientWidth - paintedAt) < 2) return;
+    // A hidden view (the rail shell's Why, while another view is shown) measures 0 wide. That is
+    // not a new width to draw at: redrawing on hide, then again on show, replaced every mark while
+    // a keyboard user was focusing them (Firefox e2e, 2 runs in 10).
+    if (model === null || el.clientWidth === 0 || Math.abs(el.clientWidth - paintedAt) < 2) return;
     window.clearTimeout(timer);
     timer = window.setTimeout(draw, 150);
   }).observe(el);

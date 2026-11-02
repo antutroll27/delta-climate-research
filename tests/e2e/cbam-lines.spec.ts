@@ -128,6 +128,21 @@ async function addLine(page: Page, overrides: Partial<LineInput> = {}): Promise<
 }
 
 /**
+ * The rail shell (spec §4.2): content outside the visible view cannot be clicked or seen. Below
+ * 900 px the rail is hidden and the bottom tab bar takes over (spec §4.1; Export and Rules sit under
+ * More), so the 320 px tests below navigate the same views by that bar.
+ */
+async function view(page: Page, name: 'estimate' | 'three-years' | 'why' | 'list' | 'export' | 'rules'): Promise<void> {
+  const rail = page.locator(`.cbx-rail [data-goto="${name}"]`);
+  if (await rail.isVisible()) await rail.click();
+  else if (name === 'export' || name === 'rules') {
+    await page.locator('.cbx-more summary').click();
+    await page.locator(`.cbx-more [data-goto="${name}"]`).click();
+  } else await page.locator(`.cbx-tabs [data-goto="${name}"]`).click();
+  await expect(page.locator(`[data-view="${name}"]`)).toBeVisible();
+}
+
+/**
  * Minimal RFC 4180 reader — handles quoted fields and doubled internal quotes, both of which real
  * rows from csvRows carry (72052100's own pack description contains commas and literal quotes),
  * so a naive `.split(',')` would silently misalign columns for that line.
@@ -155,6 +170,7 @@ test.describe('multi-line CBAM estimate — add, remove, attest, totals', () => 
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '30' });
     await addLine(page, { mass: '100' });
+    await view(page, 'list');
     await expect(page.locator('.cb-line')).toHaveCount(2);
     await expect(page.locator('.cb-total')).toContainText('2 lines');
 
@@ -169,15 +185,16 @@ test.describe('multi-line CBAM estimate — add, remove, attest, totals', () => 
     // refocus) is currently correct and this pins it as a regression test.
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '30' });
-    await expect(page.locator('.cb-thresh')).toContainText('Indeterminate');
+    await view(page, 'list');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('Indeterminate');
 
     const attest = page.locator('[data-attest="2026"]');
     await attest.check();
-    await expect(page.locator('.cb-thresh')).toContainText('Below threshold');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('Below threshold');
     await expect(attest).toBeFocused();
 
     await attest.uncheck();
-    await expect(page.locator('.cb-thresh')).toContainText('Indeterminate');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('Indeterminate');
     await expect(attest).toBeFocused();
   });
 
@@ -189,19 +206,22 @@ test.describe('multi-line CBAM estimate — add, remove, attest, totals', () => 
     // regressing: a reviewer deleted that one call and all 77 unit and 17 e2e tests stayed green.
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '20', date: '2026-03-15' });
-    await expect(page.locator('.cb-thresh')).toContainText('Indeterminate');
+    await view(page, 'list');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('Indeterminate');
 
     const attest = page.locator('[data-attest="2026"]');
     await attest.check();
-    await expect(page.locator('.cb-thresh')).toContainText('Below threshold');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('Below threshold');
     await expect(attest).toBeChecked();
 
     // A second 2026 line — still under the 50 t threshold on its own, but the LIST the user
     // attested to a moment ago no longer exists; a second line joined it without any fresh
     // statement of completeness.
+    await view(page, 'estimate');
     await addLine(page, { mass: '10', date: '2026-03-15' });
+    await view(page, 'list');
     await expect(page.locator('.cb-line')).toHaveCount(2);
-    await expect(page.locator('.cb-thresh')).toContainText('Indeterminate');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('Indeterminate');
     await expect(page.locator('[data-attest="2026"]')).not.toBeChecked();
   });
 
@@ -214,23 +234,25 @@ test.describe('multi-line CBAM estimate — add, remove, attest, totals', () => 
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '20', date: '2026-03-15' });
     await addLine(page, { mass: '10', date: '2026-03-15' });
+    await view(page, 'list');
     await expect(page.locator('.cb-line')).toHaveCount(2);
 
     const attest = page.locator('[data-attest="2026"]');
     await attest.check();
-    await expect(page.locator('.cb-thresh')).toContainText('Below threshold');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('Below threshold');
     await expect(attest).toBeChecked();
 
     await page.locator('[data-remove]').first().click();
     await expect(page.locator('.cb-line')).toHaveCount(1);
-    await expect(page.locator('.cb-thresh')).toContainText('Indeterminate');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('Indeterminate');
     await expect(page.locator('[data-attest="2026"]')).not.toBeChecked();
   });
 
   test('a 60 t line reports above threshold, with no checkbox to gate a fact', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '60' });
-    await expect(page.locator('.cb-thresh')).toContainText('Above threshold');
+    await view(page, 'list');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('Above threshold');
     await expect(page.locator('[data-attest]')).toHaveCount(0);
   });
 
@@ -244,6 +266,7 @@ test.describe('multi-line CBAM estimate — add, remove, attest, totals', () => 
     await expect(status).toContainText('1 line');
     await expect(status).not.toHaveText('');
 
+    await view(page, 'list');
     await page.locator('[data-remove]').first().click();
     await expect(page.locator('.cb-line')).toHaveCount(0);
     await expect(status).toHaveText('');
@@ -252,7 +275,8 @@ test.describe('multi-line CBAM estimate — add, remove, attest, totals', () => 
   test('a year with no published threshold rule is named in the announcement, not just the card', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { date: '2027-03-15' });
-    await expect(page.locator('.cb-thresh')).toContainText('No published rule');
+    await view(page, 'list');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('No published rule');
     // #cbStatus is the only channel a screen-reader user has once the panel's own aria-live is
     // off — a year silently missing from this sentence is a gap, not just a milder one.
     await expect(page.locator('#cbStatus')).toContainText('2027');
@@ -263,11 +287,13 @@ test.describe('multi-line CBAM estimate — add, remove, attest, totals', () => 
     // Pins item 1 of the brief, all three cases in one deterministic chain:
     //   1. remove the FIRST of three  -> focus lands on the button now at index 0
     //   2. remove the LAST of the remaining two -> focus lands on the sole remaining button
-    //   3. remove the ONLY remaining line -> focus falls to #cbAdd
+    //   3. remove the ONLY remaining line -> focus falls to the List heading. Changed on purpose
+    //      (spec §6.3): #cbAdd is on the Estimate view, hidden while the user is on the list.
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '10' });
     await addLine(page, { mass: '20' });
     await addLine(page, { mass: '30' });
+    await view(page, 'list');
     await expect(page.locator('.cb-line')).toHaveCount(3);
 
     await page.locator('[data-remove]').first().click();
@@ -280,7 +306,7 @@ test.describe('multi-line CBAM estimate — add, remove, attest, totals', () => 
 
     await page.locator('[data-remove]').first().click();
     await expect(page.locator('.cb-line')).toHaveCount(0);
-    await expect(page.locator('#cbAdd')).toBeFocused();
+    await expect(page.locator('#cbxH-list')).toBeFocused();
   });
 
   test('delegation via closest(): a click on a child element inside Remove still removes the line', async ({ page }) => {
@@ -291,6 +317,7 @@ test.describe('multi-line CBAM estimate — add, remove, attest, totals', () => 
     // ev.target to BE it.
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '30' });
+    await view(page, 'list');
     await expect(page.locator('.cb-line')).toHaveCount(1);
 
     await page.evaluate(() => {
@@ -306,6 +333,7 @@ test.describe('multi-line CBAM estimate — exports', () => {
   test('CSV exports carry the full header and a real snapshot digest, not the placeholder', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '100' });
+    await view(page, 'export');
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
@@ -336,6 +364,7 @@ test.describe('multi-line CBAM estimate — exports', () => {
     await expect(page.locator('.cb-line')).toHaveCount(1);
 
     await page.fill('#cbMass', '999');
+    await view(page, 'export');
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
@@ -352,6 +381,7 @@ test.describe('multi-line CBAM estimate — exports', () => {
   test('the print document fills #cbPrint with the §4 caveats', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '100' });
+    await view(page, 'export');
     // window.print() is a genuine no-op in headless Chromium — stubbed so onDoc's synchronous
     // call cannot hang or throw. The afterprint/matchMedia/timeout cleanup paths are covered
     // separately below, each driven explicitly rather than left to a print dialog that never opens.
@@ -532,6 +562,7 @@ test.describe('multi-line CBAM estimate — the net-mass gate', () => {
   test('C2: an attested below-threshold year leaves the total', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '30' });
+    await view(page, 'list');
     await page.locator('[data-attest="2026"]').check();
     const total = page.locator('.cb-total');
     await expect(total).toContainText('Nothing owed on the lines listed');
@@ -546,6 +577,7 @@ test.describe('multi-line CBAM estimate — the net-mass gate', () => {
     await setLine(page, { cn: '25232100', country: 'BH', route: 'default', mass: '30', date: '2026-03-15' });
     if (await page.locator('#cbScopeRow').isVisible()) await page.selectOption('#cbScope', 'direct');
     await page.click('#cbAdd');
+    await view(page, 'list');
     await expect(page.locator('.cb-line')).toHaveCount(1);
     await page.locator('[data-attest="2026"]').check();
     await expect(page.locator('.cb-total')).not.toContainText('No lines yet');
@@ -862,6 +894,7 @@ test.describe('multi-line CBAM estimate — the verified tier', () => {
     await page.check('#cbAttest');
     await page.fill('#cbRef', VERIFIED_REF);
     await page.click('#cbAdd');
+    await view(page, 'list');
     await expect(page.locator('.cb-line')).toHaveCount(1);
 
     const card = page.locator('.cb-line');
@@ -883,6 +916,7 @@ test.describe('multi-line CBAM estimate — the verified tier', () => {
     // 4. The claim reaches the exported file — the artefact that leaves the browser. A tier that
     //    were lost here would export a verified line indistinguishable from a Commission-priced
     //    one, which is precisely the mark-up-skipping row an auditor needs to be able to find.
+    await view(page, 'export');
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       page.click('#cbCsv'),
@@ -941,6 +975,7 @@ test.describe('multi-line CBAM estimate — the verified tier', () => {
     await expect(page.locator('#cbSeeIndirect')).toHaveValue('');
     await page.click('#cbAdd');
     await expect(page.locator('.cb-line')).toHaveCount(1);
+    await view(page, 'list');
     await expect(page.locator('.cb-line')).toContainText('€7,944.45');
   });
 });
@@ -953,6 +988,7 @@ test.describe('multi-line CBAM estimate — cb-printing always comes off <html>'
   test.beforeEach(async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '30' });
+    await view(page, 'export');
     await page.evaluate(() => { window.print = () => {}; });
   });
 
@@ -995,6 +1031,7 @@ test.describe('multi-line CBAM estimate — cb-printing always comes off <html>'
     // (which ran before the init script existed).
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { mass: '30' });
+    await view(page, 'export');
     await page.evaluate(() => { window.print = () => {}; });
 
     await page.click('#cbDoc');
@@ -1194,8 +1231,10 @@ test.describe('multi-line CBAM estimate — soft navigation', () => {
 
     // focus(), not hover(): it triggers the mega-menu's own `focus` listener directly, without
     // depending on synthesized mouse-trajectory/hover-bridge timing.
-    await page.getByRole('button', { name: 'Interactive Tools', exact: true }).focus();
-    await page.locator('a.menu-item[href="/cbam"]').click();
+    // The rail shell has no site Nav (spec §4.1), so the outbound hop uses the shell's own in-page
+    // link, the Delta mark, retargeted from '/' to '/cbam' so it does not cross the home page.
+    await page.locator('.cbx-rail a.cbx-brand').evaluate((a) => a.setAttribute('href', '/cbam'));
+    await page.locator('.cbx-rail a.cbx-brand').click();
     await expect(page).toHaveURL(/\/cbam\/?$/);
 
     // ...and back, via the explainer page's own link to the estimator — a second, independent
@@ -1254,9 +1293,10 @@ test.describe('multi-line CBAM estimate — accessibility', () => {
     await addLine(page, { mass: '20', date: '2026-03-15' }); // indeterminate, 2026
     await addLine(page, { mass: '25', date: '2027-03-15' }); // no published rule, 2027
     await addLine(page, { ...REFUSED_LINE, mass: '25' }); // refused, still counted, 2026
+    await view(page, 'list');
     await expect(page.locator('.cb-line')).toHaveCount(3);
     await page.check('[data-attest="2026"]');
-    await expect(page.locator('.cb-thresh').first()).toContainText('Below threshold');
+    await expect(page.locator('#cbList .cb-thresh').first()).toContainText('Below threshold');
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
@@ -1280,6 +1320,7 @@ test.describe('CBAM estimate — the three-year strip', () => {
   test('the previewed line is shown in 2026, 2027 and 2028, with the cause of the rise', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, TUBE_LINE);
+    await view(page, 'three-years');
     const strip = page.locator('#cbOutlook .cb-ol');
     await expect(strip).toBeVisible();
     await expect(strip.locator('.cb-card-label')).toHaveText('The same shipment, 2026 to 2028');
@@ -1304,8 +1345,10 @@ test.describe('CBAM estimate — the three-year strip', () => {
 
     // THE STRIP AND THE CARD ABOVE IT ARE ONE LINE. The 2026 card is the result card's own
     // figure (329.828 there, to three places), from the same engine call's input.
+    await view(page, 'estimate');
     await expect(page.locator('#cbOut .cb-n')).toHaveText('329.828');
     await expect(page.locator('#cbOut .cb-cost')).toHaveText('€24,855.80');
+    await view(page, 'three-years');
 
     await expect(strip.locator('.cb-ol-h')).toHaveText('Why it rises by 97.6 certificates by 2028');
     const legend = strip.locator('.cb-ol-legend li');
@@ -1337,13 +1380,16 @@ test.describe('CBAM estimate — the three-year strip', () => {
       await page.fill('#cbDate', date);
       await page.dispatchEvent('#cbDate', 'change');
       await expect(page.locator('#cbOut')).toContainText(`imports in ${date.slice(0, 4)}-Q1`);
+      await view(page, 'three-years');
       await expect(counts).toHaveText(['329.8', '376.8', '427.4']);
+      await view(page, 'estimate');
     }
   });
 
   test('"Show the working" opens from the keyboard and holds the engine\'s figures', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, TUBE_LINE);
+    await view(page, 'three-years');
     const strip = page.locator('#cbOutlook .cb-ol');
     const summary = strip.locator('summary');
     await expect(strip.locator('table')).toBeHidden();
@@ -1359,7 +1405,9 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(rows.nth(3).locator('td')).toHaveText([/^€24,855\.80\s*published €75\.36$/, /^—\s*none published$/, /^—\s*none published$/]);
 
     // It stays open when the line changes under it: the strip is rebuilt, the choice is kept.
+    await view(page, 'estimate');
     await page.fill('#cbMass', '200');
+    await view(page, 'three-years');
     await expect(rows.nth(2).locator('td')).toHaveText(['659.655', '753.51', '854.82']);
     await expect(strip.locator('details')).toHaveAttribute('open', '');
   });
@@ -1367,6 +1415,7 @@ test.describe('CBAM estimate — the three-year strip', () => {
   test('a price typed in the box fills 2027 and 2028 only, keeps the caret, and goes nowhere', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, TUBE_LINE);
+    await view(page, 'three-years');
     const strip = page.locator('#cbOutlook .cb-ol');
     const cards = strip.locator('.cb-ol-yr');
     const box = page.locator('#cbOlPrice');
@@ -1375,7 +1424,9 @@ test.describe('CBAM estimate — the three-year strip', () => {
 
     // The graphs are a separate chunk, fetched when the strip first appears. Wait for them, so
     // that fetch is not what the request log below catches or misses.
+    await view(page, 'why');
     await expect(page.locator('#cbGraphs .cg-board')).toBeVisible();
+    await view(page, 'three-years');
     // From here on, nothing may leave the page. The pack is already loaded, so any request at
     // all during typing is one too many.
     const requests: string[] = [];
@@ -1399,16 +1450,19 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(cards.nth(1)).toContainText('€30,328.78');   // 376.755 × 80.5 = 30,328.7775
     await expect(cards.nth(1)).toContainText('at your assumed €80.50');
     // The result card above is not the strip's to touch.
+    await view(page, 'estimate');
     await expect(page.locator('#cbOut')).not.toContainText('assumed');
     await expect(page.locator('#cbOut .cb-cost')).toHaveText('€24,855.80');
 
     // It survives the strip being rebuilt by another field, as the same typed text.
     await page.fill('#cbMass', '200');
+    await view(page, 'three-years');
     await expect(cards.nth(0).locator('.cb-ol-n')).toHaveText('659.7');
     await expect(page.locator('#cbOlPrice')).toHaveValue('80.5');
     await expect(cards.nth(1)).toContainText('€60,657.56');   // 753.51 × 80.5 = 60,657.555
 
     // The graphs' own price box is held to the same promise: a second price, typed there.
+    await view(page, 'why');
     await page.fill('#cgSecond', '123.75');
     await expect(page.locator('[data-cg-card="cost"] .cg-t')).toContainText('€80.50 to €123.75');
 
@@ -1421,6 +1475,7 @@ test.describe('CBAM estimate — the three-year strip', () => {
     expect(stored).not.toContain('123.75');
 
     // Cleared, the years go back to saying what is true of them.
+    await view(page, 'three-years');
     await page.fill('#cbOlPrice', '');
     await expect(cards.nth(1)).toContainText('none published');
     await expect(cards.nth(1)).not.toContainText('€');
@@ -1437,10 +1492,13 @@ test.describe('CBAM estimate — the three-year strip', () => {
   test('a strip rebuild that lands while the price box is focused keeps the caret at the end of the typed number', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, TUBE_LINE);
+    await view(page, 'three-years');
     const strip = page.locator('#cbOutlook .cb-ol');
     const box = page.locator('#cbOlPrice');
     await expect(strip.locator('.cb-ol-yr')).toHaveCount(3);
+    await view(page, 'why');
     await expect(page.locator('#cbGraphs .cg-board')).toBeVisible();
+    await view(page, 'three-years');
     // Let the debounce armed by setLine's fill('#cbMass') fire and settle, so the one forced below is the only rebuild left.
     await page.waitForTimeout(600);
     await page.evaluate(() => {
@@ -1463,24 +1521,36 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await page.goto('/cbam/cbam-calculator/');
     await expect(page.locator('#cbOutlook')).toBeEmpty();
     await setLine(page, TUBE_LINE);
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol')).toBeVisible();
 
     // 2029: no rules at all. The form's own refusal stands and the strip does not contradict it.
+    await view(page, 'estimate');
     await page.fill('#cbDate', '2029-03-15');
     await page.dispatchEvent('#cbDate', 'change');
     await expect(page.locator('#cbRoute')).toBeDisabled();
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook')).toBeEmpty();
 
-    // A line in the document: the panel shows totals, and the strip is not about totals.
+    // A line in the document. INVERTED on purpose (spec §6.3, the draft always previews): this used
+    // to assert the strip clears once a line exists ("the panel shows totals, and the strip is not
+    // about totals"). The totals now live in #cbList on the List view, and the strip keeps showing
+    // the line still in the form: addLine's setLine restored the 2026 date, so the draft is TUBE_LINE.
+    await view(page, 'estimate');
     await addLine(page, TUBE_LINE);
-    await expect(page.locator('#cbOutlook')).toBeEmpty();
+    await view(page, 'three-years');
+    await expect(page.locator('#cbOutlook .cb-ol')).toBeVisible();
     // And the price typed before is in neither export: the CSV is built from the lines alone.
+    await view(page, 'list');
     await page.locator('[data-remove]').first().click();
     await expect(page.locator('.cb-line')).toHaveCount(0);
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol')).toBeVisible();
 
     // A mass the engine refuses shows an instruction, not an estimate, and so no strip.
+    await view(page, 'estimate');
     await page.fill('#cbMass', '');
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook')).toBeEmpty();
   });
 
@@ -1494,6 +1564,7 @@ test.describe('CBAM estimate — the three-year strip', () => {
     // 1. A route with no default value: the engine's reason in each year, and no split.
     await setLine(page, { ...TUBE_LINE, route: '(D)' });
     await expect(page.locator('#cbOut')).toContainText('No estimate');
+    await view(page, 'three-years');
     const cards = page.locator('#cbOutlook .cb-ol-yr');
     await expect(cards).toHaveCount(3);
     for (const i of [0, 1, 2]) {
@@ -1506,7 +1577,9 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(page.locator('#cbOlPrice')).toBeHidden();
 
     // 2. A good whose benchmark steps down in 2028 shows the step as its own part.
+    await view(page, 'estimate');
     await setLine(page, { cn: '72052100', country: 'IN', route: '(F)', mass: '100', date: '2026-03-15' });
+    await view(page, 'three-years');
     const legend = page.locator('#cbOutlook .cb-ol-legend li');
     await expect(page.locator('#cbOutlook .cb-ol-n')).toHaveText(['137.1', '166.1', '213.4']);
     await expect(legend.nth(2)).toContainText('Benchmark for route (F) falls in 2028 (1.46 → 1.298)');
@@ -1514,10 +1587,12 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(page.locator('#cbOutlook .cb-ol-stack > span')).toHaveCount(3);
 
     // 3. Verified figures: the count still rises, and no mark-up is named.
+    await view(page, 'estimate');
     await setLine(page, TUBE_LINE);
     await page.selectOption('#cbTier', 'actual-verified');
     await page.fill('#cbSeeDirect', '2.0');
     await page.check('#cbAttest');
+    await view(page, 'three-years');
     const strip = page.locator('#cbOutlook .cb-ol');
     // 200 − 145.3725 / 141.645 / 134.19
     await expect(strip.locator('.cb-ol-n')).toHaveText(['54.6', '58.4', '65.8']);
@@ -1530,6 +1605,7 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await page.setViewportSize({ width: 320, height: 800 });
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, TUBE_LINE);
+    await view(page, 'three-years');
     const strip = page.locator('#cbOutlook .cb-ol');
     await strip.locator('summary').click();
     await page.fill('#cbOlPrice', '80');
@@ -1549,6 +1625,7 @@ test.describe('CBAM estimate — the three-year strip', () => {
   test('axe: the strip, with the working open and a price typed, has no automated WCAG violations', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, { cn: '72052100', country: 'IN', route: '(F)', mass: '100', date: '2026-03-15' });
+    await view(page, 'three-years');
     await page.locator('#cbOutlook summary').click();
     await page.fill('#cbOlPrice', '80');
     await expect(page.locator('#cbOutlook .cb-ol-yr').nth(1)).toContainText('your assumed');
@@ -1601,9 +1678,12 @@ test.describe('CBAM estimate — the graphs', () => {
     await page.route('**/cbam-graphs-dom*.js*', (route) => { asked += 1; return blocked ? route.abort() : route.continue(); });
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, TUBE_LINE);
+    await view(page, 'why');
     const g = page.locator('#cbGraphs');
     await expect(g.locator('.cg-none')).toContainText('The graphs could not be loaded. The figures above are complete without them.');
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol-n')).toHaveText(['329.8', '376.8', '427.4']);
+    await view(page, 'why');
     // The button tries again, and while the file is still unreachable the sentence stays.
     await g.getByRole('button', { name: 'Try again' }).click();
     await expect.poll(() => asked).toBeGreaterThan(1);
@@ -1611,7 +1691,9 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(g.locator('.cg-card')).toHaveCount(0);
     // Reachable again: the next calculation loads it without being asked.
     blocked = false;
+    await view(page, 'estimate');
     await page.fill('#cbMass', '200');
+    await view(page, 'why');
     await expect(g.locator('.cg-card')).toHaveCount(8);
     await expect(g.locator('.cg-t').first()).toHaveText('The same 200 t needs 29.6% more certificates in 2028 than in 2026.');
     await expect(g.locator('.cg-none')).toHaveCount(0);
@@ -1620,6 +1702,7 @@ test.describe('CBAM estimate — the graphs', () => {
   test('origins where most share one figure: the others are only those off it, and the shared figure is marked', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, { ...TUBE_LINE, cn: '28041000', route: 'default' });
+    await view(page, 'why');
     const card = page.locator('#cbGraphs [data-cg-card="origins"]');
     await expect(card.locator('.cg-t')).toHaveText(/^On default values, 79 of 96 origins carry the same figure for this good, 694\.0 certificates in 2026; the other 17 run from 0\.0 \(Mali\) to 2,434\.2 \(United States\)\. India is at [\d,.]+\.$/);
     await expect(card.locator('[data-shared="79"]')).toContainText('79 origins at 694.0');
@@ -1629,15 +1712,21 @@ test.describe('CBAM estimate — the graphs', () => {
   test('origins follow the mass: 100 t then 250 t, the card and its table are recomputed, never the old figures', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, TUBE_LINE);
+    await view(page, 'why');
     const card = page.locator('#cbGraphs [data-cg-card="origins"]');
     await expect(card.locator('.cg-t')).toHaveText('On default values, 2026 certificates for this good run from 13.0 (United States) to 762.1 (Indonesia). India is at 329.8.');
+    await view(page, 'estimate');
     await page.fill('#cbMass', '250');
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol-n').first()).toHaveText('824.6');
+    await view(page, 'why');
     await expect(card.locator('.cg-t')).toHaveText('On default values, 2026 certificates for this good run from 32.6 (United States) to 1,905.3 (Indonesia). India is at 824.6.');
     await expect(card.locator('[data-country="IN"]')).toHaveAttribute('data-v', '824.56875');
     await expect(card.locator('table')).toContainText('824.569');
     // And back: the 100 t figures return, from the cache or not, but never the 250 t ones.
+    await view(page, 'estimate');
     await page.fill('#cbMass', '100');
+    await view(page, 'why');
     await expect(card.locator('.cg-t')).toHaveText(/India is at 329\.8\.$/);
   });
 
@@ -1646,13 +1735,19 @@ test.describe('CBAM estimate — the graphs', () => {
     // remembered 100 t. The 250 t result must not land on the card afterwards.
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, { ...TUBE_LINE, cn: '25233000', route: 'default' });
+    await view(page, 'why');
     const card = page.locator('#cbGraphs [data-cg-card="origins"]');
     await expect(card.locator('.cg-t')).toHaveText(/India is at 182\.0\.$/);
     const strip = page.locator('#cbOutlook .cb-ol-n').first();
+    await view(page, 'three-years');
     await expect(strip).toHaveText('182.0');
+    await view(page, 'estimate');
     await page.fill('#cbMass', '250');
+    await view(page, 'three-years');
     await expect(strip).toHaveText('455.0');
+    await view(page, 'estimate');
     await page.fill('#cbMass', '100');
+    await view(page, 'why');
     await expect(card.locator('.cg-t')).toHaveText(/India is at 182\.0\.$/);
     await page.waitForTimeout(1500);
     await expect(card.locator('.cg-t')).toHaveText(/India is at 182\.0\.$/);
@@ -1662,6 +1757,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await page.goto('/cbam/cbam-calculator/');
     await expect(page.locator('#cbGraphs')).toBeEmpty();
     await setLine(page, TUBE_LINE);
+    await view(page, 'why');
     const g = page.locator('#cbGraphs');
     await expect(g.locator('.cg-card')).toHaveCount(8);
     await expect(g.locator('.cg-t')).toHaveText([
@@ -1689,7 +1785,9 @@ test.describe('CBAM estimate — the graphs', () => {
     // The graphs and the strip are one line: the same three counts, to the last digit.
     const steps = g.locator('[data-cg-card="steps"] .cg-m');
     expect(await steps.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.v))).toEqual(['329.8275', '376.755', '427.41']);
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol-n')).toHaveText(['329.8', '376.8', '427.4']);
+    await view(page, 'why');
 
     // NOTHING ROUNDED on the two reworked cards: square marks and flat ends only.
     for (const id of ['steps', 'cost']) {
@@ -1730,15 +1828,19 @@ test.describe('CBAM estimate — the graphs', () => {
     // The second box does nothing, and says why, until the first price exists.
     await expect(page.locator('#cgSecond')).toBeDisabled();
     await expect(cost.locator('[data-cg="second-note"]')).toHaveText('Type your first price in the box above. This one then makes a range.');
+    await view(page, 'three-years');
     await page.fill('#cbOlPrice', '80.555');
     // Rounded once to the cent, and used as shown, here and in the strip: 427.41 × 80.56.
+    await view(page, 'why');
     await expect(cost.locator('.cg-t')).toContainText('At your own €80.56 a certificate, 2028 comes to €34,432.');
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol-yr').nth(2)).toContainText('€34,432.15');
     await expect(page.locator('#cbOutlook .cb-ol-yr').nth(2)).toContainText('at your assumed €80.56');
     // The box shows the price used: on leaving it, the rounded price is written back.
     await page.locator('#cbOlPrice').press('Tab');
     await expect(page.locator('#cbOlPrice')).toHaveValue('80.56');
     await page.fill('#cbOlPrice', '80');
+    await view(page, 'why');
     await expect(cost.locator('.cg-t')).toHaveText('At your own €80 a certificate, 2028 comes to €34,193. That price is yours: no price is published for imports in 2027-Q1 or 2028-Q1.');
     await expect(page.locator('#cgSecond')).toBeEnabled();
     await expect(cost.locator('[data-xlo]')).toHaveCount(3);
@@ -1747,7 +1849,9 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(page.locator('#cgSecond')).toBeFocused();
     expect(await cost.locator('[data-cg="published"]').first().getAttribute('data-v')).toBe('24855.80');
     // A change elsewhere on the form redraws the graphs and keeps both prices and the open table.
+    await view(page, 'estimate');
     await page.fill('#cbMass', '200');
+    await view(page, 'why');
     await expect(g.locator('.cg-t').first()).toHaveText('The same 200 t needs 29.6% more certificates in 2028 than in 2026.');
     await expect(page.locator('#cgSecond')).toHaveValue('60');
     await expect(cost.locator('.cg-t')).toContainText('At your own €60 to €80');
@@ -1755,11 +1859,14 @@ test.describe('CBAM estimate — the graphs', () => {
     // Cleared, the cost card goes back to saying what is true.
     // With the first price gone the second is left in its box and does nothing: no cost is drawn
     // here that the strip does not show.
+    await view(page, 'three-years');
     await page.fill('#cbOlPrice', '');
+    await view(page, 'why');
     await expect(page.locator('#cgSecond')).toBeDisabled();
     await expect(page.locator('#cgSecond')).toHaveValue('60');
     await expect(cost.locator('[data-xlo]')).toHaveCount(0);
     await expect(cost.locator('.cg-t')).toHaveText('No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price above to see a cost.');
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol-yr').nth(1)).not.toContainText('€');
   });
 
@@ -1770,14 +1877,17 @@ test.describe('CBAM estimate — the graphs', () => {
 
     // A route with no default value: one sentence, no chart.
     await setLine(page, { ...TUBE_LINE, route: '(D)' });
+    await view(page, 'why');
     await expect(g.locator('.cg-none')).toHaveText('Nothing to draw: this line has no estimate in any year. The reason is in the cards above.');
     await expect(g.locator('svg')).toHaveCount(0);
 
     // Verified figures: the mark-up cards say that none is applied, and draw no capsule.
+    await view(page, 'estimate');
     await setLine(page, TUBE_LINE);
     await page.selectOption('#cbTier', 'actual-verified');
     await page.fill('#cbSeeDirect', '2.0');
     await page.check('#cbAttest');
+    await view(page, 'why');
     await expect(g.locator('[data-cg-card="markup"] .cg-t')).toHaveText('No mark-up is applied to this line: the figures are your own verified ones.');
     await expect(g.locator('[data-cg-card="share"] .cg-t')).toHaveText('of the rise to 2028 is mark-up. These are your verified figures, so none is applied.');
     await expect(g.locator('.cg-big')).toHaveText('0.0%');
@@ -1789,7 +1899,9 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(g.locator('[data-cg-card="origins"] .cg-cap')).toContainText('your line uses verified figures, which replace these');
 
     // Free allocation above the emissions counted: no split, no certificates, and the cards say so.
+    await view(page, 'estimate');
     await page.fill('#cbSeeDirect', '1.0');
+    await view(page, 'why');
     await expect(g.locator('[data-cg-card="share"] .cg-t')).toHaveText('The change to 2028 is not divided into causes for this line.');
     await expect(g.locator('.cg-big')).toHaveText('—');
     await expect(g.locator('[data-cg-card="charged"] .cg-t')).toHaveText('In 2028, free allocation covers all of the emissions counted. No certificates are due.');
@@ -1799,20 +1911,25 @@ test.describe('CBAM estimate — the graphs', () => {
 
     // AUDIT 1, on the page. Certificates are due (0.546 of one) but are under half a per cent of
     // the emissions counted, so no cell fills. The title must not say that none are due.
+    await view(page, 'estimate');
     await setLine(page, { cn: '72071980', country: 'BR', route: '(C)', mass: '100', date: '2026-03-15' });
     await page.fill('#cbSeeDirect', '1.335356');
+    await view(page, 'why');
     await expect(g.locator('[data-cg-card="charged"]')).toBeVisible();
     await g.locator('[data-cg-year="0"]').click();
     await expect(g.locator('[data-cg-card="charged"] .cg-t')).toHaveText(
       'In 2026, certificates cover under 1 of every 100 tonnes of emissions counted (0.4%). Free allocation covers the rest.');
     await expect(g.locator('[data-cg-card="charged"] [data-cg="legend"]')).toContainText('Certificates to surrender 0.4%');
     await expect(g.locator('[data-cg="charged-mark"]')).toHaveAttribute('data-charged', '0');
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol-yr').first()).toContainText('0.5');
 
     // AUDIT 2, on the page. A November 2026 shipment: no price is published for ITS quarter, two
     // other 2026 quarters have one, and neither is this shipment's cost.
+    await view(page, 'estimate');
     await page.selectOption('#cbTier', 'default+markup');
     await setLine(page, { ...TUBE_LINE, date: '2026-11-30' });
+    await view(page, 'why');
     const costCard = g.locator('[data-cg-card="cost"]');
     await expect(costCard.locator('.cg-t')).toHaveText(
       'No certificate price is published for imports in 2026-Q4, 2027-Q4 or 2028-Q4. Type your own price above to see a cost.');
@@ -1821,17 +1938,21 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(costCard).not.toContainText(/75\.36|75\.28|24,855|24,829/);
     await expect(g.locator('[data-cg-card="steps"]')).not.toContainText('€');
     // The strip (already live) had the same looseness: "2026 · none published". It now names the quarter.
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol-yr').first()).toContainText('Certificate price · imports in 2026-Q4');
     await expect(page.locator('#cbOutlook')).not.toContainText(/75\.36|24,855/);
     // 2026-Q3 has a published price (EUR 82.32, 5 October 2026): a July 2027 shipment's 2026
     // year is priced at it, and at nothing else, in the result card, the strip and the chart.
+    await view(page, 'estimate');
     await page.fill('#cbDate', '2026-08-15');
     await page.dispatchEvent('#cbDate', 'change');
     await expect(page.locator('#cbOut')).toContainText('Certificate price · imports in 2026-Q3');
     await expect(page.locator('#cbOut')).toContainText('€82.32');
     await expect(page.locator('#cbOut .cb-cost')).toHaveText('€27,151.40');
+    await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol-yr').first()).toContainText('€27,151.40');
     await expect(page.locator('#cbOutlook .cb-ol-yr').first()).toContainText('price published, €82.32');
+    await view(page, 'why');
     await expect(costCard.locator('.cg-t')).toHaveText(
       'No certificate price is published for imports in 2027-Q3 or 2028-Q3. Type your own price above to see a cost.');
     await expect(costCard.locator('[data-cg="published"]')).toHaveCount(1);
@@ -1839,14 +1960,24 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(page.locator('#cbGraphs')).not.toContainText(/75\.36|75\.28|24,855/);
 
     // 2029: nothing is computed, so nothing is drawn.
+    await view(page, 'estimate');
     await page.fill('#cbDate', '2029-03-15');
     await page.dispatchEvent('#cbDate', 'change');
+    await view(page, 'why');
     await expect(g).toBeEmpty();
 
-    // A document with lines shows totals; the graphs are about one previewed line and step aside.
+    // A document with lines. INVERTED on purpose (spec §6.3, the draft always previews): this used
+    // to assert the graphs step aside once a line exists ("the graphs are about one previewed line
+    // and step aside"). The totals now live in #cbList on the List view, and the graphs keep
+    // drawing the line still in the form: addLine's setLine restored the 2026 date, so the draft is
+    // TUBE_LINE again and its eight cards are drawn.
+    await view(page, 'estimate');
     await addLine(page, TUBE_LINE);
-    await expect(g).toBeEmpty();
+    await view(page, 'why');
+    await expect(g.locator('.cg-card')).toHaveCount(8);
+    await view(page, 'list');
     await page.locator('[data-remove]').first().click();
+    await view(page, 'why');
     await expect(g.locator('.cg-card')).toHaveCount(8);
   });
 
@@ -1854,9 +1985,12 @@ test.describe('CBAM estimate — the graphs', () => {
     await page.setViewportSize({ width: 320, height: 800 });
     await page.goto('/cbam/cbam-calculator/');
     await setLine(page, { cn: '72052100', country: 'IN', route: '(F)', mass: '100', date: '2026-03-15' });
+    await view(page, 'why');
     const g = page.locator('#cbGraphs');
     await expect(g.locator('.cg-card')).toHaveCount(8);
+    await view(page, 'three-years');
     await page.fill('#cbOlPrice', '60');
+    await view(page, 'why');
     await page.fill('#cgSecond', '100');
     await g.locator('[data-cg-card="cost"] .cg-tbl-btn').click();
     await expectTipsOnScreen(page);

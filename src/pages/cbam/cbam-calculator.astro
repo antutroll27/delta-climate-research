@@ -304,9 +304,11 @@ import { renderTitleCard } from '../../scripts/cbam-ui/title-card.ts';
   const boot = () => {
     const root = document.getElementById('cbx');
     if (!root) return;
-    // ?theme=light|dark forces a theme, for tests and screenshots. Otherwise the OS decides.
+    // ponytail: dark by default for now. Phase 1 re-homes today's cb-* cards unchanged, and they
+    // are drawn for a dark ground: in light theme the attest label read 1.01:1 (axe). Light comes
+    // back as the OS default once phases 2-4 restyle the cards; ?theme=light previews it meanwhile.
     const theme = new URLSearchParams(location.search).get('theme');
-    if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
+    root.dataset.theme = theme === 'light' ? 'light' : 'dark';
     mountViews(root);
     initCbam();
   };
