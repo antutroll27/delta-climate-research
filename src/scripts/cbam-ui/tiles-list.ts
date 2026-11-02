@@ -11,7 +11,9 @@
 // The prose helpers below moved here from cbam-app.ts, which imports them back: the List tiles,
 // the Estimate draft card, the #cbStatus announcement and the print document must say a verdict
 // with ONE spelling, and they can only do that if they read the same function.
+import Decimal from 'decimal.js';
 import type { YearThreshold } from '../cbam-lines.ts';
+import { esc, num } from './format.ts';
 
 /**
  * The 50 t de minimis figure itself lives in the consolidated Art 2(3); this is the amending act
@@ -123,3 +125,100 @@ export const refusedLineNote = (refusedLines: number) =>
  * caveats and the cscf_pending status exist to prevent everywhere else in this file.
  */
 export const totalsTag = (anyPending: boolean) => (anyPending ? 'What-if · CSCF unpublished' : 'Priced');
+
+type FoundYear = Extract<YearThreshold, { ruleFound: true }>;
+
+/** The no-rule sentence, already escaped. One spelling for the draft card and the List tile. */
+export const noRuleSentence = (calendarYear: number): string =>
+  `No de minimis threshold has been published for ${esc(String(calendarYear))}. We show no verdict rather than assume one.`;
+
+/**
+ * The verdict sentence for a year with a published rule — the text inside its <p class="cb-sub">.
+ * Moved verbatim out of renderYearThreshold so the List tile and the draft card share it.
+ */
+export function yearSentence(y: FoundYear): string {
+  const above = y.state === 'above_threshold';
+  const below = y.state === 'below_threshold';
+  // Art 2(3) is a MASS test over four sectors, so a hydrogen or electricity line is rightly
+  // outside the basis — and the verdict used to generalise that into "an importer owes nothing
+  // for the year". MEASURED: 40 t cement + 1000 t hydrogen rendered "owes nothing for 2026"
+  // beside EUR 525,302.23 (the hydrogen line alone was EUR 523,015.36) on the same page.
+  // COUNTED, NEVER EXPLAINED PER LINE: two filters run in series (ours on rule.includedSectors,
+  // aggregateThresholdBasis's own massSectors) and eligibleLineCount's own doc warns they agree
+  // today only by coincidence of the shipped 2026 row, so naming a cause for a specific line
+  // would be a claim this card cannot support. It says how many, and what the test measures.
+  const excluded = y.linesInYear - y.eligibleLineCount;
+  const outside = excluded === 0 ? '' : ` ${excluded} of your ${y.linesInYear} lines for ${esc(String(y.calendarYear))} ${excluded === 1 ? 'is' : 'are'} outside that test — goods not measured by mass for de minimis, such as hydrogen and electricity, are chargeable regardless. This verdict does not mean you owe nothing.`;
+  const sub = above
+    ? `The listed ${esc(String(y.calendarYear))} imports exceed the threshold; the exemption does not apply.`
+    : below
+      // The sectors come from the CARD (y.includedSectors, straight off the year's own threshold
+      // row) — they used to be four words typed into this string. The row is data: the day the
+      // Commission widens it, this sentence would have gone on naming the old four beside a mass
+      // computed from the new set, stating the wrong basis with nothing to catch it. See
+      // sectorList for why the prose is a table rather than a transformation of the keys, and why
+      // its order is not the row's.
+      ? `Your ${esc(sectorList(y.includedSectors))} imports for ${esc(String(y.calendarYear))} total ${num(y.knownEligibleMassT)}&nbsp;t, below the ${num(y.thresholdT)}&nbsp;t threshold for those sectors.${outside} This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
+      : `Under the threshold so far, but unattested. Tick the box only if this list is genuinely every ${esc(String(y.calendarYear))} CBAM import; the verdict is only as good as that statement.`;
+  return sub;
+}
+
+/** The completeness checkbox, or '' when the year is above the threshold (a fact needs no attestation). */
+export function attestControl(y: FoundYear): string {
+  const above = y.state === 'above_threshold';
+  const attest = above ? '' : `
+    <label class="cb-attest">
+      <input type="checkbox" data-attest="${esc(String(y.calendarYear))}" ${y.attested ? 'checked' : ''} />
+      These are all my ${esc(String(y.calendarYear))} imports of CBAM goods
+    </label>`;
+  return attest;
+}
+
+/**
+ * The de minimis ruler: 0 to the next whole multiple of the threshold at or above the mass, and
+ * never less than twice the threshold, so the threshold mark is always visible and never at the end.
+ * Percentages to 1 dp, ROUND_HALF_UP. Null when either value is not a readable non-negative number
+ * (or the threshold is not positive): the tile then draws no ruler, never a guessed one.
+ */
+export function rulerScale(massT: string, thresholdT: string): { fillPct: string; markPct: string; maxT: string } | null {
+  let m: Decimal;
+  let t: Decimal;
+  try { m = new Decimal(massT); t = new Decimal(thresholdT); } catch { return null; }
+  if (!m.isFinite() || !t.isFinite() || m.isNeg() || t.lte(0)) return null;
+  const max = t.times(Decimal.max(2, m.div(t).ceil()));
+  const pct = (x: Decimal) => x.div(max).times(100).toFixed(1, Decimal.ROUND_HALF_UP);
+  return { fillPct: pct(m), markPct: pct(t), maxT: max.toString() };
+}
+
+/**
+ * One Annual de minimis plate per calendar year in the list (spec §5.4). The successor of
+ * renderYearThreshold on the List view: same tag, same sentence, same checkbox, same citation,
+ * drawn as a tile with the eligible mass as its numeral and a ruler against the threshold.
+ */
+export function yearTile(y: YearThreshold): string {
+  const year = esc(String(y.calendarYear));
+  if (!y.ruleFound) return `
+    <section class="b-t b-s2 cb-thresh">
+      <div class="b-t-h"><div><h2 class="b-t-ti">Annual de minimis.</h2><p class="b-t-sub">${year}</p></div>
+        <span class="cb-tag pending">${esc(yearVerdictTag(y))}</span></div>
+      <p class="cb-sub">${noRuleSentence(y.calendarYear)}</p>
+    </section>`;
+  const above = y.state === 'above_threshold';
+  const below = y.state === 'below_threshold';
+  // The same tones as renderYearThreshold: indeterminate is 'pending', never the 'ok' of a real verdict.
+  const tone = above ? 'unavail' : below ? 'ok' : 'pending';
+  const n = y.eligibleLineCount;
+  const r = rulerScale(y.knownEligibleMassT, y.thresholdT);
+  const ruler = r ? `
+      <div class="b-thr" aria-hidden="true"><b style="width:${r.fillPct}%"></b><em style="left:${r.markPct}%"></em></div>
+      <p class="b-t-foot num"><span>0</span><span>${num(y.thresholdT)} t threshold</span><span>${num(r.maxT)} t</span></p>` : '';
+  return `
+    <section class="b-t b-s2 cb-thresh">
+      <div class="b-t-h"><div><h2 class="b-t-ti">Annual de minimis.</h2><p class="b-t-sub">Eligible mass, ${year} · ${n} line${n === 1 ? '' : 's'}</p></div>
+        <span class="cb-tag ${tone}">${esc(yearVerdictTag(y))}</span></div>
+      <div class="b-mid num">${num(y.knownEligibleMassT)}<span class="b-u">t</span></div>${ruler}
+      <p class="cb-sub">${yearSentence(y)}</p>
+      ${attestControl(y)}
+      <p class="cb-prov">${esc(y.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
+    </section>`;
+}

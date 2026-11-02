@@ -47,7 +47,8 @@ import {
 } from '../cbam-ui/inputs-estimate.ts';
 import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
 import {
-  AMENDED_BY_2025_2083, refusedLineNote, sectorList, totalsTag, yearVerdictTag,
+  AMENDED_BY_2025_2083, attestControl, noRuleSentence, refusedLineNote, sectorList, totalsTag, yearSentence,
+  yearVerdictTag,
 } from '../cbam-ui/tiles-list.ts';
 import {
   esc, eur, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
@@ -224,7 +225,7 @@ export function renderYearThreshold(y: YearThreshold): string {
         <h3 class="cb-card-label">Annual de minimis · ${esc(String(y.calendarYear))}</h3>
         <span class="cb-tag pending">${esc(yearVerdictTag(y))}</span>
       </div>
-      <p class="cb-sub">No de minimis threshold has been published for ${esc(String(y.calendarYear))}. We show no verdict rather than assume one.</p>
+      <p class="cb-sub">${noRuleSentence(y.calendarYear)}</p>
     </section>`;
 
   const above = y.state === 'above_threshold';
@@ -233,32 +234,6 @@ export function renderYearThreshold(y: YearThreshold): string {
   // as a genuine below-threshold answer — see renderThreshold's identical fix just above.
   const tone = above ? 'unavail' : below ? 'ok' : 'pending';
   const tag = yearVerdictTag(y);
-  const attest = above ? '' : `
-    <label class="cb-attest">
-      <input type="checkbox" data-attest="${esc(String(y.calendarYear))}" ${y.attested ? 'checked' : ''} />
-      These are all my ${esc(String(y.calendarYear))} imports of CBAM goods
-    </label>`;
-  // Art 2(3) is a MASS test over four sectors, so a hydrogen or electricity line is rightly
-  // outside the basis — and the verdict used to generalise that into "an importer owes nothing
-  // for the year". MEASURED: 40 t cement + 1000 t hydrogen rendered "owes nothing for 2026"
-  // beside EUR 525,302.23 (the hydrogen line alone was EUR 523,015.36) on the same page.
-  // COUNTED, NEVER EXPLAINED PER LINE: two filters run in series (ours on rule.includedSectors,
-  // aggregateThresholdBasis's own massSectors) and eligibleLineCount's own doc warns they agree
-  // today only by coincidence of the shipped 2026 row, so naming a cause for a specific line
-  // would be a claim this card cannot support. It says how many, and what the test measures.
-  const excluded = y.linesInYear - y.eligibleLineCount;
-  const outside = excluded === 0 ? '' : ` ${excluded} of your ${y.linesInYear} lines for ${esc(String(y.calendarYear))} ${excluded === 1 ? 'is' : 'are'} outside that test — goods not measured by mass for de minimis, such as hydrogen and electricity, are chargeable regardless. This verdict does not mean you owe nothing.`;
-  const sub = above
-    ? `The listed ${esc(String(y.calendarYear))} imports exceed the threshold; the exemption does not apply.`
-    : below
-      // The sectors come from the CARD (y.includedSectors, straight off the year's own threshold
-      // row) — they used to be four words typed into this string. The row is data: the day the
-      // Commission widens it, this sentence would have gone on naming the old four beside a mass
-      // computed from the new set, stating the wrong basis with nothing to catch it. See
-      // sectorList for why the prose is a table rather than a transformation of the keys, and why
-      // its order is not the row's.
-      ? `Your ${esc(sectorList(y.includedSectors))} imports for ${esc(String(y.calendarYear))} total ${num(y.knownEligibleMassT)}&nbsp;t, below the ${num(y.thresholdT)}&nbsp;t threshold for those sectors.${outside} This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
-      : `Under the threshold so far, but unattested. Tick the box only if this list is genuinely every ${esc(String(y.calendarYear))} CBAM import; the verdict is only as good as that statement.`;
   return `
     <section class="cb-card cb-thresh">
       <div class="cb-card-head">
@@ -269,8 +244,8 @@ export function renderYearThreshold(y: YearThreshold): string {
         <div class="cb-row"><span>Eligible mass · ${y.eligibleLineCount} line${y.eligibleLineCount === 1 ? '' : 's'}</span><b>${num(y.knownEligibleMassT)} t</b></div>
         <div class="cb-row"><span>Threshold</span><b>${num(y.thresholdT)} t</b></div>
       </div>
-      <p class="cb-sub">${sub}</p>
-      ${attest}
+      <p class="cb-sub">${yearSentence(y)}</p>
+      ${attestControl(y)}
       <p class="cb-prov">${esc(y.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
     </section>`;
 }
