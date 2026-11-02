@@ -289,9 +289,9 @@
 .cbx .b-pass .cb-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
 .cbx .b-pass .cb-card-label{margin:0;font-size:12px;font-weight:600;color:var(--ink-3)}
 .cbx .b-t .cb-water,.cbx .b-t .cb-stamp{margin-top:10px}
-.cbx .b-t .cb-row{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
-.cbx .b-t .cb-row span{color:var(--ink-2)}
-.cbx .b-t .cb-row b{font-weight:700;text-align:right;overflow-wrap:anywhere}
+.cbx .b-t:not(.b-hero) .cb-row{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.cbx .b-t:not(.b-hero) .cb-row span{color:var(--ink-2)}
+.cbx .b-t:not(.b-hero) .cb-row b{font-weight:700;text-align:right;overflow-wrap:anywhere}
 .cbx .b-t .cb-stamp-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
 .cbx .b-t .cb-notes{margin:8px 0 0;padding-left:18px;font-size:12px;line-height:1.5;color:var(--ink-2)}
 .cbx .b-t .cb-reason{margin:8px 0 0;font-size:14px;font-weight:600}
@@ -312,3 +312,7 @@
   .cbx .b-fps{grid-template-columns:1fr 1fr}
   .cbx .b-srcs ol.src{columns:1}
 }
+
+/* The status strip sits on var(--ink), so its text is var(--on-ink) in both themes. The page's scoped
+   .cb-note rule paints it cyan, which is 1.69:1 on the light ink of the dark theme (axe, phase 4). */
+.cbx #cbStatus.cbx-status{color:var(--on-ink)}
