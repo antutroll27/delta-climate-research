@@ -70,7 +70,11 @@
 .cbx .b-fill-bronze .b-fl-in,.cbx .b-fill-bronze .b-fl-in :is(.b-t-sub,.b-u){color:var(--fill-bz-ink)}
 .cbx .b-fill-cyan .b-fl-in,.cbx .b-fill-cyan .b-fl-in :is(.b-t-sub,.b-u){color:var(--fill-cy-ink)}
 .cbx .b-fill-ink .b-fl-in,.cbx .b-fill-ink .b-fl-in :is(.b-t-sub,.b-u){color:var(--on-ink)}
-.cbx .b-fl-rest{flex:1;align-items:flex-start}
+.cbx .b-fl-rest{flex:1;align-items:flex-start;container-type:inline-size}
+/* The free-allocation numeral is sized to the fill it sits in, as the chargeable one is: at 30.6 % the rest
+   block is ~65 px of content on a 345 px tile and a 64 px "30.6%" ran out of the tile (measured, 2026-11-03).
+   1.91 em is the numeral's width; 100cqi here is the rest block's own content width. */
+.cbx .b-fl-rest .b-mid{font-size:min(64px,calc((100cqi - 4px) / 1.91))}
 .cbx .b-fl-rest .b-tags{align-self:flex-end;justify-content:flex-end}
 .cbx .b-fl-rest .b-tag{background:var(--card)}
 /* The numeral is sized to the narrowest fill the bar can have (LOW_SHARE, 40 %), so its text never leaves
@@ -89,6 +93,36 @@
   .cbx .b-fill .b-fl-in,.cbx .b-fill .b-fl-in :is(.b-t-sub,.b-u){color:var(--ink)}
   .cbx .b-fl-rest .b-tags{align-self:flex-start;justify-content:flex-start}
 }
+
+/* chargeable, strip layout (decision 4A): when the smaller share is under 20 % the card is not the bar.
+   A full-width bar drawn to scale (widths are the shares; no minimum width on either segment), then two
+   label tiles with all the room they need. Bronze/cyan = the chargeable tier colour, ink = the free
+   allocation; the ink tier (verified direct + default indirect) outlines its free allocation instead. */
+.cbx .b-fill-strip{flex-direction:column;padding:20px 20px 8px;background:var(--card);gap:14px}
+.cbx .b-sp-bar{display:flex;height:22px;border-radius:99px;overflow:hidden;background:var(--well);flex:none}
+.cbx .b-sp-bar>i{display:block;flex:none;height:100%}
+.cbx .b-sp-bc{background:var(--fill-bz)}
+.cbx .b-fill-cyan .b-sp-bc{background:var(--fill-cy)}
+.cbx .b-fill-ink .b-sp-bc{background:var(--ink)}
+.cbx .b-sp-bf{background:var(--ink)}
+.cbx .b-fill-ink .b-sp-bf{background:var(--well-2);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cbx .b-sp-lg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.cbx :is(.b-sp-c,.b-sp-f){min-width:0;padding:14px 14px 12px;border-radius:18px;display:flex;flex-direction:column;overflow-wrap:anywhere}
+.cbx :is(.b-sp-c,.b-sp-f) .b-t-ti{display:flex;align-items:center;gap:8px}
+.cbx :is(.b-sp-c,.b-sp-f) .b-t-ti::before{content:"";flex:none;width:10px;height:10px;border-radius:3px;background:currentColor}
+.cbx :is(.b-sp-c,.b-sp-f) .b-mid{margin:12px 0 6px;font-size:min(44px,calc(11cqi - 4px))}
+.cbx .b-sp-c{background:var(--fill-bz);color:var(--fill-bz-ink)}
+.cbx .b-sp-c .b-t-sub,.cbx .b-sp-c .b-u{color:var(--fill-bz-ink)}
+.cbx .b-fill-cyan .b-sp-c{background:var(--fill-cy);color:var(--fill-cy-ink)}
+.cbx .b-fill-cyan .b-sp-c :is(.b-t-sub,.b-u){color:var(--fill-cy-ink)}
+.cbx .b-fill-ink .b-sp-c{background:var(--ink);color:var(--on-ink)}
+.cbx .b-fill-ink .b-sp-c :is(.b-t-sub,.b-u){color:var(--on-ink)}
+.cbx .b-sp-f{background:var(--well);color:var(--ink)}
+.cbx .b-sp-f .b-t-ti::before{background:var(--ink)}
+.cbx .b-fill-ink .b-sp-f .b-t-ti::before{background:var(--well-2);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cbx .b-sp-f .kv>div{flex-wrap:wrap;gap:2px 10px}
+.cbx .b-fill-strip>.b-tags{margin:0 0 12px}
+.cbx .b-fill-strip>.b-tags .b-tag{background:var(--well)}
 
 /* three years: a stacked deck */
 .cbx .b-yrs .b-t-ti{padding-right:40px}

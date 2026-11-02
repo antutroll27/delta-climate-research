@@ -79,6 +79,32 @@ test.describe('CBAM Estimate view', () => {
     await expect(cards.nth(1)).toHaveAttribute('aria-checked', 'true');
   });
 
+  test('the default card says whose value it is: the origin\'s own, or the residual bucket (decision 3B)', async ({ page }) => {
+    await page.goto(URL);
+    const sentence = page.locator('#cbTierCards [data-value="default+markup"] span');
+    const GENERIC = "The Commission's published default value, with its mark-up.";
+    const OWN = "The Commission's published value for this origin and route, with its mark-up.";
+    const RESIDUAL = "The Commission's residual default for \u201COther Countries and Territories\u201D, not this origin's own, with its mark-up.";
+    await expect(sentence).toHaveText(GENERIC);
+    await pick(page, '73063077', 'IN');
+    await expect(sentence).toHaveText(GENERIC); // no route chosen yet
+    await page.locator('#cbRouteSeg [data-value="(C)"]').click();
+    await expect(sentence).toHaveText(OWN);
+    // the residual bucket, picked: the "Other countries and territories (residual)" origin
+    await page.selectOption('#cbCountry', 'OTHER');
+    await expect(sentence).toHaveText(RESIDUAL);
+    await expect(page.locator('#cbOut .b-prov')).toContainText('Residual bucket');
+    // a real country the Commission publishes no own value for on this good: the engine falls back
+    await pick(page, '2507008080', 'AE');
+    await expect(sentence).toHaveText(RESIDUAL);
+    await expect(page.locator('#cbOut .b-prov')).toContainText('Residual bucket');
+    // …and back to a country with its own row
+    await pick(page, '73063077', 'IN');
+    await page.locator('#cbRouteSeg [data-value="(C)"]').click();
+    await expect(sentence).toHaveText(OWN);
+    await expect(sentence).not.toContainText(/world[- ]average/i);
+  });
+
   test('a priced line fills Chargeable, the deck and Provenance; ↗ opens Three years', async ({ page }) => {
     await page.goto(URL);
     await pick(page, '73063077', 'IN');
@@ -93,6 +119,41 @@ test.describe('CBAM Estimate view', () => {
     await deck.locator('[data-goto="three-years"]').click();
     await expect(page.locator('[data-view="three-years"]')).toBeVisible();
   });
+
+  // Decision 4A: the split tile never clips. Measured as text leaving the tile, not as a class name.
+  for (const [name, cn, country, route, want] of [
+    ['91.8 % chargeable (the strip)', '76061130', 'DZ', '(L)', 'strip'],
+    ['69.4 % chargeable (the card)', '73063077', 'IN', '(C)', 'card'],
+  ] as const) {
+    for (const width of [1101, 1250, 1440]) {
+      test(`the split tile never clips: ${name} at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.goto(URL);
+        await pick(page, cn, country);
+        await page.locator(`#cbRouteSeg [data-value="${route}"]`).click();
+        const tile = page.locator('#cbOut .b-fill');
+        await expect(tile).toBeVisible();
+        await expect(tile).toHaveClass(want === 'strip' ? /b-fill-strip/ : /^(?!.*b-fill-strip)/);
+        const out = await tile.evaluate((t) => {
+          const box = t.getBoundingClientRect();
+          let worst = 0;
+          for (const el of t.querySelectorAll('h3,.b-mid,.b-t-sub,.b-u,.b-tag,dt,dd')) {
+            const r = document.createRange(); r.selectNodeContents(el);
+            for (const q of r.getClientRects()) if (q.width) worst = Math.max(worst, q.right - box.right, box.left - q.left);
+          }
+          const bar = t.querySelector('.b-sp-bar');
+          const segs = bar ? [...bar.children].map((c) => c.getBoundingClientRect().width / bar.getBoundingClientRect().width * 100) : [];
+          return { worst, segs };
+        });
+        expect(out.worst).toBeLessThanOrEqual(0.5);
+        if (want === 'strip') {
+          expect(out.segs[0]).toBeCloseTo(91.8, 1); // to scale: 8.2 % is 8.2 % of the bar, not a padded sliver
+          expect(out.segs[1]).toBeCloseTo(8.2, 1);
+          await expect(tile.locator('.b-sp-bar')).toHaveAttribute('aria-label', '91.8% chargeable, 8.2% free allocation');
+        }
+      });
+    }
+  }
 
   test('the good sheet: keyboard in, search, sector, pick, focus back', async ({ page }) => {
     await page.goto(URL);

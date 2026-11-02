@@ -41,6 +41,44 @@ export function verifiedOnlyRoutes(
   return out;
 }
 
+/**
+ * Which basis the Commission default for this good, origin and route rests on, asked of the ENGINE
+ * (the stamp's `originBasis`, which it derives from the factor row it actually resolved) rather than
+ * inferred from the pack here: a second reading of "does this origin have its own row" could drift
+ * from the one that prices the line. 'residual' = the "Other Countries and Territories" default,
+ * whether the importer picked it or the engine fell back to it. Null while the question cannot be
+ * put (a field is empty), when the default is refused, or when the engine throws.
+ */
+export function defaultOriginBasis(
+  pack: EstimatorPack, cn: string, country: string, route: string, year: number,
+): 'country' | 'residual' | null {
+  if (!cn || !country || !route) return null;
+  try {
+    return estimateFromPack(pack, { cn, country, route, massT: '1', date: `${year}-01-01`, emissionsScope: 'direct' })
+      .stamp.originBasis;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The sentence under "Commission default + mark-up" (decision 3B). It says whose value the default
+ * is: the origin's own, or the residual bucket the engine fell back to. "world-average" is a logged
+ * false claim and is never used; the regulation's own term is.
+ */
+export function defaultTierSentence(basis: 'country' | 'residual' | null): string {
+  switch (basis) {
+    case 'country': return "The Commission's published value for this origin and route, with its mark-up.";
+    case 'residual':
+      return "The Commission's residual default for \u201COther Countries and Territories\u201D, not this origin's own, with its mark-up.";
+    case null: return "The Commission's published default value, with its mark-up.";
+    default: {
+      const _exhaustive: never = basis;
+      return _exhaustive;
+    }
+  }
+}
+
 export function verifiedOnlyNote(labels: readonly string[], origin: string): string {
   if (!labels.length) return '';
   const list = labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;

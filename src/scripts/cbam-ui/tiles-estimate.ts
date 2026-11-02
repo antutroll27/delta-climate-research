@@ -125,6 +125,26 @@ export function chargeableSplit(directTco2e: string, f: EstimateFigure): Chargea
 /** Under this share the fill cannot hold its own text, so it is drawn as a strip (decision 5). */
 const LOW_SHARE = 40;
 
+/**
+ * Decision 4A. When the SMALLER of the two shares is under this, the proportional blocks leave it a
+ * sliver too narrow for its own label (8.2 % of a 560 px tile is ~30 px), so the tile draws a
+ * full-width bar to scale with two label tiles beneath it. From this share up to its complement the
+ * tile is the card it always was.
+ */
+const STRIP_BELOW = 20;
+
+/**
+ * Which layout the Chargeable tile takes for a displayed chargeable share (1 dp, as chargeableSplit
+ * returns it): 'strip' when the smaller share is under 20 %, so chargeable under 20.0 or over 80.0;
+ * exactly 20.0 and 80.0 are still blocks. No split (nothing embedded) stays on the blocks: there is
+ * no share to draw to scale and none is invented.
+ */
+export function splitLayout(chargeablePct: string | null): 'blocks' | 'strip' {
+  if (chargeablePct === null) return 'blocks';
+  const smaller = Decimal.min(chargeablePct, new Decimal(100).minus(chargeablePct));
+  return smaller.lt(STRIP_BELOW) ? 'strip' : 'blocks';
+}
+
 function chargeable(e: CertificateEstimate): string {
   // No priced figure, no tile: an empty plate with a bare title would claim a share it does not have.
   if (e.status === 'unavailable') return '';
@@ -150,15 +170,36 @@ function chargeable(e: CertificateEstimate): string {
     : '<h3 class="b-t-ti">Free allocation.</h3>'
       + `<div class="b-mid">${share(split?.restPct)}</div>`
       + `<p class="b-t-sub">${num(f.faaTco2e)} tCO₂e · CBAM factor ${esc(String(e.terms.cbamFactorYear))} ${esc(e.terms.cbamFactor)}</p>`;
-  return `<section class="b-t b-fill b-s2 b-fill-${tierTone(e.stamp.tier)}${low ? ' b-fill-low' : ''}" `
+  const tags = `<div class="b-tags">${whatIf}<span class="b-tag">Embedded emissions (direct) · ${num(e.emissionsTco2e)} tCO₂e</span>${indirect}</div>`;
+  const tone = tierTone(e.stamp.tier);
+  if (split && splitLayout(split.chargeablePct) === 'strip') {
+    // Decision 4A. The bar is true to scale, with no minimum width on either segment (the widths are
+    // the displayed shares, which sum to 100). The label tiles sit beneath it, each with all the room
+    // it needs. Floored: the free-allocation tile carries the terms, never a percentage.
+    const freeBody = split.floored
+      ? rest.replace('<h3 class="b-t-ti">Free allocation.</h3>', '')
+      : `<div class="b-mid">${share(split.restPct)}</div>`
+        + `<p class="b-t-sub">${num(f.faaTco2e)} tCO₂e · CBAM factor ${esc(String(e.terms.cbamFactorYear))} ${esc(e.terms.cbamFactor)}</p>`;
+    const label = split.floored
+      ? `${split.chargeablePct}% chargeable, the rest covered by free allocation`
+      : `${split.chargeablePct}% chargeable, ${split.restPct}% free allocation`;
+    return `<section class="b-t b-fill b-s2 b-fill-${tone} b-fill-strip">`
+      + `<div class="b-sp-bar" role="img" aria-label="${label}">`
+      + `<i class="b-sp-bc" style="width:${split.chargeablePct}%"></i><i class="b-sp-bf" style="width:${split.restPct}%"></i></div>`
+      + '<div class="b-sp-lg">'
+      + `<div class="b-sp-c"><h3 class="b-t-ti">Chargeable.</h3><div class="b-mid">${share(split.chargeablePct)}</div>`
+      + `<p class="b-t-sub">${num(f.netTco2e)} tCO₂e</p></div>`
+      + `<div class="b-sp-f"><h3 class="b-t-ti">Free allocation.</h3>${freeBody}</div></div>`
+      + `${tags}</section>`;
+  }
+  return `<section class="b-t b-fill b-s2 b-fill-${tone}${low ? ' b-fill-low' : ''}" `
     + `style="--share:${split ? split.chargeablePct : '0'}%">`
     + '<i class="b-fl-bar" aria-hidden="true"></i>'
     + '<div class="b-fl-in"><h3 class="b-t-ti">Chargeable.</h3>'
     + `<div class="b-mid">${share(split?.chargeablePct)}</div>`
     + `<p class="b-t-sub">${num(f.netTco2e)} tCO₂e</p></div>`
     + '<div class="b-fl-rest">'
-    + `<div class="b-tags">${whatIf}<span class="b-tag">Embedded emissions (direct) · ${num(e.emissionsTco2e)} tCO₂e</span>${indirect}</div>`
-    + `${rest}</div></section>`;
+    + `${tags}${rest}</div></section>`;
 }
 
 /** The deck's shell; paintOutlook (cbam-app.ts) fills [data-deck] from the outlook it computes. */
