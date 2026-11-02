@@ -58,6 +58,8 @@ const PAIRS = [
   ['--on-ink', '--hero-well', 4.5], ['--hero-bronze', '--hero-well', 4.5], ['--hero-cyan', '--hero-well', 4.5],
   // the chargeable fills (text on them, and the bar against its track: 3:1, WCAG 1.4.11)
   ['--fill-bz-ink', '--fill-bz', 4.5], ['--fill-cy-ink', '--fill-cy', 4.5],
+  // Three years' rise bar: the benchmark's grey segment and its label; the bronze segment on the hero (pearl in dark) and its label.
+  ['--on-ink', '--seg-3', 4.5], ['--fill-bz-ink', '--hero-bz', 4.5],
   ['--fill-bz', CARD_WELL, 3], ['--fill-cy', CARD_WELL, 3], ['--ink', CARD_WELL, 3],
   // the three-years deck
   ['--deck-ink-1', '--deck-1', 4.5], ['--deck-ink-2', '--deck-2', 4.5],

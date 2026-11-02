@@ -6,10 +6,11 @@ import Decimal from 'decimal.js';
 
 import {
   assumedRange, chargedCells, chargedKind, chargedLegend, costParts, graphsModel, pctHonest, phaseModel, secondNote,
-  secondUsable, tableCharged, plotCharged, plotCost, plotMarkup, plotShare,
-  plotSteps, renderGraphs, scaleFromZero, sentenceCharged, sentenceCost, sentenceMarkup,
-  sentenceShare, sentenceSteps,
+  secondUsable, tableCharged, plotCost,
+  scaleFromZero, sentenceCharged, sentenceCost, sentenceMarkup,
+  sentenceShare,
 } from '../../src/scripts/cbam-graphs.ts';
+import { markupColumns, renderWhy, shareBar, waffle } from '../../src/scripts/cbam-ui/tiles-why.ts';
 import { assumedCost, outlook } from '../../src/scripts/cbam-outlook.ts';
 import { estimateFromPack, routesFor } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
 
@@ -32,7 +33,7 @@ const line = (over = {}) => ({
 });
 const modelOf = (input) => graphsModel(pack, input, outlook(pack, input));
 const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-const WIDTHS = { steps: 600, cascade: 600, share: 280, markup: 280, charged: 280, cost: 280, phase: 600, origins: 600 };
+const WIDTHS = { share: 280, markup: 280, charged: 280, cost: 280, phase: 600, origins: 600 };
 const STATE = () => ({ chargedYear: null, priceText: '', secondText: '', open: {} });
 const TUBE = modelOf(line());
 
@@ -143,28 +144,6 @@ const synthetic = (certs, over = {}) => ({
   ...over,
 });
 
-test('the year-by-year sentence never contradicts the line: a rise, no change, a fall, a tiny change, a zero start', () => {
-  assert.equal(text(sentenceSteps(TUBE)), 'The same 100 t needs 29.6% more certificates in 2028 than in 2026.');
-  assert.equal(text(sentenceSteps(synthetic(['200', '200', '200']))), 'The same 100 t needs the same certificates in 2028 as in 2026.');
-  assert.equal(text(sentenceSteps(synthetic(['200', '190', '150']))), 'The same 100 t needs 25.0% fewer certificates in 2028 than in 2026.');
-  // 0.04% would print as "0.0% more": said in certificates instead.
-  assert.equal(text(sentenceSteps(synthetic(['200', '200', '200.08']))), 'The same 100 t needs 0.08 more certificates in 2028 than in 2026.');
-  // From zero there is no percentage.
-  assert.equal(text(sentenceSteps(synthetic(['0', '0.355', '7.81']))), 'The same 100 t needs 7.8 more certificates in 2028 than in 2026.');
-  assert.doesNotMatch(sentenceSteps(synthetic(['200', '200', '200.08'])), /0\.0%/);
-  // A real floored-then-rising line agrees with its own counts.
-  const partial = modelOf(line({ verified: { directTco2ePerT: '1.42' } }));
-  assert.equal(text(sentenceSteps(partial)), 'The same 100 t needs 7.8 more certificates in 2028 than in 2026.');
-  // The mass is printed as a number, through the same formatter as every other figure.
-  assert.match(sentenceSteps(synthetic(['1', '2', '3'], { massT: '1e2' })), /The same 100 t needs/);
-  assert.match(sentenceSteps(synthetic(['1', '2', '3'], { massT: '987654321' })), /The same 987,654,321 t needs/);
-  assert.match(sentenceSteps(synthetic(['1', '2', '3'], { massT: '0.001' })), /The same 0\.001 t needs/);
-  // Thousands separators in a large percentage, as the strip prints it.
-  assert.match(sentenceSteps(synthetic(['4', '40', '79'])), /<b>1,875\.0% more<\/b>/);
-  // And anything that is not a number is escaped, never interpreted.
-  assert.doesNotMatch(sentenceSteps(synthetic(['1', '2', '3'], { massT: '<b>9</b>' })), /<b>9<\/b> t/);
-});
-
 test('the mark-up sentences say what applies, and never that anyone will pay less', () => {
   assert.equal(text(sentenceMarkup(TUBE)), 'On default values the mark-up adds 129.6 certificates in 2028. It no longer applies with verified data.');
   assert.equal(text(sentenceShare(TUBE)), 'of the rise to 2028 is the mark-up on default values. It no longer applies with verified data.');
@@ -181,7 +160,7 @@ test('the mark-up sentences say what applies, and never that anyone will pay les
   const tiny = synthetic(['1', '1', '1']);
   tiny.years[2].markupAdds = '0.0013';
   assert.equal(text(sentenceMarkup(tiny)), 'On default values the mark-up adds under 0.1 certificates in 2028. It no longer applies with verified data.');
-  assert.doesNotMatch(plotMarkup(tiny, 280, 'u').svg, /\+0\.0</);
+  assert.doesNotMatch(markupColumns(tiny), /\+0\.0</);
   for (const s of [sentenceMarkup(TUBE), sentenceShare(TUBE), sentenceMarkup(verified), sentenceShare(verified)]) {
     assert.doesNotMatch(s, /pay less|will pay|save|cheaper|forecast/i);
   }
@@ -235,7 +214,7 @@ test('the cost sentence: nothing typed, one price, a range; always the visitor\'
   assert.deepEqual(assumedRange('80.561', '80.564'), ['80.56'], 'two prices equal to the cent are one price');
   assert.match(text(sentenceCost(TUBE, assumedRange('80.555', ''))), /At your own €80\.56 a certificate, 2028 comes to €34,432\./);
 
-  assert.equal(text(sentenceCost(TUBE, [])), 'No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price above to see a cost.');
+  assert.equal(text(sentenceCost(TUBE, [])), 'No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price in Three years to see a cost.');
   // 427.41 × 80 = 34,192.80 ; × 60 = 25,644.60 ; × 100 = 42,741.00
   assert.equal(text(sentenceCost(TUBE, ['80'])), 'At your own €80 a certificate, 2028 comes to €34,193. That price is yours: no price is published for imports in 2027-Q1 or 2028-Q1.');
   assert.equal(text(sentenceCost(TUBE, ['60', '100'])), 'At your own €60 to €100 a certificate, 2028 comes to €25,645 to €42,741. That range is yours: no price is published for imports in 2027-Q1 or 2028-Q1.');
@@ -254,21 +233,8 @@ test('a zero-based scale: equal values draw equal, and nothing is drawn from a t
   assert.equal(scaleFromZero(0, 100)(0), 0, 'an all-zero line does not divide by zero');
 });
 
-test('the stepped line: heights proportional to the counts, three exact values on the marks', () => {
-  const svg = plotSteps(TUBE, 600).svg;
-  const marks = [...svg.matchAll(/data-v="([^"]+)"[\s\S]*?data-h="([^"]+)"/g)].map((m) => [m[1], Number(m[2])]);
-  assert.deepEqual(marks.map((m) => m[0]), ['329.8275', '376.755', '427.41']);
-  const k = marks.map(([v, h]) => h / Number(v));
-  assert.ok(Math.max(...k) / Math.min(...k) - 1 < 1e-4, 'height ÷ value is one constant');
-  assert.match(text(svg), /329\.8 .*376\.8 \+46\.9 .*427\.4 \+50\.7/);
-  assert.match(text(svg), /€24,855\.80 published €75\.36/);
-  assert.equal((text(svg).match(/none published/g) ?? []).length, 2);
-  assert.match(text(svg), /none published for 2027-Q1 imports .*none published for 2028-Q1 imports/);
-});
-
-test('NO ROUNDED MARK on the stepped line or the cost rows: no circle, no radius above 1, no round end', () => {
-  const pieces = [plotSteps(TUBE, 600).svg, plotSteps(TUBE, 300).svg,
-    plotCost(TUBE, 420, []).svg, plotCost(TUBE, 420, ['80']).svg, plotCost(TUBE, 260, ['60', '100']).svg];
+test('NO ROUNDED MARK on the cost rows: no circle, no radius above 1, no round end', () => {
+  const pieces = [plotCost(TUBE, 420, []).svg, plotCost(TUBE, 420, ['80']).svg, plotCost(TUBE, 260, ['60', '100']).svg];
   for (const svg of pieces) {
     assert.doesNotMatch(svg, /<circle|<ellipse/, 'no circular mark');
     assert.deepEqual((svg.match(/rx="([^"]+)"/g) ?? []).filter((r) => Number(/"(.+)"/.exec(r)[1]) > 1), [], 'no radius above 1');
@@ -278,7 +244,7 @@ test('NO ROUNDED MARK on the stepped line or the cost rows: no circle, no radius
 });
 
 test('the capsules: length is what the mark-up adds, and a verified line draws no capsule', () => {
-  const svg = plotMarkup(TUBE, 280, 'u').svg;
+  const svg = markupColumns(TUBE);
   const marks = [...svg.matchAll(/data-v="([^"]+)"[\s\S]*?data-y1="([^"]+)" data-y0="([^"]+)"/g)].map((m) => [m[1], Number(m[3]) - Number(m[2])]);
   assert.deepEqual(marks.map((m) => m[0]), ['43.2', '86.4', '129.6']);
   const k = marks.map(([v, len]) => len / Number(v));
@@ -286,21 +252,39 @@ test('the capsules: length is what the mark-up adds, and a verified line draws n
   assert.match(text(svg), /\+43\.2 .*\+86\.4 .*\+129\.6/);
 
   const verified = modelOf(line({ verified: { directTco2ePerT: '2.0' } }));
-  const quiet = plotMarkup(verified, 280, 'u').svg;
-  assert.doesNotMatch(quiet, /<rect class="cg-halo"|fill="url\(#u\)"/, 'no capsule where no mark-up is applied');
-  assert.equal((quiet.match(/<circle/g) ?? []).length, 3, 'the three counts are still marked');
+  const quiet = markupColumns(verified);
+  assert.doesNotMatch(quiet, /class="b-mc-mk"/, 'no mark-up segment where no mark-up is applied');
+  assert.equal((quiet.match(/class="cg-m b-mc"/g) ?? []).length, 3, 'the three counts are still marked');
   assert.match(text(quiet), /54\.6 .*no mark-up .*58\.4 .*65\.8/);
   assert.doesNotMatch(text(quiet), /\+0\.0/);
 });
 
 test('the arc: its fraction is the share, and it is empty when there is nothing to show', () => {
-  const svg = plotShare(TUBE, 280, 'u').svg;
+  const svg = shareBar(TUBE);
   assert.equal(/data-t="([^"]+)"/.exec(svg)[1], '0.88540');
   assert.equal(/data-v="([^"]+)"/.exec(svg)[1], TUBE.split.markupSharePct);
   const verified = modelOf(line({ verified: { directTco2ePerT: '2.0' } }));
-  assert.doesNotMatch(plotShare(verified, 280, 'u').svg, /data-t=/, 'a share of zero draws no arc');
+  assert.doesNotMatch(shareBar(verified), /data-t=/, 'a share of zero draws no arc');
   const floored = modelOf(line({ verified: { directTco2ePerT: '1.0' } }));
-  assert.doesNotMatch(plotShare(floored, 280, 'u').svg, /data-t=/);
+  assert.doesNotMatch(shareBar(floored), /data-t=/);
+});
+
+test('the waffle: whole cells per year, the shown year lit, and every year\'s count on the mark', () => {
+  const html = waffle(TUBE, 0);
+  assert.match(html, /data-charged="69" data-cg="charged-mark" data-cells="69,73,76"/);
+  assert.equal((html.match(/<i class="on"><\/i>/g) ?? []).length, 69);
+  assert.equal((html.match(/<i( class="on")?><\/i>/g) ?? []).length, 100);
+  assert.equal((waffle(TUBE, 99).match(/<i class="on"><\/i>/g) ?? []).length, 76, 'an index past the end shows the last year');
+});
+
+test('every Why tile: a full-stop or question title, a sentence, a plot, "Show as table", and a closed table', () => {
+  const html = renderWhy(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE));
+  const titles = [...html.matchAll(/<h2 class="b-t-ti cg-q" id="cgQ-(\w+)">([^<]+)<\/h2>/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(titles, [['share', 'Mark-up share.'],
+    ['charged', 'Charged.'], ['markup', 'What the mark-up adds.'], ['phase', 'Free allocation.'],
+    ['origins', 'Does the origin matter?'], ['cost', 'What would it cost at my own price?']]);
+  assert.equal((html.match(/>Show as table<\/button>/g) ?? []).length, 6);
+  assert.doesNotMatch(text(html), /\babove\b/, 'the views are separate: nothing points "above"');
 });
 
 test('the cost rows: the shipment\'s own published cost, the visitor\'s price only when typed, on one euro scale', () => {
@@ -335,29 +319,36 @@ test('the cost rows: the shipment\'s own published cost, the visitor\'s price on
 test('the second price box does nothing, and says why, until the first price exists', () => {
   const alone = { ...STATE(), secondText: '90' };
   assert.equal(secondUsable(alone), false);
-  assert.equal(secondNote(alone), 'Type your first price in the box above. This one then makes a range.');
-  const html = renderGraphs(TUBE, alone, WIDTHS);
+  assert.equal(secondNote(alone), 'Type your first price in Three years. This one then makes a range.');
+  const html = renderWhy(TUBE, alone, WIDTHS);
   assert.match(html, /<input id="cgSecond"[^>]*value="90" disabled \/>/);
   assert.doesNotMatch(html, /data-xlo=|At your own|38,467/, 'no cost is drawn that the strip does not show');
-  assert.match(text(html), /No certificate price is published for imports in 2027-Q1 or 2028-Q1\. Type your own price above/);
+  assert.match(text(html), /No certificate price is published for imports in 2027-Q1 or 2028-Q1\. Type your own price in Three years/);
   const both = { ...STATE(), priceText: '80', secondText: '90' };
   assert.equal(secondUsable(both), true);
-  assert.doesNotMatch(renderGraphs(TUBE, both, WIDTHS), /id="cgSecond"[^>]* disabled/);
-  assert.match(text(renderGraphs(TUBE, both, WIDTHS)), /At your own €80 to €90 a certificate/);
+  assert.doesNotMatch(renderWhy(TUBE, both, WIDTHS), /id="cgSecond"[^>]* disabled/);
+  assert.match(text(renderWhy(TUBE, both, WIDTHS)), /At your own €80 to €90 a certificate/);
+});
+
+test('no sentence points "above": the price box and the reasons are on another view now', () => {
+  for (const s of [sentenceCost(TUBE, []), secondNote({ ...STATE(), priceText: '' }), secondNote({ ...STATE(), priceText: '80' })]) {
+    assert.doesNotMatch(s, /\babove\b/, s);
+  }
+  assert.equal(secondNote({ ...STATE(), priceText: '80' }), '€ per certificate. Your first price is the one in Three years.');
 });
 
 /* ── the section ───────────────────────────────────────────────────────────── */
 
-test('the section: eight cards, each with a sentence, a table and a text alternative', () => {
-  const html = renderGraphs(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE));
+test('the section: six cards, each with a sentence, a table and a text alternative', () => {
+  const html = renderWhy(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE));
   assert.deepEqual([...html.matchAll(/data-cg-card="(\w+)"/g)].map((m) => m[1]),
-    ['steps', 'cascade', 'share', 'markup', 'charged', 'cost', 'phase', 'origins']);
-  // Seven plots drawn at once; the origins card's plot is filled after the others (see the DOM module).
-  assert.equal((html.match(/<svg[^>]*role="group" aria-label="[^"]+"/g) ?? []).length, 7, 'every plot has a text alternative');
-  assert.equal((html.match(/class="cg-tbl cg-closed"/g) ?? []).length, 8, 'every card has a table, closed to begin with');
-  assert.equal((html.match(/<h4 class="cg-t"/g) ?? []).length, 8);
-  // 3 years + 3 cascade columns + the arc + 3 capsules + the waffle + the published cost + 9 phase years.
-  assert.equal((html.match(/class="cg-m" tabindex="0" role="img" aria-label="[^"]+"/g) ?? []).length, 21, 'every mark is focusable and named');
+    ['share', 'charged', 'markup', 'phase', 'origins', 'cost']);
+  // Five plots drawn at once; the origins card's plot is filled after the others (see the DOM module).
+  assert.equal((html.match(/<svg[^>]*role="group" aria-label="[^"]+"/g) ?? []).length + (html.match(/<div class="cg-fig[^"]*" role="group" aria-label="[^"]+"/g) ?? []).length, 5, 'every plot has a text alternative');
+  assert.equal((html.match(/class="cg-tbl cg-closed"/g) ?? []).length, 6, 'every card has a table, closed to begin with');
+  assert.equal((html.match(/<p class="b-lead cg-t"/g) ?? []).length, 6);
+  // the share bar + 3 mark-up columns + the waffle + the published cost + 9 phase years.
+  assert.equal((html.match(/class="cg-m[^"]*" tabindex="0" role="img" aria-label="[^"]+"/g) ?? []).length, 15, 'every mark is focusable and named');
   const t = text(html);
   assert.match(t, /88\.5 % of the rise to 2028 is the mark-up on default values/);
   assert.match(t, /A real verified figure can be higher or lower than that base\./);
@@ -375,7 +366,7 @@ test('the section: eight cards, each with a sentence, a table and a text alterna
 
 test('the section with prices: the strip\'s price and the second price are one range, and a table follows', () => {
   const state = { ...STATE(), priceText: '100', secondText: '60', open: { cost: true } };
-  const html = renderGraphs(TUBE, state, WIDTHS);
+  const html = renderWhy(TUBE, state, WIDTHS);
   const t = text(html);
   assert.match(t, /At your own €60 to €100 a certificate, 2028 comes to €25,645 to €42,741\. That range is yours/);
   assert.match(t, /Year Imports in At your €60 At your €100 Published 2026 2026-Q1 €19,789\.65 €32,982\.75 €24,855\.80 at €75\.36 2027 2027-Q1 €22,605\.30 €37,675\.50 none published 2028 2028-Q1 €25,644\.60 €42,741\.00 none published/);
@@ -387,25 +378,24 @@ test('the section with prices: the strip\'s price and the second price are one r
 });
 
 test('refused and reduced states say so in words and draw nothing false', () => {
-  const none = renderGraphs('no-estimate', STATE(), WIDTHS);
+  const none = renderWhy('no-estimate', STATE(), WIDTHS);
   assert.match(text(none), /Nothing to draw: this line has no estimate in any year\./);
   assert.doesNotMatch(none, /<svg|data-cg-card/);
-  assert.match(text(renderGraphs('some-years-refused', STATE(), WIDTHS)), /no estimate in at least one year/);
+  assert.match(text(renderWhy('some-years-refused', STATE(), WIDTHS)), /no estimate in at least one year/);
 
-  const verified = text(renderGraphs(modelOf(line({ verified: { directTco2ePerT: '2.0' } })), STATE(), WIDTHS));
+  const verified = text(renderWhy(modelOf(line({ verified: { directTco2ePerT: '2.0' } })), STATE(), WIDTHS));
   assert.match(verified, /0\.0 % of the rise to 2028 is mark-up\. These are your verified figures, so none is applied\./);
   assert.match(verified, /No mark-up is applied to this line: the figures are your own verified ones\./);
-  assert.match(verified, /The ring is the count from your verified figures\./);
+  assert.match(verified, /The column is the count from your verified figures\./);
   assert.doesNotMatch(verified, /Commission's base value/);
 
-  const floored = text(renderGraphs(modelOf(line({ verified: { directTco2ePerT: '1.0' } })), STATE(), WIDTHS));
+  const floored = text(renderWhy(modelOf(line({ verified: { directTco2ePerT: '1.0' } })), STATE(), WIDTHS));
   assert.match(floored, /— The change to 2028 is not divided into causes for this line\./);
   assert.match(floored, /free allocation covers all of the emissions counted\. No certificates are due\./);
-  assert.match(floored, /The same 100 t needs the same certificates in 2028 as in 2026\./);
 });
 
 test('what the visitor typed is escaped wherever it lands', () => {
-  const html = renderGraphs(TUBE, { ...STATE(), priceText: '80', secondText: '"><script>x</script>' }, WIDTHS);
+  const html = renderWhy(TUBE, { ...STATE(), priceText: '80', secondText: '"><script>x</script>' }, WIDTHS);
   assert.doesNotMatch(html, /<script/);
   assert.match(html, /value="&quot;&gt;&lt;script&gt;x&lt;\/script&gt;"/);
 });
@@ -495,26 +485,26 @@ test('AUDIT 1, swept: sentence, cells, legend and table agree in kind with the c
 test('AUDIT 2: a shipment in a quarter with no published price is told so about ITS quarter, and is shown no other quarter\'s cost', () => {
   for (const date of ['2026-11-30', '2027-10-01']) {
     const m = modelOf(line({ date }));
-    const html = renderGraphs(m, STATE(), WIDTHS), t = text(html);
+    const html = renderWhy(m, STATE(), WIDTHS), t = text(html);
     // Published 2026 prices exist (Q1 to Q3), so nothing may say that none is published for 2026.
     assert.doesNotMatch(t, /published for 2026, 2027 and 2028|no 2026, 2027 or 2028 price|for 2026, 2027 and 2028: none/, date);
-    assert.match(t, /No certificate price is published for imports in 2026-Q4, 2027-Q4 or 2028-Q4\. Type your own price above to see a cost\./, date);
+    assert.match(t, /No certificate price is published for imports in 2026-Q4, 2027-Q4 or 2028-Q4\. Type your own price in Three years to see a cost\./, date);
     assert.match(t, /Certificate price for imports in 2026-Q4, 2027-Q4 and 2028-Q4: none published · as at 14 Oct 2026\./, date);
     // No published price applies to this shipment, so no published cost is drawn or tabled for it.
     assert.doesNotMatch(html, /data-cg="published"/, `${date}: another quarter's price is not this shipment's cost`);
     assert.doesNotMatch(t, /24,855\.80|24,829\.41|75\.36|75\.28|82\.32|published €/, date);
     assert.doesNotMatch(html, /€[0-9,.]+ for this shipment/, date);
-    const priced = text(renderGraphs(m, { ...STATE(), priceText: '80' }, WIDTHS));
+    const priced = text(renderWhy(m, { ...STATE(), priceText: '80' }, WIDTHS));
     assert.match(priced, /That price is yours: no price is published for imports in 2026-Q4, 2027-Q4 or 2028-Q4\./, date);
   }
   // A third-quarter shipment: its own 2026 quarter now has a published price, EUR 82.32.
   const q3 = modelOf(line({ date: '2027-07-01' }));
-  const q3html = renderGraphs(q3, STATE(), WIDTHS);
+  const q3html = renderWhy(q3, STATE(), WIDTHS);
   assert.match(text(q3html), /No certificate price is published for imports in 2027-Q3 or 2028-Q3\./);
   assert.equal((q3html.match(/data-cg="published"/g) ?? []).length, 1);
   assert.match(q3html, /data-tip="Imports in 2026-Q3: published €82\.32\n€27,151\.40 for this shipment"/);
   // A first-quarter shipment: its own quarter's published cost, and only that one.
-  const q1 = renderGraphs(TUBE, STATE(), WIDTHS);
+  const q1 = renderWhy(TUBE, STATE(), WIDTHS);
   assert.equal((q1.match(/data-cg="published"/g) ?? []).length, 1, 'one published mark: the shipment\'s own quarter');
   assert.match(q1, /data-tip="Imports in 2026-Q1: published €75\.36\n€24,855\.80 for this shipment"/);
   assert.doesNotMatch(q1, /24829\.41|24,829\.41/, 'the Q2 price is not this shipment\'s');
@@ -524,5 +514,36 @@ test('AUDIT 2: a shipment in a quarter with no published price is told so about 
 test('M2 (audit 2026-11-02): no legend calls the certificate price the quarter\'s', () => {
   // From 2027 the price is weekly (IR (EU) 2025/2548). The quarter may name the period the import
   // falls in, never the price's period.
-  assert.doesNotMatch(renderGraphs(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE)), /price for this import's quarter/);
+  assert.doesNotMatch(renderWhy(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE)), /price for this import's quarter/);
+});
+
+/* ── audit M1 (phase-3 review): a count that rests on an unpublished CSCF is a what-if, in Why too ── */
+
+test('M1: the model says whatIf when any year is a what-if, and every Why tile that draws a count wears the tag', () => {
+  assert.equal(TUBE.whatIf, true);
+  assert.equal(modelOf(line({ verified: { directTco2ePerT: '2.0' } })).whatIf, true);
+  const html = renderWhy(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE));
+  const tag = '<span class="b-tag pending">What-if · CSCF unpublished</span>';
+  for (const id of ['share', 'charged', 'markup', 'origins', 'cost']) {
+    const tile = html.split(`data-cg-card="${id}"`)[1].split('</section>')[0];
+    assert.ok(tile.includes(tag), `${id} carries the what-if tag`);
+    assert.ok(tile.indexOf(tag) < tile.indexOf('cg-t'), `${id}: in the header, before its sentence`);
+  }
+  const phase = html.split('data-cg-card="phase"')[1].split('</section>')[0];
+  assert.doesNotMatch(phase, /What-if/, 'the legislated schedule draws no count');
+  assert.equal((html.match(/What-if/g) ?? []).length, 5);
+  // Final figures: no tag anywhere. (No real line is final in this pack, so the flag is cleared on a copy.)
+  const final = { ...TUBE, whatIf: false };
+  assert.doesNotMatch(renderWhy(final, STATE(), WIDTHS, phaseModel(pack, final)), /What-if/);
+});
+
+test('M3: a bar segment too narrow for its label has a container query to hide it; a long label has the wider one', () => {
+  const css = readFileSync(fileURLToPath(new URL('../../src/styles/cbam-bento.css', import.meta.url)), 'utf8');
+  assert.match(css, /\.cbx \.b-sp\{[^}]*container:bsp\/inline-size/);
+  assert.match(css, /@container bsp \(max-width:\d+px\)\{\.cbx \.b-split:not\(\.b-split-sm\) \.b-sp:not\(\[data-long\]\)>span\{display:none\}\}/);
+  assert.match(css, /@container bsp \(max-width:\d+px\)\{\.cbx \.b-split-sm \.b-sp:not\(\[data-long\]\)>span\{display:none\}\}/);
+  // A short label ("86.4") is unmarked; a long one ("1,234.5") carries data-long, on the share bar.
+  assert.doesNotMatch(shareBar(TUBE), /data-long/);
+  const big = { ...TUBE, split: { rise: '2000', markup: '1234.5', factor: '700', benchmark: '65.5', markupSharePct: '61.725' } };
+  assert.match(shareBar(big), /class="b-sp b-sp-bz" style="flex-grow:1234\.5" data-long>/);
 });

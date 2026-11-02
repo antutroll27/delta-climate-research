@@ -125,6 +125,18 @@ export function renderPriceRow(e: { priceQuarter: string; priceEur: string | nul
     e.priceEur ? eur(e.priceEur) : 'none published'}</b></div>`;
 }
 
+/**
+ * THE WHAT-IF TAG, one spelling wherever a count or cost rests on a CSCF the Commission has not
+ * published. The engine then returns a labelled scenario, never a final figure (tiles-estimate's
+ * status tag, a Three years plate, a Why tile all wear this). `cscfYear` is named where the engine
+ * says which year's factor is missing; the outlook does not carry it, so the plates and tiles leave
+ * it out. `hook` is the e2e class, `cb-tag`, on the Estimate hero alone.
+ */
+export function whatIfTag(cscfYear: number | null = null, hook = ''): string {
+  const text = `What-if · CSCF${cscfYear === null ? '' : ` for ${cscfYear}`} unpublished`;
+  return `<span class="b-tag${hook ? ` ${hook}` : ''} pending">${esc(text)}</span>`;
+}
+
 /** The stamp's "Origin basis" row: which default sheet answered, in words. */
 export function originBasisLabel(basis: CertificateEstimate['stamp']['originBasis']): string {
   return basis === 'residual' ? 'Residual bucket' : basis === 'country' ? "Origin's own published value" : '—';
