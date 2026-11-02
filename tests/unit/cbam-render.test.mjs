@@ -739,6 +739,8 @@ test('NON-NEGOTIABLE 1 — the banner names both tiers, and concedes everything 
   // expect a quarterly price for those years, and may not forecast one.
   assert.ok(prose.includes('From 2027 it is set weekly: none published as at'),
     'the banner must say the price is weekly from 2027 and that none is published, with a date');
+  assert.ok(prose.slice(prose.indexOf('cb-banner'), prose.indexOf('cb-grid')).includes('Prototype estimator'),
+    'sanity: the slice the next assertion reads holds the banner, so it cannot pass on an empty string');
   assert.doesNotMatch(prose.slice(prose.indexOf('cb-banner'), prose.indexOf('cb-grid')),
     /will pay|pay less|forecast|expected price|not yet/i,
     'the banner states what is published; it forecasts nothing');
