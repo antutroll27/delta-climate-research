@@ -3671,8 +3671,8 @@ test('tiles — NON-NEGOTIABLE 2 — a refusal renders NO figure of any kind', (
   assert.doesNotMatch(html, FIG, 'a refusal must not render the figure block — no number, not even zero');
   assert.doesNotMatch(html, COST, 'a refusal must not render a cost');
   assert.doesNotMatch(html, /class="b-mid"/, 'and the Chargeable tile shows no share');
-  assert.match(html, /<section class="b-t b-fill b-s2 b-fill-none">/,
-    'the Chargeable tile is the empty plate: no tonnage, no share');
+  assert.doesNotMatch(html, /b-fill|Chargeable/,
+    'the Chargeable tile is not drawn at all on a refusal: no tonnage, no share, no empty plate');
 });
 
 test('tiles — NON-NEGOTIABLE 3 — CSCF-pending is labelled a what-if, never a figure', () => {

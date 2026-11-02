@@ -107,6 +107,23 @@ test('a refusal keeps the hero, provenance and the reason, and draws no figure a
   assert.match(html, /Provenance\./);
 });
 
+test('no priced figure, no Chargeable tile: idle, thrown and refused draw none (and no empty plate)', () => {
+  const refused = est({ route: '(D)' });
+  assert.equal(refused.status, 'unavailable', 'premise: (D) has no direct default for India');
+  const priced = tiles(est());
+  assert.match(priced, /Chargeable\./, 'premise: a priced line still draws its Chargeable tile');
+  for (const [name, html] of [
+    ['idle', renderEstimateIdle(IDLE)],
+    ['thrown', renderEstimateThrown('Bad thing')],
+    ['refused', tiles(refused)],
+  ]) {
+    assert.doesNotMatch(html, /Chargeable/, `${name}: no Chargeable tile`);
+    assert.doesNotMatch(html, /b-fill/, `${name}: no empty fill plate`);
+    assert.match(html, /Three years\./, `${name}: the other tiles stay`);
+    assert.match(html, /Provenance\./, `${name}: the other tiles stay`);
+  }
+});
+
 test('the threshold card goes first, whole; no card means no plate', () => {
   const card = '<section class="cb-card cb-thresh">X</section>';
   const html = tiles(est(), { threshold: card });

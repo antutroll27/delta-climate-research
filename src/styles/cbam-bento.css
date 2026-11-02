@@ -78,7 +78,6 @@
 .cbx .b-fill-low .b-fl-bar{inset:auto auto 0 0;height:14px;border-radius:0 7px 7px 0}
 .cbx .b-fill-low .b-fl-in{flex:1 1 0}
 .cbx .b-fill-low .b-fl-in,.cbx .b-fill-low .b-fl-in :is(.b-t-sub,.b-u){color:var(--ink)}
-.cbx .b-fill-none{background:var(--card)}
 @media (max-width:640px){
   .cbx .b-fill{flex-direction:column;padding-bottom:14px}
   .cbx .b-fill .b-fl-bar{inset:auto auto 0 0;height:14px;border-radius:0 7px 7px 0}
@@ -89,6 +88,7 @@
 
 /* three years: a stacked deck */
 .cbx .b-yrs .b-t-ti{padding-right:40px}
+.cbx .b-yrs>[data-deck]>.b-t-sub{margin-bottom:14px}
 .cbx .b-stack{display:flex;flex-direction:column;margin:auto 0 12px;padding:0;list-style:none}
 .cbx .b-st{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:12px 16px;border-radius:18px;margin-top:-8px;position:relative;background:var(--well-2);color:var(--ink)}
 .cbx .b-st span{font-size:12px;font-weight:600}
@@ -129,7 +129,8 @@
 .cbx .b-field-big input{height:62px;font-size:40px;letter-spacing:-.04em}
 .cbx .b-field-big span{font-size:20px;color:var(--ink-3);padding-right:10px}
 .cbx .b-clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.cbx .b-thr{position:relative;height:12px;border-radius:6px;background:var(--well-2);margin:8px 0 2px}
+/* the thumb (em) reaches 5px past the bar; the label row clears it: 10px margin top and bottom */
+.cbx .b-thr{position:relative;height:12px;border-radius:6px;background:var(--well-2);margin:10px 0 10px}
 .cbx .b-thr b{position:absolute;left:0;top:0;bottom:0;width:var(--fill,0%);border-radius:6px;background:var(--ink)}
 .cbx .b-thr em{position:absolute;left:50%;top:-5px;bottom:-5px;width:3px;margin-left:-1.5px;border-radius:2px;background:var(--card);box-shadow:0 0 0 1px var(--ink)}
 .cbx .b-thr-l2{display:flex;justify-content:space-between;gap:8px}
@@ -156,9 +157,9 @@
 .cbx .b-out{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:auto}
 .cbx .b-out>*{grid-column:1/-1}
 .cbx .b-out>:is(.b-yrs,.b-prov){grid-column:auto;min-height:232px}
+.cbx .b-out>.b-yrs{align-self:start}
 .cbx .b-out>.b-hero{min-height:400px}
 .cbx .b-out>.b-fill{min-height:232px}
-.cbx .b-out>.b-fill-none{min-height:120px}
 .cbx .b-legacy{min-width:0}
 @media (max-width:640px){
   .cbx .b-out{grid-template-columns:minmax(0,1fr)}
@@ -177,6 +178,11 @@
 .cbx .b-scrim{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:40}
 .cbx .b-sheet{position:fixed;top:16px;left:16px;bottom:16px;width:min(440px,calc(100vw - 32px));z-index:41;background:var(--card);color:var(--ink);border-radius:28px;box-shadow:0 30px 80px -20px rgba(0,0,0,.5);padding:20px 22px;display:flex;flex-direction:column;gap:10px;overflow:auto}
 .cbx .b-sheet[hidden],.cbx .b-scrim[hidden]{display:none}
+/* Phone: the tab bar (z 8) and top bar (z 7) sit under the scrim (z 40) already; the sheet is a bottom-bleed
+   panel so the tab bar's labels cannot peek out of the 16px gap or the rounded corners below it. */
+@media (max-width:899px){
+  .cbx .b-sheet{top:10px;left:0;right:0;bottom:0;width:auto;border-radius:28px 28px 0 0;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+}
 .cbx .b-sheet :is(h2,p){margin:0}
 .cbx .b-sheet header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
 .cbx .b-x{width:32px;height:32px;border-radius:50%;border:0;background:var(--well);color:var(--ink-2);font-size:20px;cursor:pointer;line-height:1}

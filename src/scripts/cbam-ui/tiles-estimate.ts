@@ -119,11 +119,10 @@ export function chargeableSplit(directTco2e: string, f: EstimateFigure): Chargea
 
 /** Under this share the fill cannot hold its own text, so it is drawn as a strip (decision 5). */
 const LOW_SHARE = 40;
-const CHARGEABLE_EMPTY = '<section class="b-t b-fill b-s2 b-fill-none"><div class="b-fl-in">'
-  + '<h3 class="b-t-ti">Chargeable.</h3></div></section>';
 
 function chargeable(e: CertificateEstimate): string {
-  if (e.status === 'unavailable') return CHARGEABLE_EMPTY;
+  // No priced figure, no tile: an empty plate with a bare title would claim a share it does not have.
+  if (e.status === 'unavailable') return '';
   const f = figureOf(e);
   const split = chargeableSplit(e.emissionsTco2e, f);
   const low = !split || Number(split.chargeablePct) < LOW_SHARE;
@@ -197,14 +196,14 @@ export function renderEstimateTiles(t: EstimateTilesInput): string {
 /** Every pre-engine state (incomplete form, no route, mass or verified refusal): the message, escaped. */
 export function renderEstimateIdle(message: string): string {
   return `<section class="b-t b-hero b-s2"><h3 class="b-t-ti">Certificates.</h3><p class="cb-idle">${esc(message)}</p></section>`
-    + CHARGEABLE_EMPTY + DECK_SHELL + PROVENANCE_EMPTY;
+    + DECK_SHELL + PROVENANCE_EMPTY;
 }
 
 /** The engine threw (a DomainError names what is missing): show it, never a generic failure. */
 export function renderEstimateThrown(message: string): string {
   return '<section class="b-t b-hero b-s2 cb-res cb-unavail"><div class="b-t-h"><h3 class="b-t-ti">Certificates.</h3>'
     + `<span class="b-tag cb-tag unavail">No estimate</span></div><p class="cb-reason">${esc(message)}</p></section>`
-    + CHARGEABLE_EMPTY + DECK_SHELL + PROVENANCE_EMPTY;
+    + DECK_SHELL + PROVENANCE_EMPTY;
 }
 
 /* ── the Three-years deck (filled into [data-deck] by paintOutlook) ──────────── */
