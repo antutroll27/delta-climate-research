@@ -39,6 +39,14 @@ import {
 import { ROUTE_GLOSSARY } from '../cbam-route-glossary.ts';
 import { renderTitleCard, titleSummary, type TitleLine } from '../cbam-ui/title-card.ts';
 import {
+  renderDeck, renderEstimateIdle, renderEstimateThrown, renderEstimateTiles,
+} from '../cbam-ui/tiles-estimate.ts';
+import {
+  mountRadioMirror, renderDatePeriod, renderMassRuler, renderRouteSegments, segmentLabel, verifiedOnlyNote,
+  verifiedOnlyRoutes,
+} from '../cbam-ui/inputs-estimate.ts';
+import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
+import {
   esc, eur, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
 } from '../cbam-ui/format.ts';
 // cbam-render.test.mjs imports renderPriceRow from this module; the format module owns it now.
@@ -1804,6 +1812,12 @@ export function initCbam(): void {
   const titleEl = $('cbTitle'), titlePhone = $('cbTitlePhone');
   const badges = document.querySelectorAll<HTMLElement>('[data-list-badge]');
   const listHeading = $('cbxH-list');
+  // Phase 2 (spec §5.1): the Estimate input column's new controls. All optional, so a stripped
+  // page still runs; the hidden #cbRoute and #cbTier stay the source of truth either way.
+  const routeSeg = $('cbRouteSeg'), routeVo = $('cbRouteVo'), tierCards = $('cbTierCards');
+  const datePeriod = $('cbDatePeriod'), massRuler = $('cbMassRuler'), cnName = $('cbCnName');
+  const cbx = $('cbx'), goodSheet = $('cbGoodSheet'), goodScrim = $('cbGoodScrim');
+  const goodOpen = document.querySelector<HTMLButtonElement>('[data-good-open]');
   if (!cn || !country || !route || !mass || !date || !out || !status || !listEl) return;
 
   /**
@@ -1945,6 +1959,7 @@ export function initCbam(): void {
 
   function syncRoutes(): void {
     noRoute = null;
+    if (routeVo) routeVo.textContent = '';
     // Read the user's pick BEFORE the rebuild wipes it — and remember it, because a rebuild that
     // empties the list wipes it BEFORE the next call gets here (see lastRoutePick). Reading
     // `route.value` alone is only enough while every rebuild leaves a real option selected.
@@ -1991,10 +2006,15 @@ export function initCbam(): void {
     // selectors all speak. 'default' keeps its own label and is NOT in the glossary: it is not an
     // Annex indicator, and it is always alone in its list (measured 53,070 of 53,070), which is
     // what makes "single route" accurate.
+    // A route the Commission publishes no direct default for prices from verified figures only
+    // (spec §5.1). Asked of the engine, marked on the option, so the select stays the one truth
+    // and the radio mirror reads it from there.
+    const vo = verifiedOnlyRoutes(pack, cn!.value, country!.value, year, rs);
     const opts = rs.map((r) => {
       const text = r === 'default' ? 'single route' : `${r} ${ROUTE_GLOSSARY[r]?.label ?? ''}`.trim();
-      return `<option value="${esc(r)}">${esc(text)}</option>`;
+      return `<option value="${esc(r)}"${vo.has(r) ? ' data-vo' : ''}>${esc(text)}</option>`;
     }).join('');
+    if (routeVo) routeVo.textContent = verifiedOnlyNote(rs.filter((r) => vo.has(r)).map(segmentLabel), countryName(country!.value));
     const want = nextRoute(rs, prev);
     // want === '' means the pairing publishes several routes and the user has not
     // chosen among them. A disabled placeholder holds the selection empty, and
@@ -2201,11 +2221,11 @@ export function initCbam(): void {
     // Inside the disabled <select> it was invisible to keyboard and screen-reader users, while this
     // panel told someone who had filled every field to "choose a route".
     if (pack && cn!.value && country!.value && noRoute) {
-      out!.innerHTML = `<p class="cb-idle">No estimate: ${esc(noRoute)}.</p>`;
+      out!.innerHTML = renderEstimateIdle(`No estimate: ${noRoute}.`);
       return null;
     }
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value || !date!.value) {
-      out!.innerHTML = '<p class="cb-idle">Choose a good, origin, route, mass and import date to see the provisional exposure.</p>';
+      out!.innerHTML = renderEstimateIdle('Choose a good, origin, route, mass and import date to see the provisional exposure.');
       return null;
     }
     // REFUSE AN IMPOSSIBLE MASS RATHER THAN PRICING IT. `min="0"` on the input is
@@ -2242,7 +2262,7 @@ export function initCbam(): void {
     // so that editing the .astro cannot silently disarm it.
     const massProblem = massRefusal(mass!.value);
     if (massProblem) {
-      out!.innerHTML = `<p class="cb-idle">${esc(massProblem)}</p>`;
+      out!.innerHTML = renderEstimateIdle(massProblem);
       return null;
     }
     // The verified panel is read through the SAME parse the added line uses (readVerified's own
@@ -2253,7 +2273,7 @@ export function initCbam(): void {
     // estimate.
     const v = readVerified();
     if ('error' in v) {
-      out!.innerHTML = `<p class="cb-idle">${esc(v.error)}</p>`;
+      out!.innerHTML = renderEstimateIdle(v.error);
       return null;
     }
     // ONE object, priced here and handed to the strip, so the three-year view is about exactly
@@ -2302,15 +2322,18 @@ export function initCbam(): void {
       // preview is where that matters MOST — it renders before anyone clicks Add, so it is all a
       // visitor who never adds a line ever sees, and it is the surface this pair was missed on
       // both previous times. The card passes the same predicate over its own estimate.
-      out!.innerHTML = t + renderResult(e)
-        + renderAttestation({ tier: e.stamp.tier, verifiedRef: v.ok.verifiedRef }, hasFigure(e));
+      // Spec §5.1 tiles. The threshold card goes first inside them (its copy says "the exposure
+      // below"), and the attestation is still built HERE, by the same call and the same predicate,
+      // because cbam-render.test.mjs pins this call site by its source text.
+      out!.innerHTML = renderEstimateTiles({
+        estimate: e, importDate: date!.value, threshold: t,
+        attestation: renderAttestation({ tier: e.stamp.tier, verifiedRef: v.ok.verifiedRef }, hasFigure(e)),
+      });
       return input;
     } catch (err) {
       // A DomainError is the engine refusing, and it names what is missing. Show it
       // rather than a generic failure — the reason is the useful part.
-      out!.innerHTML = `<div class="cb-res cb-unavail">
-        <div class="cb-tag unavail">No estimate</div>
-        <p class="cb-reason">${esc((err as Error).message)}</p></div>`;
+      out!.innerHTML = renderEstimateThrown((err as Error).message);
       return null;
     }
   }
@@ -2345,6 +2368,9 @@ export function initCbam(): void {
   function paintOutlook(line: EstimatorInput | null): void {
     if (!outlookEl) return;
     outlookView = line && pack ? outlook(pack, line) : null;
+    // The Estimate deck (spec §5.1) is drawn from this same outlook, never a second engine run.
+    const deck = out!.querySelector<HTMLElement>('[data-deck]');
+    if (deck) deck.innerHTML = renderDeck(outlookView, line?.massT ?? '');
     if (!outlookView) {
       outlookEl.innerHTML = '';
       return;
@@ -2468,7 +2494,18 @@ export function initCbam(): void {
     if (titlePhone) titlePhone.textContent = titleSummary(t);
   }
 
+  /** Steps 3 and 4's captions (spec §5.1): the price period for the date, the line against 50 t. */
+  function paintInputs(): void {
+    if (datePeriod) datePeriod.innerHTML = pack ? renderDatePeriod(pack.prices, date!.value) : '';
+    if (massRuler) {
+      massRuler.innerHTML = pack && cn!.value && date!.value && !massRefusal(mass!.value)
+        ? renderMassRuler(resolveThreshold(pack, { cn: cn!.value, massT: mass!.value.trim(), date: date!.value }))
+        : '';
+    }
+  }
+
   function run(): void {
+    paintInputs();
     const line = runPreview();
     paintTitle(line);
     paintOutlook(line);
@@ -3080,6 +3117,17 @@ export function initCbam(): void {
   // A tick is one discrete action, not typing — announce it immediately, as the year-card
   // attestation checkbox already does.
   attest?.addEventListener('change', refresh);
+  // Spec §6.5: the visible radio groups mirror the hidden selects both ways, so cbam-app.ts and
+  // the e2e suite keep reading and setting the selects. Mounted after the listeners above, so a
+  // pick's `change` reaches syncRouteNote/syncScope/refresh exactly as a select change does.
+  if (routeSeg) mountRadioMirror(route, routeSeg, renderRouteSegments);
+  if (tier && tierCards) mountRadioMirror(tier, tierCards);
+  if (cbx && goodSheet && goodScrim && goodOpen) {
+    mountGoodSheet({
+      root: cbx, sheet: goodSheet, scrim: goodScrim, trigger: goodOpen, input: cn, caption: cnName,
+      load: async () => (await ensurePack())?.classifications ?? null,
+    });
+  }
   // ONCE, AT WIRING TIME, and not only on the first user interaction: Firefox (and bfcache
   // restores generally) repopulate <select> and <input> values across a reload, so #cbTier can
   // come back reading 'actual-verified' while #cbVerifiedRow is still `hidden` from the markup —
