@@ -5,9 +5,12 @@ import { fileURLToPath } from 'node:url';
 import Decimal from 'decimal.js';
 
 import {
-  assumedCost, dateInYear, formatDecimal, formatPackDate, outlook, outlookPriceSlots, outlookWhy, outlookYears,
-  parseAssumedPrice, renderOutlook, renderOutlookWhy, renderOutlookYears, unpricedYears,
+  assumedCost, dateInYear, formatDecimal, formatPackDate, outlook, outlookWhy, outlookYears,
+  parseAssumedPrice, unpricedYears,
 } from '../../src/scripts/cbam-outlook.ts';
+import {
+  markupDots, renderYearPlates, renderYears, renderYearsWhy, yearsPriceSlots,
+} from '../../src/scripts/cbam-ui/tiles-years.ts';
 import {
   estimateFromPack, routesFor,
 } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
@@ -122,8 +125,8 @@ test('a good whose benchmark steps down in the last period: iron powder 72052100
     rise: '76.33', moreEmissions: '50.8', lessAllocation: '25.53',
     factorPart: '10.95', benchmarkPart: '14.58', emissionsCause: 'markup-default',
   });
-  const why = text(renderOutlookWhy(view));
-  assert.match(why, /Why it rises by 76\.3 certificates by 2028/);
+  const why = text(renderYearsWhy(view));
+  assert.match(why, /Why it rises\. Of 76\.3 extra certificates by 2028\./);
   assert.match(why, /Benchmark for route \(F\) falls in 2028 \(1\.46 → 1\.298\)/);
   assert.match(why, /\+50\.8/);
   assert.match(why, /\+11\.0/, '10.95 to one place, half up');
@@ -141,7 +144,7 @@ test('a good with no production route: aluminous cement 25233000', () => {
   assert.ok(new D(view.split.benchmarkPart).greaterThan(0), 'the benchmark step shows as its own part');
   // (0.717 − 0.686) × 100 t × 0.90 = 2.79
   assert.equal(view.split.benchmarkPart, '2.79');
-  const why = text(renderOutlookWhy(view));
+  const why = text(renderYearsWhy(view));
   assert.match(why, /Benchmark for this good falls in 2028 \(0\.717 → 0\.686\)/);
   assert.doesNotMatch(why, /for route/);
 });
@@ -247,7 +250,7 @@ test('verified figures: the same emissions every year, no mark-up part, and no m
   assert.equal(view.split.emissionsCause, 'none');
   assert.equal(view.split.moreEmissions, '0');
   assert.equal(view.split.factorPart, '11.1825');
-  const html = renderOutlook(view);
+  const html = renderYears(view);
   assert.doesNotMatch(html, /Mark-up/i, 'no mark-up is charged on an attested figure, so none is named');
   assert.doesNotMatch(html, /mark-up \d/i);
   assert.match(text(html), /your verified figures/);
@@ -267,7 +270,7 @@ test('verified direct figure with the Commission\'s electricity default: the mar
   assert.deepEqual(figures(view).map((y) => y.indirectMarkupPct), ['10', '20', '30']);
   assert.equal(view.split.emissionsCause, 'markup-electricity');
   assert.equal(view.split.moreEmissions, '0.8');
-  const why = text(renderOutlookWhy(view));
+  const why = text(renderYearsWhy(view));
   assert.match(why, /Mark-up on the Commission's default value for electricity rises from 10% to 30%/);
   assert.match(why, /With a verified electricity figure it no longer applies\./);
   assert.doesNotMatch(why, /Mark-up on default values/);
@@ -287,7 +290,7 @@ test('electricity in scope on default values: counts are the engine\'s, and the 
   // (161.2 + 5.2) − (136.4 + 4.4) = 25.6 ; 64.935 − 59.94 = 4.995
   assert.equal(s.moreEmissions, '25.6');
   assert.equal(s.factorPart, '4.995');
-  const rows = text(renderOutlook(view));
+  const rows = text(renderYears(view));
   assert.match(rows, /of which electricity receives no free allocation 4\.4 mark-up 10% 4\.8 mark-up 20% 5\.2 mark-up 30%/);
 });
 
@@ -301,13 +304,13 @@ test('a route with no default value for the origin: every year carries the engin
   }
   assert.equal(view.split, null);
   assert.equal(view.splitWithheld, 'refused');
-  const html = renderOutlook(view);
+  const html = renderYears(view);
   assert.equal((html.match(/No estimate/g) ?? []).length, 3);
   assert.doesNotMatch(html, /cb-ol-n"/, 'a refused year shows no figure of any kind');
   assert.doesNotMatch(html, /Why it rises/);
   assert.doesNotMatch(html, /cb-ol-stack/);
   assert.match(html, /<details class="cb-ol-work" hidden>/, 'nothing to show the working of');
-  assert.match(html, /<div class="cb-ol-price" hidden>/, 'and no cost for a price to fill');
+  assert.match(html, /<section class="b-t b-own cb-ol-price" aria-labelledby="cbOlPriceT" hidden>/, 'and no cost for a price to fill');
 });
 
 test('free allocation above the emissions counted: the counts are shown and the split is withheld', () => {
@@ -320,7 +323,7 @@ test('free allocation above the emissions counted: the counts are shown and the 
   assert.equal(view.splitWithheld, 'floor');
   assert.deepEqual(figures(view).map((y) => y.riseOnFirstPct), [null, null, null],
     'no percentage on a first-year count of zero');
-  const html = renderOutlook(view);
+  const html = renderYears(view);
   assert.doesNotMatch(html, /Why it rises|cb-ol-stack/);
   assert.match(text(html), /the count is held at zero and the change between years cannot be divided into causes/);
 
@@ -426,34 +429,34 @@ test('cost at an assumed price is the engine\'s own sum: fed a published price, 
 
 test('a typed price fills only the years with no published price, and never replaces a published one', () => {
   const view = outlook(pack, line());
-  const none = text(renderOutlook(view));
-  assert.match(none, /2026 329\.8 certificates €24,855\.80 price published, €75\.36/);
-  assert.match(none, /2027 376\.8 certificates, \+14\.2% on 2026 Certificate price · imports in 2027-Q1 none published as at 14 Oct 2026/);
-  assert.match(none, /2028 427\.4 certificates, \+29\.6% on 2026 Certificate price · imports in 2028-Q1 none published as at 14 Oct 2026/);
+  const none = text(renderYears(view));
+  assert.match(none, /2026\. 329\.8 certificates €24,855\.80 price published, €75\.36/);
+  assert.match(none, /2027\. \+14\.2% on 2026 376\.8 certificates Certificate price · imports in 2027-Q1 none published as at 14 Oct 2026/);
+  assert.match(none, /2028\. \+29\.6% on 2026 427\.4 certificates Certificate price · imports in 2028-Q1 none published as at 14 Oct 2026/);
 
-  const filled = text(renderOutlook(view, '80'));
-  assert.match(filled, /2026 329\.8 certificates €24,855\.80 price published, €75\.36/,
+  const filled = text(renderYears(view, '80'));
+  assert.match(filled, /2026\. 329\.8 certificates €24,855\.80 price published, €75\.36/,
     'the published year is untouched: still the engine\'s cost at the Commission\'s price');
   // 376.755 × 80 = 30,140.40 ; 427.41 × 80 = 34,192.80
-  assert.match(filled, /2027 376\.8 certificates, \+14\.2% on 2026 €30,140\.40 at your assumed €80 · not a published price/);
-  assert.match(filled, /2028 427\.4 certificates, \+29\.6% on 2026 €34,192\.80 at your assumed €80 · not a published price/);
+  assert.match(filled, /2027\. \+14\.2% on 2026 376\.8 certificates €30,140\.40 at your assumed €80 · not a published price/);
+  assert.match(filled, /2028\. \+29\.6% on 2026 427\.4 certificates €34,192\.80 at your assumed €80 · not a published price/);
   assert.doesNotMatch(filled, /€26,386|329\.8275 × 80/);
   assert.match(filled, /Cost price × certificates €24,855\.80 published €75\.36 €30,140\.40 your assumed €80 €34,192\.80 your assumed €80/);
 
   // Every place the visitor's number produces a figure says whose number it is.
-  const html = renderOutlook(view, '80');
+  const html = renderYears(view, '80');
   const mine = html.match(/€30,140\.40[\s\S]{0,120}/g);
   assert.equal(mine.length, 2, 'the 2027 cost appears on the card and in the table');
   for (const m of mine) assert.match(m, /your assumed €80/);
 
   // An unusable entry fills nothing and says what is wanted.
   // AUDIT 4: a price with more decimals is used as shown. 376.755 × 80.56 = 30,351.38 (not ×80.555).
-  const cents = text(renderOutlook(view, '80.555'));
+  const cents = text(renderYears(view, '80.555'));
   assert.match(cents, /€30,351\.38 at your assumed €80\.56/);
   assert.doesNotMatch(cents, /30,349\.50/);
   for (const bad of ['0', '-5', 'abc', '0.004']) {
-    const t = text(renderOutlook(view, bad));
-    assert.match(t, /2027 376\.8 certificates, \+14\.2% on 2026 Certificate price · imports in 2027-Q1 none published/, bad);
+    const t = text(renderYears(view, bad));
+    assert.match(t, /2027\. \+14\.2% on 2026 376\.8 certificates Certificate price · imports in 2027-Q1 none published/, bad);
     assert.match(t, /Enter a price of at least €0\.01\./, bad);
     assert.doesNotMatch(t, /your assumed/, bad);
   }
@@ -462,8 +465,8 @@ test('a typed price fills only the years with no published price, and never repl
 test('the slots refilled while the visitor types are exactly what a full render holds', () => {
   const view = outlook(pack, line());
   for (const priceText of ['', '80', '82.5', 'abc']) {
-    const html = renderOutlook(view, priceText);
-    const slots = outlookPriceSlots(view, priceText);
+    const html = renderYears(view, priceText);
+    const slots = yearsPriceSlots(view, priceText);
     for (const [name, inner] of Object.entries(slots)) {
       assert.ok(html.includes(`data-ol="${name}">${inner}</`), `slot ${name} at ${JSON.stringify(priceText)}`);
     }
@@ -475,12 +478,12 @@ test('when the entered date falls in a 2026 quarter with no published price, 202
   // published on 5 October 2026; see the next test.)
   const view = outlook(pack, line({ date: '2026-11-15' }));
   assert.deepEqual(unpricedYears(view), [2026, 2027, 2028]);
-  const t = text(renderOutlook(view));
-  assert.match(t, /2026 329\.8 certificates Certificate price · imports in 2026-Q4 none published as at 14 Oct 2026/);
+  const t = text(renderYears(view));
+  assert.match(t, /2026\. 329\.8 certificates Certificate price · imports in 2026-Q4 none published as at 14 Oct 2026/);
   assert.match(t, /Fills the cost for 2026, 2027 and 2028, where no certificate price is published for the import's date\./);
   // AUDIT 2, in the strip: a November shipment's 2026 card is about ITS quarter. "2026: none
   // published" was false while three other 2026 quarters have a price.
-  assert.match(t, /2027 376\.8 certificates, \+14\.2% on 2026 Certificate price · imports in 2027-Q4 none published/);
+  assert.match(t, /2027\. \+14\.2% on 2026 376\.8 certificates Certificate price · imports in 2027-Q4 none published/);
   // Each pending row's own locator, once: the 2026 row's and the weekly-price sentence.
   assert.match(t, /Certificate price, 2026: EC certificate price table, 2026-Q4 \(not yet published\)\./);
   assert.match(t, /Certificate price, 2027 and 2028: From 2027 the Commission sets a weekly certificate price/);
@@ -496,8 +499,8 @@ test('a 2026-Q3 import is priced at the published Q3 price, EUR 82.32, and at no
   assert.equal(y.price.priceEur, '82.32');
   assert.equal(y.costEur, '27151.40');
   assert.deepEqual(unpricedYears(view), [2027, 2028]);
-  const t = text(renderOutlook(view));
-  assert.match(t, /2026 329\.8 certificates €27,151\.40 price published, €82\.32/);
+  const t = text(renderYears(view));
+  assert.match(t, /2026\. 329\.8 certificates €27,151\.40 price published, €82\.32/);
   assert.doesNotMatch(t, /75\.36|75\.28|24,855/, 'not at the Q1 or Q2 price');
 });
 
@@ -507,7 +510,7 @@ test('the strip says "none published" with the pack\'s date, prints the pack\'s 
   const view = outlook(pack, line());
   assert.equal(view.packDate, pack.generatedAt);
   assert.equal(formatPackDate(pack.generatedAt), '18 Aug 2026');
-  const html = renderOutlook(view);
+  const html = renderYears(view);
   const t = text(html);
   assert.match(t, /The same shipment, 2026 to 2028 Law as published · 18 Aug 2026/);
 
@@ -534,7 +537,7 @@ test('the strip says "none published" with the pack\'s date, prints the pack\'s 
 test('every number on the strip is one of the view\'s numbers, rounded from the exact decimal', () => {
   const view = outlook(pack, line());
   const f = figures(view);
-  const cards = text(renderOutlookYears(view, null));
+  const cards = text(renderYearPlates(view, null));
   // One decimal place, half up, on the decimal: 329.8275 → 329.8, 376.755 → 376.8, 427.41 → 427.4.
   for (const y of f) {
     const shown = new D(y.certificates).toDecimalPlaces(1, Decimal.ROUND_HALF_UP);
@@ -549,16 +552,16 @@ test('every number on the strip is one of the view\'s numbers, rounded from the 
   assert.match(cards, /\+29\.6% on 2026/);   // 29.5859
 
   // The working table shows up to three places, as the result card above the strip does.
-  const html = text(renderOutlook(view));
+  const html = text(renderYears(view));
   assert.match(html, /Emissions counted, tCO₂e default value plus mark-up 475\.2 mark-up 10% 518\.4 mark-up 20% 561\.6 mark-up 30%/);
   assert.match(html, /Free allocation deducted, tCO₂e benchmark × share retained × tonnes −145\.373 1\.491 × 97\.5% −141\.645 1\.491 × 95% −134\.19 1\.491 × 90%/);
   assert.match(html, /Certificates to surrender 329\.828 376\.755 427\.41/);
   assert.match(html, /Cost price × certificates €24,855\.80 published €75\.36 — none published — none published/);
 
   // The bar's segments are the split's own values, not a second calculation.
-  const bar = renderOutlookWhy(view).match(/flex-grow:([0-9.]+)/g).map((m) => m.slice('flex-grow:'.length));
+  const bar = renderYearsWhy(view).match(/flex-grow:([0-9.]+)/g).map((m) => m.slice('flex-grow:'.length));
   assert.deepEqual(bar, ['86.4', '11.1825'], 'the benchmark part is zero and draws no segment');
-  assert.match(text(renderOutlookWhy(view)), /Benchmark for route \(C\) does not change by 2028.* 0\.0$/,
+  assert.match(text(renderYearsWhy(view)), /Benchmark for route \(C\) does not change by 2028.* 0\.0$/,
     'but its legend row is still there, saying so');
 });
 
@@ -579,8 +582,46 @@ test('the rendered strip escapes what it did not write', () => {
   // visitor's. None may reach innerHTML unescaped.
   const view = outlook(pack, line({ route: '(D)' }));
   view.years[0].reason = '<img src=x onerror=alert(1)> & "quoted"';
-  const html = renderOutlook(view, '"><script>alert(1)</script>');
+  const html = renderYears(view, '"><script>alert(1)</script>');
   assert.doesNotMatch(html, /<img|<script/);
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt; &amp; &quot;quoted&quot;/);
   assert.match(html, /value="&quot;&gt;&lt;script&gt;alert\(1\)&lt;\/script&gt;"/);
+});
+
+test('the year plates: the hero is the first year, the mark-up is the engine\'s, and the dots light only whole tens', () => {
+  const html = renderYearPlates(outlook(pack, line()), null);
+  assert.equal((html.match(/class="b-t b-yr cb-ol-yr b-hero"/g) ?? []).length, 1, 'one hero plate, the first');
+  assert.match(text(html), /2026\. 329\.8 certificates €24,855\.80 price published, €75\.36 Mark-up 10%/);
+  assert.equal((html.match(/<i class="on"><\/i>/g) ?? []).length, 1 + 2 + 3, 'one dot per 10%: 10%, 20%, 30%');
+  assert.equal(markupDots('10'), 1);
+  assert.equal(markupDots('30'), 3);
+  assert.equal(markupDots('1'), null, 'a 1% mark-up is said, not drawn as no dot');
+  assert.equal(markupDots('15'), null);
+  assert.equal(markupDots('-10'), null);
+  assert.equal(markupDots('not a number'), null);
+  // Nitric acid carries a 1% mark-up in every year: the plate names it, and draws no dots.
+  const nitric = renderYearPlates(outlook(pack, line({ cn: '28080000', route: 'default' })), null);
+  assert.equal((nitric.match(/Mark-up 1%/g) ?? []).length, 3);
+  assert.doesNotMatch(nitric, /b-d10/);
+  // Verified figures carry no mark-up, so none is named; the electricity default's is named as such.
+  assert.doesNotMatch(renderYearPlates(outlook(pack, line({ verified: { directTco2ePerT: '2.0' } })), null), /mark-up/i);
+  const clinker = renderYearPlates(outlook(pack, line({
+    cn: '2523100090', country: 'DZ', route: '(A)', emissionsScope: 'direct_and_indirect', verified: { directTco2ePerT: '1.5' },
+  })), null);
+  assert.match(text(clinker), /Electricity mark-up 10%.*Electricity mark-up 20%.*Electricity mark-up 30%/);
+});
+
+test('the view holds one details, one summary, one table, one tag: the hooks the page and the e2e read', () => {
+  const html = renderYears(outlook(pack, line()), '80', true);
+  for (const [what, re] of [['details', /<details/g], ['summary', /<summary/g], ['table', /<table/g], ['cb-tag', /\bcb-tag\b/g], ['cb-card-label', /\bcb-card-label\b/g]]) {
+    assert.equal((html.match(re) ?? []).length, 1, what);
+  }
+  assert.match(html, /<details class="cb-ol-work" open>/);
+  assert.equal((html.match(/id="cbOlPrice"/g) ?? []).length, 1);
+  // Floor: the tile says why the change is not divided, and never "Why it rises".
+  const floor = renderYears(outlook(pack, line({ verified: { directTco2ePerT: '1.0' } })));
+  assert.match(text(floor), /Not divided into causes\. In at least one of these years/);
+  assert.doesNotMatch(floor, /cb-ol-h"/);
+  // Zero first-year count: no percentage on any plate.
+  assert.doesNotMatch(floor, /cb-ol-d"/);
 });
