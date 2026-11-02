@@ -2293,6 +2293,7 @@ export function initCbam(): void {
       cn: line.cn,
       name: pack.classifications.find((c) => c.code === line.cn)?.description ?? '',
       origin: countryName(line.country),
+      originCode: line.country,
       route: line.route,
       massT: line.massT,
       date: line.date,
