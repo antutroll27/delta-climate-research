@@ -2429,13 +2429,13 @@ export function initCbam(): void {
     else if (found) graphsChunkUrl = found;
     if (!graphsEl || !graphsWanted) return;
     // ONE PLAIN SENTENCE AND A WAY BACK, in place of an empty space that says nothing. The
-    // figures above are complete without the graphs, and the sentence says so. If the address in
+    // figures on the other views are complete without the graphs, and the sentence says so. If the address in
     // the error is not this site's own script, nothing is imported from it: the way back is a
     // reload of the page.
     graphsEl.innerHTML = graphsReloadOnly
-      ? `<p class="cg-none" role="status">The graphs could not be loaded. The figures above are complete without them.
+      ? `<p class="cg-none" role="status">The graphs could not be loaded. The figures on Estimate and Three years are complete without them.
       <button type="button" class="cg-retry" data-cg="reload">Reload the page</button></p>`
-      : `<p class="cg-none" role="status">The graphs could not be loaded. The figures above are complete without them.
+      : `<p class="cg-none" role="status">The graphs could not be loaded. The figures on Estimate and Three years are complete without them.
       <button type="button" class="cg-retry" data-cg="retry">Try again</button></p>`;
   }
   function paintGraphs(line: EstimatorInput | null): void {

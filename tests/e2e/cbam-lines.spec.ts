@@ -1680,7 +1680,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await setLine(page, TUBE_LINE);
     await view(page, 'why');
     const g = page.locator('#cbGraphs');
-    await expect(g.locator('.cg-none')).toContainText('The graphs could not be loaded. The figures above are complete without them.');
+    await expect(g.locator('.cg-none')).toContainText('The graphs could not be loaded. The figures on Estimate and Three years are complete without them.');
     await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol-n')).toHaveText(['329.8', '376.8', '427.4']);
     await view(page, 'why');
@@ -1766,7 +1766,7 @@ test.describe('CBAM estimate — the graphs', () => {
       'of the rise to 2028 is the mark-up on default values. It no longer applies with verified data.',
       'On default values the mark-up adds 129.6 certificates in 2028. It no longer applies with verified data.',
       'In 2028, certificates cover 76 of every 100 tonnes of emissions counted. Free allocation covers the other 24.',
-      'No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price above to see a cost.',
+      'No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price in Three years to see a cost.',
       'Free allocation retained falls to zero in 2034. The steepest single step is 2030.',
       // Filled after the other cards, in idle time: one engine call per origin.
       'On default values, 2026 certificates for this good run from 13.0 (United States) to 762.1 (Indonesia). India is at 329.8.',
@@ -1827,7 +1827,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(cost.locator('[data-cg="published"]')).toHaveCount(1);
     // The second box does nothing, and says why, until the first price exists.
     await expect(page.locator('#cgSecond')).toBeDisabled();
-    await expect(cost.locator('[data-cg="second-note"]')).toHaveText('Type your first price in the box above. This one then makes a range.');
+    await expect(cost.locator('[data-cg="second-note"]')).toHaveText('Type your first price in Three years. This one then makes a range.');
     await view(page, 'three-years');
     await page.fill('#cbOlPrice', '80.555');
     // Rounded once to the cent, and used as shown, here and in the strip: 427.41 × 80.56.
@@ -1865,7 +1865,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(page.locator('#cgSecond')).toBeDisabled();
     await expect(page.locator('#cgSecond')).toHaveValue('60');
     await expect(cost.locator('[data-xlo]')).toHaveCount(0);
-    await expect(cost.locator('.cg-t')).toHaveText('No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price above to see a cost.');
+    await expect(cost.locator('.cg-t')).toHaveText('No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price in Three years to see a cost.');
     await view(page, 'three-years');
     await expect(page.locator('#cbOutlook .cb-ol-yr').nth(1)).not.toContainText('€');
   });
@@ -1932,7 +1932,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await view(page, 'why');
     const costCard = g.locator('[data-cg-card="cost"]');
     await expect(costCard.locator('.cg-t')).toHaveText(
-      'No certificate price is published for imports in 2026-Q4, 2027-Q4 or 2028-Q4. Type your own price above to see a cost.');
+      'No certificate price is published for imports in 2026-Q4, 2027-Q4 or 2028-Q4. Type your own price in Three years to see a cost.');
     await expect(costCard.locator('.cg-cap')).toContainText('Certificate price for imports in 2026-Q4, 2027-Q4 and 2028-Q4: none published · as at 14 Oct 2026.');
     await expect(costCard.locator('[data-cg="published"]')).toHaveCount(0);
     await expect(costCard).not.toContainText(/75\.36|75\.28|24,855|24,829/);
@@ -1954,7 +1954,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(page.locator('#cbOutlook .cb-ol-yr').first()).toContainText('price published, €82.32');
     await view(page, 'why');
     await expect(costCard.locator('.cg-t')).toHaveText(
-      'No certificate price is published for imports in 2027-Q3 or 2028-Q3. Type your own price above to see a cost.');
+      'No certificate price is published for imports in 2027-Q3 or 2028-Q3. Type your own price in Three years to see a cost.');
     await expect(costCard.locator('[data-cg="published"]')).toHaveCount(1);
     await expect(costCard.locator('[data-cg="published"]')).toHaveAttribute('data-v', '27151.40');
     await expect(page.locator('#cbGraphs')).not.toContainText(/75\.36|75\.28|24,855/);

@@ -298,7 +298,7 @@ export function sentenceCost(m: GraphsModel, prices: string[]): string {
   const none = unpriced.length ? `no price is published for imports in ${listOf(unpriced, 'or')}` : 'every year here has a published price';
   if (prices.length === 0) {
     return unpriced.length
-      ? `No certificate price is published for imports in ${listOf(unpriced, 'or')}. Type your own price above to see a cost.`
+      ? `No certificate price is published for imports in ${listOf(unpriced, 'or')}. Type your own price in Three years to see a cost.`
       : 'A certificate price is published for every year shown.';
   }
   if (prices.length === 1) {
@@ -869,8 +869,8 @@ const legendDot = (kind: 'fill' | 'ring'): string => (kind === 'fill'
  */
 export const secondUsable = (state: GraphsState): boolean => parseAssumedPrice(state.priceText) !== null;
 export const secondNote = (state: GraphsState): string => (secondUsable(state)
-  ? '€ per certificate. Your first price is the box above.'
-  : 'Type your first price in the box above. This one then makes a range.');
+  ? '€ per certificate. Your first price is the one in Three years.'
+  : 'Type your first price in Three years. This one then makes a range.');
 
 /** The cost card's changing parts, for the page to refill while a price is being typed. */
 export function costParts(m: GraphsModel, w: number, state: GraphsState): { title: string; plot: string; table: string } {

@@ -235,7 +235,7 @@ test('the cost sentence: nothing typed, one price, a range; always the visitor\'
   assert.deepEqual(assumedRange('80.561', '80.564'), ['80.56'], 'two prices equal to the cent are one price');
   assert.match(text(sentenceCost(TUBE, assumedRange('80.555', ''))), /At your own €80\.56 a certificate, 2028 comes to €34,432\./);
 
-  assert.equal(text(sentenceCost(TUBE, [])), 'No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price above to see a cost.');
+  assert.equal(text(sentenceCost(TUBE, [])), 'No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price in Three years to see a cost.');
   // 427.41 × 80 = 34,192.80 ; × 60 = 25,644.60 ; × 100 = 42,741.00
   assert.equal(text(sentenceCost(TUBE, ['80'])), 'At your own €80 a certificate, 2028 comes to €34,193. That price is yours: no price is published for imports in 2027-Q1 or 2028-Q1.');
   assert.equal(text(sentenceCost(TUBE, ['60', '100'])), 'At your own €60 to €100 a certificate, 2028 comes to €25,645 to €42,741. That range is yours: no price is published for imports in 2027-Q1 or 2028-Q1.');
@@ -335,15 +335,22 @@ test('the cost rows: the shipment\'s own published cost, the visitor\'s price on
 test('the second price box does nothing, and says why, until the first price exists', () => {
   const alone = { ...STATE(), secondText: '90' };
   assert.equal(secondUsable(alone), false);
-  assert.equal(secondNote(alone), 'Type your first price in the box above. This one then makes a range.');
+  assert.equal(secondNote(alone), 'Type your first price in Three years. This one then makes a range.');
   const html = renderGraphs(TUBE, alone, WIDTHS);
   assert.match(html, /<input id="cgSecond"[^>]*value="90" disabled \/>/);
   assert.doesNotMatch(html, /data-xlo=|At your own|38,467/, 'no cost is drawn that the strip does not show');
-  assert.match(text(html), /No certificate price is published for imports in 2027-Q1 or 2028-Q1\. Type your own price above/);
+  assert.match(text(html), /No certificate price is published for imports in 2027-Q1 or 2028-Q1\. Type your own price in Three years/);
   const both = { ...STATE(), priceText: '80', secondText: '90' };
   assert.equal(secondUsable(both), true);
   assert.doesNotMatch(renderGraphs(TUBE, both, WIDTHS), /id="cgSecond"[^>]* disabled/);
   assert.match(text(renderGraphs(TUBE, both, WIDTHS)), /At your own €80 to €90 a certificate/);
+});
+
+test('no sentence points "above": the price box and the reasons are on another view now', () => {
+  for (const s of [sentenceCost(TUBE, []), secondNote({ ...STATE(), priceText: '' }), secondNote({ ...STATE(), priceText: '80' })]) {
+    assert.doesNotMatch(s, /\babove\b/, s);
+  }
+  assert.equal(secondNote({ ...STATE(), priceText: '80' }), '€ per certificate. Your first price is the one in Three years.');
 });
 
 /* ── the section ───────────────────────────────────────────────────────────── */
@@ -498,7 +505,7 @@ test('AUDIT 2: a shipment in a quarter with no published price is told so about 
     const html = renderGraphs(m, STATE(), WIDTHS), t = text(html);
     // Published 2026 prices exist (Q1 to Q3), so nothing may say that none is published for 2026.
     assert.doesNotMatch(t, /published for 2026, 2027 and 2028|no 2026, 2027 or 2028 price|for 2026, 2027 and 2028: none/, date);
-    assert.match(t, /No certificate price is published for imports in 2026-Q4, 2027-Q4 or 2028-Q4\. Type your own price above to see a cost\./, date);
+    assert.match(t, /No certificate price is published for imports in 2026-Q4, 2027-Q4 or 2028-Q4\. Type your own price in Three years to see a cost\./, date);
     assert.match(t, /Certificate price for imports in 2026-Q4, 2027-Q4 and 2028-Q4: none published · as at 14 Oct 2026\./, date);
     // No published price applies to this shipment, so no published cost is drawn or tabled for it.
     assert.doesNotMatch(html, /data-cg="published"/, `${date}: another quarter's price is not this shipment's cost`);
