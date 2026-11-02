@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 import { resolveThreshold, routesFor } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
 import {
-  renderDatePeriod, renderMassRuler, renderRouteSegments, segmentLabel, verifiedOnlyNote, verifiedOnlyRoutes,
+  defaultOriginBasis, defaultTierSentence, renderDatePeriod, renderMassRuler, renderRouteSegments, segmentLabel,
+  verifiedOnlyNote, verifiedOnlyRoutes,
 } from '../../src/scripts/cbam-ui/inputs-estimate.ts';
 
 const pack = JSON.parse(readFileSync(
@@ -84,4 +85,35 @@ test('review 6 — from 2027 the price is weekly: the caption stays, the quarter
   assert.equal(html, '<p class="b-help">Certificate price · imports in 2027-Q1: none published</p>');
   assert.doesNotMatch(renderDatePeriod(pack.prices, '2028-12-31'), /b-qtr/);
   assert.match(renderDatePeriod(pack.prices, '2026-12-31'), /b-qtr/, 'premise: 2026 is quarterly');
+});
+
+/* The "Commission default + mark-up" card's sentence follows the origin (founder decision 3B,
+   2026-11-03). Three sentences, chosen on the ENGINE's own originBasis, never a second reading of the pack. */
+const OWN = 'The Commission\'s published value for this origin and route, with its mark-up.';
+const RESIDUAL = 'The Commission\'s residual default for \u201COther Countries and Territories\u201D, not this origin\'s own, with its mark-up.';
+const GENERIC = 'The Commission\'s published default value, with its mark-up.';
+
+test('tier-card sentence: origin\'s own value, residual fallback, and not-yet-known', () => {
+  assert.equal(defaultTierSentence('country'), OWN);
+  assert.equal(defaultTierSentence('residual'), RESIDUAL);
+  assert.equal(defaultTierSentence(null), GENERIC);
+  for (const b of ['country', 'residual', null]) {
+    assert.doesNotMatch(defaultTierSentence(b), /world[- ]average/i, 'a logged false claim');
+  }
+});
+
+test('tier-card basis is asked of the engine: India own value; OTHER and an unlisted-origin fallback are residual', () => {
+  assert.equal(defaultOriginBasis(pack, '73063077', 'IN', '(C)', 2026), 'country');
+  assert.equal(defaultOriginBasis(pack, '73063077', 'OTHER', '(C)', 2026), 'residual');
+  // a REAL country the Commission publishes no own value for on this good: the engine falls back
+  assert.equal(defaultOriginBasis(pack, '2507008080', 'AE', 'default', 2026), 'residual');
+  assert.equal(defaultTierSentence(defaultOriginBasis(pack, '2507008080', 'AE', 'default', 2026)), RESIDUAL);
+});
+
+test('tier-card basis is null (generic sentence) when there is nothing to ask, or the default refuses', () => {
+  assert.equal(defaultOriginBasis(pack, '', 'IN', '(C)', 2026), null);
+  assert.equal(defaultOriginBasis(pack, '73063077', '', '(C)', 2026), null);
+  assert.equal(defaultOriginBasis(pack, '73063077', 'IN', '', 2026), null);
+  assert.equal(defaultOriginBasis(pack, '73063077', 'IN', '(D)', 2026), null, 'no direct default: no basis to name');
+  assert.equal(defaultOriginBasis(pack, 'not-a-cn', 'IN', '(C)', 2026), null);
 });

@@ -42,7 +42,7 @@ import {
   renderDeck, renderEstimateIdle, renderEstimateThrown, renderEstimateTiles,
 } from '../cbam-ui/tiles-estimate.ts';
 import {
-  mountRadioMirror, renderDatePeriod, renderMassRuler, renderRouteSegments, segmentLabel, verifiedOnlyNote,
+  defaultOriginBasis, defaultTierSentence, mountRadioMirror, renderDatePeriod, renderMassRuler, renderRouteSegments, segmentLabel, verifiedOnlyNote,
   verifiedOnlyRoutes,
 } from '../cbam-ui/inputs-estimate.ts';
 import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
@@ -2496,6 +2496,14 @@ export function initCbam(): void {
 
   /** Steps 3 and 4's captions (spec §5.1): the price period for the date, the line against 50 t. */
   function paintInputs(): void {
+    // Decision 3B: the default card says whose value the default is, asked of the engine for the
+    // form's good, origin and route. The server-rendered generic sentence stands until all three are chosen.
+    const defaultSentence = tierCards?.querySelector('[data-value="default+markup"] span');
+    if (defaultSentence) {
+      const year = Number(date!.value.slice(0, 4)) || 2026;
+      defaultSentence.textContent = defaultTierSentence(
+        pack ? defaultOriginBasis(pack, cn!.value, country!.value, route!.value, year) : null);
+    }
     if (datePeriod) datePeriod.innerHTML = pack ? renderDatePeriod(pack.prices, date!.value) : '';
     if (massRuler) {
       massRuler.innerHTML = pack && cn!.value && date!.value && !massRefusal(mass!.value)

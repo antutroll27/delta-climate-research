@@ -79,6 +79,32 @@ test.describe('CBAM Estimate view', () => {
     await expect(cards.nth(1)).toHaveAttribute('aria-checked', 'true');
   });
 
+  test('the default card says whose value it is: the origin\'s own, or the residual bucket (decision 3B)', async ({ page }) => {
+    await page.goto(URL);
+    const sentence = page.locator('#cbTierCards [data-value="default+markup"] span');
+    const GENERIC = "The Commission's published default value, with its mark-up.";
+    const OWN = "The Commission's published value for this origin and route, with its mark-up.";
+    const RESIDUAL = "The Commission's residual default for \u201COther Countries and Territories\u201D, not this origin's own, with its mark-up.";
+    await expect(sentence).toHaveText(GENERIC);
+    await pick(page, '73063077', 'IN');
+    await expect(sentence).toHaveText(GENERIC); // no route chosen yet
+    await page.locator('#cbRouteSeg [data-value="(C)"]').click();
+    await expect(sentence).toHaveText(OWN);
+    // the residual bucket, picked: the "Other countries and territories (residual)" origin
+    await page.selectOption('#cbCountry', 'OTHER');
+    await expect(sentence).toHaveText(RESIDUAL);
+    await expect(page.locator('#cbOut .b-prov')).toContainText('Residual bucket');
+    // a real country the Commission publishes no own value for on this good: the engine falls back
+    await pick(page, '2507008080', 'AE');
+    await expect(sentence).toHaveText(RESIDUAL);
+    await expect(page.locator('#cbOut .b-prov')).toContainText('Residual bucket');
+    // …and back to a country with its own row
+    await pick(page, '73063077', 'IN');
+    await page.locator('#cbRouteSeg [data-value="(C)"]').click();
+    await expect(sentence).toHaveText(OWN);
+    await expect(sentence).not.toContainText(/world[- ]average/i);
+  });
+
   test('a priced line fills Chargeable, the deck and Provenance; ↗ opens Three years', async ({ page }) => {
     await page.goto(URL);
     await pick(page, '73063077', 'IN');
