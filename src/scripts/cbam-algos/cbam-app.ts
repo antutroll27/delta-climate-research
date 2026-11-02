@@ -47,6 +47,7 @@ import {
 } from '../cbam-ui/inputs-estimate.ts';
 import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
 import { csvTileBody, docTileBody, fingerprintsBody } from '../cbam-ui/tiles-export.ts';
+import { renderNotYetPublished, renderRulePack, renderSources } from '../cbam-ui/tiles-rules.ts';
 import {
   AMENDED_BY_2025_2083, attestControl, noRuleSentence, refusedLineNote, sectorList, totalsTag, yearSentence,
   yearVerdictTag, linePlate, listView, refusedLinePlate, shareOfTotal, thresholdErrorTile, totalTile, yearTile,
@@ -1613,6 +1614,7 @@ export function initCbam(): void {
   const exportCsvEl = $('cbExportCsv'), exportDocEl = $('cbExportDoc'), exportFpsEl = $('cbExportFps');
   // The static "add a line" copy, kept to restore when the list empties.
   const exportIdle = [exportCsvEl, exportDocEl].map((el) => el?.innerHTML ?? '');
+  const notYetEl = $('cbNotYet'), rulePackEl = $('cbRulePack'), sourcesEl = $('cbSources');
   // Phase 2 (spec §5.1): the Estimate input column's new controls. All optional, so a stripped
   // page still runs; the hidden #cbRoute and #cbTier stay the source of truth either way.
   const routeSeg = $('cbRouteSeg'), routeVo = $('cbRouteVo'), tierCards = $('cbTierCards');
@@ -1734,6 +1736,10 @@ export function initCbam(): void {
     }
     pack = loaded.pack;
     snapshot = hash;
+    // Rules & sources (spec §5.6, §7): its pack-dependent tiles fill once, here, from the pack.
+    if (notYetEl) notYetEl.innerHTML = renderNotYetPublished(pack);
+    if (rulePackEl) rulePackEl.innerHTML = renderRulePack(pack, snapshot);
+    if (sourcesEl) sourcesEl.innerHTML = renderSources(pack.sources);
     // 572 goods; the datalist is the whole corpus, filtered natively by the browser. Five of
     // them are 10-digit TARIC codes, and an 8-digit CN is a PREFIX of its TARIC — so a user
     // typing the code off their customs paperwork still surfaces the published one here.
@@ -2971,6 +2977,10 @@ export function initCbam(): void {
   add?.addEventListener('click', () => { void onAdd(); });
   csvBtn?.addEventListener('click', onCsv);
   docBtn?.addEventListener('click', onDoc);
+  // The Rules view's "Load the rule pack" buttons: the pack is never fetched at page load (37 MB),
+  // so a visitor who opens Rules first asks for it here. The fill above replaces the buttons.
+  document.querySelectorAll<HTMLButtonElement>('[data-load-pack]').forEach((b) =>
+    b.addEventListener('click', () => { void ensurePack(); }));
   listEl.addEventListener('click', onOutClick);
   listEl.addEventListener('change', onOutClick);
   outlookEl?.addEventListener('input', onOutlookInput);
