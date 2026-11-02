@@ -2100,7 +2100,8 @@ test.describe('rail views, phase 4 — List, Export, Rules', () => {
   test('Rules: loads the pack on request and lists every source, the rule pack and what is owed', async ({ page }) => {
     const pack = JSON.parse(readFileSync('public/cbam/estimator-pack.json', 'utf8'));
     await page.goto(`${CALC}#rules`);
-    await expect(page.locator('[data-view="rules"] .cb-eyebrow')).toBeVisible();
+    await expect(page.locator('[data-view="rules"] .cb-banner')).toBeVisible();
+    await expect(page.locator('[data-view="estimate"] .cb-frame-sum')).toHaveCount(1);
     await page.locator('#cbSources [data-load-pack]').click();
     await expect(page.locator('#cbSources li')).toHaveCount(pack.sources.length);
     await expect(page.locator('#cbRulePack')).toContainText(pack.identity.id);

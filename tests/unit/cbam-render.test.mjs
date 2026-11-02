@@ -160,6 +160,10 @@ const ATTESTATION_SENTENCE_WITH_EXCLUSION =
  */
 const EYEBROW_71 =
   '<p class="cb-eyebrow">Provisional · defaults or your verified figures · in-browser</p>';
+// D1 (founder, 2026-11-03): the one-line summary that stands on Estimate where the banner used to be.
+const BANNER_SUM_71 =
+  '<p class="cb-frame-sum">A labelled what-if, not a declaration. '
+  + '<button type="button" class="cb-frame-link" data-goto="rules">Read the full framing</button></p>';
 const BANNER_71 =
   '<div class="cb-banner" role="note"> '
   + 'Prototype estimator · Commission default values or your own verified figures · '
@@ -739,11 +743,22 @@ test('NON-NEGOTIABLE 1 — the banner names both tiers, and concedes everything 
   // expect a quarterly price for those years, and may not forecast one.
   assert.ok(prose.includes('From 2027 it is set weekly: none published as at'),
     'the banner must say the price is weekly from 2027 and that none is published, with a date');
-  assert.ok(prose.slice(prose.indexOf('cb-banner'), prose.indexOf('cb-grid')).includes('Prototype estimator'),
-    'sanity: the slice the next assertion reads holds the banner, so it cannot pass on an empty string');
-  assert.doesNotMatch(prose.slice(prose.indexOf('cb-banner'), prose.indexOf('cb-grid')),
-    /will pay|pay less|forecast|expected price|not yet/i,
+  // D1 (founder, 2026-11-03, relayed by Opus): the banner moved to Rules & sources, AFTER Estimate's
+  // cb-grid, so the old slice from the first 'cb-banner' to the first 'cb-grid' would be an empty
+  // string and pass on nothing. The slice is anchored to the banner element itself and closed by its
+  // own </div>, and the Estimate summary line is checked too. Both must state, never forecast.
+  const bannerOpen = '<div class="cb-banner" role="note">';
+  const bannerAt = prose.indexOf(bannerOpen);
+  assert.equal(prose.split(bannerOpen).length - 1, 1, 'the banner exists exactly once (spec §6.2)');
+  const bannerProse = prose.slice(bannerAt, prose.indexOf('</div>', bannerAt) + '</div>'.length);
+  assert.ok(bannerProse.includes('Prototype estimator') && bannerProse.endsWith('</div>'),
+    'sanity: the slice is the whole banner');
+  assert.doesNotMatch(bannerProse, /will pay|pay less|forecast|expected price|not yet/i,
     'the banner states what is published; it forecasts nothing');
+  const summary = /<p class="cb-frame-sum">.*?<\/p>/.exec(prose)?.[0] ?? '';
+  assert.equal(summary, BANNER_SUM_71, 'the Estimate summary must match its pinned text exactly');
+  assert.doesNotMatch(summary, /will pay|pay less|forecast|expected price|not yet/i,
+    'nor does its one-line summary');
 
   // THE DATE IS THE PACK'S, not the day somebody edited the banner: the day the source of the
   // pack's 2027 price rows was last read, which is the date those rows give for "none published".
@@ -763,8 +778,8 @@ test('NON-NEGOTIABLE 1 — the banner names both tiers, and concedes everything 
   // EXACT pins, for the reason the constants' doc comment gives: every phrase assertion above
   // survives a paraphrase that keeps the phrase and appends a contradicting reassurance to the
   // same sentence. A whole-block substring match does not.
-  assert.ok(prose.includes(EYEBROW_71),
-    'the eyebrow must match the pinned text exactly');
+  // D1 (founder, 2026-11-03): the "Provisional" eyebrow is dropped; the banner, unchanged, carries its claims.
+  assert.ok(!prose.includes('class="cb-eyebrow"'), 'D1: the eyebrow is gone, not restyled into something else');
   assert.ok(prose.includes(BANNER_71),
     'the §7.1 banner must match the pinned text exactly — word for word, punctuation for punctuation');
 });
