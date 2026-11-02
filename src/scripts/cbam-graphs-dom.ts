@@ -59,26 +59,29 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
    * Where the keyboard is, in terms that survive a rebuild: the nth mark, the nth button, or the
    * second price box. The section is redrawn whole whenever the line changes, and a redraw that
    * dropped focus sent a keyboard user back to the top of the page (and hid the tooltip they
-   * had just opened). Returns a function that puts focus back on the same control.
+   * had just opened). Returns a function that puts focus back on the same control, and says
+   * whether it could: false when that control is not there yet (the origins card is drawn empty
+   * and filled a moment later), so the caller can try again once it is.
    */
-  function rememberFocus(): () => void {
+  function rememberFocus(): () => boolean {
     const active = document.activeElement;
-    if (!(active instanceof Element) || !el.contains(active)) return () => {};
+    if (!(active instanceof Element) || !el.contains(active)) return () => true;
     for (const selector of ['.cg-m', 'button', 'input', '.cg-tbl']) {
       const all = [...el.querySelectorAll(selector)];
       const index = all.indexOf(active);
       if (index < 0) continue;
       return () => {
         const again = el.querySelectorAll<HTMLElement | SVGElement>(selector)[index];
-        if (!again) return;
+        if (!again) return false;
         again.focus({ preventScroll: true });
         // A redraw during the scroll that brought a focused mark into view can cancel that scroll
         // (WebKit), leaving the mark outside the window: finish the job, without moving otherwise.
         const r = again.getBoundingClientRect();
         if (r.bottom < 0 || r.top > window.innerHeight) again.scrollIntoView({ block: 'nearest' });
+        return true;
       };
     }
-    return () => {};
+    return () => true;
   }
 
   /**
@@ -95,14 +98,24 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
   // Per pack object, then per whole input (originsKey): a new pack starts an empty cache.
   const originsCache = new WeakMap<EstimatorPack, Map<string, OriginsModel | null>>();
   let originsToken = 0;
+  /** A focus the last redraw could not give back, because its mark lives in the origins card, which
+      that redraw drew empty. fillOrigins gives it back; any focus the visitor moves meanwhile cancels it. */
+  let owedFocus: (() => boolean) | null = null;
+  el.addEventListener('focusin', () => { owedFocus = null; });
   function fillOrigins(o: OriginsModel | null): void {
     if (!widths) return;
+    // Replacing the marks drops the focus (Firefox says nothing, so the tooltip is left stale too):
+    // a keyboard user inside this card, or one whose focus a redraw just owed it, gets it back.
+    const restore = rememberFocus();
     const parts = originsParts(o, widths.origins);
     const title = part('origins', 'title'), plot = part('origins', 'plot'), tbl = part('origins', 'table'), cap = part('origins', 'cap');
     if (title) title.innerHTML = parts.title;
     if (plot) plot.innerHTML = parts.plot;
     if (tbl) tbl.innerHTML = parts.table;
     if (cap) cap.textContent = parts.cap;
+    restore();
+    const owed = owedFocus;
+    if (owed && (document.activeElement === null || document.activeElement === document.body) && owed()) owedFocus = null;
   }
   function scheduleOrigins(): void {
     if (!packNow || !lineNow || model === null || typeof model === 'string') return;
@@ -148,8 +161,10 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
       el.innerHTML = renderGraphs(model, state, widths, phase);
     }
     paintedAt = el.clientWidth;
-    restoreFocus();
+    // The origins first: a card already computed for this line is filled by this call, and a mark
+    // in it (the 24th to the 50th of the page's marks) is not there to focus until it has been.
     scheduleOrigins();
+    owedFocus = restoreFocus() ? null : restoreFocus;
   }
 
   const card = (id: string): HTMLElement | null => el.querySelector<HTMLElement>(`[data-cg-card="${id}"]`);
