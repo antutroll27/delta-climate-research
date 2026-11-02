@@ -37,6 +37,7 @@ import {
   type Line, type Totals, type YearThreshold,
 } from '../cbam-lines.ts';
 import { ROUTE_GLOSSARY } from '../cbam-route-glossary.ts';
+import { renderTitleCard, titleSummary, type TitleLine } from '../cbam-ui/title-card.ts';
 import { outlook, outlookPriceSlots, parseAssumedPrice, renderOutlook, type Outlook } from '../cbam-outlook.ts';
 import type { GraphsMount } from '../cbam-graphs-dom.ts';
 
@@ -1912,7 +1913,13 @@ export function initCbam(): void {
   const outWrap = $('cbOutWrap');
   const outlookEl = $('cbOutlook');
   const graphsEl = $('cbGraphs');
-  if (!cn || !country || !route || !mass || !date || !out || !status) return;
+  // The rail shell (spec §6.3): the list has its own container, so #cbOut only ever previews the
+  // draft. The title card and the List badge are optional, so a stripped-down page still runs.
+  const listEl = $('cbList');
+  const titleEl = $('cbTitle'), titlePhone = $('cbTitlePhone');
+  const badges = document.querySelectorAll<HTMLElement>('[data-list-badge]');
+  const listHeading = $('cbxH-list');
+  if (!cn || !country || !route || !mass || !date || !out || !status || !listEl) return;
 
   /**
    * GUARD AGAINST DOUBLE INIT. The page's <script> calls `boot()` directly AND listens for
@@ -2562,8 +2569,23 @@ export function initCbam(): void {
   }
 
   /** The preview and, beneath it, the same shipment in each covered year. */
+  /** The rail's title card and the phone top bar follow the draft line (spec §4.1). */
+  function paintTitle(line: EstimatorInput | null): void {
+    const t: TitleLine | null = line && pack ? {
+      cn: line.cn,
+      name: pack.classifications.find((c) => c.code === line.cn)?.description ?? '',
+      origin: countryName(line.country),
+      route: line.route,
+      massT: line.massT,
+      date: line.date,
+    } : null;
+    if (titleEl) titleEl.innerHTML = renderTitleCard(t);
+    if (titlePhone) titlePhone.textContent = titleSummary(t);
+  }
+
   function run(): void {
     const line = runPreview();
+    paintTitle(line);
     paintOutlook(line);
     paintGraphs(line);
   }
@@ -2778,31 +2800,19 @@ export function initCbam(): void {
    * worst outcome is a sub-second flicker. Documented per review guidance, not papered over.
    */
   function renderAll(): void {
+    // SPEC §6.3: THE DRAFT ALWAYS PREVIEWS. The list has its own view and container (#cbList),
+    // so adding, removing or attesting never touches #cbOut, #cbOutlook or #cbGraphs. Those show
+    // the line being edited, and refresh() keeps them current whether or not lines exist. That is
+    // why this function no longer calls run(): nothing it changes is part of the draft.
+    badges.forEach((b) => { b.textContent = String(lines.length); b.hidden = lines.length === 0; });
     if (!lines.length) {
       lastPairs = [];
-      // Single-line mode keeps its ORIGINAL, tested contract: the whole panel is one aria-live
-      // region, because a refusal only sighted users learn about is not a refusal (the .astro
-      // file's own framing-banner comment). Restore "polite" in case a prior multi-line render
-      // (below) turned it off.
-      outWrap?.setAttribute('aria-live', 'polite');
-      // MUST clear #cbStatus here too — found on review of f04b95b. Once that commit made
-      // #cbStatus the authoritative channel for screen-reader users in multi-line mode (the panel
-      // itself goes aria-live="off" while lines exist), a stale summary left here after the list
-      // empties back out is no longer a cosmetic stale line-count next to a live panel — it is a
-      // stale euro figure ("1 line in this estimate... €5,882.98.") announced as current to
-      // exactly the users who have no other way to learn it is gone, sitting right next to a
-      // panel whose OWN aria-live is restored to "polite" and will correctly (re)announce
-      // whatever run() puts there. Clearing avoids double-announcing on top of that restored
-      // region rather than composing a redundant second summary here.
+      listEl!.innerHTML = '';
+      // MUST clear #cbStatus (found on review of f04b95b): a stale summary left here after the list
+      // empties is a stale euro figure announced as current to the users who rely on it.
       status!.textContent = '';
-      run();
       return;
     }
-    // The three-year strip is about ONE previewed line. With lines in the document there is no
-    // such line on screen, and a strip left over from the last preview would sit under a
-    // document total it has nothing to do with.
-    paintOutlook(null);
-    paintGraphs(null);
     const pairs = safeEstimates(lines);
     lastPairs = pairs;
     const ok = pairs.filter((p) => p.e !== null);
@@ -2840,22 +2850,10 @@ export function initCbam(): void {
     const totals = sumTotals(ok.filter((p) => !isExempt(p)).map((p) => p.e!));
     const exempt = sumTotals(ok.filter(isExempt).map((p) => p.e!));
 
-    // MULTI-LINE MODE NARROWS THE LIVE REGION (quality review item 5). #cbOut's aria-live was
-    // written for the single-line preview, where one edit replaces one card. In multi-line mode
-    // the SAME region holds every year card, every line card, every waterfall and provenance
-    // stamp, and renderAll replaces all of it on every add, remove and attest toggle — so a
-    // screen-reader user ticking ONE checkbox got the ENTIRE, ever-growing panel read back. This
-    // file already fixed the identical shape of problem once (see the mass-input debounce below:
-    // a screen-reader user "heard the whole result... once per keystroke"); there is no debounce
-    // lever here — these are discrete clicks, not rapid typing — so instead the panel's live
-    // region is turned OFF for the duration of multi-line mode, and #cbStatus (its own, already
-    // separately-live region) carries a short, current summary instead: the line count, as
-    // before, plus the headline total when one exists. TRADE-OFF, taken deliberately: a
-    // screen-reader user no longer hears per-line detail automatically after each edit — they
-    // still can, by navigating into the (unchanged, still fully marked-up) panel — in exchange
-    // for not being read a wall of cards after every single click.
-    outWrap?.setAttribute('aria-live', 'off');
-    out!.innerHTML = yearsHtml + renderTotals(totals, exempt) + pairs.map((p, i) => p.e
+    // THE LIST'S LIVE REGION IS OFF (quality review item 5, now in markup on #cbList): every add,
+    // remove and attest rebuilds every card, and reading that wall back after each click buried
+    // the answer. #cbStatus carries a short, current summary instead (below).
+    listEl!.innerHTML = yearsHtml + renderTotals(totals, exempt) + pairs.map((p, i) => p.e
       ? renderLineCard(p.l, p.e, i, p.cmp)
       : `<article class="cb-line" data-line="${esc(p.l.id)}">
            <div class="cb-line-head">
@@ -2995,10 +2993,10 @@ export function initCbam(): void {
       // down by one, so the button now sitting at the removed line's own index `i` is the line
       // that visually took its place — focus that. If `i` ran past the end (the removed line was
       // the last one and others remain), Math.min falls back to the new last Remove button. If no
-      // lines remain, both are absent and focus falls to the Add button, the only actionable
-      // control left once the panel returns to the single-line preview.
-      const remaining = out!.querySelectorAll<HTMLButtonElement>('[data-remove]');
-      (remaining[Math.min(i, remaining.length - 1)] ?? add)?.focus();
+      // lines remain, both are absent and focus goes to the List heading: the Add button is on
+      // the Estimate view, which is hidden while the user is here (spec §6.3).
+      const remaining = listEl!.querySelectorAll<HTMLButtonElement>('[data-remove]');
+      (remaining[Math.min(i, remaining.length - 1)] ?? listHeading)?.focus();
       return;
     }
     const attestBox = t?.closest?.<HTMLInputElement>('[data-attest]') ?? null;
@@ -3011,7 +3009,7 @@ export function initCbam(): void {
       // survives the rebuild as its data-attest value (derived from the year, not the DOM node
       // itself), so re-find it by that and restore focus — otherwise a keyboard user loses their
       // place on every single tick.
-      out!.querySelector<HTMLInputElement>(`[data-attest="${CSS.escape(at)}"]`)?.focus();
+      listEl!.querySelector<HTMLInputElement>(`[data-attest="${CSS.escape(at)}"]`)?.focus();
     }
   }
 
@@ -3149,11 +3147,9 @@ export function initCbam(): void {
     }
   }
 
-  // route/scope/mass/date/cn/country changes preview the draft line only while `lines` is empty
-  // (the single-line path, byte-compatible with the pre-Task-6 behaviour); once lines exist, the
-  // form is purely the editor for the NEXT prospective line and must not touch the multi-line
-  // render underneath it.
-  const refresh = () => { if (!lines.length) run(); };
+  // Spec §6.3: the form previews the line being edited whether or not lines exist. The list has
+  // its own view now, so a preview can no longer overwrite it.
+  const refresh = () => run();
   // syncVerifiedRows() ALWAYS runs after syncScope(), never before: it reads the `scopeRow.hidden`
   // that syncScope() has just computed, and running it first would judge the indirect field
   // against the PREVIOUS good's scope row for one turn — showing an indirect input for a good
@@ -3213,8 +3209,8 @@ export function initCbam(): void {
   add?.addEventListener('click', () => { void onAdd(); });
   csvBtn?.addEventListener('click', onCsv);
   docBtn?.addEventListener('click', onDoc);
-  out.addEventListener('click', onOutClick);
-  out.addEventListener('change', onOutClick);
+  listEl.addEventListener('click', onOutClick);
+  listEl.addEventListener('change', onOutClick);
   outlookEl?.addEventListener('input', onOutlookInput);
   // THE BOX SHOWS THE PRICE USED: on leaving it, a price rounded to the cent is written back.
   outlookEl?.addEventListener('change', (ev) => {

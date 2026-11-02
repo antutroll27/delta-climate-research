@@ -1,0 +1,108 @@
+/* src/styles/cbam-app.css. The CBAM Calculator's app shell (spec §4). Plates only, Light + Dark.
+   Tokens are ported from the OBOS v2 / Birkenhead twin contract (preview 25-cbam-rail/system.css).
+   Helvetica Neue through the system stack only: it is licensed and never embedded. Scoped under
+   .cbx so nothing leaks into other pages across a soft navigation. */
+.cbx{
+  --sans:"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --ease:cubic-bezier(.16,1,.3,1);
+  --ground:#EFECE6; --card:#FFFFFF; --well:rgba(20,22,20,.06); --well-2:rgba(20,22,20,.11); --line:rgba(20,22,20,.13);
+  --ink:#141614; --ink-2:#363936; --ink-3:#4A4D49; --unit:#5E615D; --on-ink:#FFFFFF; --focus:#1f63d6;
+  --shadow:0 1px 2px rgba(20,22,20,.06),0 18px 40px -22px rgba(20,22,20,.28);
+  /* CBAM colour law: bronze = Commission default values and the mark-up; cyan = verified figures. */
+  --bronze-t:#7A5718; --bronze-f:#A87A28; --bronze-bg:rgba(168,122,40,.13);
+  --cyan-t:#0B6E7C; --cyan-f:#139AAD; --cyan-bg:rgba(19,154,173,.12);
+  --rw:248px;
+  color-scheme:light;
+  position:fixed; inset:0; overflow:hidden;
+  background:var(--ground); color:var(--ink);
+  font:400 15px/1.45 var(--sans); -webkit-font-smoothing:antialiased;
+}
+@media (prefers-color-scheme:dark){ .cbx:not([data-theme="light"]){
+  --ground:#031416; --card:#061b1d; --well:#0a2629; --well-2:#0d3236; --line:rgba(111,202,214,.16);
+  --ink:#F1F3F0; --ink-2:#D3DCDB; --ink-3:#A9BCBE; --unit:#9FB3B5; --on-ink:#061b1d; --focus:#8ab4ff;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 24px 48px -24px rgba(0,0,0,.7);
+  --bronze-t:#E0B766; --bronze-f:#CFA24A; --bronze-bg:rgba(224,183,102,.14);
+  --cyan-t:#6FCAD6; --cyan-f:#6FCAD6; --cyan-bg:rgba(111,202,214,.13);
+  color-scheme:dark;
+}}
+.cbx[data-theme="dark"]{
+  --ground:#031416; --card:#061b1d; --well:#0a2629; --well-2:#0d3236; --line:rgba(111,202,214,.16);
+  --ink:#F1F3F0; --ink-2:#D3DCDB; --ink-3:#A9BCBE; --unit:#9FB3B5; --on-ink:#061b1d; --focus:#8ab4ff;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 24px 48px -24px rgba(0,0,0,.7);
+  --bronze-t:#E0B766; --bronze-f:#CFA24A; --bronze-bg:rgba(224,183,102,.14);
+  --cyan-t:#6FCAD6; --cyan-f:#6FCAD6; --cyan-bg:rgba(111,202,214,.13);
+  color-scheme:dark;
+}
+.cbx *,.cbx *::before,.cbx *::after{box-sizing:border-box}
+.cbx :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.cbx[data-rail="collapsed"]{--rw:72px}
+
+/* Rail */
+.cbx-rail{position:absolute;left:16px;top:16px;bottom:16px;width:var(--rw);padding:12px 8px;display:flex;flex-direction:column;gap:12px;overflow:hidden;background:var(--card);border-radius:22px;box-shadow:var(--shadow);transition:width .45s var(--ease);z-index:5}
+.cbx-brand{display:flex;align-items:center;gap:10px;min-height:34px;padding-left:12px;color:var(--ink);text-decoration:none;white-space:nowrap}
+.cbx-brand svg{flex:none}
+.cbx-brand .cbx-lbl{display:flex;flex-direction:column;gap:2px;line-height:1.1;font-size:15px;letter-spacing:-.02em}
+.cbx-brand b{font-weight:700}
+.cbx-app{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.cbx-tcard{background:var(--well);border-radius:18px;padding:16px 16px 18px;min-width:0}
+.cbx-tcard p{margin:0}
+.cbx-tc-k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.cbx-tc-code{font-size:28px;font-weight:200;letter-spacing:-.03em;line-height:1.1;margin-top:12px!important;white-space:nowrap}
+.cbx-tc-none{font-size:18px;font-weight:700}
+.cbx-tc-name{font-size:14px;font-weight:700;margin:4px 0 14px!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cbx-tc-meta{font-size:12px;color:var(--ink-2)}
+.cbx-tc-meta+.cbx-tc-meta{margin-top:8px!important}
+.cbx-nav{position:relative;display:flex;align-items:center;gap:10px;width:100%;height:40px;padding:0 10px 0 16px;border:0;background:transparent;border-radius:14px;color:var(--ink-2);font:500 13px var(--sans);cursor:pointer;text-align:left;white-space:nowrap}
+.cbx-nav svg{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.cbx-nav:hover{color:var(--ink);background:var(--well)}
+.cbx-nav[aria-current="page"]{background:var(--ink);color:var(--on-ink)}
+.cbx-badge{margin-left:auto;min-width:20px;height:20px;border-radius:10px;background:var(--bronze-bg);color:var(--bronze-t);font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 6px;font-style:normal}
+.cbx-nav[aria-current="page"] .cbx-badge{background:var(--on-ink);color:var(--ink)}
+.cbx-collapse{margin-top:auto;border-top:1px solid var(--line);border-radius:0 0 14px 14px}
+.cbx[data-rail="collapsed"] .cbx-lbl,.cbx[data-rail="collapsed"] .cbx-badge{opacity:0;pointer-events:none}
+.cbx[data-rail="collapsed"] .cbx-tcard{padding:8px 4px;text-align:center}
+.cbx[data-rail="collapsed"] .cbx-tcard>:not(.cbx-tc-code){display:none}
+.cbx[data-rail="collapsed"] .cbx-tc-code{font-size:13px;font-weight:700;width:4ch;overflow:hidden;margin:0 auto!important}
+.cbx[data-rail="collapsed"] .cbx-collapse svg{transform:rotate(180deg)}
+
+/* Main, views and headings */
+.cbx-main{position:absolute;left:calc(16px + var(--rw) + 20px);right:0;top:0;bottom:0;overflow:auto;padding:18px 20px 32px 0;transition:left .45s var(--ease)}
+.cbx-main:focus{outline:none}
+.cbx [data-view][hidden]{display:none}
+.cbx-h1{margin:6px 4px 18px;font-size:40px;font-weight:700;letter-spacing:-.035em;line-height:1.05}
+.cbx-h1 span{display:block;color:var(--ink-3);font-weight:500}
+.cbx-h1:focus{outline:none}
+.cbx-plate{background:var(--card);border-radius:22px;padding:18px;box-shadow:var(--shadow)}
+.cbx-actions{display:flex;gap:10px;flex-wrap:wrap;margin:0 4px 16px}
+
+/* Empty states: shown only while the container just before them is :empty (spec §4.2). */
+.cbx-empty{text-align:center;padding:48px 18px}
+.cbx-empty p{color:var(--ink-2)}
+:is(#cbOutlook,#cbGraphs,#cbList):not(:empty)+.cbx-empty{display:none}
+
+/* The status strip: outside every view, so it is announced from any of them (spec §6.3). */
+.cbx-status{position:sticky;bottom:12px;margin:16px 4px 0;padding:12px 16px;border-radius:14px;background:var(--ink);color:var(--on-ink);font-size:13px;box-shadow:var(--shadow)}
+.cbx-status:empty{display:none}
+
+/* Phone (spec §4.1) */
+.cbx-top,.cbx-tabs{display:none}
+@media (max-width:899px){
+  .cbx-rail{display:none}
+  .cbx-top{display:flex;position:absolute;top:10px;left:14px;right:14px;min-height:54px;align-items:center;gap:10px;padding:0 12px;border-radius:16px;background:var(--card);box-shadow:var(--shadow);z-index:7;font-size:13px;overflow:hidden}
+  .cbx-top>div{min-width:0;line-height:1.25}
+  .cbx-top .cbx-app{display:block;font-size:10px}
+  .cbx-top #cbTitlePhone{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cbx-main{left:0;right:0;top:72px;bottom:64px;padding:6px 14px 28px}
+  .cbx-h1{font-size:28px}
+  .cbx-tabs{display:grid;grid-template-columns:repeat(5,1fr);position:absolute;left:0;right:0;bottom:0;height:64px;background:var(--card);border-top:1px solid var(--line);z-index:8}
+  .cbx-tabs>button,.cbx-more>summary{position:relative;border:0;background:transparent;color:var(--ink-3);font:600 10.5px var(--sans);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;list-style:none}
+  .cbx-more>summary::-webkit-details-marker{display:none}
+  .cbx-tabs svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+  .cbx-tabs [aria-current="page"]{color:var(--ink)}
+  .cbx-tabs .cbx-badge{position:absolute;top:6px;left:56%;min-width:16px;height:16px;font-size:10px}
+  .cbx-more{position:relative;display:flex}
+  .cbx-more>summary{width:100%}
+  .cbx-more>div{position:absolute;right:8px;bottom:72px;display:flex;flex-direction:column;min-width:200px;padding:8px;background:var(--card);border-radius:16px;box-shadow:var(--shadow)}
+  .cbx-more>div>button{height:42px;border:0;background:transparent;border-radius:10px;padding:0 12px;font:600 14px var(--sans);color:var(--ink);text-align:left}
+  .cbx-more>div>button[aria-current="page"]{background:var(--ink);color:var(--on-ink)}
+}

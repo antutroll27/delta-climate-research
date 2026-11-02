@@ -30,23 +30,42 @@
 // THE FRAMING BANNER IS MARKUP, NOT JAVASCRIPT (dossier §7.1). It must be on the
 // page whether or not the script runs, whether or not the pack loads.
 import Base from '../../layouts/Base.astro';
-import Nav from '../../components/layout/Nav.astro';
-import Footer from '../../components/layout/Footer.astro';
+import '../../styles/cbam-app.css';
+import { renderTitleCard } from '../../scripts/cbam-ui/title-card.ts';
 ---
 
 <Base
-  title="CBAM certificate estimator — Delta Climate Research"
+  title="CBAM Calculator · Delta Climate"
   description="Estimate EU CBAM certificate exposure for a good, origin and production route. Runs entirely in your browser from the Commission's published default values and benchmarks. Screening-grade: it shows what it cannot compute rather than guessing."
   noindex
+  nativeScroll
 >
-  <Nav />
+  <div class="cbx" id="cbx">
+    <nav class="cbx-rail" aria-label="Calculator sections">
+      <a class="cbx-brand" href="/" aria-label="Delta Climate Research, home">
+        <svg viewBox="0 0 28 28" width="26" height="26" aria-hidden="true"><path d="M14 3 25 24H3Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14 9.5 20 21H8Z" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M14 15 16.5 20H11.5Z" fill="currentColor"/></svg>
+        <span class="cbx-lbl"><span><b>Delta</b> Climate</span><span class="cbx-app">CBAM Calculator</span></span>
+      </a>
+      <div class="cbx-tcard" id="cbTitle" set:html={renderTitleCard(null)} />
+      <button type="button" class="cbx-nav" data-goto="estimate"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3.5h10a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1ZM7 7h6M7 10.5h2M11 10.5h2M7 13.5h2M11 13.5h2"/></svg><span class="cbx-lbl">Estimate</span></button>
+      <button type="button" class="cbx-nav" data-goto="three-years"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 16V11M10 16V7M16 16V3.5"/></svg><span class="cbx-lbl">Three years</span></button>
+      <button type="button" class="cbx-nav" data-goto="why"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 15 8 10l3 2.5 5-7M12.5 5.5H16V9"/></svg><span class="cbx-lbl">Why it changes</span></button>
+      <button type="button" class="cbx-nav" data-goto="list"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5h9M7 10h9M7 15h9M3.5 5h.5M3.5 10h.5M3.5 15h.5"/></svg><span class="cbx-lbl">Shipment list</span><em class="cbx-badge" data-list-badge hidden></em></button>
+      <button type="button" class="cbx-nav" data-goto="export"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5v9M6.5 9.5 10 13l3.5-3.5M4 16.5h12"/></svg><span class="cbx-lbl">Export</span></button>
+      <button type="button" class="cbx-nav" data-goto="rules"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3.5h7l3 3V16a.5.5 0 0 1-.5.5h-9.5a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .5-.5ZM7.5 9.5h5M7.5 12.5h5M7.5 6.5h2.5"/></svg><span class="cbx-lbl">Rules &amp; sources</span></button>
+      <button type="button" class="cbx-nav cbx-collapse" data-collapse aria-expanded="true"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12 5 7 10l5 5"/></svg><span class="cbx-lbl">Collapse menu</span></button>
+    </nav>
 
-  <main id="main" tabindex="-1" class="cb-page">
-    <div class="cb-shell">
-      <h1 class="cb-title">Estimator</h1>
-      <p class="cb-eyebrow">Provisional · defaults or your verified figures · in-browser</p>
+    <header class="cbx-top">
+      <a href="/" aria-label="Delta Climate Research, home"><svg viewBox="0 0 28 28" width="24" height="24" aria-hidden="true"><path d="M14 3 25 24H3Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></a>
+      <div><span class="cbx-app">CBAM Calculator</span><span id="cbTitlePhone">No line yet</span></div>
+    </header>
 
-      <!-- NON-NEGOTIABLE §7.1 — ships with the calculator, always, in markup. -->
+    <main id="main" tabindex="-1" class="cbx-main">
+      <section data-view="estimate" aria-labelledby="cbxH-estimate">
+        <h1 id="cbxH-estimate" class="cbx-h1" tabindex="-1">Estimate. <span>A labelled what-if, not a declaration.</span></h1>
+        <p class="cb-eyebrow">Provisional · defaults or your verified figures · in-browser</p>
+        <!-- NON-NEGOTIABLE §7.1 — ships with the calculator, always, in markup. -->
       <!-- WORDING APPROVED 2026-10-14. The three sentences from "This tool counts
            certificates" to "labelled what-if" replace the ones that said a 2027 or 2028 import
            returns nothing, which stopped being true when the pack gained pending price rows
@@ -66,8 +85,7 @@ import Footer from '../../components/layout/Footer.astro';
         is a labelled what-if. This is not a filing, not validated by the EU CBAM Registry, and
         not a statement of monetary liability.
       </div>
-
-      <div class="cb-grid">
+        <div class="cb-grid">
         <section class="cb-form" aria-labelledby="cb-form-h">
           <h2 id="cb-form-h" class="cb-sr">The line</h2>
 
@@ -169,22 +187,15 @@ import Footer from '../../components/layout/Footer.astro';
             </div>
           </div>
 
-          <p class="cb-note" id="cbStatus" role="status" aria-live="polite"></p>
 
           <div class="cb-lineactions">
             <button id="cbAdd" type="button" class="cb-btn">Add line to estimate</button>
-            <button id="cbCsv" type="button" class="cb-btn" disabled>Export CSV</button>
-            <button id="cbDoc" type="button" class="cb-btn" disabled>Export document</button>
           </div>
         </section>
 
         <!-- aria-live: the figure AND the refusal both need announcing. A refusal only
-             sighted users learn about is not a refusal. This starts "polite" for the
-             single-line preview and stays that way with lines empty — cbam-app.ts turns
-             it "off" only in multi-line mode, where the SAME region would otherwise
-             re-announce every year card, line card, waterfall and stamp on every single
-             add/remove/attest click; #cbStatus (already its own live region) carries a
-             short summary instead. See renderAll's own comment for the full rationale. -->
+             sighted users learn about is not a refusal. Polite, always: since the rail shell
+             (spec §6.3) this region holds the ONE draft line, and the list lives in #cbList. -->
         <section id="cbOutWrap" class="cb-out" aria-labelledby="cb-res-h" aria-live="polite">
           <h2 id="cb-res-h" class="cb-sr">Provisional exposure</h2>
           <!-- The empty state is a CARD, not bare text. Without the shell the right
@@ -200,41 +211,105 @@ import Footer from '../../components/layout/Footer.astro';
                  work exists to close. build-contracts.test.mjs now pins them together. -->
             <p class="cb-idle">Choose a good, origin, route, mass and import date to see the provisional exposure.</p>
           </div>
-          <!-- The three-year strip (cbam-outlook.ts), drawn under the preview of ONE line and
+          <p class="cb-source" id="cbProv"></p>
+        </section>
+      </div>
+      </section>
+
+      <section data-view="three-years" aria-labelledby="cbxH-years" hidden>
+        <h1 id="cbxH-years" class="cbx-h1" tabindex="-1">Three years. <span>2026 to 2028, the law as published.</span></h1>
+        <div class="cb-out">
+        <!-- The three-year strip (cbam-outlook.ts), drawn under the preview of ONE line and
                cleared in multi-line mode. aria-live="off" ON PURPOSE, inside a polite region:
                the result card above is what a screen-reader user is told about, and re-reading
                three more years and a table after every keystroke would bury it. The strip is
                ordinary content, reachable by heading and by Tab. -->
           <div id="cbOutlook" aria-live="off"></div>
-          <!-- The graphs (cbam-graphs.ts), drawn under the strip for the same previewed line and
+        <div class="cbx-plate cbx-empty"><p>Price a line first. The three-year view appears once a line is priced.</p><button type="button" class="cb-btn" data-goto="estimate">Go to Estimate</button></div>
+        </div>
+      </section>
+
+      <section data-view="why" aria-labelledby="cbxH-why" hidden>
+        <h1 id="cbxH-why" class="cbx-h1" tabindex="-1">Why it changes. <span>The same line, drawn.</span></h1>
+        <div class="cb-out">
+        <!-- The graphs (cbam-graphs.ts), drawn under the strip for the same previewed line and
                cleared with it. Not announced, for the reason the strip is not: every card's
                sentence, table and marks are ordinary content, reachable by heading and by Tab. -->
           <div id="cbGraphs" aria-live="off"></div>
-          <p class="cb-source" id="cbProv"></p>
-        </section>
-      </div>
+        <div class="cbx-plate cbx-empty"><p>Price a line first. The graphs appear once a line is priced.</p><button type="button" class="cb-btn" data-goto="estimate">Go to Estimate</button></div>
+        </div>
+      </section>
 
-      <p class="cb-foot">
+      <section data-view="list" aria-labelledby="cbxH-list" hidden>
+        <h1 id="cbxH-list" class="cbx-h1" tabindex="-1">Shipment list. <span>Every line, the annual de minimis test and the total.</span></h1>
+        <div class="cbx-actions"><button type="button" class="cb-btn" data-goto="estimate">Add a line</button></div>
+        <!-- THE LIST'S OWN CONTAINER (spec §6.3). aria-live="off" for the reason renderAll's
+             comment gives: every add, remove and attest rebuilds every card, and reading that
+             wall back on each click buried the answer. #cbStatus carries the spoken summary. -->
+        <div class="cb-out">
+        <div id="cbList" aria-live="off"></div>
+        <div class="cbx-plate cbx-empty"><p>No lines yet. Price a line on Estimate, then add it to the list.</p><button type="button" class="cb-btn" data-goto="estimate">Go to Estimate</button></div>
+        </div>
+      </section>
+
+      <section data-view="export" aria-labelledby="cbxH-export" hidden>
+        <h1 id="cbxH-export" class="cbx-h1" tabindex="-1">Export. <span>CSV and document.</span></h1>
+        <div class="cbx-actions">
+          <button id="cbCsv" type="button" class="cb-btn" disabled>Export CSV</button>
+          <button id="cbDoc" type="button" class="cb-btn" disabled>Export document</button>
+        </div>
+      </section>
+
+      <section data-view="rules" aria-labelledby="cbxH-rules" hidden>
+        <h1 id="cbxH-rules" class="cbx-h1" tabindex="-1">Rules &amp; sources. <span>What this rests on.</span></h1>
+        <p class="cb-foot">
         Engine and rule corpus shared with the GeoCBAM ledger. Default values and benchmarks are the
         European Commission's; the cut, structure and normalisation are ours. Where the Commission
         has not published a benchmark matching a production route, this tool shows no deduction
         rather than substituting a nearby one — 183 of 574 offered goods currently resolve that way,
         and 181 of those are iron and steel.
       </p>
-    </div>
+      </section>
 
-    <!-- Print-only. Filled at export time; offscreen otherwise. NOT [hidden] —
+      <!-- MOVED HERE FROM THE FORM (spec §6.3). A live region inside a [hidden] view is never
+           announced, and Remove and attest happen on the List view. One writer, as before. -->
+      <p class="cb-note cbx-status" id="cbStatus" role="status" aria-live="polite"></p>
+
+      <!-- Print-only. Filled at export time; offscreen otherwise. NOT [hidden] —
          display:none would defeat the visibility trick in the print stylesheet below. -->
     <section id="cbPrint" aria-hidden="true"></section>
-  </main>
+    </main>
 
-  <Footer />
+    <nav class="cbx-tabs" aria-label="Calculator sections">
+      <button type="button" data-goto="estimate"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3.5h10a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1ZM7 7h6M7 10.5h2M11 10.5h2M7 13.5h2M11 13.5h2"/></svg><span>Estimate</span></button>
+      <button type="button" data-goto="three-years"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 16V11M10 16V7M16 16V3.5"/></svg><span>3 years</span></button>
+      <button type="button" data-goto="why"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 15 8 10l3 2.5 5-7M12.5 5.5H16V9"/></svg><span>Why</span></button>
+      <button type="button" data-goto="list"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5h9M7 10h9M7 15h9M3.5 5h.5M3.5 10h.5M3.5 15h.5"/></svg><span>List</span><em class="cbx-badge" data-list-badge hidden></em></button>
+      <details class="cbx-more">
+        <summary><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="4.5" cy="10" r="1.2"/><circle cx="10" cy="10" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/></svg><span>More</span></summary>
+        <div>
+          <button type="button" data-goto="export">Export</button>
+          <button type="button" data-goto="rules">Rules &amp; sources</button>
+        </div>
+      </details>
+    </nav>
+  </div>
 </Base>
 
 <script>
   import { initCbam } from '../../scripts/cbam-algos/cbam-app.ts';
-  // Mount on load and on soft nav (ClientRouter), matching the heat map's pattern.
-  const boot = () => initCbam();
+  import { mountViews } from '../../scripts/cbam-ui/views.ts';
+  // Mount on load and on soft nav (ClientRouter), matching the heat map's pattern. Both guard
+  // against the double call themselves (astro:page-load also fires on first paint).
+  const boot = () => {
+    const root = document.getElementById('cbx');
+    if (!root) return;
+    // ?theme=light|dark forces a theme, for tests and screenshots. Otherwise the OS decides.
+    const theme = new URLSearchParams(location.search).get('theme');
+    if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
+    mountViews(root);
+    initCbam();
+  };
   boot();
   document.addEventListener('astro:page-load', boot);
 </script>
