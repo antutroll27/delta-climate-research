@@ -21,8 +21,8 @@ import { originsTileParts, renderWhy, type WhyWidths } from './cbam-ui/tiles-why
 type Widths = WhyWidths;
 /** How long one slice of the origins computation may run before it yields. */
 const ORIGINS_SLICE_MS = 12;
-/** The tiles whose plot is an SVG drawn at a measured pixel width. The HTML plots size themselves. */
-const CARDS = ['steps', 'cascade', 'cost'] as const;
+/** The tile whose plot is an SVG drawn at a measured pixel width. The HTML plots size themselves. */
+const CARDS = ['cost'] as const;
 
 export interface GraphsMount {
   /** Draw the graphs for a line and its outlook, or clear them when there is no outlook. */
@@ -43,8 +43,8 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     const w = el.clientWidth || 600;
     const pad = w < 420 ? 34 : 44;
     const full = Math.max(220, Math.floor(w - pad));
-    // Every SVG plot sits in a full-width tile (b-s4).
-    return { steps: full, cascade: full, cost: full };
+    // The cost rows are the one SVG plot; it sits in a full-width tile (b-s4).
+    return { cost: full };
   }
   function measured(): Widths | null {
     const out: Partial<Widths> = {};

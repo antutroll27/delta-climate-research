@@ -3,11 +3,11 @@
  *
  * This file is OURS (like cbam-outlook.ts). No DOM: `graphsModel` is a pure function of the pack,
  * the line and its outlook. The tiles that draw the model are in cbam-ui/tiles-why.ts; the SVG for
- * the cost rows (and, until D2, the step chart and the cascade) is drawn here. All of it returns a
+ * the cost rows is drawn here. All of it returns a
  * string, so all of it runs under node:test against the real pack.
  *
  * WHAT IT ADDS TO THE STRIP, AND WHAT IT DOES NOT REPEAT. The strip above states the three
- * counts and the split as figures. These five cards draw them, and add two things the strip does
+ * counts and the split as figures. These cards draw them, and add two things the strip does
  * not have: what the mark-up adds in each year, and how much of the emissions counted is
  * charged. Nothing here is a second source for a number: every figure is read from the outlook
  * (which is the engine's own answer per year) or from one more engine call, named below.
@@ -194,10 +194,6 @@ const n1Honest = (v: string): string => {
 };
 /** A signed table figure: "+12.3", and a plain "0" for nothing, never "+0". */
 const plus = (v: string): string => (new D(v).isZero() ? '0' : `${new D(v).isNegative() ? '' : '+'}${n3(v)}`);
-/** The mass as a number, through the same formatter as every other figure ("1e2" is 100). */
-const massText = (massT: string): string => {
-  try { return `${formatDecimal(new D(massT).toFixed(), 3, false)} t`; } catch { return `${esc(massT)} t`; }
-};
 /** 100 cells for a share: whole cells, half up on the decimal, held inside 0 to 100. */
 export function chargedCells(chargedPct: string): number {
   const n = new D(chargedPct).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
@@ -210,23 +206,6 @@ export function chargedCells(chargedPct: string): number {
  * functions so the tests can hand them the edge cases a real line seldom produces: no change, a
  * fall, a rise that rounds to nothing.
  */
-export function sentenceSteps(m: GraphsModel): string {
-  const first = m.years[0];
-  const last = m.years[m.years.length - 1];
-  const diff = new D(last.certificates).minus(first.certificates);
-  const mass = massText(m.massT);
-  if (diff.isZero()) return `The same ${mass} needs <b>the same</b> certificates in ${last.year} as in ${first.year}.`;
-  const word = diff.isNegative() ? 'fewer' : 'more';
-  if (last.riseOnFirstPct === null) {
-    // The first year's count is zero, so there is no percentage to give.
-    return `The same ${mass} needs <b>${n1(diff.abs().toFixed())} ${word}</b> certificates in ${last.year} than in ${first.year}.`;
-  }
-  const shown = new D(last.riseOnFirstPct).abs().toDecimalPlaces(1, Decimal.ROUND_HALF_UP);
-  // A change too small to show at one decimal place is said in certificates, not as "0.0%".
-  if (shown.isZero()) return `The same ${mass} needs <b>${n3(diff.abs().toFixed())} ${word}</b> certificates in ${last.year} than in ${first.year}.`;
-  return `The same ${mass} needs <b>${formatDecimal(shown.toFixed(), 1, true)}% ${word}</b> certificates in ${last.year} than in ${first.year}.`;
-}
-
 export function sentenceShare(m: GraphsModel): string {
   const last = m.years[m.years.length - 1].year;
   if (!m.split) return `The change to ${last} is not divided into causes for this line.`;
@@ -324,48 +303,6 @@ interface Plot { h: number; svg: string; alt: string }
 const wrap = (w: number, p: Plot): string =>
   `<svg viewBox="0 0 ${w} ${p.h}" width="${w}" height="${p.h}" role="group" aria-label="${esc(p.alt)}">${p.svg}</svg>`;
 
-/** Certificates by year: one thin stepped line. Square corners and flat ends only. */
-export function plotSteps(m: GraphsModel, w: number): Plot {
-  const Y = m.years, asAt = `as at ${formatPackDate(m.priceAsAt)}`;
-  const h = 292, top = 40, base = 206, col = w / Y.length;
-  const sy = scaleFromZero(Math.max(...Y.map((y) => Number(y.certificates))) * 1.02, base - top);
-  const yOf = (v: string): number => base - sy(Number(v));
-  const inset = Math.min(22, col * 0.16), narrow = w < 400;
-  let s = `<line class="cg-hair" x1="0" x2="${w}" y1="${base + 0.5}" y2="${base + 0.5}"/>`;
-  Y.forEach((_, i) => { if (i) s += `<line class="cg-hair" x1="${col * i + 0.5}" x2="${col * i + 0.5}" y1="${top - 10}" y2="${base}"/>`; });
-  let d = '';
-  Y.forEach((y, i) => {
-    const yy = yOf(y.certificates);
-    d += `${i ? 'L' : 'M'}${i ? col * i : inset},${yy}L${i === Y.length - 1 ? w - inset : col * (i + 1)},${yy}`;
-  });
-  s += `<path d="${d}" fill="none" stroke="var(--cg-ink)" stroke-width="2" stroke-linejoin="miter" stroke-linecap="butt"/>`;
-  const last = Y[Y.length - 1];
-  s += `<rect x="${w - inset - 4}" y="${yOf(last.certificates) - 4}" width="8" height="8" fill="var(--cg-accent)"/>`;
-  Y.forEach((y, i) => {
-    const cx = col * i + col / 2, yy = yOf(y.certificates);
-    const tip = `${y.year}: ${n3(y.certificates)} certificates\n${y.costEur !== null && y.priceEur !== null
-      ? `${eur(y.costEur)} at the published ${price(y.priceEur)} for imports in ${y.priceQuarter}` : `no price published for imports in ${y.priceQuarter}, ${asAt}`}`;
-    s += mark(tip, y.certificates, `<rect x="${cx - col / 2}" y="${top - 30}" width="${col}" height="${base - top + 30}" fill="transparent" data-h="${(base - yy).toFixed(3)}"/>`);
-    s += `<text class="cg-num" x="${cx}" y="${yy - 13}" text-anchor="middle" font-size="${w < 360 ? 16 : 19}">${n1(y.certificates)}</text>`;
-    if (y.stepRise !== null && !new D(y.stepRise).isZero()) {
-      const prev = yOf(Y[i - 1].certificates);
-      s += `<text class="cg-faint" x="${col * i + 7}" y="${(prev + yy) / 2 + 18}" font-size="10.5">${new D(y.stepRise).isNegative() ? '' : '+'}${n1(y.stepRise)}</text>`;
-    }
-    s += `<text class="cg-lab" x="${cx}" y="${base + 22}" text-anchor="middle" font-size="11">${y.year}</text>`;
-    const cw = Math.min(col - 6, 132), cy = base + 36;
-    if (y.costEur !== null && y.priceEur !== null) {
-      s += `<rect x="${cx - cw / 2}" y="${cy}" width="${cw}" height="40" rx="1" fill="var(--cg-well)"/>
-        <text class="cg-num" x="${cx}" y="${cy + 17}" text-anchor="middle" font-size="${narrow ? 10.5 : 12}">${eur(y.costEur)}</text>
-        <text class="cg-faint" x="${cx}" y="${cy + 31}" text-anchor="middle" font-size="9.5">published ${price(y.priceEur)}</text>`;
-    } else {
-      s += `<rect x="${cx - cw / 2 + 0.5}" y="${cy + 0.5}" width="${cw - 1}" height="39" rx="1" fill="none" stroke="var(--cg-faint)" stroke-width="1" stroke-dasharray="3 4"/>
-        <text class="cg-num" x="${cx}" y="${cy + 17}" text-anchor="middle" font-size="${narrow ? 9.5 : 11}">none published</text>
-        <text class="cg-faint" x="${cx}" y="${cy + 31}" text-anchor="middle" font-size="9.5">${narrow ? '' : 'for '}${y.priceQuarter} imports</text>`;
-    }
-  });
-  return { h, svg: s, alt: `Certificates: ${Y.map((y) => `${y.year} ${n1(y.certificates)}`).join(', ')}.` };
-}
-
 export const chargedTip = (y: GraphYear): string => (y.chargedPct === null
   ? `${y.year}: no emissions counted`
   : `${y.year}: certificates ${pctHonest(y.chargedPct)} of emissions counted (${n3(y.certificates)} certificates)\nfree allocation covers the rest`);
@@ -407,117 +344,6 @@ export function plotCost(m: GraphsModel, w: number, prices: string[]): Plot {
     }
   });
   return { h, svg: s, alt: prices.length ? 'Cost at your own price for each year.' : 'Published cost where one applies; no price of your own is entered.' };
-}
-
-/* ── why it rises ──────────────────────────────────────────────────────────── */
-
-type CauseKey = 'markup' | 'factor' | 'benchmark';
-const CAUSES: { key: CauseKey; cls: string }[] = [
-  { key: 'markup', cls: 'cg-c1' }, { key: 'factor', cls: 'cg-c2' }, { key: 'benchmark', cls: 'cg-c3' },
-];
-const causePart = (sp: OutlookSplit, key: CauseKey): string =>
-  (key === 'markup' ? sp.moreEmissions : key === 'factor' ? sp.factorPart : sp.benchmarkPart);
-const causeWords = (m: GraphsModel, key: CauseKey): string => (key === 'markup'
-  ? (m.emissionsCause === 'markup-electricity' ? "the mark-up on the Commission's default value for electricity" : 'the mark-up on default values')
-  : key === 'factor' ? 'the smaller share of free allocation retained' : 'the lower benchmark');
-const causeLabel = (m: GraphsModel, key: CauseKey): string => (key === 'markup'
-  ? (m.emissionsCause === 'markup-electricity' ? 'Mark-up on the electricity default' : 'Mark-up on default values')
-  : key === 'factor' ? 'Less free allocation retained' : 'Lower benchmark');
-
-/**
- * Why the count rises, DECIDED FROM THE TRUE PARTS. The largest part is found by comparing exact
- * decimals, not the rounded figures printed beside them, and the benchmark is said not to change
- * only when its part is exactly zero.
- */
-export function sentenceCascade(m: GraphsModel): string {
-  const first = m.years[0], last = m.years[m.years.length - 1];
-  const rise = new D(last.certificates).minus(first.certificates);
-  if (rise.isZero()) {
-    return `The count does not change between ${first.year} and ${last.year}${chargedKind(last) === 'none' ? ': free allocation covers all of the emissions counted' : ''}.`;
-  }
-  const sp = m.causes[m.causes.length - 1];
-  if (!sp) return `The change to ${last.year} is not divided into causes for this line.`;
-  const largest = CAUSES.map((c) => ({ ...c, part: new D(causePart(sp, c.key)) }))
-    .reduce((a, b) => (b.part.greaterThan(a.part) ? b : a));
-  const flat = new D(sp.benchmarkPart).isZero() ? ` The benchmark does not change ${m.benchmarkScope}.` : '';
-  return `Of the <b>${n1Honest(sp.rise)}</b> extra certificates by ${last.year}, <b>${n1Honest(largest.part.toFixed())}</b> come from ${causeWords(m, largest.key)}.${flat}`;
-}
-
-/** Whole units that sum exactly to `total`: the largest-remainder method. */
-function apportion(values: Decimal[], total: number): number[] {
-  const sum = values.reduce((a, b) => a.plus(b), new D(0));
-  if (sum.isZero() || total <= 0) return values.map(() => 0);
-  const raw = values.map((v) => v.div(sum).times(total));
-  const base = raw.map((r) => r.floor().toNumber());
-  let left = total - base.reduce((a, b) => a + b, 0);
-  raw.map((r, i) => ({ rem: r.minus(base[i]), i })).sort((a, b) => b.rem.cmp(a.rem) || a.i - b.i)
-    .forEach(({ i }) => { if (left > 0) { base[i] += 1; left -= 1; } });
-  return base;
-}
-
-/** A dot per cause, a different SHAPE as well as a different hue. Small points, not bodies. */
-function causeDot(cls: string, x: number, y: number, r: number): string {
-  if (cls === 'cg-c1') return `<circle cx="${x}" cy="${y}" r="${r}" fill="var(--cg-markup)"/>`;
-  if (cls === 'cg-c2') return `<circle cx="${x}" cy="${y}" r="${r}" fill="var(--cg-allocation)"/><circle cx="${x}" cy="${y}" r="${r * 0.36}" fill="var(--cg-surface)"/>`;
-  return `<circle cx="${x}" cy="${y}" r="${r - 0.9}" fill="none" stroke="var(--cg-benchmark)" stroke-width="1.8"/>`;
-}
-
-/** The dot unit: the smallest round number that keeps the tallest column within 52 dots. Above the
- * hand-picked steps it is the smallest power of ten that does (H2, audit 2026-11-02: the old fixed
- * fallback drew 11,340 dots at 1e10 t and exhausted the heap at 1e15 t). */
-export function cascadeUnit(maxCertificates: number): number {
-  return [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 100000, 1000000]
-    .find((u) => maxCertificates / u <= 52) ?? 10 ** Math.ceil(Math.log10(maxCertificates / 52));
-}
-
-export function plotCascade(m: GraphsModel, w: number): Plot {
-  const Y = m.years, max = Math.max(...Y.map((y) => Number(y.certificates)));
-  const unit = cascadeUnit(max), per = 4, gap = w < 420 ? 13 : 17, r = gap * 0.36;
-  // min(52) backstops the unit; `|| 0` maps NaN (an infinite count over an infinite unit) to no dots.
-  const base0 = Math.min(52, Math.round(Number(Y[0].certificates) / unit) || 0);
-  const cols = Y.map((y, i) => {
-    const total = Math.min(52, Math.round(Number(y.certificates) / unit) || 0), sp = m.causes[i];
-    if (i === 0 || !sp) return { y, seq: Array<string>(total).fill('n') };
-    const parts = apportion(CAUSES.map((c) => new D(causePart(sp, c.key))), Math.max(0, total - base0));
-    return { y, seq: [...Array<string>(Math.min(base0, total)).fill('n'), ...parts.flatMap((n, k) => Array<string>(n).fill(CAUSES[k].cls))] };
-  });
-  const rows = Math.max(1, Math.ceil(Math.max(...cols.map((c) => c.seq.length)) / per));
-  const top0 = 44, baseY = top0 + rows * gap, h = baseY + 40, colW = w / cols.length;
-  let s = `<line class="cg-hair" x1="0" x2="${w}" y1="${baseY + 4.5}" y2="${baseY + 4.5}"/>`;
-  const drawn = new Set<string>();
-  cols.forEach((c, ci) => {
-    const cx = colW * ci + colW / 2, x0 = cx - ((per - 1) * gap) / 2;
-    let dots = '';
-    c.seq.forEach((cls, k) => {
-      const x = x0 + (k % per) * gap, yy = baseY - Math.floor(k / per) * gap - gap / 2 + 2;
-      if (cls !== 'n') drawn.add(cls);
-      dots += `<g class="cg-dot" style="animation-delay:${Math.floor(k / per) * 22 + ci * 90}ms">${cls === 'n'
-        ? `<circle cx="${x}" cy="${yy}" r="${r}" fill="var(--cg-neutral)"/>` : causeDot(cls, x, yy, r)}</g>`;
-    });
-    const topY = baseY - Math.ceil(c.seq.length / per) * gap - 12;
-    const sp = m.causes[ci];
-    const tip = `${c.y.year}: ${n3(c.y.certificates)} certificates${ci === 0 ? '\nthe starting year'
-      : sp ? `\nsince ${Y[0].year}: ${CAUSES.filter((k) => !new D(causePart(sp, k.key)).isZero()).map((k) => `${causeLabel(m, k.key).toLowerCase()} +${n1Honest(causePart(sp, k.key))}`).join(', ')}` : '\nthe change is not divided into causes'}`;
-    s += mark(tip, c.y.certificates, `${dots}
-      <circle cx="${cx}" cy="${topY}" r="6.5" fill="var(--cg-ink)"/>
-      <rect x="${cx - colW / 2}" y="0" width="${colW}" height="${baseY + 6}" fill="transparent"/>`, `data-dots="${c.seq.length}"`);
-    s += `<text class="cg-num" x="${cx}" y="${topY - 14}" text-anchor="middle" font-size="15">${n1(c.y.certificates)}</text>
-      <text class="cg-lab" x="${cx}" y="${baseY + 24}" text-anchor="middle" font-size="11">${c.y.year}</text>`;
-  });
-  // Which causes are drawn at all, for the legend and the tests: a cause with no part draws nothing.
-  const sp = m.causes[m.causes.length - 1];
-  const present = sp ? CAUSES.filter((c) => !new D(causePart(sp, c.key)).isZero()) : [];
-  s += present.map((c) => `<g data-cause="${c.key}"></g>`).join('');
-  void drawn;
-  return { h, svg: s, alt: sp ? `By ${Y[Y.length - 1].year}: ${present.map((c) => `${causeLabel(m, c.key)} ${n1Honest(causePart(sp, c.key))}`).join(', ')}.` : 'The change is not divided into causes.' };
-}
-
-export function cascadeLegend(m: GraphsModel): string {
-  const sp = m.causes[m.causes.length - 1];
-  const dot = (cls: string): string => `<svg width="12" height="12" aria-hidden="true">${cls === 'n'
-    ? '<circle cx="6" cy="6" r="4.5" fill="var(--cg-neutral)"/>' : causeDot(cls, 6, 6, 4.5)}</svg>`;
-  const present = sp ? CAUSES.filter((c) => !new D(causePart(sp, c.key)).isZero()) : [];
-  return `<span>${dot('n')}${m.years[0].year} level</span>${present.map((c) => `<span>${dot(c.cls)}${causeLabel(m, c.key)} <b>+${n1Honest(causePart(sp!, c.key))}</b></span>`).join('')}`;
 }
 
 /* ── how fast free allocation goes ─────────────────────────────────────────── */
@@ -725,7 +551,4 @@ export function chargedLegend(m: GraphsModel, yearIndex: number): string {
 
 /* ── shared with cbam-ui/tiles-why.ts, so the tiles format and table every figure the same way ── */
 export type { Plot, Table };
-export {
-  CAUSES, causeLabel, causePart, esc, eur, listOf, n1, n3, offShared, pct1, plus, sharePct,
-  table as renderTable, unpricedQuarters, wrap,
-};
+export { esc, listOf, n1, n3, offShared, pct1, plus, sharePct, table as renderTable, unpricedQuarters };

@@ -5,11 +5,12 @@ import { fileURLToPath } from 'node:url';
 import Decimal from 'decimal.js';
 
 import {
-  cascadeUnit, graphsModel, originCountries, originRow, originsFrom, originsKey, originsModel, phaseModel, plotCascade,
-  sentenceCascade, sentenceOrigins, sentencePhase, ORIGINS_FLAT_SHARE, ORIGINS_SAME_SHARE,
+  graphsModel, originCountries, originRow, originsFrom, originsKey, originsModel, phaseModel,
+  sentenceOrigins, sentencePhase, ORIGINS_FLAT_SHARE, ORIGINS_SAME_SHARE,
 } from '../../src/scripts/cbam-graphs.ts';
 import { originStrip, phaseColumns, renderWhy } from '../../src/scripts/cbam-ui/tiles-why.ts';
-import { outlook, splitBetween } from '../../src/scripts/cbam-outlook.ts';
+import { renderYearsWhy } from '../../src/scripts/cbam-ui/tiles-years.ts';
+import { outlook, outlookWhy } from '../../src/scripts/cbam-outlook.ts';
 import { estimateFromPack, routesFor } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
 
 /**
@@ -31,15 +32,10 @@ const line = (over = {}) => ({
 const modelOf = (input) => graphsModel(pack, input, outlook(pack, input));
 const text = (html) => html.replace(/<\/?b>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const goodsAndRoutes = () => pack.classifications.flatMap((c) => routesFor(pack, c.code, 'IN', 2026).map((route) => [c.code, route]));
-const CAUSE_WORDS = {
-  markup: /come from the mark-up on (default values|the Commission's default value for electricity)/,
-  factor: /come from the smaller share of free allocation retained/,
-  benchmark: /come from the lower benchmark/,
-};
 
 /* ── why it rises ──────────────────────────────────────────────────────────── */
 
-test('SWEEP, why it rises: the sentence names the largest cause, says when the benchmark adds nothing, and never splits what is not split', () => {
+test('SWEEP, why it rises (moved from the cascade, D2): the benchmark is said not to change exactly when its part is zero, in its own scope, and a zero part draws no segment', () => {
   let lines = 0, split = 0, withheld = 0, benchZero = 0, benchNonZero = 0; const wrong = [];
   for (const [cn, route] of goodsAndRoutes()) {
     const inputs = [line({ cn, route })];
@@ -49,39 +45,31 @@ test('SWEEP, why it rises: the sentence names the largest cause, says when the b
       for (const f of ['0.5', '1.004', '2']) inputs.push(line({ cn, route, verified: { directTco2ePerT: perTonne.times(f).toDecimalPlaces(6).toFixed() } }));
     }
     for (const input of inputs) {
-      const m = modelOf(input);
-      if (!m || typeof m === 'string') continue;
-      lines += 1;
-      const s = text(sentenceCascade(m)), where = `${cn}/${route} ${input.verified ? `verified ${input.verified.directTco2ePerT}` : 'defaults'}`;
       const view = outlook(pack, input);
-      const first = view.years[0], last = view.years[view.years.length - 1];
-      const rise = new D(last.certificates).minus(first.certificates);
-      const truth = splitBetween(first, last);
-      if (rise.isZero()) {
+      if (!view) continue;
+      lines += 1;
+      const where = `${cn}/${route} ${input.verified ? `verified ${input.verified.directTco2ePerT}` : 'defaults'}`;
+      const why = outlookWhy(view);
+      if (why.kind !== 'split') {
         withheld += 1;
-        if (!/^The count does not change between/.test(s)) wrong.push(`${where}: no change, sentence "${s}"`);
-        continue;
-      }
-      if (!truth) {
-        withheld += 1;
-        if (!/is not divided into causes/.test(s)) wrong.push(`${where}: no split, sentence "${s}"`);
+        if (view.split !== null) wrong.push(`${where}: a split exists and the tile withholds it`);
         continue;
       }
       split += 1;
-      const parts = { markup: new D(truth.moreEmissions), factor: new D(truth.factorPart), benchmark: new D(truth.benchmarkPart) };
-      const largest = Object.entries(parts).sort((a, b) => b[1].cmp(a[1]))[0][0];
-      if (!CAUSE_WORDS[largest].test(s)) wrong.push(`${where}: largest cause is ${largest}, sentence "${s}"`);
-      // The strip's words: the benchmark is per route, so "for route (C)"; "for this good" only without one.
+      const bench = why.rows.find((r) => r.key === 'benchmark');
+      const zero = new D(view.split.benchmarkPart).isZero();
+      if (zero) benchZero += 1; else benchNonZero += 1;
+      const saysFlat = /does not change/.test(bench.title);
+      if (saysFlat !== zero) wrong.push(`${where}: benchmark part ${view.split.benchmarkPart}, title "${bench.title}"`);
+      const first = view.years[0];
       const bm = first.benchmarks.length === 1 ? first.benchmarks[0] : null;
       const scope = bm && bm.route ? `for route ${bm.route}` : 'for this good';
-      if (/The benchmark does not change/.test(s) && !s.includes(`The benchmark does not change ${scope}.`)) wrong.push(`${where}: benchmark scope should be "${scope}": "${s}"`);
-      const saysBenchFlat = /The benchmark does not change/.test(s);
-      if (parts.benchmark.isZero()) benchZero += 1; else benchNonZero += 1;
-      if (saysBenchFlat !== parts.benchmark.isZero()) wrong.push(`${where}: benchmark part ${parts.benchmark}, sentence "${s}"`);
-      // The legend draws no category that contributes nothing.
-      const svg = plotCascade(m, 600).svg;
-      for (const [key, part] of Object.entries(parts)) {
-        if ((svg.includes(`data-cause="${key}"`)) !== !part.isZero()) wrong.push(`${where}: cause ${key} drawn=${svg.includes(`data-cause="${key}"`)} part=${part}`);
+      if (saysFlat && bm && !bench.title.includes(`Benchmark ${scope} does not change`)) wrong.push(`${where}: scope should be "${scope}": "${bench.title}"`);
+      const html = renderYearsWhy(view);
+      for (const [key, cls] of [['markup', 'cb-ol-s1'], ['factor', 'cb-ol-s2'], ['benchmark', 'cb-ol-s3']]) {
+        const row = why.rows.find((r) => r.key === key);
+        const drawn = html.includes(`${cls}" style="flex-grow`);
+        if (drawn !== (!!row && !new D(row.value).isZero())) wrong.push(`${where}: ${key} drawn=${drawn}, part=${row?.value}`);
       }
     }
   }
@@ -89,26 +77,6 @@ test('SWEEP, why it rises: the sentence names the largest cause, says when the b
   assert.ok(split > 1000 && withheld > 100 && benchZero > 100 && benchNonZero > 100,
     `the sweep must reach every kind: split ${split}, withheld ${withheld}, benchmark flat ${benchZero}, benchmark steps ${benchNonZero}`);
   assert.equal(wrong.length, 0, `${wrong.length} contradictions, e.g.\n${wrong.slice(0, 6).join('\n')}`);
-});
-
-test('why it rises, worked: welded tube and iron powder', () => {
-  // Tube: 86.4 of 97.5825 is mark-up, 11.1825 the share retained, the benchmark does not move.
-  assert.equal(text(sentenceCascade(modelOf(line()))),
-    'Of the 97.6 extra certificates by 2028, 86.4 come from the mark-up on default values. The benchmark does not change for route (C).');
-  // Iron powder (F): 50.8 mark-up, 10.95 share retained, 14.58 the 2028 benchmark step.
-  assert.equal(text(sentenceCascade(modelOf(line({ cn: '72052100', route: '(F)' })))),
-    'Of the 76.3 extra certificates by 2028, 50.8 come from the mark-up on default values.');
-  // Verified figures: no mark-up, so the share retained leads.
-  assert.equal(text(sentenceCascade(modelOf(line({ verified: { directTco2ePerT: '2.0' } })))),
-    'Of the 11.2 extra certificates by 2028, 11.2 come from the smaller share of free allocation retained. The benchmark does not change for route (C).');
-  // A floored line is not divided.
-  assert.equal(text(sentenceCascade(modelOf(line({ verified: { directTco2ePerT: '1.0' } })))),
-    'The count does not change between 2026 and 2028: free allocation covers all of the emissions counted.');
-  // A benchmark step too small to print is still a step: never say it does not change.
-  const m = modelOf(line({ cn: '72052100', route: '(F)' }));
-  const sp = m.causes[m.causes.length - 1];
-  m.causes[m.causes.length - 1] = { ...sp, benchmarkPart: '0.01' };
-  assert.ok(!text(sentenceCascade(m)).includes('does not change'), 'a 0.01 benchmark part is not "no change"');
 });
 
 /* ── how fast free allocation goes ─────────────────────────────────────────── */
@@ -318,9 +286,9 @@ test('the phase columns: a column\'s height is the share retained, solid only wh
 test('the section carries the three new cards, and the origins card waits to be filled', () => {
   const m = modelOf(line());
   const html = renderWhy(m, { chargedYear: null, priceText: '', secondText: '', open: {} },
-    { steps: 600, cascade: 600, share: 280, markup: 280, charged: 280, cost: 280, phase: 600, origins: 600 }, phaseModel(pack, m));
+    { share: 280, markup: 280, charged: 280, cost: 280, phase: 600, origins: 600 }, phaseModel(pack, m));
   assert.deepEqual([...html.matchAll(/data-cg-card="(\w+)"/g)].map((x) => x[1]),
-    ['steps', 'cascade', 'share', 'charged', 'markup', 'phase', 'origins', 'cost']);
+    ['share', 'charged', 'markup', 'phase', 'origins', 'cost']);
   assert.match(text(html), /Comparing every origin's default value…/);
   assert.doesNotMatch(text(html), /\b(2029|2030|2031|2032|2033|2034)\b[^.]*certificates/);
 });
@@ -344,23 +312,16 @@ test('a retry imports only this site\'s own built scripts; any other address mea
   assert.equal(graphsRetryUrl('Importing a module script failed.', origin), null);
 });
 
-/* ── H2 (audit 2026-11-02): the dot chart is bounded for any mass ── */
+/* ── H2 (audit 2026-11-02): the Why view is bounded for any mass ── */
 
-test('H2: cascadeUnit keeps 52 dots or fewer for ANY finite size, not just up to 1e7 units', () => {
-  for (const max of [0.5, 52, 53, 1e4, 5.2e8, 1e10, 1e15, 1e300]) {
-    const u = cascadeUnit(max);
-    assert.ok(max / u <= 52, `${max}: ${max / u} dots at unit ${u}`);
-  }
-  assert.equal(cascadeUnit(1e10), 1e9);
-});
-
-test('H2: an absurd mass draws a bounded chart, quickly', () => {
+test('H2 (moved, D2): an absurd mass renders the whole Why view, bounded and quickly', () => {
   for (const massT of ['1e10', '1e15', '1e400']) {
     const t0 = Date.now();
-    const svg = plotCascade(modelOf(line({ massT })), 600).svg;
+    const m = modelOf(line({ massT }));
+    if (!m || typeof m === 'string') continue;
+    const html = renderWhy(m, { chargedYear: null, priceText: '', secondText: '', open: {} }, { cost: 600 }, phaseModel(pack, m));
     assert.ok(Date.now() - t0 < 2000, `${massT}: took ${Date.now() - t0} ms`);
-    const dots = [...svg.matchAll(/data-dots="(\d+)"/g)].map((m) => Number(m[1]));
-    assert.ok(dots.length > 0 && dots.every((d) => d <= 52), `${massT}: columns ${dots}`);
-    assert.ok(svg.length < 200_000, `${massT}: ${svg.length} bytes of SVG`);
+    assert.ok(html.length < 200_000, `${massT}: ${html.length} bytes`);
+    assert.equal((html.match(/<i( class="on")?><\/i>/g) ?? []).length, 100, `${massT}: the waffle is always 100 cells`);
   }
 });

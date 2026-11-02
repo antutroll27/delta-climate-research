@@ -18,10 +18,9 @@
 import Decimal from 'decimal.js';
 import { formatDecimal, formatPackDate } from '../cbam-outlook.ts';
 import {
-  CAUSES, causeLabel, causePart, cascadeLegend, cascadeUnit, chargedCells, chargedLegend, chargedTip,
-  costParts, esc, eur, listOf, n1, n3, offShared, pct1, plotCascade, plotSteps, plus, renderTable,
-  secondNote, secondUsable, sentenceCascade, sentenceCharged, sentenceMarkup, sentenceOrigins,
-  sentencePhase, sentenceShare, sentenceSteps, sharePct, tableCharged, unpricedQuarters, wrap,
+  chargedCells, chargedLegend, chargedTip, costParts, esc, listOf, n1, n3, offShared, pct1, plus,
+  renderTable, secondNote, secondUsable, sentenceCharged, sentenceMarkup, sentenceOrigins,
+  sentencePhase, sentenceShare, sharePct, tableCharged, unpricedQuarters,
   type GraphsModel, type GraphsRefusal, type GraphsState, type OriginsModel, type PhaseModel,
 } from '../cbam-graphs.ts';
 
@@ -147,8 +146,8 @@ export function originsTileParts(o: OriginsModel | null): { title: string; plot:
 
 /* ── the tiles ─────────────────────────────────────────────────────────────── */
 
-/** The pixel widths the page measured for the tiles whose plot is an SVG. The HTML plots size themselves. */
-export type WhyWidths = Record<'steps' | 'cascade' | 'cost', number>;
+/** The pixel width the page measured for the one tile whose plot is an SVG (the cost rows). The HTML plots size themselves. */
+export type WhyWidths = Record<'cost', number>;
 
 interface TileOpts {
   span: 2 | 4; hero?: boolean; title: string; sub?: string; head?: string; big?: string;
@@ -190,27 +189,6 @@ export function renderWhy(model: GraphsModel | GraphsRefusal, state: GraphsState
   const asAt = `as at ${formatPackDate(m.priceAsAt)}`;
   const cost = costParts(m, widths.cost, state);
   const unpriced = unpricedQuarters(m);
-
-  // D2 (spec §11): the year-step chart and the dot cascade. Task 8 of the phase-3 plan deletes
-  // these two tiles; until then they are drawn here, unchanged in content.
-  const maxCount = Math.max(...Y.map((y) => Number(y.certificates)));
-  const steps = tile('steps', {
-    span: 4, title: 'Certificates, year by year.', sentence: sentenceSteps(m), plot: wrap(widths.steps, plotSteps(m, widths.steps)),
-    cap: `Law as published · ${formatPackDate(m.packDate)}. A cost appears only where a certificate price is published.`,
-    open: !!state.open.steps,
-    tbl: renderTable({ head: ['Year', 'Certificates', `Change on ${Y[0].year}`, 'Cost'],
-      rows: Y.map((y) => [y.year, n3(y.certificates), y.riseOnFirstPct === null ? '—' : new D(y.riseOnFirstPct).isZero() ? '0%' : `${new D(y.riseOnFirstPct).isNegative() ? '' : '+'}${pct1(y.riseOnFirstPct)}`,
-        y.costEur !== null ? eur(y.costEur) : `none published for imports in ${y.priceQuarter}`]) }),
-  });
-  const cascade = tile('cascade', {
-    span: 4, title: 'Why does it rise?', sentence: sentenceCascade(m), plot: wrap(widths.cascade, plotCascade(m, widths.cascade)),
-    extra: `<div class="cg-legend">${cascadeLegend(m)}</div>`,
-    cap: `One dot = ${formatDecimal(String(cascadeUnit(maxCount)), 1, false)} certificate${cascadeUnit(maxCount) === 1 ? '' : 's'}, rounded; the table is exact.${m.usesDefault ? ' The mark-up no longer applies with verified data.' : ''}`,
-    open: !!state.open.cascade,
-    tbl: renderTable({ head: ['Year', 'Certificates', ...CAUSES.map((c) => causeLabel(m, c.key))],
-      rows: Y.map((y, i) => [y.year, n3(y.certificates), ...CAUSES.map((c) => (i === 0 ? '—' : m.causes[i] ? plus(causePart(m.causes[i]!, c.key)) : 'not divided'))]),
-      caption: `Changes are since ${Y[0].year}.` }),
-  });
 
   const share = tile('share', {
     span: 2, hero: true, title: 'Mark-up share.',
@@ -271,5 +249,5 @@ export function renderWhy(model: GraphsModel | GraphsRefusal, state: GraphsState
   });
 
   return `<section class="cg" aria-label="Graphs"><p class="cg-sub">Hover or focus a mark for its exact figure.</p><div class="b-bento cg-board">${
-    steps}${cascade}${share}${charged}${markup}${phaseTile}${origins}${costTile}</div><div class="cg-tip" data-cg="tip" aria-hidden="true"></div></section>`;
+    share}${charged}${markup}${phaseTile}${origins}${costTile}</div><div class="cg-tip" data-cg="tip" aria-hidden="true"></div></section>`;
 }

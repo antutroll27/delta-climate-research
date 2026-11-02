@@ -7,8 +7,8 @@ import Decimal from 'decimal.js';
 import {
   assumedRange, chargedCells, chargedKind, chargedLegend, costParts, graphsModel, pctHonest, phaseModel, secondNote,
   secondUsable, tableCharged, plotCost,
-  plotSteps, scaleFromZero, sentenceCharged, sentenceCost, sentenceMarkup,
-  sentenceShare, sentenceSteps,
+  scaleFromZero, sentenceCharged, sentenceCost, sentenceMarkup,
+  sentenceShare,
 } from '../../src/scripts/cbam-graphs.ts';
 import { markupColumns, renderWhy, shareBar, waffle } from '../../src/scripts/cbam-ui/tiles-why.ts';
 import { assumedCost, outlook } from '../../src/scripts/cbam-outlook.ts';
@@ -33,7 +33,7 @@ const line = (over = {}) => ({
 });
 const modelOf = (input) => graphsModel(pack, input, outlook(pack, input));
 const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-const WIDTHS = { steps: 600, cascade: 600, share: 280, markup: 280, charged: 280, cost: 280, phase: 600, origins: 600 };
+const WIDTHS = { share: 280, markup: 280, charged: 280, cost: 280, phase: 600, origins: 600 };
 const STATE = () => ({ chargedYear: null, priceText: '', secondText: '', open: {} });
 const TUBE = modelOf(line());
 
@@ -144,28 +144,6 @@ const synthetic = (certs, over = {}) => ({
   ...over,
 });
 
-test('the year-by-year sentence never contradicts the line: a rise, no change, a fall, a tiny change, a zero start', () => {
-  assert.equal(text(sentenceSteps(TUBE)), 'The same 100 t needs 29.6% more certificates in 2028 than in 2026.');
-  assert.equal(text(sentenceSteps(synthetic(['200', '200', '200']))), 'The same 100 t needs the same certificates in 2028 as in 2026.');
-  assert.equal(text(sentenceSteps(synthetic(['200', '190', '150']))), 'The same 100 t needs 25.0% fewer certificates in 2028 than in 2026.');
-  // 0.04% would print as "0.0% more": said in certificates instead.
-  assert.equal(text(sentenceSteps(synthetic(['200', '200', '200.08']))), 'The same 100 t needs 0.08 more certificates in 2028 than in 2026.');
-  // From zero there is no percentage.
-  assert.equal(text(sentenceSteps(synthetic(['0', '0.355', '7.81']))), 'The same 100 t needs 7.8 more certificates in 2028 than in 2026.');
-  assert.doesNotMatch(sentenceSteps(synthetic(['200', '200', '200.08'])), /0\.0%/);
-  // A real floored-then-rising line agrees with its own counts.
-  const partial = modelOf(line({ verified: { directTco2ePerT: '1.42' } }));
-  assert.equal(text(sentenceSteps(partial)), 'The same 100 t needs 7.8 more certificates in 2028 than in 2026.');
-  // The mass is printed as a number, through the same formatter as every other figure.
-  assert.match(sentenceSteps(synthetic(['1', '2', '3'], { massT: '1e2' })), /The same 100 t needs/);
-  assert.match(sentenceSteps(synthetic(['1', '2', '3'], { massT: '987654321' })), /The same 987,654,321 t needs/);
-  assert.match(sentenceSteps(synthetic(['1', '2', '3'], { massT: '0.001' })), /The same 0\.001 t needs/);
-  // Thousands separators in a large percentage, as the strip prints it.
-  assert.match(sentenceSteps(synthetic(['4', '40', '79'])), /<b>1,875\.0% more<\/b>/);
-  // And anything that is not a number is escaped, never interpreted.
-  assert.doesNotMatch(sentenceSteps(synthetic(['1', '2', '3'], { massT: '<b>9</b>' })), /<b>9<\/b> t/);
-});
-
 test('the mark-up sentences say what applies, and never that anyone will pay less', () => {
   assert.equal(text(sentenceMarkup(TUBE)), 'On default values the mark-up adds 129.6 certificates in 2028. It no longer applies with verified data.');
   assert.equal(text(sentenceShare(TUBE)), 'of the rise to 2028 is the mark-up on default values. It no longer applies with verified data.');
@@ -255,21 +233,8 @@ test('a zero-based scale: equal values draw equal, and nothing is drawn from a t
   assert.equal(scaleFromZero(0, 100)(0), 0, 'an all-zero line does not divide by zero');
 });
 
-test('the stepped line: heights proportional to the counts, three exact values on the marks', () => {
-  const svg = plotSteps(TUBE, 600).svg;
-  const marks = [...svg.matchAll(/data-v="([^"]+)"[\s\S]*?data-h="([^"]+)"/g)].map((m) => [m[1], Number(m[2])]);
-  assert.deepEqual(marks.map((m) => m[0]), ['329.8275', '376.755', '427.41']);
-  const k = marks.map(([v, h]) => h / Number(v));
-  assert.ok(Math.max(...k) / Math.min(...k) - 1 < 1e-4, 'height ÷ value is one constant');
-  assert.match(text(svg), /329\.8 .*376\.8 \+46\.9 .*427\.4 \+50\.7/);
-  assert.match(text(svg), /€24,855\.80 published €75\.36/);
-  assert.equal((text(svg).match(/none published/g) ?? []).length, 2);
-  assert.match(text(svg), /none published for 2027-Q1 imports .*none published for 2028-Q1 imports/);
-});
-
-test('NO ROUNDED MARK on the stepped line or the cost rows: no circle, no radius above 1, no round end', () => {
-  const pieces = [plotSteps(TUBE, 600).svg, plotSteps(TUBE, 300).svg,
-    plotCost(TUBE, 420, []).svg, plotCost(TUBE, 420, ['80']).svg, plotCost(TUBE, 260, ['60', '100']).svg];
+test('NO ROUNDED MARK on the cost rows: no circle, no radius above 1, no round end', () => {
+  const pieces = [plotCost(TUBE, 420, []).svg, plotCost(TUBE, 420, ['80']).svg, plotCost(TUBE, 260, ['60', '100']).svg];
   for (const svg of pieces) {
     assert.doesNotMatch(svg, /<circle|<ellipse/, 'no circular mark');
     assert.deepEqual((svg.match(/rx="([^"]+)"/g) ?? []).filter((r) => Number(/"(.+)"/.exec(r)[1]) > 1), [], 'no radius above 1');
@@ -315,10 +280,10 @@ test('the waffle: whole cells per year, the shown year lit, and every year\'s co
 test('every Why tile: a full-stop or question title, a sentence, a plot, "Show as table", and a closed table', () => {
   const html = renderWhy(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE));
   const titles = [...html.matchAll(/<h2 class="b-t-ti cg-q" id="cgQ-(\w+)">([^<]+)<\/h2>/g)].map((m) => [m[1], m[2]]);
-  assert.deepEqual(titles, [['steps', 'Certificates, year by year.'], ['cascade', 'Why does it rise?'], ['share', 'Mark-up share.'],
+  assert.deepEqual(titles, [['share', 'Mark-up share.'],
     ['charged', 'Charged.'], ['markup', 'What the mark-up adds.'], ['phase', 'Free allocation.'],
     ['origins', 'Does the origin matter?'], ['cost', 'What would it cost at my own price?']]);
-  assert.equal((html.match(/>Show as table<\/button>/g) ?? []).length, 8);
+  assert.equal((html.match(/>Show as table<\/button>/g) ?? []).length, 6);
   assert.doesNotMatch(text(html), /\babove\b/, 'the views are separate: nothing points "above"');
 });
 
@@ -374,16 +339,16 @@ test('no sentence points "above": the price box and the reasons are on another v
 
 /* ── the section ───────────────────────────────────────────────────────────── */
 
-test('the section: eight cards, each with a sentence, a table and a text alternative', () => {
+test('the section: six cards, each with a sentence, a table and a text alternative', () => {
   const html = renderWhy(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE));
   assert.deepEqual([...html.matchAll(/data-cg-card="(\w+)"/g)].map((m) => m[1]),
-    ['steps', 'cascade', 'share', 'charged', 'markup', 'phase', 'origins', 'cost']);
-  // Seven plots drawn at once; the origins card's plot is filled after the others (see the DOM module).
-  assert.equal((html.match(/<svg[^>]*role="group" aria-label="[^"]+"/g) ?? []).length + (html.match(/<div class="cg-fig[^"]*" role="group" aria-label="[^"]+"/g) ?? []).length, 7, 'every plot has a text alternative');
-  assert.equal((html.match(/class="cg-tbl cg-closed"/g) ?? []).length, 8, 'every card has a table, closed to begin with');
-  assert.equal((html.match(/<p class="b-lead cg-t"/g) ?? []).length, 8);
-  // 3 steps + 3 cascade + the share bar + 3 mark-up columns + the waffle + the published cost + 9 phase years.
-  assert.equal((html.match(/class="cg-m[^"]*" tabindex="0" role="img" aria-label="[^"]+"/g) ?? []).length, 21, 'every mark is focusable and named');
+    ['share', 'charged', 'markup', 'phase', 'origins', 'cost']);
+  // Five plots drawn at once; the origins card's plot is filled after the others (see the DOM module).
+  assert.equal((html.match(/<svg[^>]*role="group" aria-label="[^"]+"/g) ?? []).length + (html.match(/<div class="cg-fig[^"]*" role="group" aria-label="[^"]+"/g) ?? []).length, 5, 'every plot has a text alternative');
+  assert.equal((html.match(/class="cg-tbl cg-closed"/g) ?? []).length, 6, 'every card has a table, closed to begin with');
+  assert.equal((html.match(/<p class="b-lead cg-t"/g) ?? []).length, 6);
+  // the share bar + 3 mark-up columns + the waffle + the published cost + 9 phase years.
+  assert.equal((html.match(/class="cg-m[^"]*" tabindex="0" role="img" aria-label="[^"]+"/g) ?? []).length, 15, 'every mark is focusable and named');
   const t = text(html);
   assert.match(t, /88\.5 % of the rise to 2028 is the mark-up on default values/);
   assert.match(t, /A real verified figure can be higher or lower than that base\./);
@@ -427,7 +392,6 @@ test('refused and reduced states say so in words and draw nothing false', () => 
   const floored = text(renderWhy(modelOf(line({ verified: { directTco2ePerT: '1.0' } })), STATE(), WIDTHS));
   assert.match(floored, /— The change to 2028 is not divided into causes for this line\./);
   assert.match(floored, /free allocation covers all of the emissions counted\. No certificates are due\./);
-  assert.match(floored, /The same 100 t needs the same certificates in 2028 as in 2026\./);
 });
 
 test('what the visitor typed is escaped wherever it lands', () => {
