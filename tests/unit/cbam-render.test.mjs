@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   buildPrintDocument, decimalProblem, decorateSnapshot, inputFor, massRefusal, nextRoute, noRouteReason, parseVerifiedFields,
   priceNoteFor, renderAttestation, renderDraftThreshold, renderLineCard, renderPriceRow, renderResult,
-  renderThreshold, renderTotals, renderYearThreshold, stampedTierOf, verifiedInputOf,
+  renderThreshold, renderYearThreshold, stampedTierOf, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
@@ -16,6 +16,7 @@ import { outlook } from '../../src/scripts/cbam-outlook.ts';
 import {
   renderDeck, renderEstimateIdle, renderEstimateThrown, renderEstimateTiles,
 } from '../../src/scripts/cbam-ui/tiles-estimate.ts';
+import { totalTile, yearTile } from '../../src/scripts/cbam-ui/tiles-list.ts';
 
 /**
  * The CBAM engine is the GeoCBAM SaaS's, copied byte-for-byte. Its UI is not — the
@@ -159,6 +160,10 @@ const ATTESTATION_SENTENCE_WITH_EXCLUSION =
  */
 const EYEBROW_71 =
   '<p class="cb-eyebrow">Provisional · defaults or your verified figures · in-browser</p>';
+// D1 (founder, 2026-11-03): the one-line summary that stands on Estimate where the banner used to be.
+const BANNER_SUM_71 =
+  '<p class="cb-frame-sum">A labelled what-if, not a declaration. '
+  + '<button type="button" class="cb-frame-link" data-goto="rules">Read the full framing</button></p>';
 const BANNER_71 =
   '<div class="cb-banner" role="note"> '
   + 'Prototype estimator · Commission default values or your own verified figures · '
@@ -256,11 +261,24 @@ test('the threshold card always cites the amending regulation', () => {
 });
 
 /**
+ * Every renderer that draws a per-year de minimis card (rail redesign phase 4). The List view draws
+ * yearTile; the Estimate draft card still draws renderYearThreshold for a year with no rule. Both
+ * carry the same verdict prose, so every assertion that reads a per-year card runs on each, and
+ * neither can drift. eachYearRenderer prefixes a failure with the renderer's name.
+ */
+const YEAR_RENDERERS = [['yearTile', yearTile], ['renderYearThreshold', renderYearThreshold]];
+const eachYearRenderer = (fn) => {
+  for (const [who, render] of YEAR_RENDERERS) {
+    try { fn(render, who); } catch (err) { err.message = `[${who}] ${err.message}`; throw err; }
+  }
+};
+
+/**
  * A one-sector per-year card, so the sector name it prints can be compared 1:1 with the
  * single-line card's. Shaped exactly like the `ruleFound: true` fixtures further down, and
  * `below_threshold` + attested because that is the only branch whose sentence names the sectors.
  */
-const yearCardFor = (sector) => renderYearThreshold({
+const yearCardFor = (sector, render = renderYearThreshold) => render({
   calendarYear: 2026, ruleFound: true, state: 'below_threshold',
   knownEligibleMassT: '30', thresholdT: '50',
   sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
@@ -294,15 +312,17 @@ test('the two threshold cards name a sector identically — "iron & steel", neve
 
   // ...and the two cards, compared directly. `sub` is whatever the per-year card calls the
   // sector, extracted from its own verdict rather than re-typed here.
-  for (const [sector, cn] of [
-    ['cement', '2523100090'], ['iron_and_steel', '72083800'],
-    ['aluminium', '76011010'], ['fertilisers', '28080000'],
-  ]) {
-    const said = /Your (.+?) imports for 2026 total/.exec(yearCardFor(sector));
-    assert.ok(said, `the per-year card must name ${sector} in its verdict`);
-    for (const massT of ['10', '100']) {
-      assert.ok(renderThreshold(thresh(cn, massT)).includes(`<b>${said[1]}</b>`),
-        `the single-line card must call ${sector} what the per-year card calls it: "${said[1]}"`);
+  for (const [who, render] of YEAR_RENDERERS) {
+    for (const [sector, cn] of [
+      ['cement', '2523100090'], ['iron_and_steel', '72083800'],
+      ['aluminium', '76011010'], ['fertilisers', '28080000'],
+    ]) {
+      const said = /Your (.+?) imports for 2026 total/.exec(yearCardFor(sector, render));
+      assert.ok(said, `the per-year card (${who}) must name ${sector} in its verdict`);
+      for (const massT of ['10', '100']) {
+        assert.ok(renderThreshold(thresh(cn, massT)).includes(`<b>${said[1]}</b>`),
+          `the single-line card must call ${sector} what the per-year card (${who}) calls it: "${said[1]}"`);
+      }
     }
   }
 });
@@ -343,6 +363,16 @@ test('a year with no published threshold row gets a card on the PREVIEW too, not
   assert.equal(html, renderYearThreshold({
     calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0,
   }), 'the preview must render the same no-rule card the per-year panel renders');
+
+  // Rail phase 4: the List draws the same year as a tile. The tile's shell differs; its verdict
+  // must not. Same tag span, same sentence, both present.
+  const pick = (h) => [
+    h.match(/<span class="cb-tag [^"]+">[^<]+<\/span>/)?.[0],
+    h.match(/<p class="cb-sub">[^<]+<\/p>/)?.[0],
+  ];
+  const tile = yearTile({ calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0 });
+  assert.ok(pick(html).every(Boolean), 'sanity: the draft card has a tag and a sentence');
+  assert.deepEqual(pick(tile), pick(html), 'the List tile and the draft card say the same thing about 2027');
 });
 
 test('the other three nulls stay silent — an absent card is the right answer for them', () => {
@@ -713,9 +743,22 @@ test('NON-NEGOTIABLE 1 — the banner names both tiers, and concedes everything 
   // expect a quarterly price for those years, and may not forecast one.
   assert.ok(prose.includes('From 2027 it is set weekly: none published as at'),
     'the banner must say the price is weekly from 2027 and that none is published, with a date');
-  assert.doesNotMatch(prose.slice(prose.indexOf('cb-banner'), prose.indexOf('cb-grid')),
-    /will pay|pay less|forecast|expected price|not yet/i,
+  // D1 (founder, 2026-11-03, relayed by Opus): the banner moved to Rules & sources, AFTER Estimate's
+  // cb-grid, so the old slice from the first 'cb-banner' to the first 'cb-grid' would be an empty
+  // string and pass on nothing. The slice is anchored to the banner element itself and closed by its
+  // own </div>, and the Estimate summary line is checked too. Both must state, never forecast.
+  const bannerOpen = '<div class="cb-banner" role="note">';
+  const bannerAt = prose.indexOf(bannerOpen);
+  assert.equal(prose.split(bannerOpen).length - 1, 1, 'the banner exists exactly once (spec §6.2)');
+  const bannerProse = prose.slice(bannerAt, prose.indexOf('</div>', bannerAt) + '</div>'.length);
+  assert.ok(bannerProse.includes('Prototype estimator') && bannerProse.endsWith('</div>'),
+    'sanity: the slice is the whole banner');
+  assert.doesNotMatch(bannerProse, /will pay|pay less|forecast|expected price|not yet/i,
     'the banner states what is published; it forecasts nothing');
+  const summary = /<p class="cb-frame-sum">.*?<\/p>/.exec(prose)?.[0] ?? '';
+  assert.equal(summary, BANNER_SUM_71, 'the Estimate summary must match its pinned text exactly');
+  assert.doesNotMatch(summary, /will pay|pay less|forecast|expected price|not yet/i,
+    'nor does its one-line summary');
 
   // THE DATE IS THE PACK'S, not the day somebody edited the banner: the day the source of the
   // pack's 2027 price rows was last read, which is the date those rows give for "none published".
@@ -735,8 +778,8 @@ test('NON-NEGOTIABLE 1 — the banner names both tiers, and concedes everything 
   // EXACT pins, for the reason the constants' doc comment gives: every phrase assertion above
   // survives a paraphrase that keeps the phrase and appends a contradicting reassurance to the
   // same sentence. A whole-block substring match does not.
-  assert.ok(prose.includes(EYEBROW_71),
-    'the eyebrow must match the pinned text exactly');
+  // D1 (founder, 2026-11-03): the "Provisional" eyebrow is dropped; the banner, unchanged, carries its claims.
+  assert.ok(!prose.includes('class="cb-eyebrow"'), 'D1: the eyebrow is gone, not restyled into something else');
   assert.ok(prose.includes(BANNER_71),
     'the §7.1 banner must match the pinned text exactly — word for word, punctuation for punctuation');
 });
@@ -977,14 +1020,14 @@ test('the renderer handles every status the engine can return', () => {
  */
 const SECTORS_2026 = pack.thresholds.find((t) => t.calendarYear === 2026).includedSectors;
 
-test('renderYearThreshold: a year without a rule refuses to invent one', () => {
-  const html = renderYearThreshold({ calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0 });
+test('renderYearThreshold: a year without a rule refuses to invent one', () => eachYearRenderer((render) => {
+  const html = render({ calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0 });
   assert.match(html, /no.*threshold.*published.*2027/i);
   assert.doesNotMatch(html, /50/, 'must not show the 2026 figure for 2027');
-});
+}));
 
-test('renderYearThreshold: below-attested says so and names its basis', () => {
-  const html = renderYearThreshold({
+test('renderYearThreshold: below-attested says so and names its basis', () => eachYearRenderer((render) => {
+  const html = render({
     calendarYear: 2026, ruleFound: true, state: 'below_threshold',
     knownEligibleMassT: '30', thresholdT: '50',
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
@@ -1010,9 +1053,9 @@ test('renderYearThreshold: below-attested says so and names its basis', () => {
     'the attestation sentence must match the pinned text exactly — word for word, punctuation for punctuation');
   assert.match(html, /data-attest="2026"[^>]*checked/, 'checkbox reflects the attestation');
   assert.match(html, /2025\/2083/, 'the amending act must be cited on the per-year card too');
-});
+}));
 
-test('renderYearThreshold: a below-threshold verdict says which lines its test did not cover', () => {
+test('renderYearThreshold: a below-threshold verdict says which lines its test did not cover', () => eachYearRenderer((render) => {
   // THE regression this task exists for. Art 2(3)'s de minimis is a MASS test over four sectors,
   // so a hydrogen line is RIGHTLY outside the basis — the exclusion is correct and untouched.
   // The wording then generalised it. MEASURED on the shipped pack: 40 t of cement plus 1000 t of
@@ -1025,7 +1068,7 @@ test('renderYearThreshold: a below-threshold verdict says which lines its test d
   //
   // The card ALREADY knew: eligibleLineCount was 1 while the user had entered 2. It just had no
   // denominator to say so with, which is what linesInYear (cbam-lines.ts) now supplies.
-  const html = renderYearThreshold({
+  const html = render({
     calendarYear: 2026, ruleFound: true, state: 'below_threshold',
     knownEligibleMassT: '40', thresholdT: '50',
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
@@ -1045,13 +1088,13 @@ test('renderYearThreshold: a below-threshold verdict says which lines its test d
   // full stop, and catches a reworded exclusion clause that still contains "1 of your 2 lines".
   assert.ok(html.includes(ATTESTATION_SENTENCE_WITH_EXCLUSION),
     'the excluded-line verdict must match the pinned text exactly — word for word');
-});
+}));
 
-test('renderYearThreshold: a year with nothing excluded carries no exclusion sentence', () => {
+test('renderYearThreshold: a year with nothing excluded carries no exclusion sentence', () => eachYearRenderer((render) => {
   // The other half, and the one that keeps the sentence from becoming boilerplate. A caveat that
   // prints on EVERY below-threshold card is not a caveat, it is furniture — a reader who sees it
   // beside a cement-only year learns nothing from seeing it beside a hydrogen one.
-  const html = renderYearThreshold({
+  const html = render({
     calendarYear: 2026, ruleFound: true, state: 'below_threshold',
     knownEligibleMassT: '40', thresholdT: '50',
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
@@ -1066,12 +1109,12 @@ test('renderYearThreshold: a year with nothing excluded carries no exclusion sen
   // "the year". Dropping the exclusion clause must not drop the scoping with it.
   assert.match(html, /threshold for those sectors/,
     'the surviving sentence must still scope itself to the sectors the test measures');
-});
+}));
 
-test('renderYearThreshold: the exclusion sentence agrees with itself in number', () => {
+test('renderYearThreshold: the exclusion sentence agrees with itself in number', () => eachYearRenderer((render) => {
   // Two excluded lines, so the verb must be "are". Cheap to get wrong, and a card whose grammar
   // visibly breaks is a card a reader trusts less on the arithmetic too.
-  const html = renderYearThreshold({
+  const html = render({
     calendarYear: 2026, ruleFound: true, state: 'below_threshold',
     knownEligibleMassT: '40', thresholdT: '50',
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
@@ -1080,9 +1123,9 @@ test('renderYearThreshold: the exclusion sentence agrees with itself in number',
     includedSectors: SECTORS_2026,
   });
   assert.match(html, /2 of your 3 lines for 2026 are outside that test/);
-});
+}));
 
-test('renderYearThreshold: only the below-threshold verdict carries the exclusion note', () => {
+test('renderYearThreshold: only the below-threshold verdict carries the exclusion note', () => eachYearRenderer((render) => {
   // The note exists to stop ONE claim — "you owe nothing for the year". The other two states
   // never make it: 'above' says the exemption does not apply and the exposure stands, and
   // 'indeterminate' says the year is unresolved and asks the user to attest. Printing the note
@@ -1090,7 +1133,7 @@ test('renderYearThreshold: only the below-threshold verdict carries the exclusio
   // to skim past it on the one card where it matters. Both fixtures carry an excluded line
   // (eligibleLineCount 1 of linesInYear 2), so the note is available to print and withheld.
   for (const state of ['above_threshold', 'indeterminate']) {
-    const html = renderYearThreshold({
+    const html = render({
       calendarYear: 2026, ruleFound: true, state,
       knownEligibleMassT: state === 'above_threshold' ? '60' : '40', thresholdT: '50',
       sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
@@ -1101,10 +1144,10 @@ test('renderYearThreshold: only the below-threshold verdict carries the exclusio
     assert.doesNotMatch(html, /of your 2 lines/, `${state} makes no owe-nothing claim to qualify`);
     assert.doesNotMatch(html, /does not mean you owe nothing/i, state);
   }
-});
+}));
 
-test('renderYearThreshold: above hides the checkbox — a fact needs no attestation', () => {
-  const html = renderYearThreshold({
+test('renderYearThreshold: above hides the checkbox — a fact needs no attestation', () => eachYearRenderer((render) => {
+  const html = render({
     calendarYear: 2026, ruleFound: true, state: 'above_threshold',
     knownEligibleMassT: '60', thresholdT: '50',
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
@@ -1114,12 +1157,12 @@ test('renderYearThreshold: above hides the checkbox — a fact needs no attestat
   });
   assert.match(html, /Above threshold/);
   assert.doesNotMatch(html, /data-attest/, 'no checkbox when it cannot change the answer');
-});
+}));
 
-test('renderYearThreshold: indeterminate is tagged pending, not the green of a real below-threshold verdict', () => {
+test('renderYearThreshold: indeterminate is tagged pending, not the green of a real below-threshold verdict', () => eachYearRenderer((render) => {
   // The plan this shipped from gave indeterminate the SAME 'ok' tone as below_threshold — an
   // unresolved "we cannot tell you yet" must not wear the colour of a resolved "you owe nothing".
-  const html = renderYearThreshold({
+  const html = render({
     calendarYear: 2026, ruleFound: true, state: 'indeterminate',
     knownEligibleMassT: '30', thresholdT: '50',
     sourceLocator: 'Regulation (EU) 2023/956 Article 2(3)',
@@ -1130,12 +1173,12 @@ test('renderYearThreshold: indeterminate is tagged pending, not the green of a r
   assert.match(html, /Indeterminate/);
   assert.match(html, /cb-tag pending/, 'indeterminate must use the pending tone, not ok');
   assert.doesNotMatch(html, /cb-tag ok/, 'indeterminate must not be tagged with the same class as below_threshold');
-});
+}));
 
 /* ── the totals card ────────────────────────────────────────────────────────── */
 
 test('renderTotals: a pending total is tagged a what-if and shows no false euro', () => {
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '214.395', costEur: null, chargeableTco2e: '214.395',
     pricedLines: 2, refusedLines: 1, anyPending: true,
   });
@@ -1147,7 +1190,7 @@ test('renderTotals: a pending total is tagged a what-if and shows no false euro'
 });
 
 test('renderTotals: a final priced total shows the euro figure and no what-if language', () => {
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '71.465', costEur: '5385.60', chargeableTco2e: '71.465',
     pricedLines: 1, refusedLines: 0, anyPending: false,
   });
@@ -1161,7 +1204,7 @@ test('renderTotals: a non-numeric costEur never prints as "€NaN" or the litera
   // is a non-empty but non-numeric string, so it still passes that guard and reaches eur().
   // Nothing in Totals' TYPE stops a future caller from constructing this; eur() must make it
   // safe to print rather than trust that every future call site re-derives the same guard.
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '71.465', costEur: 'not-a-number', chargeableTco2e: '71.465',
     pricedLines: 1, refusedLines: 0, anyPending: false,
   });
@@ -1173,7 +1216,7 @@ test('renderTotals: a whitespace-only costEur never prints as an invented "€0.
   // Number('   ') is 0 in JS, same quirk as Number('') — the first fix only special-cased the
   // exact empty string and missed this. A whitespace-only string is TRUTHY, so it passes the
   // `t.costEur ? eur(t.costEur) : fallback` guard at every call site exactly like a real value.
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '71.465', costEur: '   ', chargeableTco2e: '71.465',
     pricedLines: 1, refusedLines: 0, anyPending: false,
   });
@@ -1184,7 +1227,7 @@ test('renderTotals: a whitespace-only costEur never prints as an invented "€0.
 test('renderTotals: every entered line refused reads as a warning, never a claimed zero', () => {
   // Totals.certificates is '0' both for "genuinely zero" and "nothing was summed" — the card
   // must not let the second case read as a confirmed zero-liability result.
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '0', costEur: null, chargeableTco2e: '0',
     pricedLines: 0, refusedLines: 2, anyPending: false,
   });
@@ -1198,7 +1241,7 @@ test('renderTotals: no lines entered yet is a neutral empty state, not the same 
   // pricedLines === 0 with refusedLines === 0 is derivable from Totals as it stands — no line
   // was ever entered — and must not wear the same "unavail" tone as every-line-refused: an
   // empty form is not a form full of failures.
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '0', costEur: null, chargeableTco2e: '0',
     pricedLines: 0, refusedLines: 0, anyPending: false,
   });
@@ -1378,12 +1421,12 @@ test('buildPrintDocument\'s §2 verdict matches what renderYearThreshold\'s own 
     packSnapshot: 'f'.repeat(64), rulePackages: [], pack, generatedOn: '2026-08-08',
   });
 
-  for (const y of [below, noRule]) {
-    const cardMatch = renderYearThreshold(y).match(/<span class="cb-tag [^"]+">([^<]+)<\/span>/);
-    assert.ok(cardMatch, `sanity: renderYearThreshold(${y.calendarYear}) must render a tag span`);
+  for (const [who, render] of YEAR_RENDERERS) for (const y of [below, noRule]) {
+    const cardMatch = render(y).match(/<span class="cb-tag [^"]+">([^<]+)<\/span>/);
+    assert.ok(cardMatch, `sanity: ${who}(${y.calendarYear}) must render a tag span`);
     const cardTag = cardMatch[1];
     assert.ok(html.includes(`<b>${cardTag}</b>`),
-      `§2 for ${y.calendarYear} must show the card's own tag verbatim ("${cardTag}"), not a `
+      `§2 for ${y.calendarYear} must show the card's own tag verbatim ("${cardTag}", ${who}), not a `
       + 're-derived paraphrase that can drift from it');
   }
 });
@@ -3578,7 +3621,7 @@ const C2_EXEMPT = { certificates: '98.948', costEur: '7456.74', chargeableTco2e:
 const C2_NONE = { certificates: '0', costEur: null, chargeableTco2e: '0', pricedLines: 0, refusedLines: 0, anyPending: false };
 
 test('C2: renderTotals shows exempt lines OUTSIDE the total, with their own figures', () => {
-  const html = renderTotals(C2_OWED, C2_EXEMPT);
+  const html = totalTile(C2_OWED, C2_EXEMPT);
   assert.match(html, /Total exposure · 1 line/);
   assert.match(html, /Exempt if your list is complete/);
   assert.match(html, /1 line below the de minimis threshold/);
@@ -3587,17 +3630,17 @@ test('C2: renderTotals shows exempt lines OUTSIDE the total, with their own figu
 });
 
 test('C2: when every priced line is exempt, the total is a stated nil, not "No lines yet"', () => {
-  const html = renderTotals(C2_NONE, C2_EXEMPT);
+  const html = totalTile(C2_NONE, C2_EXEMPT);
   assert.doesNotMatch(html, /No lines yet/);
   assert.match(html, /Nothing owed on the lines listed/);
   assert.match(html, /Exempt if your list is complete/);
 });
 
 test('C2: without exempt lines, renderTotals is unchanged', () => {
-  assert.equal(renderTotals(C2_OWED), renderTotals(C2_OWED, null));
-  assert.equal(renderTotals(C2_OWED), renderTotals(C2_OWED, C2_NONE));
-  assert.doesNotMatch(renderTotals(C2_OWED), /Exempt/);
-  assert.match(renderTotals(C2_NONE), /No lines yet/);
+  assert.equal(totalTile(C2_OWED), totalTile(C2_OWED, null));
+  assert.equal(totalTile(C2_OWED), totalTile(C2_OWED, C2_NONE));
+  assert.doesNotMatch(totalTile(C2_OWED), /Exempt/);
+  assert.match(totalTile(C2_NONE), /No lines yet/);
 });
 
 /* ── Follow-ups from the independent audit of the H1/C2 fixes (2026-11-02) ── */
@@ -3614,8 +3657,8 @@ test('H1 follow-up: exponents, oversize numbers and -0 are refused at the form',
 });
 
 test('C2 follow-up: the exempt amount says it is a what-if when it is one', () => {
-  assert.match(renderTotals(C2_OWED, C2_EXEMPT), /a what-if: the CSCF is unpublished/);
-  assert.doesNotMatch(renderTotals(C2_OWED, { ...C2_EXEMPT, anyPending: false }), /what-if: the CSCF/);
+  assert.match(totalTile(C2_OWED, C2_EXEMPT), /a what-if: the CSCF is unpublished/);
+  assert.doesNotMatch(totalTile(C2_OWED, { ...C2_EXEMPT, anyPending: false }), /what-if: the CSCF/);
 });
 
 

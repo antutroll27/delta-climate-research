@@ -2055,3 +2055,57 @@ test.describe('CBAM estimate — the graphs', () => {
     await page.emulateMedia({ media: 'screen' });
   });
 });
+
+test.describe('rail views, phase 4 — List, Export, Rules', () => {
+  const CALC = '/cbam/cbam-calculator/';
+
+  test('List: a Total tile, a de minimis tile, and one plate per line with a share of the total', async ({ page }) => {
+    await page.goto(CALC);
+    await addLine(page);
+    await addLine(page, { mass: '60' });
+    await view(page, 'list');
+    await expect(page.locator('#cbList .cb-total h2')).toHaveText('Total.');
+    await expect(page.locator('#cbList .cb-total')).toContainText('2 lines');
+    await expect(page.locator('#cbList .cb-thresh h2')).toHaveText('Annual de minimis.');
+    await expect(page.locator('#cbList .cb-line')).toHaveCount(2);
+    const shares = await page.locator('#cbList .b-share-row .num').allTextContents();
+    expect(shares).toHaveLength(2);
+    const sum = shares.reduce((a, s) => a + Number(s.replace('%', '')), 0);
+    expect(Math.abs(sum - 100)).toBeLessThanOrEqual(0.1);
+    // 30 t and 60 t of the same good: one third and two thirds.
+    expect(shares).toEqual(['33.3%', '66.7%']);
+  });
+
+  test('Export: the CSV preview is the downloaded CSV — counts, columns and cells', async ({ page }) => {
+    await page.goto(CALC);
+    await addLine(page);
+    await addLine(page, { mass: '60' });
+    await view(page, 'export');
+    await expect(page.locator('#cbExportCsv th')).toHaveText(['line_id', 'cn_code', 'origin', 'mass_t', 'certificates', 'cost_eur']);
+    const [download] = await Promise.all([page.waitForEvent('download'), page.click('#cbCsv')]);
+    const [headerLine, ...rowLines] = readFileSync(await download.path(), 'utf8').trim().split('\n');
+    const header = parseCsvRow(headerLine!);
+    await expect(page.locator('#cbExportCsv .b-t-sub')).toHaveText(`${header.length} columns · 2 lines · full precision`);
+    const shown = page.locator('#cbExportCsv tbody tr');
+    await expect(shown).toHaveCount(2);
+    for (const [r, line] of rowLines.entries()) {
+      const cells = parseCsvRow(line);
+      const want = ['line_id', 'cn_code', 'origin', 'mass_t', 'certificates', 'cost_eur'].map((c) => cells[header.indexOf(c)]!);
+      await expect(shown.nth(r).locator('td')).toHaveText(want);
+    }
+    await expect(page.locator('#cbExportFps figure')).toHaveCount(3);
+    await expect(page.locator('#cbExportDoc')).toContainText('every line as entered');
+  });
+
+  test('Rules: loads the pack on request and lists every source, the rule pack and what is owed', async ({ page }) => {
+    const pack = JSON.parse(readFileSync('public/cbam/estimator-pack.json', 'utf8'));
+    await page.goto(`${CALC}#rules`);
+    await expect(page.locator('[data-view="rules"] .cb-banner')).toBeVisible();
+    await expect(page.locator('[data-view="estimate"] .cb-frame-sum')).toHaveCount(1);
+    await page.locator('#cbSources [data-load-pack]').click();
+    await expect(page.locator('#cbSources li')).toHaveCount(pack.sources.length);
+    await expect(page.locator('#cbRulePack')).toContainText(pack.identity.id);
+    await expect(page.locator('#cbNotYet')).toContainText('Cross-sectoral correction factor');
+    await expect(page.locator('[data-view="rules"] .cb-foot')).toContainText(`of ${pack.classifications.length} offered goods`);
+  });
+});

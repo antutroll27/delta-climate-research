@@ -207,7 +207,6 @@
 }
 
 /* legacy Estimate markup, kept for its pins, restyled so the light theme stays legible */
-.cbx [data-view="estimate"] .cb-eyebrow{margin:0 4px;font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .cbx [data-view="estimate"] .cb-banner{margin:12px 4px 0;max-width:96ch;border-radius:18px;padding:14px 18px;background:var(--bronze-bg);color:var(--bronze-t);font-family:var(--sans);font-size:13px;line-height:1.6}
 .cbx [data-view="estimate"] .cb-datenote{margin:4px 0 0;color:var(--ink-2)}
 .cbx .b-results .cb-source{margin:10px 4px 0;font-family:var(--sans);font-size:11.5px;color:var(--ink-3)}
@@ -434,3 +433,116 @@
   .cbx .cg-card .cg-big{font-size:20pt;line-height:1.1;margin:0 0 6pt}
 }
 /* ── end Why it changes */
+
+/* ── Phase 4: Shipment list, Export, Rules & sources (spec §5.4–5.6) ───────────────────────────
+   Ported from the preview's bento.css (source order kept), scoped under .cbx. */
+/* phase-4 fill: shared primitives phase 2 did not carry (btn, foot), verbatim from the preview; b-lead/b-lead2 are above */
+.cbx .btn{border:0;height:30px;padding:0 14px;border-radius:99px;background:var(--well);font:inherit;font-size:12px;font-weight:600;color:var(--ink-2);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
+.cbx .foot{font-size:11px;font-weight:400;color:var(--ink-3);line-height:1.55}
+
+.cbx h2.b-t-ti{margin:0}
+.cbx .b-list{margin-bottom:12px}
+.cbx .b-c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cbx .b-t-h>.b-chips{justify-content:flex-end;gap:4px}
+.cbx .b-row2{display:flex;gap:8px;margin-top:14px}
+.cbx .b-row2 .btn{flex:1;width:auto}
+.cbx .b-hero .b-add{background:var(--on-ink);color:var(--ink)}
+.cbx .b-t>.btn.b-add,.cbx .b-t>.cb-btn.b-add{margin-top:auto}
+.cbx .b-ghost{height:46px;border-radius:99px;font-size:14px;font-weight:600;background:transparent;box-shadow:inset 0 0 0 1.5px color-mix(in oklab,var(--on-ink) 40%,transparent);color:var(--on-ink)}
+.cbx .b-stackbar{display:flex;gap:4px;height:14px;margin:14px 0 0}
+.cbx .b-stackbar b{border-radius:7px;background:color-mix(in oklab,var(--on-ink) 80%,transparent)}
+.cbx .b-stackbar b+b{background:color-mix(in oklab,var(--on-ink) 45%,transparent)}
+.cbx .b-stackbar b+b+b{background:color-mix(in oklab,var(--on-ink) 22%,transparent)}
+.cbx .b-pass-name{font-size:22px;font-weight:500;letter-spacing:-.02em;margin:6px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cbx .b-share-row{display:flex;justify-content:space-between;font-size:11.5px;font-weight:600;color:var(--ink-3);margin-top:10px}
+.cbx .b-share{position:relative;height:12px;border-radius:6px;background:var(--well);overflow:hidden;margin:6px 0 8px}
+.cbx .b-share b{position:absolute;left:0;top:0;bottom:0;background:var(--ink);border-radius:6px}
+.cbx .b-rm{align-self:flex-start;margin-top:8px;border:0;background:transparent;color:var(--ink-3);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:6px 0}
+.cbx .b-csvwrap{overflow-x:auto;border-radius:16px;background:var(--well);margin:12px 0 10px}
+.cbx .b-csv{border-collapse:collapse;font-size:12px;white-space:nowrap;width:100%}
+.cbx .b-csv th,.cbx .b-csv td{padding:8px 12px;text-align:left}
+.cbx .b-csv th{color:var(--ink-3);font-weight:600}
+.cbx .b-csv td{border-top:1px solid var(--line)}
+.cbx .b-fps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}
+.cbx .b-fps figure{margin:0;display:flex;gap:14px;align-items:center}
+.cbx .b-fps .b-fp{width:112px;padding:12px;gap:4px}
+.cbx .b-fps figcaption b{display:block;font-size:14px}
+.cbx .b-fps figcaption span{font-size:12px;color:var(--ink-3)}
+.cbx .b-frame-full{font-size:18px;line-height:1.5;letter-spacing:-.005em;margin-top:auto}
+.cbx .b-np{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.cbx .b-npi{display:flex;gap:14px}
+.cbx .b-npi b{font-size:15px}
+.cbx .b-npi p{font-size:13px;line-height:1.5;color:var(--ink-2);margin:4px 0 0}
+.cbx .b-npi ul.foot{margin:6px 0 0;padding-left:16px}
+.cbx .b-dash{flex:none;width:44px;height:44px;border-radius:12px;box-shadow:inset 0 0 0 2px var(--ink-3);background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in oklab,var(--ink) 10%,transparent) 6px 8px)}
+.cbx .b-key{display:flex;flex-direction:column;gap:6px;margin-top:auto}
+.cbx .b-k{border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;font-size:12.5px}
+.cbx .b-k b{font-size:15px}
+.cbx .b-k-bz{background:var(--bronze-f);color:#141614}
+.cbx .b-k-cy{background:var(--cyan-f);color:#071a1d}
+.cbx .b-k-ink{background:var(--ink);color:var(--on-ink)}
+.cbx .b-fp-sm{width:96px;padding:10px;gap:3px;margin-top:12px}
+.cbx .b-srcs ol.src{list-style:none;margin:10px 0 0;padding:0;columns:2;column-gap:28px}
+.cbx .b-srcs .src li{break-inside:avoid;padding:10px 0;border-top:1px solid var(--line)}
+.cbx .b-srcs .src li:first-child{border-top:0}
+.cbx .b-srcs .src .row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.cbx .b-srcs .src b{font-size:13px;font-weight:600;max-width:34ch}
+.cbx .b-srcs .src a{color:var(--ink-2);overflow-wrap:anywhere}
+.cbx .b-t .cb-foot{margin:10px 0 0;max-width:72ch;font:400 14px/1.5 var(--sans);color:var(--ink-2)}
+.cbx .b-frame .cb-banner{margin:14px 0 0;padding:0;max-width:none;border-radius:0;background:none;font:400 15px/1.55 var(--sans);color:inherit}
+.cbx .cb-frame-sum{margin:0 4px 16px;font-size:14px;color:var(--ink-2)}
+.cbx .cb-frame-link{border:0;background:none;padding:0;font:inherit;font-weight:600;color:var(--ink);text-decoration:underline;cursor:pointer}
+/* #cbCsv / #cbDoc keep the page's own .cb-btn class (their listeners and tests read the id), so the tile look
+   is set here at a higher specificity than the page's scoped mono-uppercase .cb-btn rule and its hover. */
+.cbx .b-t .cb-btn.b-add,.cbx .b-t .cb-btn.b-add:hover:not(:disabled){border:0;border-radius:99px;padding:0 22px;cursor:pointer;background:var(--ink);color:var(--on-ink);font:600 14px/1 var(--sans);letter-spacing:0;text-transform:none}
+.cbx .b-hero .cb-btn.b-add,.cbx .b-hero .cb-btn.b-add:hover:not(:disabled){background:var(--on-ink);color:var(--ink)}
+.cbx .b-t .cb-btn.b-add:disabled{opacity:.45;cursor:not-allowed}
+.cbx .b-t-foot.num{display:flex;justify-content:space-between;gap:8px;margin-top:0}
+.cbx :is(#cbExportCsv,#cbExportDoc){margin-bottom:14px}
+
+/* The honesty hooks inside tiles. Their markup is pinned by tests/unit/cbam-render.test.mjs, so
+   they are styled here and never renamed. Status tags are ink: colour is provenance only (spec §3). */
+.cbx .b-t .cb-tag{display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:99px;background:var(--well);color:inherit;font-size:12px;font-weight:600;white-space:nowrap}
+.cbx .b-t .cb-tag.unavail{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor}
+.cbx .b-t .cb-fig{margin:auto 0 0}
+.cbx .b-t .cb-n{font-size:64px;font-weight:400;letter-spacing:-.05em;line-height:1}
+.cbx .b-hero .cb-n{font-size:clamp(72px,7vw,120px);letter-spacing:-.06em;line-height:.9}
+.cbx .b-t .cb-u{font-size:12.5px;color:var(--ink-3);margin-top:4px}
+.cbx .b-t .cb-cost{display:inline-flex;align-self:flex-start;align-items:center;height:26px;margin-top:10px;padding:0 11px;border-radius:99px;background:var(--well);font-size:12px;font-weight:600}
+.cbx .b-t .cb-sub{margin:10px 0 0;font-size:13px;line-height:1.5;color:var(--ink-2)}
+.cbx .b-hero .cb-sub{color:var(--ink-3)}
+.cbx .b-t .cb-warn{font-weight:600}
+.cbx .b-t .cb-prov{margin:auto 0 0;padding-top:10px;font-size:11px;line-height:1.5;color:var(--ink-3)}
+.cbx .b-t .cb-attest{display:flex;gap:10px;align-items:flex-start;margin-top:12px;font-size:13px;font-weight:600}
+.cbx .b-t .cb-attest input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--ink)}
+.cbx .b-pass .cb-card{margin-top:12px;padding:0;border:0;background:transparent;box-shadow:none}
+.cbx .b-pass .cb-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.cbx .b-pass .cb-card-label{margin:0;font-size:12px;font-weight:600;color:var(--ink-3)}
+.cbx .b-t .cb-water,.cbx .b-t .cb-stamp{margin-top:10px}
+.cbx .b-t:not(.b-hero) .cb-row{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.cbx .b-t:not(.b-hero) .cb-row span{color:var(--ink-2)}
+.cbx .b-t:not(.b-hero) .cb-row b{font-weight:700;text-align:right;overflow-wrap:anywhere}
+.cbx .b-t .cb-stamp-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.cbx .b-t .cb-notes{margin:8px 0 0;padding-left:18px;font-size:12px;line-height:1.5;color:var(--ink-2)}
+.cbx .b-t .cb-reason{margin:8px 0 0;font-size:14px;font-weight:600}
+.cbx .b-t .cb-sel{display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:12px;color:var(--ink-2)}
+.cbx .b-t .cb-sel code{overflow-wrap:anywhere}
+.cbx .b-t .cb-delta{margin-top:10px;padding:12px 14px;border-radius:14px;background:var(--well)}
+.cbx .b-t .cb-delta-h{font-size:12px;font-weight:600;color:var(--ink-3)}
+.cbx .b-t .cb-attested{color:var(--ink)}
+
+@media (max-width:1100px){
+  .cbx .b-c3{grid-template-columns:1fr 1fr}
+  .cbx .b-fps{grid-template-columns:1fr 1fr}
+}
+@media (max-width:899px){
+  .cbx :is(.b-list,.b-export,.b-rules){grid-template-columns:minmax(0,1fr);grid-auto-rows:auto}
+  .cbx :is(.b-list,.b-export,.b-rules)>*{grid-column:auto;grid-row:auto}
+  .cbx .b-c3{grid-template-columns:1fr}
+  .cbx .b-fps{grid-template-columns:1fr 1fr}
+  .cbx .b-srcs ol.src{columns:1}
+}
+
+/* The status strip sits on var(--ink), so its text is var(--on-ink) in both themes. The page's scoped
+   .cb-note rule paints it cyan, which is 1.69:1 on the light ink of the dark theme (axe, phase 4). */
+.cbx #cbStatus.cbx-status{color:var(--on-ink)}
