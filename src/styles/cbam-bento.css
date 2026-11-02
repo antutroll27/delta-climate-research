@@ -202,3 +202,75 @@
 .cbx .b-res b{font-size:16px}
 .cbx .b-res-d{font-size:12px;line-height:1.45;color:var(--ink-2)}
 .cbx .b-sheet .b-t-foot{margin-top:4px}
+
+/* Primitives the plan assumed from phase 2 but phase 2 did not carry (b-none, b-lead, b-lead2):
+   copied verbatim from the visual reference, preview/bento.css lines 71-74, scoped under .cbx. */
+.cbx .b-lead{font-size:15px;line-height:1.45;max-width:46ch;margin-bottom:14px}
+.cbx .b-lead2{font-size:14px;line-height:1.5;color:var(--ink-2);margin-top:10px;max-width:72ch}
+.cbx .b-none{background:transparent;box-shadow:inset 0 0 0 1.5px var(--ink-3);border:0;color:var(--ink-3)}
+/* ── Three years (cbam-ui/tiles-years.ts → #cbOutlook), spec §5.2 ─────────────────────────
+   Colour law (spec §3): bronze marks only the mark-up. Free allocation and the benchmark are
+   ink; the visitor's own price is dashed ink, never a colour that means a source. */
+.cbx .cb-ol{display:flex;flex-direction:column;gap:12px;min-width:0}
+.cbx .cb-ol-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.cbx .cb-ol-head .cb-card-label{margin:0;font-size:13px;font-weight:600;color:var(--ink-2)}
+.cbx .cb-ol-years{grid-column:span 3;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:12px;list-style:none;margin:0;padding:0;min-width:0}
+.cbx .b-yr{min-height:232px}
+.cbx .b-yr .b-mid{margin:auto 0 0;font-size:clamp(40px,4.4vw,64px)}
+.cbx .b-yr-cost{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:14px 0}
+.cbx .b-hero .b-tag{background:color-mix(in oklab,var(--on-ink) 12%,transparent);color:inherit}
+.cbx .b-hero.b-yr .b-t-sub{color:color-mix(in oklab,var(--on-ink) 72%,transparent)}
+.cbx .cb-ol-e.cb-ol-mine{background:transparent;outline:1.5px dashed currentColor;outline-offset:-1.5px}
+.cbx .b-mk{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0;font-size:11.5px;font-weight:600;color:var(--ink-3)}
+.cbx .b-hero .b-mk{color:color-mix(in oklab,var(--on-ink) 72%,transparent)}
+.cbx .b-d10{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;width:110px}
+.cbx .b-d10 i{aspect-ratio:1;border-radius:50%;background:color-mix(in oklab,var(--ink) 16%,transparent)}
+.cbx .b-hero .b-d10 i{background:color-mix(in oklab,var(--on-ink) 22%,transparent)}
+.cbx .b-d10.b-bz i.on{background:var(--bronze-f)}
+.cbx .cb-ol-refused .cb-ol-none{margin:auto 0 8px;font-size:28px;letter-spacing:-.02em}
+.cbx .cb-ol-reason{font-size:12.5px;line-height:1.5}
+.cbx .b-own{grid-column:span 1}
+.cbx .b-pricebox{display:flex;align-items:baseline;gap:6px;margin:auto 0 10px;padding:10px 16px;border-radius:20px;background:var(--well)}
+.cbx .b-pricebox:focus-within{box-shadow:0 0 0 2px var(--focus)}
+.cbx .b-pricebox span{font-size:40px;color:var(--ink-3)}
+.cbx .b-pricebox input{width:100%;min-width:0;border:0;background:transparent;font:inherit;font-size:56px;letter-spacing:-.05em;color:var(--ink);outline:0}
+.cbx .b-pricebox input::placeholder{color:var(--ink-3);font-size:24px;letter-spacing:0}
+.cbx .b-pricebox input{-moz-appearance:textfield;appearance:textfield}
+.cbx .b-pricebox input::-webkit-outer-spin-button,.cbx .b-pricebox input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.cbx .b-pricebox em{font-style:normal;font-size:12px;color:var(--ink-3);white-space:nowrap}
+.cbx .b-own .b-t-foot{display:block;line-height:1.5}
+.cbx .b-split{display:flex;gap:6px;height:120px;margin:16px 0 12px}
+.cbx .b-split-sm{height:64px;margin:0 0 12px}
+.cbx .b-sp{flex:0 0 0;min-width:0;overflow:hidden;border-radius:18px;display:flex;align-items:flex-start}
+.cbx .b-sp>span{padding:14px 16px;font-size:30px;letter-spacing:-.04em;line-height:1;white-space:nowrap}
+.cbx .b-split-sm .b-sp>span{padding:10px 12px;font-size:20px}
+.cbx .b-sp-bz{background:var(--bronze-f);color:#141614}
+.cbx .b-sp-ink{background:var(--ink);color:var(--on-ink)}
+.cbx .b-sp-ink2{background:var(--ink-3);color:var(--on-ink)}
+.cbx .b-sp-on{background:color-mix(in oklab,var(--on-ink) 22%,transparent);color:var(--on-ink)}
+.cbx .cb-ol-legend{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.cbx .cb-ol-legend li{display:grid;grid-template-columns:12px 1fr auto;gap:10px;align-items:baseline;font-size:14px;line-height:1.45}
+.cbx .cb-ol-legend small{display:block;font-size:12px;color:var(--ink-3)}
+.cbx .cb-ol-legend b{font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cbx .cb-ol-sw{display:inline-block;width:10px;height:10px;border-radius:3px}
+.cbx .cb-ol-sw.cb-ol-s1{background:var(--bronze-f)}
+.cbx .cb-ol-sw.cb-ol-s2{background:var(--ink)}
+.cbx .cb-ol-sw.cb-ol-s3{background:var(--ink-3)}
+.cbx .cb-ol-nosplit{max-width:72ch}
+.cbx .b-work summary{width:fit-content;margin-top:12px;padding:6px 14px;border-radius:99px;background:var(--well);cursor:pointer;list-style:none;font-size:12px;font-weight:600;color:var(--ink-2)}
+.cbx .b-work summary::-webkit-details-marker{display:none}
+.cbx .cb-ol-scroll{overflow-x:auto;min-width:0}
+.cbx .b-wk{width:100%;min-width:25rem;border-collapse:collapse;margin-top:14px;font-size:15px;font-variant-numeric:tabular-nums}
+.cbx .b-wk th,.cbx .b-wk td{text-align:right;padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top;font-weight:400}
+.cbx .b-wk thead th{font-size:12px;font-weight:600;color:var(--ink-3)}
+.cbx .b-wk tbody th{text-align:left;font-weight:600;font-size:13px}
+.cbx .b-wk small{display:block;margin-top:2px;font-size:11px;font-weight:400;color:var(--ink-3)}
+.cbx .b-wk .cb-ol-tot td{font-size:24px;letter-spacing:-.03em}
+.cbx .b-wk tr:last-child th,.cbx .b-wk tr:last-child td{border-bottom:0}
+.cbx .b-wk .cb-ol-np{font-weight:600;color:var(--ink)}
+.cbx .cb-ol-notes{margin-top:12px}
+.cbx .cb-ol-note{margin:6px 0 0;font-size:11.5px;line-height:1.55;color:var(--ink-3)}
+.cbx :is(.b-work summary,.cb-ol-scroll):focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+@media (max-width:1100px){.cbx .cb-ol-years,.cbx .b-own{grid-column:1/-1}}
+@media (max-width:899px){.cbx .cb-ol-years{grid-auto-flow:row;grid-template-columns:minmax(0,1fr)}}
+/* ── end Three years */

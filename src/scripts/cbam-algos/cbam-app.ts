@@ -51,7 +51,8 @@ import {
 } from '../cbam-ui/format.ts';
 // cbam-render.test.mjs imports renderPriceRow from this module; the format module owns it now.
 export { renderPriceRow };
-import { outlook, outlookPriceSlots, parseAssumedPrice, renderOutlook, type Outlook } from '../cbam-outlook.ts';
+import { outlook, parseAssumedPrice, type Outlook } from '../cbam-outlook.ts';
+import { renderYears, yearsPriceSlots } from '../cbam-ui/tiles-years.ts';
 import type { GraphsMount } from '../cbam-graphs-dom.ts';
 
 const PACK_URL = '/cbam/estimator-pack.json';
@@ -2381,7 +2382,7 @@ export function initCbam(): void {
     // '80' then '.5' read '.580'. Moving the live element into the new markup keeps its caret.
     const live = document.activeElement instanceof HTMLInputElement && document.activeElement.id === 'cbOlPrice'
       ? document.activeElement : null;
-    outlookEl.innerHTML = renderOutlook(outlookView, assumedPriceText, open);
+    outlookEl.innerHTML = renderYears(outlookView, assumedPriceText, open);
     const fresh = live && outlookEl.querySelector<HTMLInputElement>('#cbOlPrice');
     if (live && fresh) { fresh.replaceWith(live); live.focus(); }
   }
@@ -2469,7 +2470,7 @@ export function initCbam(): void {
     const box = ev.target;
     if (!(box instanceof HTMLInputElement) || box.id !== 'cbOlPrice' || !outlookEl || !outlookView) return;
     assumedPriceText = box.value;
-    const slots = outlookPriceSlots(outlookView, assumedPriceText);
+    const slots = yearsPriceSlots(outlookView, assumedPriceText);
     for (const [name, html] of Object.entries(slots)) {
       const slot = outlookEl.querySelector(`[data-ol="${name}"]`);
       if (slot) slot.innerHTML = html;

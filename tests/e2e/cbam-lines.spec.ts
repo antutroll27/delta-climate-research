@@ -1350,7 +1350,8 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(page.locator('#cbOut .cb-cost')).toHaveText('€24,855.80');
     await view(page, 'three-years');
 
-    await expect(strip.locator('.cb-ol-h')).toHaveText('Why it rises by 97.6 certificates by 2028');
+    await expect(strip.locator('.cb-ol-h')).toHaveText('Why it rises.');
+    await expect(strip.locator('.cb-ol-hs')).toHaveText('Of 97.6 extra certificates by 2028.');
     const legend = strip.locator('.cb-ol-legend li');
     await expect(legend).toHaveCount(3);
     await expect(legend.nth(0)).toContainText('Mark-up on default values rises from 10% to 30%');
@@ -1598,7 +1599,8 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(strip.locator('.cb-ol-n')).toHaveText(['54.6', '58.4', '65.8']);
     await expect(strip.locator('.cb-ol-legend li')).toHaveCount(2);
     await expect(strip).not.toContainText(/mark-up/i);
-    await expect(strip.locator('.cb-ol-h')).toHaveText('Why it rises by 11.2 certificates by 2028');
+    await expect(strip.locator('.cb-ol-h')).toHaveText('Why it rises.');
+    await expect(strip.locator('.cb-ol-hs')).toHaveText('Of 11.2 extra certificates by 2028.');
   });
 
   test('at 320 px the page does not scroll sideways, and the working table scrolls inside its own box', async ({ page }) => {
