@@ -128,7 +128,7 @@ import Footer from '../../components/layout/Footer.astro';
           </div>
           <div id="cbVerifiedRow" hidden>
             <label class="cb-label" for="cbSeeDirect">Verified direct emissions (tCO₂e / tonne)</label>
-            <input id="cbSeeDirect" class="cb-field" type="number" min="0" step="any" />
+            <input id="cbSeeDirect" class="cb-field" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" />
             <!-- Shown only when the indirect side is actually charged for this good AND the
                  scope includes it — the same rule the defaults path uses. cbam-app.ts CLEARS
                  this input whenever the row is hidden: on the verified path the figure is the
@@ -136,7 +136,7 @@ import Footer from '../../components/layout/Footer.astro';
                  left behind an invisible row would silently inflate the next line. -->
             <div id="cbSeeIndirectRow" hidden>
               <label class="cb-label" for="cbSeeIndirect">Verified indirect emissions (tCO₂e / tonne)</label>
-              <input id="cbSeeIndirect" class="cb-field" type="number" min="0" step="any" />
+              <input id="cbSeeIndirect" class="cb-field" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" />
             </div>
             <label class="cb-check"><input id="cbAttest" type="checkbox" />
               I attest these figures come from an accredited verification (ISO 14064-3 / CBAM
@@ -150,7 +150,10 @@ import Footer from '../../components/layout/Footer.astro';
           <div class="cb-row2">
             <div>
               <label class="cb-label" for="cbMass">Net mass (tonnes)</label>
-              <input id="cbMass" class="cb-field" type="number" min="0" step="any" value="100" />
+              <input id="cbMass" class="cb-field" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="100" />
+              <!-- H1 (audit 2026-11-02): a text field, read by the engine's own parser. type="number"
+                   re-read 0,85 as 085 in Chromium and priced the figure tenfold. -->
+              <p class="cb-hint">Use a decimal point: 0.85, not 0,85.</p>
             </div>
             <div>
               <label class="cb-label" for="cbDate">Import date</label>

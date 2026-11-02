@@ -676,7 +676,7 @@ export function renderOutlookRows(view: Outlook, assumed: string | null): string
 /** The sentence under the price box. */
 export function renderOutlookPriceNote(view: Outlook, priceText: string): string {
   const years = unpricedYears(view);
-  const fills = `Fills the cost for ${yearList(years)}, where no price is published for the import's quarter.`;
+  const fills = `Fills the cost for ${yearList(years)}, where no certificate price is published for the import's date.`;
   const mine = 'It is your own assumption: not a forecast and not a published price. '
     + 'It stays on this page and is not saved, exported or sent.';
   if (priceText.trim() !== '' && parseAssumedPrice(priceText) === null) {

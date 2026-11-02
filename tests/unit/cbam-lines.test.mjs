@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Decimal from 'decimal.js';
 
 import {
-  yearOf, lineFingerprint, packSnapshotHash, thresholdByYear, sumTotals, csvRows, toCsv,
+  yearOf, lineFingerprint, packSnapshotHash, thresholdByYear, sumTotals, csvRows, toCsv, exemptLineIds,
 } from '../../src/scripts/cbam-lines.ts';
 import {
   estimateFromPack, nonNegativeDecimal,
@@ -1267,4 +1267,20 @@ test('csvRows throws naming the mismatch when lines and results are different le
     () => csvRows([line({ id: 'L1' }), line({ id: 'L2' })], [est('2523100090', 'DZ', '(A)', '100')],
       fp, 'f'.repeat(64), pack),
     /2 line\(s\) but 1 result\(s\)/);
+});
+
+/* ── C2 (audit 2026-11-02): which lines an exempt year takes out of the total ── */
+
+test('C2: exemptLineIds is the basis of attested below-threshold years, and nothing else', () => {
+  // 28041000 is the pack's only hydrogen code, offered from IN on 'default' (measured).
+  const steel = line({ id: 'steel', cn: '72061000', country: 'IN', route: '(C)', massT: '30' });
+  const h2 = line({ id: 'h2', cn: '28041000', country: 'IN', route: 'default', massT: '1000', date: '2026-04-01' });
+  const fps = new Map([['steel', 'a'.repeat(64)], ['h2', 'b'.repeat(64)]]);
+  assert.deepEqual([...exemptLineIds(thresholdByYear([steel, h2], fps, new Set([2026]), pack))], ['steel'],
+    'hydrogen is outside the Art 2a basis and stays owed');
+  assert.deepEqual([...exemptLineIds(thresholdByYear([steel, h2], fps, new Set(), pack))], [],
+    'an unattested year is indeterminate, never exempt');
+  assert.deepEqual([...exemptLineIds(thresholdByYear([line({ id: 'steel', cn: '72061000', country: 'IN', route: '(C)', massT: '60' })], fps, new Set([2026]), pack))], [],
+    'above the threshold is owed');
+  assert.deepEqual([...exemptLineIds([])], [], 'no verdicts (e.g. a failed card) exempt nothing');
 });

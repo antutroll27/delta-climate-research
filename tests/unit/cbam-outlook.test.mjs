@@ -459,7 +459,7 @@ test('when the entered date falls in a 2026 quarter with no published price, 202
   assert.deepEqual(unpricedYears(view), [2026, 2027, 2028]);
   const t = text(renderOutlook(view));
   assert.match(t, /2026 329\.8 certificates Certificate price · imports in 2026-Q4 none published as at 14 Oct 2026/);
-  assert.match(t, /Fills the cost for 2026, 2027 and 2028, where no price is published for the import's quarter\./);
+  assert.match(t, /Fills the cost for 2026, 2027 and 2028, where no certificate price is published for the import's date\./);
   // AUDIT 2, in the strip: a November shipment's 2026 card is about ITS quarter. "2026: none
   // published" was false while three other 2026 quarters have a price.
   assert.match(t, /2027 376\.8 certificates, \+14\.2% on 2026 Certificate price · imports in 2027-Q4 none published/);

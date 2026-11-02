@@ -520,3 +520,9 @@ test('AUDIT 2: a shipment in a quarter with no published price is told so about 
   assert.doesNotMatch(q1, /24829\.41|24,829\.41/, 'the Q2 price is not this shipment\'s');
   assert.match(text(q1), /No certificate price is published for imports in 2027-Q1 or 2028-Q1\./);
 });
+
+test('M2 (audit 2026-11-02): no legend calls the certificate price the quarter\'s', () => {
+  // From 2027 the price is weekly (IR (EU) 2025/2548). The quarter may name the period the import
+  // falls in, never the price's period.
+  assert.doesNotMatch(renderGraphs(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE)), /price for this import's quarter/);
+});

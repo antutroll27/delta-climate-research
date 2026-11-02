@@ -468,20 +468,10 @@ test.describe('multi-line CBAM estimate — the net-mass gate', () => {
     // against, and all 386 unit tests stay green. Only an assertion on what the user actually
     // perceives fails. That is this test.
     //
-    // WHAT IT CANNOT DO, stated so nobody assumes otherwise: it cannot tell
-    // `nonNegativeDecimal(mass.value)` from the `Number(mass.value)` check that preceded it. Measured
-    // in Chrome, not reasoned from the spec: #cbMass is <input type="number">, so value sanitisation
-    // collapses EVERY string the two predicates disagree about — '0x10', '+100', '5.', '  100  ',
-    // '1e400' and a 400-digit integer all become '' — and '' is then absorbed by run()'s completeness
-    // guard one line ABOVE the mass gate. Over everything that survives the control the two
-    // predicates are behaviourally identical; their difference is only reachable by constructing a
-    // `Line` in code, which is exactly where cbam-lines.test.mjs pins it.
-    //
-    // METHODOLOGY TRAP, in the spirit of the header's: do NOT try to prove the hex case with
-    // `page.fill('#cbMass', '0x10')`. fill() does not throw on a malformed number — it falls back to
-    // typing, the UA drops the characters it will not take, and the field silently ends up holding
-    // '010'. '+100' lands as '100', '5.' as '5'. A test written that way asserts a refusal the page
-    // was never asked to make, and would keep passing with the gate deleted.
+    // SINCE H1 (audit 2026-11-02) #cbMass is type="text" inputmode="decimal", so strings the old
+    // <input type="number"> sanitised away ('0x10', '+100', '2,5', '  100  ') now reach the gate
+    // as typed. The H1 tests below assert each is refused, or (with spaces) read, by the engine's
+    // own parser.
     await page.goto('/cbam/cbam-calculator/');
 
     // -500 t: the figure run()'s own comment records, reachable exactly as it describes. `min="0"` on
@@ -514,6 +504,51 @@ test.describe('multi-line CBAM estimate — the net-mass gate', () => {
     await page.fill('#cbMass', '');
     await expect(page.locator('#cbOut')).toContainText('Choose a good, origin, route, mass and import date');
     await expect(page.locator('#cbOut')).not.toContainText('Net mass must be a number of tonnes');
+  });
+
+  test('H1: a decimal comma is refused by name, and nothing is priced', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, { ...GOOD_LINE, mass: '2,5' });
+    await expect(page.locator('#cbOut')).toContainText('Use a decimal point');
+    await expect(page.locator('#cbOut')).not.toContainText('€');
+    for (const bad of ['0x10', '+100', '1_000']) {
+      await page.fill('#cbMass', bad);
+      await expect(page.locator('#cbOut')).toContainText('Net mass must be a number of tonnes, zero or greater.');
+    }
+    await page.fill('#cbMass', '  100  ');
+    await expect(page.locator('#cbOut .cb-cost')).toBeVisible();
+  });
+
+  test('H1: a decimal comma in the verified direct figure is refused, never re-read as 085', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, VERIFIED_LINE);
+    await page.selectOption('#cbTier', 'actual-verified');
+    await page.fill('#cbSeeDirect', '0,85');
+    await page.check('#cbAttest');
+    await expect(page.locator('#cbOut')).toContainText('Verified direct emissions: Use a decimal point');
+    await expect(page.locator('#cbOut')).not.toContainText('€');
+  });
+
+  test('C2: an attested below-threshold year leaves the total', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await addLine(page, { mass: '30' });
+    await page.locator('[data-attest="2026"]').check();
+    const total = page.locator('.cb-total');
+    await expect(total).toContainText('Nothing owed on the lines listed');
+    await expect(total).toContainText('Exempt if your list is complete');
+    await expect(page.locator('#cbStatus')).toContainText('exempt if your list is complete');
+  });
+
+  test('M3: a year with no rules is explained in the result, not only inside a disabled select', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await page.fill('#cbCn', GOOD_LINE.cn);
+    await page.dispatchEvent('#cbCn', 'change');
+    await expect(page.locator(`#cbCountry option[value="${GOOD_LINE.country}"]`)).toBeAttached();
+    await page.selectOption('#cbCountry', GOOD_LINE.country);
+    await page.fill('#cbDate', '2029-03-15');
+    await page.dispatchEvent('#cbDate', 'change');
+    await expect(page.locator('#cbOut')).toContainText('No estimate: no rules published for 2029.');
+    await expect(page.locator('#cbOut')).not.toContainText('Choose a good, origin, route');
   });
 });
 

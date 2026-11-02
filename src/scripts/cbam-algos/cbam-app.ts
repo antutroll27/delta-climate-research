@@ -25,15 +25,15 @@
  */
 import Decimal from 'decimal.js';
 import {
-  estimateFromPack, nonNegativeDecimal, resolveThreshold, routesFor, selectIndirectFactorFromPack,
+  estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
   type EstimatorInput, type EstimatorPack, type ThresholdView,
 } from './estimator/estimate-from-pack.ts';
 import { loadEstimatorPack, type PackIntegrity } from './estimator/load-pack.ts';
 import type { LoadedEstimatorPack } from './estimator/pack-v2.ts';
 import type { CertificateEstimate, DataTier } from './cbam/certificate-estimate.ts';
-import { parseRegulatoryDate } from './cbam/input.ts';
+import { parseNonNegativeDecimal, parseRegulatoryDate } from './cbam/input.ts';
 import {
-  csvRows, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
+  csvRows, exemptLineIds, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
   type Line, type Totals, type YearThreshold,
 } from '../cbam-lines.ts';
 import { ROUTE_GLOSSARY } from '../cbam-route-glossary.ts';
@@ -545,7 +545,24 @@ const totalsTag = (anyPending: boolean) => (anyPending ? 'What-if · CSCF unpubl
  * line failed closed (a real "nothing here priced" warning). Showing the same red tag for both
  * would make an empty form look like a form full of refusals.
  */
-export function renderTotals(t: Totals): string {
+export function renderTotals(t: Totals, exempt: Totals | null = null): string {
+  // C2 (audit 2026-11-02): lines an attested below-threshold year exempts are summed apart and
+  // shown OUTSIDE the total. Before, "Below threshold" sat beside a total that still billed them.
+  const exemptNote = exempt && exempt.pricedLines > 0
+    ? `<p class="cb-sub cb-exempt"><b>Exempt if your list is complete:</b> ${exempt.pricedLines} line${
+        exempt.pricedLines === 1 ? '' : 's'} below the de minimis threshold for the year you attested, ${
+        num(exempt.certificates)} certificates${exempt.costEur ? ` · ${eur(exempt.costEur)}` : ''} — not included in the total.</p>`
+    : '';
+  if (t.pricedLines === 0 && t.refusedLines === 0 && exemptNote) return `
+    <section class="cb-card cb-res cb-total">
+      <div class="cb-card-head">
+        <h3 class="cb-card-label">Total exposure</h3>
+        <span class="cb-tag ok">Below threshold</span>
+      </div>
+      <p class="cb-sub">Nothing owed on the lines listed, on your statement that they are all your imports for the year.</p>
+      ${exemptNote}
+    </section>`;
+
   if (t.pricedLines === 0 && t.refusedLines === 0) return `
     <section class="cb-card cb-res cb-total">
       <div class="cb-card-head">
@@ -563,6 +580,7 @@ export function renderTotals(t: Totals): string {
       </div>
       <p class="cb-sub">No line has a priced estimate, so there is no total to show — not even a zero. ${
         refusedLineNote(t.refusedLines)}</p>
+      ${exemptNote}
     </section>`;
 
   const tone = t.anyPending ? 'pending' : 'ok';
@@ -578,6 +596,7 @@ export function renderTotals(t: Totals): string {
       ${t.costEur ? `<div class="cb-cost">${eur(t.costEur)}</div>`
         : '<div class="cb-sub">No € total — at least one line has no published certificate price.</div>'}
       ${t.refusedLines ? `<p class="cb-sub cb-warn">${refusedLineNote(t.refusedLines)}</p>` : ''}
+      ${exemptNote}
     </section>`;
 }
 
@@ -1197,12 +1216,14 @@ export function buildPrintDocument(input: {
   results: readonly (CertificateEstimate | LineEstimateFailure)[];
   yearCards: readonly YearThreshold[];
   totals: Totals;
+  /** C2: lines an attested below-threshold year exempts, summed apart. Optional for older callers. */
+  exempt?: Totals;
   packSnapshot: string;
   rulePackages: readonly string[];
   pack: Pick<EstimatorPack, 'sources'>;
   generatedOn: string;
 }): string {
-  const { lines, results, yearCards, totals, packSnapshot, rulePackages, pack, generatedOn } = input;
+  const { lines, results, yearCards, totals, exempt, packSnapshot, rulePackages, pack, generatedOn } = input;
   if (lines.length !== results.length) {
     // Matches csvRows's own idiom in cbam-lines.ts: name the mismatch loudly rather than let
     // `results[i]!` below hand back a bare `undefined` with nothing to debug from.
@@ -1298,7 +1319,9 @@ export function buildPrintDocument(input: {
       <tbody>${lineRows}</tbody></table>
 
     <h2>2 · What we computed</h2>
-    ${totals.pricedLines === 0
+    ${totals.pricedLines === 0 && totals.refusedLines === 0 && exempt?.pricedLines
+      ? '<p>Nothing owed on the lines listed, on your statement that they are all your imports for the year.</p>'
+      : totals.pricedLines === 0
       ? `<p>No line could be priced, so there is <b>no total</b> — not a total of zero. ${
           totals.refusedLines} line${totals.refusedLines === 1 ? '' : 's'} refused; the last column
           of §1 names what was missing for each. Nothing on this page states that the exposure is
@@ -1307,6 +1330,9 @@ export function buildPrintDocument(input: {
           totals.costEur ? ` · <b>${eur(totals.costEur)}</b>` : ' · no € total (a certificate price is unpublished)'}${
           totals.anyPending ? ' — a <b>what-if</b>, because the CSCF is unpublished (see §4)' : ''}. ${
           totals.refusedLines ? `${totals.refusedLines} line(s) refused and excluded.` : ''}</p>`}
+    ${exempt?.pricedLines ? `<p>Exempt if your list is complete: ${exempt.pricedLines} line(s) below the de minimis
+      threshold for the year you attested, ${num(exempt.certificates)} certificates${
+      exempt.costEur ? ` · ${eur(exempt.costEur)}` : ''} — not included in the total.</p>` : ''}
     <ul>${verdicts || '<li>No de minimis verdict — no eligible lines.</li>'}</ul>
 
     <h2>3 · On what authority</h2>
@@ -1554,29 +1580,33 @@ export function decorateSnapshot(e: CertificateEstimate, snapshotHash: string): 
 }
 
 /**
- * One verified per-tonne figure as the FORM should judge it, or null.
+ * H1 (audit 2026-11-02). The three figure fields are type="text" inputmode="decimal", because
+ * type="number" re-read '0,85' as '085' in Chromium and priced 8,500 tCO₂e beside "transcribed
+ * exactly as entered". So every figure field is now read by the ENGINE's own parser and nothing
+ * else: what this accepts is exactly what the engine prices. The comma is the one mistake common
+ * enough to name: it is the decimal mark in most of the exporting world, and a thousands separator
+ * in the rest.
  *
- * DELIBERATELY LOOSER THAN THE ENGINE'S OWN GATE, and the looseness is the design. The
- * authority on what may be priced is `verifiedPerT` in estimate-from-pack.ts — a vendored
- * function this file cannot import (it is not exported) and must not copy, because a copied
- * regex is a second rule that drifts from the first. That gate is stricter than this one: it
- * refuses '0x10', '1_000', '5.' and '+5', all of which `Number()` happily reads. Those reach
- * the engine and come back as a REFUSAL CARD naming the input — fail-closed, just one step
- * later and in a different place on screen. What this catches is the ordinary case — prose, an
- * empty field, Infinity — where an inline message beside the field beats a refused card.
- *
- * SIGNS PASS THROUGH ON PURPOSE. `Number('-1')` is perfectly finite, so a negative figure is
- * NOT this function's refusal to make: it must reach the caller's own `< 0` test, which is what
- * gives a negative its own specific message ("enter zero if the verified figure really is nil")
- * rather than the generic "not a number".
- *
- * ZERO IS LEGAL. A 100%-scrap EAF producer genuinely attests a near-zero figure, and this is
- * exactly the importer the verified tier exists to reward — a falsy check here would refuse the
- * best-documented line on the form.
+ * This replaces verifiedFigure(), which read with Number() on the premise that the engine's gate
+ * could not be imported. It can: the engine prices verified figures through nonNegativeDecimal,
+ * which is parseNonNegativeDecimal. A negative keeps its own class so its message can say
+ * "enter zero", and zero stays legal (the best-documented producer attests near-zero).
  */
-function verifiedFigure(value: string): number | null {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+export type DecimalProblem = 'comma' | 'negative' | 'unreadable';
+export function decimalProblem(text: string): DecimalProblem | null {
+  const parsed = parseNonNegativeDecimal(text);
+  if (parsed.ok) return null;
+  if (text.includes(',')) return 'comma';
+  return parsed.code === 'NEGATIVE_NUMBER' ? 'negative' : 'unreadable';
+}
+
+export const COMMA_HINT = 'Use a decimal point and no thousands separators: 0.85, not 0,85, and 1000, not 1,000.';
+
+/** The mass field's refusal, shared by the preview and the Add path so the two say one thing. */
+export function massRefusal(text: string): string | null {
+  const p = decimalProblem(text);
+  if (p === null) return null;
+  return p === 'comma' ? `Net mass: ${COMMA_HINT}` : 'Net mass must be a number of tonnes, zero or greater.';
 }
 
 /** What the verified panel contributes to a draft Line, or the reason it cannot.
@@ -1635,23 +1665,25 @@ export function parseVerifiedFields(v: {
     return { error: 'Enter your verified direct emissions in tCO₂e per tonne of good, '
       + 'or switch this line back to the Commission defaults.' };
   }
-  const d = verifiedFigure(direct);
-  if (d === null) {
+  const dp = decimalProblem(direct);
+  if (dp === 'comma') return { error: `Verified direct emissions: ${COMMA_HINT}` };
+  if (dp === 'unreadable') {
     return { error: `Verified direct emissions must be a number of tCO₂e per tonne — `
       + `“${direct}” is not one.` };
   }
-  if (d < 0) {
+  if (dp === 'negative') {
     return { error: 'Verified direct emissions cannot be negative — enter zero if the '
       + 'verified figure really is nil.' };
   }
 
   if (indirect) {
-    const i = verifiedFigure(indirect);
-    if (i === null) {
+    const ip = decimalProblem(indirect);
+    if (ip === 'comma') return { error: `Verified indirect emissions: ${COMMA_HINT}` };
+    if (ip === 'unreadable') {
       return { error: `Verified indirect emissions must be a number of tCO₂e per tonne — `
         + `“${indirect}” is not one. Leave the field empty if you are not claiming one.` };
     }
-    if (i < 0) {
+    if (ip === 'negative') {
       return { error: 'Verified indirect emissions cannot be negative — enter zero, or leave '
         + 'the field empty if you are not claiming one.' };
     }
@@ -1937,6 +1969,9 @@ export function initCbam(): void {
    * is a rebuild doing it.
    */
   let lastRoutePick = '';
+  // M3: why no route can be offered for the current good, origin and year, or null. Set by
+  // syncRoutes, read by runPreview so the reason reaches the live region.
+  let noRoute: string | null = null;
 
   /**
    * ONE LOAD IN FLIGHT, SHARED BY EVERY CALLER. Two listeners ask for the pack before it has
@@ -2003,6 +2038,7 @@ export function initCbam(): void {
   }
 
   function syncRoutes(): void {
+    noRoute = null;
     // Read the user's pick BEFORE the rebuild wipes it — and remember it, because a rebuild that
     // empties the list wipes it BEFORE the next call gets here (see lastRoutePick). Reading
     // `route.value` alone is only enough while every rebuild leaves a real option selected.
@@ -2035,7 +2071,8 @@ export function initCbam(): void {
     // passed for the third of those: it is the only one of the three the pairing sentence hides
     // completely, because nothing else on screen says the typed code is not an offered good.
     if (!rs.length) {
-      route!.innerHTML = `<option value="">${esc(noRouteReason(pack, year, cn!.value))}</option>`;
+      noRoute = noRouteReason(pack, year, cn!.value);
+      route!.innerHTML = `<option value="">${esc(noRoute)}</option>`;
       return;
     }
     // The indicator ALONE asks an importer to pick their plant's technology from a letter, and
@@ -2138,7 +2175,9 @@ export function initCbam(): void {
     const has = !!pack && !!cn!.value && !!country!.value && !!route!.value
       && selectIndirectFactorFromPack(pack, {
         cn: cn!.value, country: country!.value, route: route!.value,
-        massT: mass!.value || '1', date: date!.value,
+        // H1: the mass field is free text now, so only a mass the engine can read is passed; the
+        // probe asks whether an indirect default EXISTS, which no mass changes.
+        massT: massRefusal(mass!.value) ? '1' : mass!.value.trim() || '1', date: date!.value,
       }).kind !== 'none';
     scopeRow.hidden = !has;
   }
@@ -2252,6 +2291,13 @@ export function initCbam(): void {
    * the engine's reason in each year, which is the honest picture of that line.
    */
   function runPreview(): EstimatorInput | null {
+    // M3 (audit 2026-11-02): when no route CAN be offered, the reason must reach the live region.
+    // Inside the disabled <select> it was invisible to keyboard and screen-reader users, while this
+    // panel told someone who had filled every field to "choose a route".
+    if (pack && cn!.value && country!.value && noRoute) {
+      out!.innerHTML = `<p class="cb-idle">No estimate: ${esc(noRoute)}.</p>`;
+      return null;
+    }
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value || !date!.value) {
       out!.innerHTML = '<p class="cb-idle">Choose a good, origin, route, mass and import date to see the provisional exposure.</p>';
       return null;
@@ -2288,8 +2334,9 @@ export function initCbam(): void {
     // this one. Deciding with the function that does the parsing makes the drift structurally
     // impossible rather than merely unreachable. Checked here, not against the markup's `min`,
     // so that editing the .astro cannot silently disarm it.
-    if (!nonNegativeDecimal(mass!.value)) {
-      out!.innerHTML = '<p class="cb-idle">Net mass must be a number of tonnes, zero or greater.</p>';
+    const massProblem = massRefusal(mass!.value);
+    if (massProblem) {
+      out!.innerHTML = `<p class="cb-idle">${esc(massProblem)}</p>`;
       return null;
     }
     // The verified panel is read through the SAME parse the added line uses (readVerified's own
@@ -2307,7 +2354,7 @@ export function initCbam(): void {
     // the line this card shows and cannot be built from a second reading of the form.
     const input: EstimatorInput = {
       cn: cn!.value, country: country!.value, route: route!.value,
-      massT: mass!.value, date: date!.value,
+      massT: mass!.value.trim(), date: date!.value,
       emissionsScope: (scope?.value as 'direct' | 'direct_and_indirect') ?? 'direct_and_indirect',
       verified: verifiedInputOf(v.ok),
     };
@@ -2325,7 +2372,7 @@ export function initCbam(): void {
       // multi-line panel showed an explicit "No published rule" card for the same year. See
       // renderDraftThreshold for the enumeration and for which of the four are still, correctly,
       // silent.
-      const t = renderDraftThreshold(pack, { cn: cn!.value, massT: mass!.value, date: date!.value });
+      const t = renderDraftThreshold(pack, { cn: cn!.value, massT: mass!.value.trim(), date: date!.value });
       // The attestation travels with the PREVIEW too, not just the added line's card. This is the
       // surface with the largest audience — it is what the page shows before anyone clicks Add, so
       // a visitor who never adds a line sees only this — and on the verified tier it shows the
@@ -2533,7 +2580,7 @@ export function initCbam(): void {
   /**
    * Builds the next line from the form's current values, or null if the line is not ready to
    * add. Refuses an impossible mass with the SAME predicate run() previews with —
-   * nonNegativeDecimal, the function the engine itself parses with — never a second opinion that
+   * massRefusal, over the engine's own parser (H1) — never a second opinion that
    * merely looks equivalent (checked here, not left to the markup's inert `min="0"`, for the
    * same reason run() gives; see the call site for what the two gates disagreed about).
    *
@@ -2581,7 +2628,8 @@ export function initCbam(): void {
     // Those were measured on the FUNCTION, not through the form — <input type="number"> admits
     // none of those strings, so none was user-reachable. thresholdByYear now carries its own
     // gate, so this one is the outer of two rather than the only one.
-    if (!nonNegativeDecimal(mass!.value)) return null;
+    const massProblem = massRefusal(mass!.value);
+    if (massProblem) { draftReason = massProblem; return null; }
     // The verified panel's contribution — the tier, and on the verified branch the attested
     // figures and any reference — or the reason it cannot contribute one. Its refusals are
     // SPECIFIC ("tick the attestation", "that is not a number"), unlike the four checks above,
@@ -2592,7 +2640,7 @@ export function initCbam(): void {
     const l: Line = {
       id: crypto.randomUUID(), cn: cn!.value, country: country!.value, route: route!.value,
       scope: (scope?.value as Line['scope']) ?? 'direct_and_indirect',
-      massT: mass!.value, date: date!.value,
+      massT: mass!.value.trim(), date: date!.value,
       // Spread LAST and unconditionally: `tier` is required on Line (see its doc in
       // cbam-lines.ts) and v.ok is typed to always carry one, so the compiler — not a default
       // written here — is what guarantees every line states which tier priced it. The optional
@@ -2742,7 +2790,6 @@ export function initCbam(): void {
     const pairs = safeEstimates(lines);
     lastPairs = pairs;
     const ok = pairs.filter((p) => p.e !== null);
-    const totals = sumTotals(ok.map((p) => p.e!));
 
     // thresholdByYear THROWS on any in-scope line missing a fingerprint (its own doc: this
     // fires inside the per-year map, so one bad line discards EVERY year's card, not just its
@@ -2767,6 +2814,11 @@ export function initCbam(): void {
       // years stays [] — the announcement below must not claim a verdict computed from data that
       // just failed to compute.
     }
+    // C2: computed AFTER the verdicts, from the same `years` the cards show. If they failed, no
+    // line is exempt and the total over-states rather than hides.
+    const exemptIds = exemptLineIds(years);
+    const totals = sumTotals(ok.filter((p) => !exemptIds.has(p.l.id)).map((p) => p.e!));
+    const exempt = sumTotals(ok.filter((p) => exemptIds.has(p.l.id)).map((p) => p.e!));
 
     // MULTI-LINE MODE NARROWS THE LIVE REGION (quality review item 5). #cbOut's aria-live was
     // written for the single-line preview, where one edit replaces one card. In multi-line mode
@@ -2783,7 +2835,7 @@ export function initCbam(): void {
     // still can, by navigating into the (unchanged, still fully marked-up) panel — in exchange
     // for not being read a wall of cards after every single click.
     outWrap?.setAttribute('aria-live', 'off');
-    out!.innerHTML = yearsHtml + renderTotals(totals) + pairs.map((p, i) => p.e
+    out!.innerHTML = yearsHtml + renderTotals(totals, exempt) + pairs.map((p, i) => p.e
       ? renderLineCard(p.l, p.e, i, p.cmp)
       : `<article class="cb-line" data-line="${esc(p.l.id)}">
            <div class="cb-line-head">
@@ -2832,6 +2884,7 @@ export function initCbam(): void {
     status!.textContent = `${lines.length} line${lines.length === 1 ? '' : 's'} in this estimate.`
       + (yearVerdicts ? ` Threshold ${yearVerdicts}.` : '')
       + totalsHeadline
+      + (exempt.pricedLines ? ` ${exempt.pricedLines} line${exempt.pricedLines === 1 ? ' is' : 's are'} exempt if your list is complete and not in the total.` : '')
       + refusedNote;
   }
 
@@ -3006,6 +3059,9 @@ export function initCbam(): void {
       status!.textContent = `Could not build the document: ${(err as Error).message}`;
       return;
     }
+    // C2: the document's total leaves out what the year cards exempt, exactly as the panel does.
+    const exemptIds = exemptLineIds(years);
+    const pricedPairs = lastPairs.filter((p) => p.e !== null);
     // Same exposure as onCsv's, found the same way: buildPrintDocument throws on a
     // lines/results length mismatch (its own guard), and an uncaught throw here would leave
     // #cbPrint holding the PREVIOUS export's markup while the print dialog never opens — a
@@ -3017,7 +3073,8 @@ export function initCbam(): void {
       html = buildPrintDocument({
         lines, results,
         yearCards: years,
-        totals: sumTotals(priced),
+        totals: sumTotals(pricedPairs.filter((p) => !exemptIds.has(p.l.id)).map((p) => p.e!)),
+        exempt: sumTotals(pricedPairs.filter((p) => exemptIds.has(p.l.id)).map((p) => p.e!)),
         packSnapshot: snapshot,
         rulePackages: priced[0]?.stamp.rulePackages ?? [],
         pack, generatedOn: new Date().toISOString().slice(0, 10),

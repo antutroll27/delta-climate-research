@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Decimal from 'decimal.js';
 
 import {
-  graphsModel, originCountries, originRow, originsFrom, originsKey, originsModel, phaseModel, plotCascade, plotOrigins, plotPhase, renderGraphs,
+  cascadeUnit, graphsModel, originCountries, originRow, originsFrom, originsKey, originsModel, phaseModel, plotCascade, plotOrigins, plotPhase, renderGraphs,
   sentenceCascade, sentenceOrigins, sentencePhase, ORIGINS_FLAT_SHARE, ORIGINS_SAME_SHARE,
 } from '../../src/scripts/cbam-graphs.ts';
 import { outlook, splitBetween } from '../../src/scripts/cbam-outlook.ts';
@@ -324,4 +324,25 @@ test('a retry imports only this site\'s own built scripts; any other address mea
   assert.equal(graphsRetryUrl('Failed to fetch dynamically imported module: http://deltaclimate.earth/_astro/x.js', origin), 'foreign', 'not even the same host over another scheme');
   // No address at all (WebKit's wording): nothing to follow; the plain import is tried again.
   assert.equal(graphsRetryUrl('Importing a module script failed.', origin), null);
+});
+
+/* ── H2 (audit 2026-11-02): the dot chart is bounded for any mass ── */
+
+test('H2: cascadeUnit keeps 52 dots or fewer for ANY finite size, not just up to 1e7 units', () => {
+  for (const max of [0.5, 52, 53, 1e4, 5.2e8, 1e10, 1e15, 1e300]) {
+    const u = cascadeUnit(max);
+    assert.ok(max / u <= 52, `${max}: ${max / u} dots at unit ${u}`);
+  }
+  assert.equal(cascadeUnit(1e10), 1e9);
+});
+
+test('H2: an absurd mass draws a bounded chart, quickly', () => {
+  for (const massT of ['1e10', '1e15', '1e400']) {
+    const t0 = Date.now();
+    const svg = plotCascade(modelOf(line({ massT })), 600).svg;
+    assert.ok(Date.now() - t0 < 2000, `${massT}: took ${Date.now() - t0} ms`);
+    const dots = [...svg.matchAll(/data-dots="(\d+)"/g)].map((m) => Number(m[1]));
+    assert.ok(dots.length > 0 && dots.every((d) => d <= 52), `${massT}: columns ${dots}`);
+    assert.ok(svg.length < 200_000, `${massT}: ${svg.length} bytes of SVG`);
+  }
 });

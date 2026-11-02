@@ -4,7 +4,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
-  buildPrintDocument, decorateSnapshot, inputFor, nextRoute, noRouteReason, parseVerifiedFields,
+  buildPrintDocument, decimalProblem, decorateSnapshot, inputFor, massRefusal, nextRoute, noRouteReason, parseVerifiedFields,
   priceNoteFor, renderAttestation, renderDraftThreshold, renderLineCard, renderPriceRow, renderResult,
   renderThreshold, renderTotals, renderYearThreshold, stampedTierOf, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
@@ -1612,9 +1612,8 @@ test('a non-numeric direct figure is refused rather than coerced', () => {
 
 test('Infinity is refused — the check is finiteness, not merely not-NaN', () => {
   // `Number('Infinity')` is a number and passes `!Number.isNaN`, so only the FINITE test catches
-  // it; verifiedFigure's own doc names this case. `<input type="number">` sanitises the string
-  // away in a browser, so this is a guard on the pure function's contract rather than a reachable
-  // UI path — asserted here because that contract is the only thing holding it.
+  // it. Since H1 (audit 2026-11-02) the field is type="text", so 'Infinity' IS reachable from
+  // the form, and this test is what holds it.
   const r = parseVerifiedFields(vf({ direct: 'Infinity' }));
   assert.equal(r.ok, undefined, 'an infinite figure must never become a priceable line');
   assert.match(r.error, /direct/i);
@@ -3525,4 +3524,74 @@ test('an unreadable date produces no price note — that is a different problem'
 test('a full UTC timestamp resolves to its day, not to nothing', () => {
   // quarterOf accepts both shapes; callers pass '2026-03-15T00:00:00.000Z' as well as a bare day.
   assert.equal(priceNoteFor(pack, '2026-03-15T00:00:00.000Z'), null);
+});
+
+/* ── H1 (audit 2026-11-02): a decimal comma is refused by name, never silently re-read ── */
+
+test('H1: decimalProblem classifies with the engine parser', () => {
+  assert.equal(decimalProblem('0.85'), null);
+  assert.equal(decimalProblem(' 2.31 '), null, 'the engine trims; so does this');
+  assert.equal(decimalProblem('0'), null);
+  assert.equal(decimalProblem('0,85'), 'comma');
+  assert.equal(decimalProblem('1,000'), 'comma', 'a thousands separator is a comma too');
+  assert.equal(decimalProblem('-1'), 'negative');
+  for (const bad of ['0x10', '+100', '5.', '1_000', 'Infinity', 'abc']) {
+    assert.equal(decimalProblem(bad), 'unreadable', bad);
+  }
+});
+
+test('H1: a comma in the verified direct figure is refused, naming the comma', () => {
+  const r = parseVerifiedFields(vf({ direct: '0,85' }));
+  assert.equal(r.ok, undefined, '0,85 must never become a priceable 85 or 085');
+  assert.match(r.error, /decimal point/);
+  assert.match(r.error, /0\.85, not 0,85/);
+});
+
+test('H1: a comma in the verified indirect figure is refused, naming the comma', () => {
+  const r = parseVerifiedFields(vf({ direct: '2.31', indirect: '0,4' }));
+  assert.equal(r.ok, undefined);
+  assert.match(r.error, /indirect/i);
+  assert.match(r.error, /decimal point/);
+});
+
+test('H1: the verified gate reads what the engine reads (A5): hex is refused, not priced as 16', () => {
+  const r = parseVerifiedFields(vf({ direct: '0x10' }));
+  assert.equal(r.ok, undefined);
+  assert.match(r.error, /is not one/);
+});
+
+test('H1: the mass refusal names the comma, or keeps its existing sentence', () => {
+  assert.equal(massRefusal('100'), null);
+  assert.match(massRefusal('2,5'), /decimal point/);
+  assert.equal(massRefusal('-5'), 'Net mass must be a number of tonnes, zero or greater.');
+  assert.equal(massRefusal('0x10'), 'Net mass must be a number of tonnes, zero or greater.');
+});
+
+/* ── C2 (audit 2026-11-02): an exempt year's lines sit outside the total ── */
+
+const C2_OWED = { certificates: '100', costEur: '7536.00', chargeableTco2e: '100', pricedLines: 1, refusedLines: 0, anyPending: true };
+const C2_EXEMPT = { certificates: '98.948', costEur: '7456.74', chargeableTco2e: '98.948', pricedLines: 1, refusedLines: 0, anyPending: true };
+const C2_NONE = { certificates: '0', costEur: null, chargeableTco2e: '0', pricedLines: 0, refusedLines: 0, anyPending: false };
+
+test('C2: renderTotals shows exempt lines OUTSIDE the total, with their own figures', () => {
+  const html = renderTotals(C2_OWED, C2_EXEMPT);
+  assert.match(html, /Total exposure · 1 line/);
+  assert.match(html, /Exempt if your list is complete/);
+  assert.match(html, /1 line below the de minimis threshold/);
+  assert.match(html, /98\.948/);
+  assert.match(html, /not included in the total/);
+});
+
+test('C2: when every priced line is exempt, the total is a stated nil, not "No lines yet"', () => {
+  const html = renderTotals(C2_NONE, C2_EXEMPT);
+  assert.doesNotMatch(html, /No lines yet/);
+  assert.match(html, /Nothing owed on the lines listed/);
+  assert.match(html, /Exempt if your list is complete/);
+});
+
+test('C2: without exempt lines, renderTotals is unchanged', () => {
+  assert.equal(renderTotals(C2_OWED), renderTotals(C2_OWED, null));
+  assert.equal(renderTotals(C2_OWED), renderTotals(C2_OWED, C2_NONE));
+  assert.doesNotMatch(renderTotals(C2_OWED), /Exempt/);
+  assert.match(renderTotals(C2_NONE), /No lines yet/);
 });

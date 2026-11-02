@@ -531,18 +531,21 @@ function causeDot(cls: string, x: number, y: number, r: number): string {
   return `<circle cx="${x}" cy="${y}" r="${r - 0.9}" fill="none" stroke="var(--cg-benchmark)" stroke-width="1.8"/>`;
 }
 
-/** The dot unit: the smallest round number that keeps the tallest column within 52 dots. */
+/** The dot unit: the smallest round number that keeps the tallest column within 52 dots. Above the
+ * hand-picked steps it is the smallest power of ten that does (H2, audit 2026-11-02: the old fixed
+ * fallback drew 11,340 dots at 1e10 t and exhausted the heap at 1e15 t). */
 export function cascadeUnit(maxCertificates: number): number {
   return [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 100000, 1000000]
-    .find((u) => maxCertificates / u <= 52) ?? 10000000;
+    .find((u) => maxCertificates / u <= 52) ?? 10 ** Math.ceil(Math.log10(maxCertificates / 52));
 }
 
 export function plotCascade(m: GraphsModel, w: number): Plot {
   const Y = m.years, max = Math.max(...Y.map((y) => Number(y.certificates)));
   const unit = cascadeUnit(max), per = 4, gap = w < 420 ? 13 : 17, r = gap * 0.36;
-  const base0 = Math.round(Number(Y[0].certificates) / unit);
+  // min(52) backstops the unit; `|| 0` maps NaN (an infinite count over an infinite unit) to no dots.
+  const base0 = Math.min(52, Math.round(Number(Y[0].certificates) / unit) || 0);
   const cols = Y.map((y, i) => {
-    const total = Math.round(Number(y.certificates) / unit), sp = m.causes[i];
+    const total = Math.min(52, Math.round(Number(y.certificates) / unit) || 0), sp = m.causes[i];
     if (i === 0 || !sp) return { y, seq: Array<string>(total).fill('n') };
     const parts = apportion(CAUSES.map((c) => new D(causePart(sp, c.key))), Math.max(0, total - base0));
     return { y, seq: [...Array<string>(Math.min(base0, total)).fill('n'), ...parts.flatMap((n, k) => Array<string>(n).fill(CAUSES[k].cls))] };
@@ -951,7 +954,7 @@ export function renderGraphs(
         <input id="cgSecond" type="number" min="0" step="any" inputmode="decimal" autocomplete="off" aria-describedby="cgSecondNote" value="${esc(state.secondText)}"${secondUsable(state) ? '' : ' disabled'} />
         <span id="cgSecondNote" data-cg="second-note">${secondNote(state)}</span></div>
       <div class="cg-legend">
-        <span><svg width="12" height="12" aria-hidden="true"><rect x="4.5" y="1" width="3" height="10" fill="var(--cg-ink)"/></svg>Published price for this import's quarter</span>
+        <span><svg width="12" height="12" aria-hidden="true"><rect x="4.5" y="1" width="3" height="10" fill="var(--cg-ink)"/></svg>Published price for this import's date</span>
         <span><svg width="16" height="12" aria-hidden="true"><path d="M1 6h14" stroke="var(--cg-markup)" stroke-width="2"/></svg>Your own price</span>
         <span><svg width="16" height="12" aria-hidden="true"><path d="M1 6h14" stroke="var(--cg-markup)" stroke-width="2" stroke-dasharray="3 3"/></svg>Yours, where none is published</span></div>`,
     cap: `Your price is your assumption, not a forecast. It stays on this page.${unpriced.length ? ` Certificate price for imports in ${listOf(unpriced, 'and')}: none published · ${asAt}.` : ''}`,

@@ -427,6 +427,18 @@ export function thresholdByYear(
   }).filter((card): card is YearThreshold => card !== null);
 }
 
+/**
+ * C2 (audit 2026-11-02): the lines a year's de minimis verdict exempts, so the total can leave
+ * them out. Only a year the user ATTESTED complete can be `below_threshold` (evaluateThreshold
+ * returns 'indeterminate' for a partial list), and only the lines in that year's basis
+ * (`entryIds`, the four sectors Art 2a counts) are exempt. A hydrogen or electricity line in
+ * the same year is outside the basis and stays owed. A year whose card failed to compute
+ * contributes nothing, so a failure can only over-state the total, never hide a bill.
+ */
+export function exemptLineIds(years: readonly YearThreshold[]): Set<string> {
+  return new Set(years.flatMap((y) => (y.ruleFound && y.state === 'below_threshold' ? y.entryIds : [])));
+}
+
 export interface Totals {
   /**
    * '0' both for "every line summed to a real zero" and for "there were no
