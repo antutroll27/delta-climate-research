@@ -991,3 +991,10 @@ export function renderGraphs(
   </article>`;
   return `<section class="cg" aria-label="Graphs">${head}<div class="cg-board">${steps}${cascade}${share}${markup}${charged}${costCard}${phaseCard}${origins}</div><div class="cg-tip" data-cg="tip" aria-hidden="true"></div></section>`;
 }
+
+/* ── shared with cbam-ui/tiles-why.ts, so the tiles format and table every figure the same way ── */
+export type { Plot, Table };
+export {
+  CAUSES, causeLabel, causePart, esc, eur, listOf, n1, n3, offShared, pct1, plus, sharePct,
+  table as renderTable, unpricedQuarters, wrap,
+};
