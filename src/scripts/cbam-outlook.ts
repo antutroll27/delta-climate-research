@@ -444,6 +444,9 @@ const signedPct = (v: string): string => {
     ? `${text}%` : `+${text}%`;
 };
 
+/** The strip's own formatters, shared with cbam-ui/tiles-years.ts so the tiles print every figure the same way. */
+export { count1 as formatCount, euros as formatEuros, price as formatPrice, signedPct as formatSignedPct };
+
 /** The pack's date as "18 Aug 2026", read in UTC so it is the same day in every browser. */
 export function formatPackDate(iso: string): string {
   const d = new Date(iso);
@@ -520,21 +523,47 @@ export function benchmarkScope(y: OutlookFigureYear): string {
   return bm && bm.route ? `for route ${esc(bm.route)}` : 'for this good';
 }
 
-/** "Why it rises": the bar and its legend, or the sentence said in their place. */
-export function renderOutlookWhy(view: Outlook): string {
+/** One part of the rise, as the strip names it. `title` and `sub` are HTML-safe (escaped here). */
+export interface OutlookWhyRow {
+  key: 'markup' | 'factor' | 'benchmark';
+  title: string;
+  sub: string;
+  /** The part's exact value, from the split. */
+  value: string;
+  /** The short name used in the bar's text alternative. */
+  label: string;
+}
+
+/**
+ * What "why it rises" says: nothing (a refused year — each year card already carries the engine's
+ * reason, verbatim), a sentence saying why the change is not divided, or the split's rows.
+ */
+export type OutlookWhy =
+  | { kind: 'none' }
+  | { kind: 'withheld'; reason: 'floor' | 'tier-changes'; sentence: string }
+  | { kind: 'split'; rise: string; lastYear: number; rows: OutlookWhyRow[] };
+
+/**
+ * "Why it rises" as data: the one place its wording is decided. The tiles (cbam-ui/tiles-years.ts)
+ * and renderOutlookWhy draw these rows; neither decides a word of them.
+ */
+export function outlookWhy(view: Outlook): OutlookWhy {
   const s = view.split;
   if (s === null) {
     switch (view.splitWithheld) {
       case 'floor':
-        return `<p class="cb-ol-nosplit">In at least one of these years the free allocation is as
-          large as the emissions counted, so the count is held at zero and the change between years
-          cannot be divided into causes. The counts above stand.</p>`;
+        return {
+          kind: 'withheld', reason: 'floor',
+          sentence: 'In at least one of these years the free allocation is as large as the emissions counted, so the count is held at zero and the change between years cannot be divided into causes. The counts above stand.',
+        };
       case 'tier-changes':
-        return `<p class="cb-ol-nosplit">These years do not rest on the same kind of figure, so the
-          change between them is not divided into causes. The counts above stand.</p>`;
+        return {
+          kind: 'withheld', reason: 'tier-changes',
+          sentence: 'These years do not rest on the same kind of figure, so the change between them is not divided into causes. The counts above stand.',
+        };
       case 'refused':
       case null:
-        return '';
+        return { kind: 'none' };
       default: {
         const _exhaustive: never = view.splitWithheld;
         return _exhaustive;
@@ -544,8 +573,7 @@ export function renderOutlookWhy(view: Outlook): string {
   const figures = figureYears(view);
   const first = figures[0];
   const last = figures[figures.length - 1];
-
-  const rows: { cls: string; title: string; sub: string; value: string; label: string }[] = [];
+  const rows: OutlookWhyRow[] = [];
 
   if (s.emissionsCause !== 'none') {
     const electricity = s.emissionsCause === 'markup-electricity';
@@ -569,7 +597,7 @@ export function renderOutlookWhy(view: Outlook): string {
       title = `${what} rises from ${esc(from)}% to ${esc(to)}%`;
     }
     rows.push({
-      cls: 'cb-ol-s1',
+      key: 'markup',
       title,
       sub: electricity
         ? 'It applies to the electricity figure, which is not your own verified one. With a verified electricity figure it no longer applies.'
@@ -581,7 +609,7 @@ export function renderOutlookWhy(view: Outlook): string {
 
   const cite = first.factorLocator.includes(':') ? first.factorLocator.slice(0, first.factorLocator.indexOf(':')) : '';
   rows.push({
-    cls: 'cb-ol-s2',
+    key: 'factor',
     title: first.factor === last.factor
       ? `Free allocation retained stays at ${share(first.factor)}`
       : `Free allocation retained falls from ${share(first.factor)} to ${share(last.factor)}`,
@@ -606,7 +634,7 @@ export function renderOutlookWhy(view: Outlook): string {
     benchTitle = `Benchmark ${scope} ${verb} in ${changedIn.year} (${esc(bmFirst.value)} → ${esc(bmLast.value)})`;
   }
   rows.push({
-    cls: 'cb-ol-s3',
+    key: 'benchmark',
     title: benchTitle,
     sub: view.benchmarkPeriods.length
       ? `Benchmarks are set by period: ${view.benchmarkPeriods.map(([a, b]) => `${a}–${b}`).join(', then ')}.`
@@ -614,19 +642,27 @@ export function renderOutlookWhy(view: Outlook): string {
     value: s.benchmarkPart,
     label: 'Benchmark',
   });
+  return { kind: 'split', rise: s.rise, lastYear: s.lastYear, rows };
+}
 
+const WHY_CLASS: Record<OutlookWhyRow['key'], string> = { markup: 'cb-ol-s1', factor: 'cb-ol-s2', benchmark: 'cb-ol-s3' };
+
+/** "Why it rises": the bar and its legend, or the sentence said in their place. Drawn from outlookWhy. */
+export function renderOutlookWhy(view: Outlook): string {
+  const why = outlookWhy(view);
+  if (why.kind === 'none') return '';
+  if (why.kind === 'withheld') return `<p class="cb-ol-nosplit">${why.sentence}</p>`;
   // A part that is zero draws no segment (it would be a zero-width box holding a gap open); its
   // legend row still stands and says so.
-  const bar = rows.filter((r) => !new D(r.value).isZero()).map((r) => `<span class="${r.cls}" style="flex-grow:${
+  const bar = why.rows.filter((r) => !new D(r.value).isZero()).map((r) => `<span class="${WHY_CLASS[r.key]}" style="flex-grow:${
     new D(r.value).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toFixed()}"></span>`).join('');
-  const aria = rows.map((r) => `${r.label} ${count1(r.value)}`).join(', ');
-  const legend = rows.map((r) => `<li>
-      <span class="cb-ol-sw ${r.cls}"></span>
+  const aria = why.rows.map((r) => `${r.label} ${count1(r.value)}`).join(', ');
+  const legend = why.rows.map((r) => `<li>
+      <span class="cb-ol-sw ${WHY_CLASS[r.key]}"></span>
       <span>${r.title}<small>${r.sub}</small></span>
       <b>${new D(r.value).isZero() ? '0.0' : `+${count1(r.value)}`}</b>
     </li>`).join('');
-
-  return `<h4 class="cb-ol-h">Why it rises by ${count1(s.rise)} certificates by ${s.lastYear}</h4>
+  return `<h4 class="cb-ol-h">Why it rises by ${count1(why.rise)} certificates by ${why.lastYear}</h4>
     <div class="cb-ol-stack" role="img" aria-label="${esc(aria)}">${bar}</div>
     <ul class="cb-ol-legend">${legend}</ul>`;
 }

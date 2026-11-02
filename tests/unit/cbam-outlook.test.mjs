@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Decimal from 'decimal.js';
 
 import {
-  assumedCost, dateInYear, formatDecimal, formatPackDate, outlook, outlookPriceSlots, outlookYears,
+  assumedCost, dateInYear, formatDecimal, formatPackDate, outlook, outlookPriceSlots, outlookWhy, outlookYears,
   parseAssumedPrice, renderOutlook, renderOutlookWhy, renderOutlookYears, unpricedYears,
 } from '../../src/scripts/cbam-outlook.ts';
 import {
@@ -330,6 +330,24 @@ test('free allocation above the emissions counted: the counts are shown and the 
   assert.deepEqual(counts(partial), ['0', '0.355', '7.81']);
   assert.equal(partial.split, null, 'the identity fails by the 3.3725 the floor absorbed');
   assert.equal(partial.splitWithheld, 'floor');
+});
+
+test('outlookWhy: the rows are the split\'s parts in order, and the withheld states say why', () => {
+  const tube = outlookWhy(outlook(pack, line()));
+  assert.equal(tube.kind, 'split');
+  assert.equal(tube.rise, '97.5825');
+  assert.equal(tube.lastYear, 2028);
+  assert.deepEqual(tube.rows.map((r) => [r.key, r.value, r.label]),
+    [['markup', '86.4', 'Mark-up'], ['factor', '11.1825', 'Free allocation retained'], ['benchmark', '0', 'Benchmark']]);
+  assert.equal(tube.rows[0].title, 'Mark-up on default values rises from 10% to 30%');
+  // A refused year: each year card carries the engine's reason; the rows say nothing more.
+  assert.deepEqual(outlookWhy(outlook(pack, line({ route: '(D)' }))), { kind: 'none' });
+  const floor = outlookWhy(outlook(pack, line({ verified: { directTco2ePerT: '1.0' } })));
+  assert.equal(floor.kind, 'withheld');
+  assert.equal(floor.reason, 'floor');
+  assert.match(floor.sentence, /the count is held at zero and the change between years cannot be divided into causes/);
+  // Verified figures: no mark-up row at all.
+  assert.deepEqual(outlookWhy(outlook(pack, line({ verified: { directTco2ePerT: '2.0' } }))).rows.map((r) => r.key), ['factor', 'benchmark']);
 });
 
 test('the split identity holds for every line the strip splits, across the corpus', () => {
