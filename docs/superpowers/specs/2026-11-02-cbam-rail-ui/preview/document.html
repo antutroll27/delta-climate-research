@@ -1,0 +1,67 @@
+<!doctype html><meta charset="utf-8"><title>CBAM estimate document</title><style>body{font:12pt/1.45 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#111;max-width:760px;margin:24px auto;padding:0 24px}h1{font-size:20pt}h2{font-size:13pt;margin-top:18pt}table{border-collapse:collapse;width:100%;font-size:9.5pt}td,th{border:1px solid #999;padding:4px 6px;text-align:left}code{word-break:break-all;font-size:9pt;font-family:inherit}</style>
+    <h1>CBAM certificate exposure — provisional estimate</h1>
+    <p class="cbp-sub">Generated 2026-11-02 · deltaclimate.earth/cbam/cbam-calculator · not a filing, not verified data</p>
+
+    <h2>1 · What you asked</h2>
+    <table><thead><tr><th>CN</th><th>Origin</th><th>Route</th><th>Mass t</th><th>Import date</th>
+      <th>Data tier</th><th>Certificates</th><th>Cost</th><th>Benchmark authority</th></tr></thead>
+      <tbody><tr>
+      <td>73063077</td><td>IN</td><td>(C)</td>
+      <td>100</td><td>2026-03-15</td>
+      <td class="cbp-loc">Commission default + mark-up</td>
+      <td>329.828 (what-if)</td>
+      <td>€24,855.80</td>
+      <td class="cbp-loc">IR (EU) 2025/2620 Annex, Column B route (C) (via EC benchmarks workbook v1, sheet row 1401)</td>
+    </tr><tr>
+      <td>25232900</td><td>IN</td><td>default</td>
+      <td>120</td><td>2026-05-12</td>
+      <td class="cbp-loc">Commission default + mark-up</td>
+      <td>117.438 (what-if)</td>
+      <td>€8,840.73</td>
+      <td class="cbp-loc">IR (EU) 2025/2620 Annex, Column B (via EC benchmarks workbook v1, sheet row 7)</td>
+    </tr><tr>
+      <td>76011010</td><td>IN</td><td>(K)</td>
+      <td>40</td><td>2026-08-03</td>
+      <td class="cbp-loc">Commission default + mark-up</td>
+      <td>26.783 (what-if)</td>
+      <td>€2,204.78</td>
+      <td class="cbp-loc">IR (EU) 2025/2620 Annex, Column B route (K) (via EC benchmarks workbook v1, sheet row 1695)</td>
+    </tr></tbody></table>
+
+    <h2>2 · What we computed</h2>
+    <p>Total: <b>474.049 certificates</b> · <b>€35,901.31</b> — a <b>what-if</b>, because the CSCF is unpublished (see §4). </p>
+    <ul><li>2026: <b>Above threshold</b> at 260 t of 50 t — completeness box TICKED by the user.</li></ul>
+
+    <h2>3 · On what authority</h2>
+    <ul>
+      <li>Rule packages: <code>eu-cbam-2026-defaults-v3@v3</code> · <code>eu-cbam-2026-free-allocation@v1</code></li>
+      <li>Data snapshot: <code>f6af39aed68a4cb332b9dbdf4233ed35b6ca1165cc67f69f1240992f97d7cfdf</code> — SHA-256 over the pack's
+        generation timestamp, both Commission source-workbook hashes (below), and a digest of the
+        pack's own contents, so a changed default value changes this stamp.</li>
+      <li>IR (EU) 2025/2620 (free allocation), the enacted regulation itself:
+        <code>8bbba79e7f33f0e4943140c28e91a8810612f2fa770bd6dcad33fdb7045e4c05</code></li>
+      <li>IR (EU) 2025/2621 (default values), the enacted regulation itself:
+        <code>3155016c2e07b049b64f1ac4c2320061534245b81971ce5cba7814736f09acb4</code></li>
+      <li>Commission Benchmarks workbook — an informational transcription of the 2025/2620 Annex,
+        not the binding text: <code>b79108b025e697822f0f59de477fa68066c1c05c228fae2270cd230af84e8a7b</code></li>
+      <li>Commission Default Values workbook — an informational transcription of 2025/2621's
+        Annex I, not the binding text: <code>900583811c7e1194799eb9bdbad2d6d7e1100f5a7d80a664c1584a8fce6f9f35</code></li>
+      <li>Per-line benchmark authority is printed in the table above; the CBAM factor is
+        Dir 2003/87/EC Art 10a(1a) (free allocation retained).</li>
+    </ul>
+
+    <h2>4 · What this does not tell you</h2>
+    <ul>
+      <li>The cross-sectoral correction factor (CSCF) for 2026–2030 is unpublished. CSCF only
+        ever reduces the free allocation that offsets a bill — it can subtract, never add — so
+        every figure above assumes the largest free allocation legally possible (CSCF&nbsp;=&nbsp;1,
+        the last value the Commission actually set). Each figure above is therefore a floor: the
+        real bill cannot be lower than what is shown, and may be higher once the true factor is
+        published.</li>
+      <li>Article 9 deductions for a carbon price paid in the country of origin are not modelled
+        (the implementing act is still a draft), so figures do not credit any such payment.</li>
+      <li>Any below-threshold verdict rests on the user's own statement of completeness, ticked
+        in the tool. No one has verified that list.</li>
+      <li>Line fingerprints cover inputs as entered; no source document exists behind them. They
+        are not customs provenance.</li>
+    </ul>

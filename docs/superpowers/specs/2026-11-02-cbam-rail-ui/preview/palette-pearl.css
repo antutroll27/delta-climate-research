@@ -1,0 +1,14 @@
+/* Palette trial: Pearl #FFF7E6 · Midnight #102E4A. Overrides system.css tokens only.
+   Two-colour brand, so the "bronze" slot (Commission defaults) is a mid tint of Midnight. Verified ("cyan") still undecided. */
+:root{
+  --ground:#FFF7E6; --card:#FFFCF5; --well:rgba(16,46,74,.06); --well-2:rgba(16,46,74,.11); --line:rgba(16,46,74,.14);
+  --ink:#102E4A; --ink-2:#2A4560; --ink-3:#465D74; --unit:#566B80; --on-ink:#FFF7E6; --focus:#2C5C8C;
+  --shadow:0 1px 2px rgba(16,46,74,.06),0 18px 40px -22px rgba(16,46,74,.30);
+  --bronze-t:#2C5C8C; --bronze-f:#4A7DB0; --bronze-bg:rgba(74,125,176,.14);
+}
+:root[data-theme="dark"]{
+  --ground:#0C2238; --card:#102E4A; --well:#163A5B; --well-2:#1C4569; --line:rgba(255,247,230,.13);
+  --ink:#FFF7E6; --ink-2:#EAE2D0; --ink-3:#C3C7C6; --unit:#B4BAC0; --on-ink:#102E4A; --focus:#9CC0E4;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 24px 48px -24px rgba(0,0,0,.6);
+  --bronze-t:#9CC0E4; --bronze-f:#7FA9D6; --bronze-bg:rgba(127,169,214,.16);
+}
