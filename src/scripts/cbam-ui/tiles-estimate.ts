@@ -206,3 +206,51 @@ export function renderEstimateThrown(message: string): string {
     + `<span class="b-tag cb-tag unavail">No estimate</span></div><p class="cb-reason">${esc(message)}</p></section>`
     + CHARGEABLE_EMPTY + DECK_SHELL + PROVENANCE_EMPTY;
 }
+
+/* ── the Three-years deck (filled into [data-deck] by paintOutlook) ──────────── */
+
+/** "+29.6%", "−3.1%", "0.0%": exact, one decimal, half up (the strip's own rule). */
+const signedPct = (v: string): string => {
+  const text = formatDecimal(v, 1, true);
+  return text.startsWith('−') || new Decimal(v).toDecimalPlaces(1, Decimal.ROUND_HALF_UP).isZero()
+    ? `${text}%` : `+${text}%`;
+};
+
+const yearList = (ys: readonly number[]): string => (ys.length <= 1
+  ? ys.join('')
+  : `${ys.slice(0, -1).join(', ')} and ${ys[ys.length - 1]}`);
+
+/**
+ * The deck: one plate per covered year, the count to 1 dp (the strip's precision), or "No
+ * estimate" with the engine's reason beneath. Counts only, never euros: the costs live on the
+ * Three years view, which states whose price each one is.
+ */
+export function renderDeck(view: Outlook | null, massT: string): string {
+  if (!view) return '';
+  const figs = view.years.filter((y): y is OutlookFigureYear => y.kind === 'figure');
+  const allDefault = figs.length > 0 && figs.every((y) => y.tier === 'default+markup');
+  const markups = figs.map((y) => y.directMarkupPct);
+  const markup = figs.length === view.years.length && markups.every((m): m is string => m !== null)
+    ? ` Mark-up ${markups.map((m) => formatDecimal(m, 2, false)).join(' → ')}%.`
+    : '';
+  const plates = view.years.map((y, i) => (y.kind === 'figure'
+    ? `<li class="b-st b-st${i}"><span>${y.year}</span><b>${formatDecimal(y.certificates, 1, true)}</b></li>`
+    : `<li class="b-st b-st${i} b-st-none"><span>${y.year}</span><b>No estimate</b></li>`)).join('');
+  const foot: string[] = [];
+  const first = view.years[0];
+  const last = view.years[view.years.length - 1];
+  if (first.kind === 'figure' && last.kind === 'figure' && last !== first && last.riseOnFirstPct !== null) {
+    foot.push(`${signedPct(last.riseOnFirstPct)} by ${last.year}`);
+  }
+  const unpriced = unpricedYears(view);
+  if (unpriced.length) foot.push(`No certificate price published for the ${yearList(unpriced)} imports`);
+  const reasons = new Map<string, number[]>();
+  for (const y of view.years) {
+    if (y.kind === 'refused') reasons.set(y.reason, [...(reasons.get(y.reason) ?? []), y.year]);
+  }
+  const why = [...reasons].map(([r, ys]) => `<p class="b-help">${yearList(ys)}: ${esc(r)}</p>`).join('');
+  return `<p class="b-t-sub">Same line, same ${esc(massT)} t.${markup}</p>`
+    + `<ol class="b-stack ${allDefault ? 'b-stack-bz' : 'b-stack-ink'}">${plates}</ol>`
+    + (foot.length ? `<p class="b-t-foot">${foot.map(esc).join(' · ')}</p>` : '')
+    + why;
+}

@@ -5,8 +5,9 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { estimateFromPack } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
+import { outlook } from '../../src/scripts/cbam-outlook.ts';
 import {
-  chargeableSplit, renderEstimateIdle, renderEstimateThrown, renderEstimateTiles, tierTone,
+  chargeableSplit, renderDeck, renderEstimateIdle, renderEstimateThrown, renderEstimateTiles, tierTone,
 } from '../../src/scripts/cbam-ui/tiles-estimate.ts';
 
 const pack = JSON.parse(readFileSync(
@@ -127,4 +128,47 @@ test('the page ships the idle tiles as static markup, identical to renderEstimat
   assert.ok(m, 'the page must carry #cbOut as <div id="cbOut" class="b-bento b-out"> followed by #cbProv');
   const norm = (s) => s.replace(/<!--[\s\S]*?-->/g, '').replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim();
   assert.equal(norm(m[1]), norm(renderEstimateIdle(IDLE)));
+});
+
+const ol = (over) => outlook(pack, {
+  cn: '73063077', country: 'IN', route: '(C)', massT: '100', date: '2026-03-15',
+  emissionsScope: 'direct_and_indirect', ...over,
+});
+
+test('the deck: three counts, the mark-up from the model, the rise, and the missing prices', () => {
+  const html = renderDeck(ol(), '100');
+  assert.ok(html.includes('<p class="b-t-sub">Same line, same 100 t. Mark-up 10 → 20 → 30%.</p>'));
+  for (const [i, y, n] of [[0, 2026, '329.8'], [1, 2027, '376.8'], [2, 2028, '427.4']]) {
+    assert.ok(html.includes(`<li class="b-st b-st${i}"><span>${y}</span><b>${n}</b></li>`), `${y}`);
+  }
+  assert.ok(html.includes('+29.6% by 2028 · No certificate price published for the 2027 and 2028 imports'));
+  assert.match(html, /class="b-stack b-stack-bz"/);
+  assert.doesNotMatch(html, /€|quarterly|\(pending\)|Q[1-4] certificate price|cb-ol-/i);
+});
+
+test('the deck reads the mark-up from the model, never a constant', () => {
+  const fert = renderDeck(ol({ cn: '28080000', country: 'DZ', route: 'default' }), '100');
+  assert.match(fert, /Mark-up 1 → 1 → 1%\./);
+  const verified = renderDeck(ol({ route: '(D)', verified: { directTco2ePerT: '1.2' } }), '100');
+  assert.doesNotMatch(verified, /Mark-up/, 'an attested direct figure carries no mark-up');
+  assert.match(verified, /class="b-stack b-stack-ink"/);
+});
+
+test('refused years say so, with the engine\'s reason verbatim, grouped, and no count', () => {
+  const view = ol({ cn: '72052100', route: '(G)', massT: '60' });
+  assert.ok(view.years.every((y) => y.kind === 'refused'), 'premise');
+  const html = renderDeck(view, '60');
+  assert.equal((html.match(/<b>No estimate<\/b>/g) ?? []).length, 3);
+  const reason = view.years[0].reason.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  assert.ok(html.includes(`<p class="b-help">2026, 2027 and 2028: ${reason}</p>`));
+  assert.doesNotMatch(html, /Mark-up|by 2028/);
+});
+
+test('no outlook, no deck', () => {
+  assert.equal(renderDeck(null, '100'), '');
+});
+
+test('the mass is escaped: it is the user\'s own text', () => {
+  assert.match(renderDeck(ol(), '<b>'), /same &lt;b&gt; t\./);
 });
