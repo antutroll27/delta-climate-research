@@ -1766,12 +1766,12 @@ test.describe('CBAM estimate — the graphs', () => {
       'The same 100 t needs 29.6% more certificates in 2028 than in 2026.',
       'Of the 97.6 extra certificates by 2028, 86.4 come from the mark-up on default values. The benchmark does not change for route (C).',
       'of the rise to 2028 is the mark-up on default values. It no longer applies with verified data.',
-      'On default values the mark-up adds 129.6 certificates in 2028. It no longer applies with verified data.',
       'In 2028, certificates cover 76 of every 100 tonnes of emissions counted. Free allocation covers the other 24.',
-      'No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price in Three years to see a cost.',
+      'On default values the mark-up adds 129.6 certificates in 2028. It no longer applies with verified data.',
       'Free allocation retained falls to zero in 2034. The steepest single step is 2030.',
       // Filled after the other cards, in idle time: one engine call per origin.
       'On default values, 2026 certificates for this good run from 13.0 (United States) to 762.1 (Indonesia). India is at 329.8.',
+      'No certificate price is published for imports in 2027-Q1 or 2028-Q1. Type your own price in Three years to see a cost.',
     ]);
     // The cascade draws no legend entry for a cause that contributes nothing.
     await expect(g.locator('[data-cg-card="cascade"] .cg-legend')).not.toContainText('benchmark');
@@ -1880,7 +1880,7 @@ test.describe('CBAM estimate — the graphs', () => {
     // A route with no default value: one sentence, no chart.
     await setLine(page, { ...TUBE_LINE, route: '(D)' });
     await view(page, 'why');
-    await expect(g.locator('.cg-none')).toHaveText('Nothing to draw: this line has no estimate in any year. The reason is in the cards above.');
+    await expect(g.locator('.cg-none')).toHaveText('Nothing to draw: this line has no estimate in any year. The reason is in Three years.');
     await expect(g.locator('svg')).toHaveCount(0);
 
     // Verified figures: the mark-up cards say that none is applied, and draw no capsule.
@@ -1893,7 +1893,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(g.locator('[data-cg-card="markup"] .cg-t')).toHaveText('No mark-up is applied to this line: the figures are your own verified ones.');
     await expect(g.locator('[data-cg-card="share"] .cg-t')).toHaveText('of the rise to 2028 is mark-up. These are your verified figures, so none is applied.');
     await expect(g.locator('.cg-big')).toHaveText('0.0%');
-    await expect(g.locator('[data-cg-card="markup"] svg rect[rx]')).toHaveCount(0);
+    await expect(g.locator('[data-cg-card="markup"] .b-mc-mk')).toHaveCount(0);
     await expect(g.locator('[data-cg-card="steps"] .cg-t')).toHaveText('The same 100 t needs 20.5% more certificates in 2028 than in 2026.');
     await expect(g.locator('[data-cg-card="cascade"] .cg-t')).toHaveText(
       'Of the 11.2 extra certificates by 2028, 11.2 come from the smaller share of free allocation retained. The benchmark does not change for route (C).');
@@ -2033,7 +2033,7 @@ test.describe('CBAM estimate — the graphs', () => {
     await expectTipsOnScreen(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
     // Every plot fits inside its card.
-    const fits = await g.locator('.cg-plot svg').evaluateAll((els) => els.every((el) => {
+    const fits = await g.locator('.cg-plot > *').evaluateAll((els) => els.every((el) => {
       const r = el.getBoundingClientRect(), c = el.closest('.cg-card')!.getBoundingClientRect();
       return r.left >= c.left - 0.5 && r.right <= c.right + 0.5;
     }));

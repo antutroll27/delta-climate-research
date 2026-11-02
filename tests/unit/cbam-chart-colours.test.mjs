@@ -109,10 +109,18 @@ test('the check bites: the brand colours themselves, and a near-twin pair, are r
 });
 
 test('the calculator page draws the graphs in these tokens and names no chart colour of its own', () => {
-  const page = readFileSync(fileURLToPath(new URL('../../src/pages/cbam/cbam-calculator.astro', import.meta.url)), 'utf8');
-  assert.match(page, /--cg-markup: var\(--color-chart-markup\); --cg-allocation: var\(--color-chart-allocation\);/);
-  assert.match(page, /--cg-benchmark: var\(--color-chart-benchmark\);/);
-  assert.match(page, /--cg-markup: var\(--color-chart-markup-paper\); --cg-allocation: var\(--color-chart-allocation-paper\);/);
-  const graphs = readFileSync(fileURLToPath(new URL('../../src/scripts/cbam-graphs.ts', import.meta.url)), 'utf8');
-  assert.deepEqual(graphs.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [], [], 'cbam-graphs.ts must use the --cg-* tokens only');
+  // The graphs moved into bento tiles (spec §5.3). Their --cg-* tokens are mapped onto the bento
+  // tokens in cbam-bento.css, under the colour law (spec §3): bronze only for the mark-up; free
+  // allocation, the benchmark and the visitor's own price in ink. None is a colour of its own.
+  const css = readFileSync(fileURLToPath(new URL('../../src/styles/cbam-bento.css', import.meta.url)), 'utf8');
+  const start = css.indexOf('/* ── Why it changes'), end = css.indexOf('/* ── end Why it changes */');
+  assert.ok(start >= 0 && end > start, 'the Why section is marked in cbam-bento.css');
+  const why = css.slice(start, end);
+  assert.match(why, /--cg-markup:var\(--bronze-f\);--cg-allocation:var\(--ink-2\);--cg-benchmark:var\(--ink-3\);/);
+  assert.match(why, /\.cbx \.cg-cost\{--cg-markup:var\(--ink\)\}/);
+  assert.deepEqual(why.match(/--cg-[a-z0-9-]+:\s*#[0-9a-fA-F]{3,8}\b/g) ?? [], [], 'every --cg-* token is a design token');
+  for (const f of ['../../src/scripts/cbam-graphs.ts', '../../src/scripts/cbam-ui/tiles-why.ts']) {
+    const src = readFileSync(fileURLToPath(new URL(f, import.meta.url)), 'utf8');
+    assert.deepEqual(src.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [], [], `${f} must use the tokens only`);
+  }
 });

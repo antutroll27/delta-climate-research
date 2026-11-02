@@ -274,3 +274,96 @@
 @media (max-width:1100px){.cbx .cb-ol-years,.cbx .b-own{grid-column:1/-1}}
 @media (max-width:899px){.cbx .cb-ol-years{grid-auto-flow:row;grid-template-columns:minmax(0,1fr)}}
 /* ── end Three years */
+
+/* ── Why it changes (cbam-ui/tiles-why.ts → #cbGraphs), spec §5.3 ──────────────────────
+   The --cg-* tokens the SVG plots read are mapped onto the bento tokens here and nowhere else.
+   Colour law (spec §3): the mark-up is bronze; free allocation and the benchmark are ink; the
+   visitor's own price (cost tile) is ink, dashed where none is published. */
+.cbx .cg-card{--cg-ink:var(--ink);--cg-muted:var(--ink-2);--cg-faint:var(--ink-3);--cg-hair:var(--line);--cg-well:var(--well);--cg-surface:var(--card);--cg-accent:var(--ink);--cg-warm:var(--bronze-f);--cg-neutral:var(--ink-3);--cg-neutral-2:var(--well-2);--cg-markup:var(--bronze-f);--cg-allocation:var(--ink-2);--cg-benchmark:var(--ink-3);}
+.cbx .cg-cost{--cg-markup:var(--ink)}
+.cbx .cg-sub{margin:0 0 10px;font-size:12px;color:var(--ink-3)}
+.cbx .cg-card .cg-t{margin:0 0 4px;font-size:15px;line-height:1.45;max-width:46ch}
+.cbx .cg-card .cg-t b{font-weight:700}
+.cbx .cg-plot{margin:12px 0 0;min-width:0}
+.cbx .cg-plot svg{display:block;max-width:100%;height:auto;overflow:visible}
+.cbx .cg-plot text{fill:var(--cg-muted);font-variant-numeric:tabular-nums}
+.cbx .cg-plot .cg-num{fill:var(--cg-ink);font-weight:600}
+.cbx .cg-plot .cg-lab,.cbx .cg-plot .cg-faint{fill:var(--cg-faint)}
+.cbx .cg-plot .cg-hair{stroke:var(--cg-hair);stroke-width:1;fill:none}
+.cbx .cg-plot .cg-halo{display:none}
+.cbx .cg-m{outline:none}
+.cbx .cg-m:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.cbx .cg-foot{align-items:flex-end}
+.cbx .cg-cap{margin:0;font-size:11.5px;line-height:1.5;color:var(--ink-3)}
+.cbx .cg-tbl-btn{flex:none;min-height:2.25rem;padding:0 14px;border:0;border-radius:99px;background:var(--well);cursor:pointer;font:inherit;font-size:12px;font-weight:600;color:var(--ink-2)}
+.cbx .cg-tbl-btn[aria-expanded="true"]{background:var(--ink);color:var(--on-ink)}
+.cbx .b-hero .cg-tbl-btn{background:var(--well);color:var(--on-ink)}
+.cbx .b-hero .cg-tbl-btn[aria-expanded="true"]{background:var(--on-ink);color:var(--ink)}
+.cbx .cg-mini{display:flex;gap:4px}
+.cbx .cg-mini button{min-height:2.25rem;padding:0 11px;border:0;border-radius:11px;background:transparent;cursor:pointer;font:inherit;font-size:11.5px;font-weight:600;color:var(--ink-2)}
+.cbx .cg-mini button[aria-pressed="true"]{background:var(--ink);color:var(--on-ink)}
+.cbx :is(.cg-tbl-btn,.cg-mini button,.cg-second input,.cg-tbl):focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.cbx .cg-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:12.5px;color:var(--ink-2)}
+.cbx .cg-legend span{display:inline-flex;align-items:center;gap:6px}
+.cbx .cg-legend b{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.cbx .cg-legend svg{flex:none}
+.cbx .cg-second{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-top:12px;font-size:13px}
+.cbx .cg-second input{width:7rem;border:0;border-radius:12px;padding:8px 10px;background:var(--well);color:var(--ink);font:inherit;font-weight:600}
+.cbx .cg-second input:disabled{color:var(--ink-3);cursor:not-allowed}
+.cbx .cg-second span{flex:1 1 100%;font-size:12px;color:var(--ink-3)}
+.cbx .cg-tbl{margin-top:10px;overflow-x:auto;border-top:1px solid var(--line)}
+.cbx .cg-tbl.cg-closed{display:none}
+.cbx .cg-tbl table{width:100%;min-width:17rem;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+.cbx .cg-tbl th,.cbx .cg-tbl td{padding:8px;text-align:right;font-weight:400;white-space:nowrap;border-bottom:1px solid var(--line)}
+.cbx .cg-tbl th:first-child,.cbx .cg-tbl td:first-child{text-align:left}
+.cbx .cg-tbl thead th{font-size:11px;font-weight:600;color:var(--ink-3)}
+.cbx .cg-tbl caption{caption-side:bottom;text-align:left;padding:6px 8px 0;font-size:11px;color:var(--ink-3)}
+.cbx .cg-tip{position:fixed;z-index:60;left:0;top:0;pointer-events:none;max-width:17rem;white-space:pre-line;padding:8px 11px;border-radius:12px;background:var(--ink);color:var(--on-ink);font-size:12px;line-height:1.5;opacity:0;transform:translateY(4px);transition:opacity .18s var(--ease),transform .18s var(--ease)}
+.cbx .cg-tip.on{opacity:1;transform:none}
+.cbx .cg-none{margin:0;font-size:14px;line-height:1.6;color:var(--ink-2)}
+.cbx .cg-retry{margin-left:10px;min-height:2.25rem;padding:0 14px;border:0;border-radius:99px;background:var(--well);cursor:pointer;font:inherit;font-size:12px;font-weight:600;color:var(--ink)}
+.cbx .cg-retry:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+/* the HTML plots: zero-based, lengths are quantities */
+.cbx .b-waffle{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;width:190px}
+.cbx .b-waffle i{aspect-ratio:1;border-radius:50%;background:color-mix(in oklab,var(--ink) 14%,transparent)}
+.cbx .b-waffle i.on{background:var(--ink)}
+.cbx .b-mcols{display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));gap:14px;align-items:end;height:250px;margin:6px 0 4px}
+.cbx .b-mc{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
+.cbx .b-mc-top{margin-bottom:6px;font-size:20px;letter-spacing:-.03em}
+.cbx .b-mc-bar{display:flex;flex-direction:column;width:44%}
+.cbx .b-mc-bar>b,.cbx .b-mc-bar>i{display:block;flex-basis:0;min-height:0}
+.cbx .b-mc-bar>b{position:relative;background:var(--bronze-f);border-radius:8px 8px 0 0}
+.cbx .b-mc-bar>b em{position:absolute;right:calc(100% + 6px);top:0;font-style:normal;font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap}
+.cbx .b-mc-bar>i{background:var(--well-2);border-radius:0 0 8px 8px}
+.cbx .b-mc-bar>i:only-child{border-radius:8px}
+.cbx .b-mc-y{margin-top:8px;font-size:13px;font-weight:600}
+.cbx .b-phase{display:grid;grid-template-columns:repeat(var(--n,9),minmax(0,1fr));gap:6px;height:200px;margin:6px 0 4px}
+.cbx .b-ph{display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;min-width:0}
+.cbx .b-ph-bar{flex:1;width:100%;display:flex;align-items:flex-end}
+.cbx .b-ph-bar b{width:100%;border-radius:8px;background:color-mix(in oklab,var(--ink) 18%,transparent)}
+.cbx .b-ph-on .b-ph-bar b{background:var(--ink)}
+.cbx .b-ph span.num{font-size:10.5px;font-weight:600}
+.cbx .b-ph em{font-style:normal;font-size:10.5px;color:var(--ink-3)}
+.cbx .b-orig-big{display:flex;flex-wrap:wrap;align-items:baseline;gap:18px;margin:14px 0 8px;font-size:clamp(36px,5vw,64px);letter-spacing:-.05em;line-height:1}
+.cbx .b-orig-big small{display:block;margin-top:4px;font-size:12px;letter-spacing:0;color:var(--ink-3)}
+.cbx .b-arrow{color:var(--ink-3)}
+.cbx .b-me-big{margin-left:auto;padding:6px 12px;border-radius:99px;background:var(--ink);color:var(--on-ink);font-size:16px;font-weight:600;letter-spacing:0}
+.cbx .b-strip{position:relative;height:44px;margin:12px 6px;border-radius:22px;background:var(--well)}
+.cbx .b-strip:has(.b-strip-band){margin-bottom:32px}
+.cbx .b-strip i{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:color-mix(in oklab,var(--ink) 40%,transparent)}
+.cbx .b-strip i.b-me{z-index:1;width:22px;height:22px;margin:-11px 0 0 -11px;background:var(--ink);box-shadow:0 0 0 4px var(--card)}
+.cbx .b-strip-band{position:absolute;top:calc(100% + 6px);transform:translateX(-50%);font-size:11.5px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+/* below the rail breakpoint the Why board is one column, so a half tile is never squeezed to 150 px */
+@media (max-width:899px){.cbx .cg-board{grid-template-columns:minmax(0,1fr)}.cbx .cg-board>.b-t{grid-column:1/-1}.cbx .b-mc-top{font-size:17px}.cbx .b-mc-bar>b em{right:auto;left:calc(100% + 4px)}}
+@media (max-width:520px){.cbx .b-ph em{display:none}.cbx .b-ph span.num{font-size:9px}}
+@media (prefers-reduced-motion:reduce){.cbx .cg-tip{transition:none}}
+/* ON PAPER THE GRAPHS BECOME THEIR TABLES: each tile's sentence, caption and table in black on white. */
+@media print{
+  .cbx .cg-card{--cg-ink:black;--cg-muted:black;--cg-faint:rgb(51 51 51);--cg-hair:rgb(153 153 153);background:white!important;color:black!important;box-shadow:none!important;border:1px solid rgb(153 153 153);border-radius:0;break-inside:avoid}
+  .cbx .cg-card :is(.cg-t,.b-t-ti,.cg-big,.cg-cap){color:black!important}
+  .cbx :is(.cg-plot,.cg-mini,.cg-second,.cg-legend,.cg-tbl-btn,.cg-tip,.cg-sub){display:none!important}
+  .cbx .cg-tbl,.cbx .cg-tbl.cg-closed{display:block!important}
+  .cbx .cg-board{display:block}
+  .cbx .cg-card+.cg-card{margin-top:8pt}
+}
+/* ── end Why it changes */

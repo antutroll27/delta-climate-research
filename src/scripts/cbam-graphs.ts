@@ -2,8 +2,9 @@
  * The graphs under the three-year strip: the previewed line, drawn.
  *
  * This file is OURS (like cbam-outlook.ts). No DOM: `graphsModel` is a pure function of the pack,
- * the line and its outlook, and every renderer returns a string, so all of it runs under
- * node:test against the real pack.
+ * the line and its outlook. The tiles that draw the model are in cbam-ui/tiles-why.ts; the SVG for
+ * the cost rows (and, until D2, the step chart and the cascade) is drawn here. All of it returns a
+ * string, so all of it runs under node:test against the real pack.
  *
  * WHAT IT ADDS TO THE STRIP, AND WHAT IT DOES NOT REPEAT. The strip above states the three
  * counts and the split as figures. These five cards draw them, and add two things the strip does
@@ -365,76 +366,6 @@ export function plotSteps(m: GraphsModel, w: number): Plot {
   return { h, svg: s, alt: `Certificates: ${Y.map((y) => `${y.year} ${n1(y.certificates)}`).join(', ')}.` };
 }
 
-/** The share of the rise that is mark-up: one restrained arc from 0 to 100%. */
-export function plotShare(m: GraphsModel, w: number, uid: string): Plot {
-  const h = 170, cx = w / 2, cy = 150, R = Math.min(118, Math.min(w, 300) / 2 - 14);
-  const share = m.split ? Math.max(0, Math.min(1, Number(m.split.markupSharePct) / 100)) : 0;
-  const pt = (t: number): [number, number] => [cx - R * Math.cos(Math.PI * t), cy - R * Math.sin(Math.PI * t)];
-  const arc = (t0: number, t1: number): string => {
-    const [x0, y0] = pt(t0), [x1, y1] = pt(t1);
-    return `M${x0},${y0}A${R},${R} 0 0 1 ${x1},${y1}`;
-  };
-  let s = `<defs><linearGradient id="${uid}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--cg-allocation)"/><stop offset=".55" stop-color="var(--cg-markup)"/><stop offset="1" stop-color="var(--cg-warm)"/></linearGradient></defs>
-    <path d="${arc(0, 1)}" fill="none" stroke="var(--cg-neutral-2)" stroke-width="2" stroke-linecap="round"/>`;
-  if (m.split && share > 0) {
-    const [mx, my] = pt(share);
-    const [ox, oy] = [cx - (R + 16) * Math.cos(Math.PI * share), cy - (R + 16) * Math.sin(Math.PI * share)];
-    s += `<path class="cg-halo" d="${arc(0, share)}" fill="none" stroke="url(#${uid})" stroke-width="30" stroke-linecap="round"/>`;
-    s += mark(`${pct1(m.split.markupSharePct)} of the rise\n${n1(m.split.markup)} of ${n1(m.split.rise)} certificates`, m.split.markupSharePct,
-      `<path d="${arc(0, share)}" fill="none" stroke="url(#${uid})" stroke-width="7" stroke-linecap="round" data-t="${share.toFixed(5)}"/><path d="${arc(0, 1)}" fill="none" stroke="transparent" stroke-width="40"/>`);
-    s += `<line x1="${mx}" y1="${my}" x2="${ox}" y2="${oy}" stroke="var(--cg-ink)" stroke-width="1.5" stroke-dasharray="2 3"/>`;
-  }
-  s += `<text class="cg-lab" x="${cx - R}" y="${cy + 16}" text-anchor="middle" font-size="9.5">0</text>
-    <text class="cg-lab" x="${cx + R}" y="${cy + 16}" text-anchor="middle" font-size="9.5">100%</text>`;
-  return { h, svg: s, alt: m.split ? `${pct1(m.split.markupSharePct)} of the rise is mark-up.` : 'The change is not divided into causes.' };
-}
-
-/** What the mark-up adds: a capsule from the count at the base value up to the count as priced. */
-export function plotMarkup(m: GraphsModel, w: number, uid: string): Plot {
-  const Y = m.years, h = 340, top = 30, base = 290, col = w / Y.length, cw = Math.min(38, col * 0.34);
-  const sy = scaleFromZero(Math.max(1e-9, ...Y.map((y) => Number(y.certificates))) * 1.04, base - top);
-  const yOf = (v: string): number => base - sy(Number(v));
-  let s = `<defs><linearGradient id="${uid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--cg-markup)"/><stop offset="1" stop-color="var(--cg-markup)" stop-opacity=".55"/></linearGradient></defs>
-    <line class="cg-hair" x1="0" x2="${w}" y1="${base + 0.5}" y2="${base + 0.5}"/><text class="cg-faint" x="0" y="${base + 14}" font-size="9.5">0</text>`;
-  Y.forEach((y, i) => {
-    const cx = col * i + col / 2, y1 = yOf(y.certificates), y0 = yOf(y.certificatesAtBase);
-    const adds = !new D(y.markupAdds).isZero();
-    const tip = adds
-      ? `${y.year}: mark-up ${y.markupPct ?? ''}% adds ${n3(y.markupAdds)}\nas priced: ${n3(y.certificates)}\nthe base value entered as verified: ${n3(y.certificatesAtBase)}`
-      : `${y.year}: ${n3(y.certificates)} certificates\nno mark-up is applied`;
-    s += `<line x1="${cx}" x2="${cx}" y1="${y0}" y2="${base}" stroke="var(--cg-neutral)" stroke-width="1.5"/>`;
-    s += mark(tip, y.markupAdds, `${adds ? `
-      <rect class="cg-halo" x="${cx - cw / 2}" y="${y1}" width="${cw}" height="${y0 - y1}" rx="${cw / 2}" fill="var(--cg-markup)"/>
-      <rect x="${cx - cw / 2}" y="${y1}" width="${cw}" height="${y0 - y1}" rx="${Math.min(cw / 2, (y0 - y1) / 2)}" fill="url(#${uid})"/>` : ''}
-      <circle cx="${cx}" cy="${y0}" r="4" fill="var(--cg-surface)" stroke="var(--cg-ink)" stroke-width="1.5"/>
-      <rect x="${cx - col / 2}" y="${top - 20}" width="${col}" height="${base - top + 20}" fill="transparent" data-y1="${y1.toFixed(3)}" data-y0="${y0.toFixed(3)}"/>`);
-    s += `<text class="cg-num" x="${cx}" y="${y1 - (adds ? 9 : 13)}" text-anchor="middle" font-size="12.5">${n1(y.certificates)}</text>`;
-    if (adds) {
-      s += `<text class="cg-faint" x="${cx + cw / 2 + 7}" y="${y0 + 4}" font-size="10.5">${n1(y.certificatesAtBase)}</text>`;
-      s += `<text class="cg-num" x="${cx - cw / 2 - 7}" y="${(y0 + y1) / 2 + 4}" text-anchor="end" font-size="11">${new D(y.markupAdds).toDecimalPlaces(1, Decimal.ROUND_HALF_UP).isZero() ? 'under 0.1' : `+${n1(y.markupAdds)}`}</text>`;
-    }
-    s += `<text class="cg-lab" x="${cx}" y="${base + 24}" text-anchor="middle" font-size="11">${y.year}</text>
-      <text class="cg-faint" x="${cx}" y="${base + 40}" text-anchor="middle" font-size="9.5">${y.markupPct !== null ? `mark-up ${esc(y.markupPct)}%` : 'no mark-up'}</text>`;
-  });
-  return { h, svg: s, alt: `Mark-up adds ${Y.map((y) => `${n1(y.markupAdds)} in ${y.year}`).join(', ')} certificates.` };
-}
-
-/** How much of the emissions counted is charged: 100 cells per year, one layer per year. */
-export function plotCharged(m: GraphsModel, w: number, yearIndex: number): Plot {
-  const size = Math.min(w, 270), gap = size / 10, r = gap * 0.34, x0 = (w - size) / 2 + gap / 2, h = size + 6;
-  const yi = Math.max(0, Math.min(m.years.length - 1, yearIndex));
-  const cells = m.years.map((y) => (y.chargedPct === null ? 0 : chargedCells(y.chargedPct)));
-  let s = '';
-  for (let k = 0; k < 100; k += 1) {
-    const x = x0 + (k % 10) * gap, yy = h - gap / 2 - Math.floor(k / 10) * gap - 3;
-    s += m.years.map((_, j) => `<g class="cg-cell" data-year="${j}" style="opacity:${j === yi ? 1 : 0};transition-delay:${Math.floor(k / 10) * 18}ms">${k < cells[j]
-      ? `<circle cx="${x}" cy="${yy}" r="${r}" fill="var(--cg-accent)"/>`
-      : `<circle cx="${x}" cy="${yy}" r="${r - 0.8}" fill="none" stroke="var(--cg-neutral)" stroke-width="1.5"/>`}</g>`).join('');
-  }
-  const y = m.years[yi];
-  s += mark(chargedTip(y), y.chargedPct ?? '', `<rect x="${x0 - gap / 2}" y="0" width="${size}" height="${h}" fill="transparent"/>`, `data-charged="${cells[yi]}" data-cg="charged-mark"`);
-  return { h, svg: s, alt: `${cells[yi]} of 100 cells are certificates in ${y.year}.` };
-}
 export const chargedTip = (y: GraphYear): string => (y.chargedPct === null
   ? `${y.year}: no emissions counted`
   : `${y.year}: certificates ${pctHonest(y.chargedPct)} of emissions counted (${n3(y.certificates)} certificates)\nfree allocation covers the rest`);
@@ -616,32 +547,6 @@ export function sentencePhase(phase: PhaseModel): string {
   return `Free allocation retained falls to ${end}. The steepest single step is ${steep.year}.`;
 }
 
-export function plotPhase(phase: PhaseModel, w: number): Plot {
-  const F = phase.rows, h = w > 560 ? 310 : 250, L = 34, R = 14, top = 22, base = h - 54;
-  const sx = (i: number): number => L + (i / Math.max(1, F.length - 1)) * (w - L - R);
-  const sy = (v: string): number => base - Number(v) * (base - top);
-  let steepI = 1, drop = -1;
-  F.forEach((f, i) => { if (i) { const d = Number(F[i - 1].factor) - Number(f.factor); if (d > drop) { drop = d; steepI = i; } } });
-  let s = '';
-  for (const v of ['0', '0.5', '1']) s += `<line class="cg-hair" x1="${L}" x2="${w - R}" y1="${sy(v) + 0.5}" y2="${sy(v) + 0.5}"/><text class="cg-faint" x="${L - 8}" y="${sy(v) + 3.5}" text-anchor="end" font-size="9.5">${Number(v) * 100}%</text>`;
-  F.forEach((f, i) => { s += `<line class="cg-hair" x1="${sx(i) + 0.5}" x2="${sx(i) + 0.5}" y1="${top}" y2="${base}"/><text class="cg-lab" x="${sx(i)}" y="${base + 20}" text-anchor="middle" font-size="${w < 420 ? 9 : 10.5}">${w < 420 ? `'${String(f.year).slice(2)}` : f.year}</text>`; });
-  const nComp = F.filter((f) => f.computable).length;
-  const path = (from: number, to: number): string => F.slice(from, to).map((f, k) => `${k ? 'L' : 'M'}${sx(from + k)},${sy(f.factor)}`).join('');
-  if (nComp > 0 && nComp < F.length) s += `<path d="${path(nComp - 1, F.length)}" fill="none" stroke="var(--cg-neutral)" stroke-width="1.5" stroke-linejoin="round"/>`;
-  if (nComp > 1) s += `<path d="${path(0, nComp)}" fill="none" stroke="var(--cg-ink)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-  s += `<circle class="cg-halo" cx="${sx(steepI)}" cy="${sy(F[steepI].factor)}" r="11" fill="var(--cg-warm)"/>`;
-  F.forEach((f, i) => {
-    const x = sx(i), y = sy(f.factor);
-    const tip = `${f.year}: ${sharePct(f.factor)} of free allocation retained\n${f.locator}\n${f.computable ? 'the engine computes this line for this year' : 'legislated; no certificate count is computed here for this year'}`;
-    s += mark(tip, f.factor, `${f.computable
-      ? `<circle cx="${x}" cy="${y}" r="4.5" fill="var(--cg-ink)" stroke="var(--cg-surface)" stroke-width="2"/>`
-      : `<circle cx="${x}" cy="${y}" r="4" fill="var(--cg-surface)" stroke="${i === steepI ? 'var(--cg-warm)' : 'var(--cg-neutral)'}" stroke-width="1.8"/>`}
-      <rect x="${x - 14}" y="${top}" width="28" height="${base - top}" fill="transparent"/>`, `data-computable="${f.computable}" data-cy="${y.toFixed(3)}"`);
-  });
-  s += `<text class="cg-num" x="${sx(steepI) + 12}" y="${sy(F[steepI].factor) - 8}" font-size="11.5">${sharePct(F[steepI].factor)}</text>`;
-  return { h, svg: s, alt: `Share of free allocation retained: ${F.map((f) => `${f.year} ${sharePct(f.factor)}`).join(', ')}.` };
-}
-
 /* ── origins ───────────────────────────────────────────────────────────────── */
 
 /**
@@ -756,56 +661,6 @@ function othersText(o: OriginsModel, b: (t: string) => string): string {
   return `the other ${others.length} run from ${b(n1(lo.certificates))} (${esc(lo.name)}) to ${b(n1(hi.certificates))} (${esc(hi.name)})`;
 }
 
-export function plotOrigins(o: OriginsModel, w: number, ownCountry: string): Plot {
-  if (o.kind !== 'chart') return { h: 0, svg: '', alt: 'Not drawn: the origins barely differ, or too few are published.' };
-  const O = o.rows, me = O.find((r) => r.country === ownCountry);
-  // With a shared figure, the labelled extremes are those of the others, as the sentence says.
-  const named = o.shared ? offShared(o) : O, lo = named[0], hi = named[named.length - 1];
-  const h = 260, top = 50, base = 216, L = 6, R = 6, step = (w - L - R) / O.length;
-  const sy = scaleFromZero(Number(hi.certificates) * 1.02, base - top);
-  const yOf = (v: string): number => base - sy(Number(v));
-  let s = `<line class="cg-hair" x1="0" x2="${w}" y1="${base + 0.5}" y2="${base + 0.5}"/>`;
-  O.forEach((r, i) => {
-    const x = L + step * i + step / 2, y = yOf(r.certificates), is = r === me, rad = is ? 5.5 : Math.max(1.6, Math.min(3.2, step * 0.3));
-    s += mark(`${r.name}: ${n3(r.certificates)} certificates on default values, ${o.year}`, r.certificates, `
-      <line x1="${x}" x2="${x}" y1="${top - 6}" y2="${base}" stroke="var(--cg-hair)" stroke-width="1"/>
-      <line x1="${x}" x2="${x}" y1="${y}" y2="${base}" stroke="${is ? 'var(--cg-accent)' : 'var(--cg-neutral)'}" stroke-width="${is ? 2 : 1.2}"/>
-      ${is ? `<circle class="cg-halo" cx="${x}" cy="${y}" r="9" fill="var(--cg-accent)"/>` : ''}
-      <circle cx="${x}" cy="${y}" r="${rad}" fill="${is ? 'var(--cg-accent)' : 'var(--cg-ink)'}" ${is ? 'stroke="var(--cg-surface)" stroke-width="2"' : ''} data-cy="${y.toFixed(3)}"/>
-      <rect x="${x - Math.max(step, 6) / 2}" y="${top - 6}" width="${Math.max(step, 6)}" height="${base - top + 6}" fill="transparent"/>`, `data-country="${esc(r.country)}"`);
-  });
-  if (o.shared) {
-    // The shared figure, marked once across its run of stems (a sorted run is contiguous).
-    const i0 = O.findIndex((r) => new D(r.certificates).equals(o.mode.certificates)), i1 = i0 + o.mode.count - 1;
-    const x0 = L + step * i0, x1 = L + step * (i1 + 1), y = yOf(o.mode.certificates);
-    // Below the band, clear of the extremes' labels (which sit above their dots); above it only
-    // when the band is too near the baseline. A surface halo keeps it legible over the stems.
-    const ly = y + 22 < base - 4 ? y + 22 : y - 12;
-    s += `<g data-shared="${o.mode.count}" aria-hidden="true"><rect x="${x0}" y="${y - 6}" width="${x1 - x0}" height="12" fill="var(--cg-accent)" opacity="0.14"/>
-      <text class="cg-num" x="${(x0 + x1) / 2}" y="${ly}" text-anchor="middle" font-size="11" paint-order="stroke" stroke="var(--cg-surface)" stroke-width="4" stroke-linejoin="round">${o.mode.count} origins at ${n1(o.mode.certificates)}</text></g>`;
-  }
-  for (const r of new Set([lo, hi, ...(me ? [me] : [])])) {
-    const i = O.indexOf(r), x = L + step * i + step / 2, y = yOf(r.certificates), right = x > w * 0.7, left = x < w * 0.3;
-    const anchor = right ? 'end' : left ? 'start' : 'middle', dx = right ? 6 : left ? -4 : 0, up = r === lo && r !== me ? 30 : 16;
-    if (up > 16) s += `<line x1="${x}" x2="${x}" y1="${y - 6}" y2="${y - up + 5}" stroke="var(--cg-faint)" stroke-width="1"/>`;
-    s += `<text class="cg-num" x="${x + dx}" y="${y - up}" text-anchor="${anchor}" font-size="11">${n1(r.certificates)} <tspan class="cg-faint" font-weight="400">${esc(r.name)}</tspan></text>`;
-  }
-  s += `<text class="cg-lab" x="${L}" y="${base + 20}" font-size="10">Lowest default</text><text class="cg-lab" x="${w - R}" y="${base + 20}" text-anchor="end" font-size="10">Highest default</text>`;
-  return { h, svg: s, alt: `${O.length} origins ranked by certificates on default values, from ${n1(O[0].certificates)} to ${n1(O[O.length - 1].certificates)}${o.shared ? `; ${o.mode.count} of them at ${n1(o.mode.certificates)}` : ''}.` };
-}
-
-/** The origins card's body, drawn when the origins have been computed. */
-export function originsParts(o: OriginsModel | null, w: number): { title: string; plot: string; table: string; cap: string } {
-  if (!o) return { title: 'No origin publishes a default value for this good and route in this year.', plot: '', table: '', cap: '' };
-  const p = plotOrigins(o, w, o.ownCountry);
-  return {
-    title: sentenceOrigins(o),
-    plot: p.h ? wrap(w, p) : '',
-    table: table({ head: ['Origin', `Certificates, ${o.year}`], rows: o.rows.map((r) => [esc(r.name), n3(r.certificates)]) }),
-    cap: `The Commission's default values for each origin, ${o.rows.length} published for this good and route. Where goods come from is a fact of the shipment, not a setting${o.usesVerified ? '; your line uses verified figures, which replace these' : ''}.`,
-  };
-}
-
 /* ── tables ────────────────────────────────────────────────────────────────── */
 
 interface Table { head: string[]; rows: (string | number)[][]; caption?: string }
@@ -841,24 +696,6 @@ export interface GraphsState {
   open: Record<string, boolean>;
 }
 
-/**
- * A closed table carries the class `cg-closed`, NOT the `hidden` attribute. The site's base layer
- * hides [hidden] with !important, and an !important rule in a layer cannot be overridden from
- * outside it, so a table closed with the attribute could never be shown to a printer. Measured:
- * the print rule existed and the tables stayed hidden in all three engines.
- */
-const cardShell = (id: string, o: { q: string; title: string; plot: string; big?: string; extra?: string; cap: string; tbl: string; paper?: boolean; open: boolean }): string => `
-  <article class="cg-card cg-${id}"${o.paper ? ' data-paper' : ''} data-cg-card="${id}">
-    <p class="cg-q">${o.q}</p>
-    ${o.big === undefined ? `<h4 class="cg-t" data-cg="title">${o.title}</h4>` : ''}
-    <figure class="cg-plot" data-cg="plot">${o.plot}</figure>
-    ${o.big === undefined ? '' : `<p class="cg-big">${o.big}</p><h4 class="cg-t" data-cg="title">${o.title}</h4>`}
-    ${o.extra ?? ''}
-    <div class="cg-foot"><p class="cg-cap">${o.cap}</p>
-      <button type="button" class="cg-tbl-btn" aria-expanded="${o.open}" aria-controls="cgTbl-${id}">Table</button></div>
-    <div class="cg-tbl${o.open ? '' : ' cg-closed'}" id="cgTbl-${id}" data-cg="table" tabindex="0" role="region" aria-label="Table: ${esc(o.q)}">${o.tbl}</div>
-  </article>`;
-
 const legendDot = (kind: 'fill' | 'ring'): string => (kind === 'fill'
   ? '<svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="var(--cg-accent)"/></svg>'
   : '<svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="3.8" fill="none" stroke="var(--cg-neutral)" stroke-width="1.5"/></svg>');
@@ -884,112 +721,6 @@ export function chargedLegend(m: GraphsModel, yearIndex: number): string {
   const charged = y.chargedPct === null ? null : new D(y.chargedPct);
   return `<span>${legendDot('fill')}Certificates to surrender <b>${charged ? pctHonest(charged.toFixed()) : '—'}</b></span>
     <span>${legendDot('ring')}Free allocation <b>${charged ? pctHonest(D.max(0, new D(100).minus(charged)).toFixed()) : '—'}</b></span>`;
-}
-
-export type GraphWidths = Record<'steps' | 'cascade' | 'share' | 'markup' | 'charged' | 'cost' | 'phase' | 'origins', number>;
-
-/**
- * The whole section. `widths` are the pixel widths the page measured for each card's plot; the
- * module never measures anything itself.
- */
-export function renderGraphs(
-  model: GraphsModel | GraphsRefusal, state: GraphsState, widths: GraphWidths, phase?: PhaseModel,
-): string {
-  const head = `<div class="cg-head"><h3 class="cg-h">The same shipment, drawn</h3>
-    <p class="cg-sub">For the line above. Hover or focus a mark for its exact figure.</p></div>`;
-  if (typeof model === 'string') {
-    return `<section class="cg" aria-label="Graphs">${head}<p class="cg-none">${model === 'no-estimate'
-      ? 'Nothing to draw: this line has no estimate in any year. The reason is in the cards above.'
-      : 'Nothing to draw: this line has no estimate in at least one year. The reason is in the cards above.'}</p></section>`;
-  }
-  const m = model, Y = m.years;
-  const yi = state.chargedYear === null ? Y.length - 1 : Math.max(0, Math.min(Y.length - 1, state.chargedYear));
-  const asAt = `as at ${formatPackDate(m.priceAsAt)}`;
-  const cost = costParts(m, widths.cost, state);
-  const unpriced = unpricedQuarters(m);
-
-  const steps = cardShell('steps', {
-    q: 'Certificates, year by year', title: sentenceSteps(m), plot: wrap(widths.steps, plotSteps(m, widths.steps)),
-    cap: `Law as published · ${formatPackDate(m.packDate)}. A cost appears only where a certificate price is published.`,
-    open: !!state.open.steps,
-    tbl: table({ head: ['Year', 'Certificates', `Change on ${Y[0].year}`, 'Cost'],
-      rows: Y.map((y) => [y.year, n3(y.certificates), y.riseOnFirstPct === null ? '—' : new D(y.riseOnFirstPct).isZero() ? '0%' : `${new D(y.riseOnFirstPct).isNegative() ? '' : '+'}${pct1(y.riseOnFirstPct)}`,
-        y.costEur !== null ? eur(y.costEur) : `none published for imports in ${y.priceQuarter}`]) }),
-  });
-
-  const share = cardShell('share', {
-    paper: true, q: 'How much of the rise is the mark-up?', title: sentenceShare(m),
-    big: m.split ? `${formatDecimal(m.usesDefault ? m.split.markupSharePct : '0', 1, true)}<small>%</small>` : '—',
-    plot: wrap(widths.share, plotShare(m, widths.share, 'cgShare')),
-    cap: m.split ? `${n1(m.split.markup)} of ${n1(m.split.rise)} certificates. The rest is free allocation.` : 'The counts above stand.',
-    open: !!state.open.share,
-    tbl: table(m.split ? { head: ['Cause', 'Certificates'],
-      rows: [['Mark-up', plus(m.split.markup)], ['Less free allocation retained', plus(m.split.factor)], ['Lower benchmark', plus(m.split.benchmark)], ['Total rise', plus(m.split.rise)]] }
-      : { head: ['Cause', 'Certificates'], rows: [['Not divided for this line', '—']] }),
-  });
-
-  const markup = cardShell('markup', {
-    q: 'What does the mark-up add?', title: sentenceMarkup(m), plot: wrap(widths.markup, plotMarkup(m, widths.markup, 'cgMarkup')),
-    cap: m.usesDefault
-      ? "Top: the line as priced. Ring: the engine given the Commission's base value as a verified figure. A real verified figure can be higher or lower than that base."
-      : 'The ring is the count from your verified figures.',
-    open: !!state.open.markup,
-    tbl: table({ head: ['Year', 'Mark-up', 'As priced', 'Base as verified', 'Mark-up adds'],
-      rows: Y.map((y) => [y.year, y.markupPct !== null ? `${esc(y.markupPct)}%` : 'none', n3(y.certificates), n3(y.certificatesAtBase), plus(y.markupAdds)]) }),
-  });
-
-  const charged = cardShell('charged', {
-    paper: true, q: 'How much of the emissions is charged?', title: sentenceCharged(m, yi),
-    plot: wrap(widths.charged, plotCharged(m, widths.charged, yi)),
-    extra: `<div class="cg-mini" role="group" aria-label="Year">${Y.map((y, j) => `<button type="button" data-cg-year="${j}" aria-pressed="${j === yi}">${y.year}</button>`).join('')}</div>
-      <div class="cg-legend" data-cg="legend">${chargedLegend(m, yi)}</div>`,
-    cap: 'One cell = 1% of the emissions counted for this shipment, rounded to whole cells.',
-    open: !!state.open.charged,
-    tbl: table(tableCharged(m)),
-  });
-
-  const costCard = cardShell('cost', {
-    q: 'What would it cost at my own price?', title: cost.title, plot: cost.plot,
-    extra: `<div class="cg-second"><label for="cgSecond">A second price, to see a range</label>
-        <input id="cgSecond" type="number" min="0" step="any" inputmode="decimal" autocomplete="off" aria-describedby="cgSecondNote" value="${esc(state.secondText)}"${secondUsable(state) ? '' : ' disabled'} />
-        <span id="cgSecondNote" data-cg="second-note">${secondNote(state)}</span></div>
-      <div class="cg-legend">
-        <span><svg width="12" height="12" aria-hidden="true"><rect x="4.5" y="1" width="3" height="10" fill="var(--cg-ink)"/></svg>Published price for this import's date</span>
-        <span><svg width="16" height="12" aria-hidden="true"><path d="M1 6h14" stroke="var(--cg-markup)" stroke-width="2"/></svg>Your own price</span>
-        <span><svg width="16" height="12" aria-hidden="true"><path d="M1 6h14" stroke="var(--cg-markup)" stroke-width="2" stroke-dasharray="3 3"/></svg>Yours, where none is published</span></div>`,
-    cap: `Your price is your assumption, not a forecast. It stays on this page.${unpriced.length ? ` Certificate price for imports in ${listOf(unpriced, 'and')}: none published · ${asAt}.` : ''}`,
-    open: !!state.open.cost, tbl: cost.table,
-  });
-  const cascade = cardShell('cascade', {
-    q: 'Why does it rise?', title: sentenceCascade(m), plot: wrap(widths.cascade, plotCascade(m, widths.cascade)),
-    extra: `<div class="cg-legend">${cascadeLegend(m)}</div>`,
-    cap: `One dot = ${formatDecimal(String(cascadeUnit(Math.max(...Y.map((y) => Number(y.certificates))))), 1, false)} certificate${cascadeUnit(Math.max(...Y.map((y) => Number(y.certificates)))) === 1 ? '' : 's'}, rounded; the table is exact.${m.usesDefault ? ' The mark-up no longer applies with verified data.' : ''}`,
-    open: !!state.open.cascade,
-    tbl: table({ head: ['Year', 'Certificates', ...CAUSES.map((c) => causeLabel(m, c.key))],
-      rows: Y.map((y, i) => [y.year, n3(y.certificates), ...CAUSES.map((c) => (i === 0 ? '—' : m.causes[i] ? plus(causePart(m.causes[i]!, c.key)) : 'not divided'))]),
-      caption: `Changes are since ${Y[0].year}.` }),
-  });
-
-  const phaseCard = phase ? cardShell('phase', {
-    paper: true, q: 'How fast does free allocation go?', title: sentencePhase(phase), plot: wrap(widths.phase, plotPhase(phase, widths.phase)),
-    extra: `<div class="cg-legend"><span><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="var(--cg-ink)"/></svg>Years computed for this line</span><span><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="3.8" fill="none" stroke="var(--cg-neutral)" stroke-width="1.8"/></svg>Legislated, not computed here</span></div>`,
-    cap: 'Directive 2003/87/EC Art 10a(1a): the share of free allocation retained. Default values are published to 2028 only, so no certificate count is drawn after it.',
-    open: !!state.open.phase,
-    tbl: table({ head: ['Year', 'Share retained', 'Computed for this line'], rows: phase.rows.map((r) => [r.year, sharePct(r.factor), r.computable ? 'yes' : 'no']) }),
-  }) : '';
-
-  // THE ORIGINS ARE COMPUTED AFTER THE REST IS ON SCREEN (one engine call per origin), so the
-  // card is drawn with its question and a placeholder, and the page fills its slots.
-  const origins = `
-  <article class="cg-card cg-origins" data-cg-card="origins">
-    <p class="cg-q">Does the origin matter?</p>
-    <h4 class="cg-t" data-cg="title">Comparing every origin's default value…</h4>
-    <figure class="cg-plot" data-cg="plot"></figure>
-    <div class="cg-foot"><p class="cg-cap" data-cg="cap"></p>
-      <button type="button" class="cg-tbl-btn" aria-expanded="${!!state.open.origins}" aria-controls="cgTbl-origins">Table</button></div>
-    <div class="cg-tbl${state.open.origins ? '' : ' cg-closed'}" id="cgTbl-origins" data-cg="table" tabindex="0" role="region" aria-label="Table: Does the origin matter?"></div>
-  </article>`;
-  return `<section class="cg" aria-label="Graphs">${head}<div class="cg-board">${steps}${cascade}${share}${markup}${charged}${costCard}${phaseCard}${origins}</div><div class="cg-tip" data-cg="tip" aria-hidden="true"></div></section>`;
 }
 
 /* ── shared with cbam-ui/tiles-why.ts, so the tiles format and table every figure the same way ── */
