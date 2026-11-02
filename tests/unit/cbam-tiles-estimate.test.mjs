@@ -273,3 +273,100 @@ test('review 9 — the default tier card says what is true of every origin, resi
   assert.ok(page.includes('<b>Commission default + mark-up</b><span>The Commission\'s published default value, with its mark-up.</span>'));
   assert.doesNotMatch(page, /published value for this origin and route/);
 });
+
+/* ── decision 4A (2026-11-03): the split tile never clips ─────────────────────────────────────
+   The card-is-the-bar layout gives the smaller share a strip of the tile too narrow for its own
+   label (8.2 % of a 560 px tile). When the smaller share is under 20 %, the tile draws a full-width
+   bar to scale and two label tiles beneath it. From 20 % to 80 % it is exactly the card it was. */
+import { splitLayout } from '../../src/scripts/cbam-ui/tiles-estimate.ts';
+
+/** A real priced estimate with its split pushed to `pct` % chargeable (total 1000 t, floor not reached). */
+const atShare = (pct, over = {}) => {
+  const e = est();
+  const figure = {
+    ...e.scenario, totalEmbeddedTco2e: '1000', netTco2e: (pct * 10).toFixed(3),
+    faaTco2e: (1000 - pct * 10).toFixed(3), certificates: (pct * 10).toFixed(3), costEur: '1000.00',
+  };
+  return { ...e, emissionsTco2e: '1000', scenario: figure, ...over };
+};
+
+test('4A threshold: the smaller share under 20 % draws the strip, from 20 % to 80 % the card, both directions', () => {
+  const at = (p) => splitLayout(p);
+  for (const [pct, want] of [
+    ['19.9', 'strip'], ['20.0', 'blocks'], ['20.1', 'blocks'],
+    ['79.9', 'blocks'], ['80.0', 'blocks'], ['80.1', 'strip'],
+    ['0.0', 'strip'], ['100.0', 'strip'], ['91.8', 'strip'], ['50.0', 'blocks'],
+  ]) assert.equal(at(pct), want, `${pct} % chargeable`);
+});
+
+test('4A: no split (nothing embedded) is not a strip: no share is invented, no bar is drawn to scale', () => {
+  assert.equal(splitLayout(null), 'blocks');
+  const e = est({ verified: { directTco2ePerT: '0' } });
+  assert.doesNotMatch(tiles(e), /b-fill-strip|b-sp-bar/);
+});
+
+test('4A: between 20 % and 80 % the tile is byte-identical to the card it was (no strip markup)', () => {
+  for (const pct of [20, 40, 69.4, 80]) {
+    const html = section(tiles(atShare(pct)), 'b-fill');
+    assert.doesNotMatch(html, /b-fill-strip|b-sp-/, `${pct} %`);
+    assert.match(html, /class="b-fl-bar"/, `${pct} %`);
+    assert.match(html, /class="b-fl-rest"/, `${pct} %`);
+  }
+});
+
+test('4A: 91.8 % draws the bar to scale (no minimum width), a real aria-label, and two label tiles', () => {
+  const html = section(tiles(atShare(91.8)), 'b-fill');
+  assert.match(html, /b-fill-bronze b-fill-strip/);
+  assert.doesNotMatch(html, /class="b-fl-bar"|class="b-fl-rest"|b-fill-low/, 'the proportional blocks are gone');
+  assert.ok(html.includes('<div class="b-sp-bar" role="img" aria-label="91.8% chargeable, 8.2% free allocation">'));
+  assert.ok(html.includes('<i class="b-sp-bc" style="width:91.8%"></i><i class="b-sp-bf" style="width:8.2%"></i>'));
+  assert.doesNotMatch(html, /min-width|flex:/, 'true to scale: nothing pads the small segment');
+  // two label tiles, each with its own title, its percentage and its sub-line
+  assert.match(html, /<div class="b-sp-c"><h3 class="b-t-ti">Chargeable\.<\/h3><div class="b-mid">91\.8<span class="b-u">%<\/span><\/div><p class="b-t-sub">918 tCO₂e<\/p><\/div>/);
+  assert.match(html, /<div class="b-sp-f"><h3 class="b-t-ti">Free allocation\.<\/h3><div class="b-mid">8\.2<span class="b-u">%<\/span><\/div><p class="b-t-sub">82 tCO₂e · CBAM factor 2026 0\.975<\/p><\/div>/);
+  // every existing tag survives
+  assert.ok(html.includes(WHATIF), 'what-if CSCF');
+  assert.ok(html.includes('Embedded emissions (direct) · 1,000 tCO₂e'));
+});
+
+test('4A: a low chargeable share (8.2 %) is a strip too, widths to scale the other way round', () => {
+  const html = section(tiles(atShare(8.2)), 'b-fill');
+  assert.match(html, /b-fill-strip/);
+  assert.ok(html.includes('aria-label="8.2% chargeable, 91.8% free allocation"'));
+  assert.ok(html.includes('<i class="b-sp-bc" style="width:8.2%"></i><i class="b-sp-bf" style="width:91.8%"></i>'));
+});
+
+test('4A: the strip keeps the tier\'s colour class and the indirect tag', () => {
+  const html = section(tiles(atShare(91.8, { scenario: { ...atShare(91.8).scenario, indirectTco2e: '4.4' } })), 'b-fill');
+  assert.ok(html.includes('+ Indirect (electricity) · no free allocation · 4.4 tCO₂e'));
+  const v = tiles(est({ route: '(D)', verified: { directTco2ePerT: '1.2' } }));
+  assert.match(v, /b-fill-cyan/);
+});
+
+test('4A: a floored charge in the strip prints the true terms in the free-allocation tile, never a share', () => {
+  const e = estimateFromPack(pack, {
+    cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15',
+    emissionsScope: 'direct_and_indirect', verified: { directTco2ePerT: '0.1' },
+  });
+  // Push the chargeable share to 85 % of the embedded total while FA still exceeds the direct term.
+  const f = { ...e.scenario, totalEmbeddedTco2e: '100', netTco2e: '85', indirectTco2e: '85', certificates: '85' };
+  const html = section(tiles({ ...e, scenario: f }), 'b-fill');
+  assert.match(html, /b-fill-strip/);
+  const free = /<div class="b-sp-f">[\s\S]*?<\/div><\/div>/.exec(html)?.[0] ?? '';
+  assert.ok(free.includes('<dt>− Free allocation</dt><dd>64.935 tCO₂e</dd>'));
+  assert.ok(free.includes('<dt>CBAM factor 2026</dt><dd>0.975</dd>'));
+  assert.ok(free.includes('Free allocation exceeds the direct emissions'));
+  assert.doesNotMatch(free, /class="b-mid"/, 'no free-allocation share is printed');
+});
+
+test('4A: the bar\'s CSS pads no segment (true to scale), and the free-allocation numeral is sized to its own fill', () => {
+  const css = readFileSync(fileURLToPath(new URL('../../src/styles/cbam-bento.css', import.meta.url)), 'utf8');
+  for (const sel of ['.b-sp-bar', '.b-sp-bar>i', '.b-sp-bc', '.b-sp-bf']) {
+    const rules = [...css.matchAll(new RegExp(`\\.cbx[^{}]*${sel.replace(/[.>]/g, '\\$&')}[^{}]*\\{([^}]*)\\}`, 'g'))].map((m) => m[1]);
+    assert.ok(rules.length > 0, `${sel} is styled`);
+    for (const r of rules) assert.doesNotMatch(r, /min-width|min-inline-size|flex-grow|flex:[^;]*[1-9]/, `${sel} must not pad or stretch a segment`);
+  }
+  // 30.6 % of a 345 px tile left a 64 px numeral ~55 px outside it: the rest block now sizes the numeral by its own width.
+  assert.match(css, /\.cbx \.b-fl-rest\{[^}]*container-type:inline-size\}/);
+  assert.match(css, /\.cbx \.b-fl-rest \.b-mid\{font-size:min\(64px,calc\(\(100cqi - 4px\) \/ 1\.91\)\)\}/);
+});

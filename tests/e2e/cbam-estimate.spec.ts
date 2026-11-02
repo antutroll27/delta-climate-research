@@ -120,6 +120,41 @@ test.describe('CBAM Estimate view', () => {
     await expect(page.locator('[data-view="three-years"]')).toBeVisible();
   });
 
+  // Decision 4A: the split tile never clips. Measured as text leaving the tile, not as a class name.
+  for (const [name, cn, country, route, want] of [
+    ['91.8 % chargeable (the strip)', '76061130', 'DZ', '(L)', 'strip'],
+    ['69.4 % chargeable (the card)', '73063077', 'IN', '(C)', 'card'],
+  ] as const) {
+    for (const width of [1101, 1250, 1440]) {
+      test(`the split tile never clips: ${name} at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.goto(URL);
+        await pick(page, cn, country);
+        await page.locator(`#cbRouteSeg [data-value="${route}"]`).click();
+        const tile = page.locator('#cbOut .b-fill');
+        await expect(tile).toBeVisible();
+        await expect(tile).toHaveClass(want === 'strip' ? /b-fill-strip/ : /^(?!.*b-fill-strip)/);
+        const out = await tile.evaluate((t) => {
+          const box = t.getBoundingClientRect();
+          let worst = 0;
+          for (const el of t.querySelectorAll('h3,.b-mid,.b-t-sub,.b-u,.b-tag,dt,dd')) {
+            const r = document.createRange(); r.selectNodeContents(el);
+            for (const q of r.getClientRects()) if (q.width) worst = Math.max(worst, q.right - box.right, box.left - q.left);
+          }
+          const bar = t.querySelector('.b-sp-bar');
+          const segs = bar ? [...bar.children].map((c) => c.getBoundingClientRect().width / bar.getBoundingClientRect().width * 100) : [];
+          return { worst, segs };
+        });
+        expect(out.worst).toBeLessThanOrEqual(0.5);
+        if (want === 'strip') {
+          expect(out.segs[0]).toBeCloseTo(91.8, 1); // to scale: 8.2 % is 8.2 % of the bar, not a padded sliver
+          expect(out.segs[1]).toBeCloseTo(8.2, 1);
+          await expect(tile.locator('.b-sp-bar')).toHaveAttribute('aria-label', '91.8% chargeable, 8.2% free allocation');
+        }
+      });
+    }
+  }
+
   test('the good sheet: keyboard in, search, sector, pick, focus back', async ({ page }) => {
     await page.goto(URL);
     const open = page.locator('[data-good-open]');
