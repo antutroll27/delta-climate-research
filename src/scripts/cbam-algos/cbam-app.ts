@@ -48,7 +48,7 @@ import {
 import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
 import {
   AMENDED_BY_2025_2083, attestControl, noRuleSentence, refusedLineNote, sectorList, totalsTag, yearSentence,
-  yearVerdictTag,
+  yearVerdictTag, linePlate, totalTile, type LinePlateContext,
 } from '../cbam-ui/tiles-list.ts';
 import {
   esc, eur, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
@@ -312,74 +312,6 @@ export function renderDraftThreshold(
 const orList = (items: readonly string[]): string => (items.length < 2
   ? (items[0] ?? '')
   : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`);
-
-/**
- * The summed exposure. A total containing any what-if is itself a what-if, and a total with no
- * priced lines at all (Totals.certificates === '0' both for "genuinely zero" and "nothing was
- * summed", per that field's own doc in cbam-lines.ts) must never render as a confirmed zero —
- * hence its own states below, distinct from a real "Priced" verdict at 0.
- *
- * pricedLines === 0 is itself two different situations, distinguishable from Totals' EXISTING
- * fields with no new signal needed: refusedLines === 0 means no line was even entered yet (a
- * neutral empty state — nobody has done anything wrong); refusedLines > 0 means every entered
- * line failed closed (a real "nothing here priced" warning). Showing the same red tag for both
- * would make an empty form look like a form full of refusals.
- */
-export function renderTotals(t: Totals, exempt: Totals | null = null): string {
-  // C2 (audit 2026-11-02): lines an attested below-threshold year exempts are summed apart and
-  // shown OUTSIDE the total. Before, "Below threshold" sat beside a total that still billed them.
-  const exemptNote = exempt && exempt.pricedLines > 0
-    ? `<p class="cb-sub cb-exempt"><b>Exempt if your list is complete:</b> ${exempt.pricedLines} line${
-        exempt.pricedLines === 1 ? '' : 's'} below the de minimis threshold for the year you attested, ${
-        num(exempt.certificates)} certificates${exempt.costEur ? ` · ${eur(exempt.costEur)}` : ''}${
-        exempt.anyPending ? ' (a what-if: the CSCF is unpublished)' : ''} — not included in the total.</p>`
-    : '';
-  if (t.pricedLines === 0 && t.refusedLines === 0 && exemptNote) return `
-    <section class="cb-card cb-res cb-total">
-      <div class="cb-card-head">
-        <h3 class="cb-card-label">Total exposure</h3>
-        <span class="cb-tag ok">Below threshold</span>
-      </div>
-      <p class="cb-sub">Nothing owed on the lines listed, on your statement that they are all your imports for the year.</p>
-      ${exemptNote}
-    </section>`;
-
-  if (t.pricedLines === 0 && t.refusedLines === 0) return `
-    <section class="cb-card cb-res cb-total">
-      <div class="cb-card-head">
-        <h3 class="cb-card-label">Total exposure</h3>
-        <span class="cb-tag pending">No lines yet</span>
-      </div>
-      <p class="cb-sub">Add at least one line to see a total.</p>
-    </section>`;
-
-  if (t.pricedLines === 0) return `
-    <section class="cb-card cb-res cb-total">
-      <div class="cb-card-head">
-        <h3 class="cb-card-label">Total exposure</h3>
-        <span class="cb-tag unavail">Nothing priced</span>
-      </div>
-      <p class="cb-sub">No line has a priced estimate, so there is no total to show — not even a zero. ${
-        refusedLineNote(t.refusedLines)}</p>
-      ${exemptNote}
-    </section>`;
-
-  const tone = t.anyPending ? 'pending' : 'ok';
-  const tag = totalsTag(t.anyPending);
-  return `
-    <section class="cb-card cb-res cb-total">
-      <div class="cb-card-head">
-        <h3 class="cb-card-label">Total exposure · ${t.pricedLines} line${t.pricedLines === 1 ? '' : 's'}</h3>
-        <span class="cb-tag ${tone}">${esc(tag)}</span>
-      </div>
-      <div class="cb-fig"><span class="cb-n">${num(t.certificates)}</span></div>
-      <div class="cb-u">certificates</div>
-      ${t.costEur ? `<div class="cb-cost">${eur(t.costEur)}</div>`
-        : '<div class="cb-sub">No € total — at least one line has no published certificate price.</div>'}
-      ${t.refusedLines ? `<p class="cb-sub cb-warn">${refusedLineNote(t.refusedLines)}</p>` : ''}
-      ${exemptNote}
-    </section>`;
-}
 
 /** The subtraction, shown as terms rather than a single opaque number. */
 function renderWaterfall(e: Extract<CertificateEstimate, { terms: unknown }>, fig: {
@@ -817,6 +749,8 @@ export function renderLineCard(
    * sentences (see deltaSentence): only one of them is a claim about the Commission's corpus.
    */
   comparison?: CertificateEstimate | null,
+  /** Rail phase 4: what the List knows beyond the estimate (good name, share, exemption). */
+  plate: LinePlateContext = {},
 ): string {
   // GATED ON THE LINE'S TIER, NOT ON THE ARGUMENT. A default-tier line IS the Commission
   // default: it has nothing to attest and nothing to compare itself against, and would render a
@@ -832,17 +766,12 @@ export function renderLineCard(
   // is unchecked. defaultPathComparison decides with the SAME predicate — no longer a matching
   // pair two readers must keep in step, but one spelling both read; see isAttested.
   const verified = isAttested(line.tier);
-  return `
-    <article class="cb-line" data-line="${esc(line.id)}">
-      <div class="cb-line-head">
-        <span class="cb-line-n">Line ${index + 1}</span>
-        <span class="cb-line-sum">${esc(line.cn)} · ${esc(line.country)} · ${esc(line.route)} · ${num(line.massT)} t · ${esc(line.date)}</span>
-        <button type="button" class="cb-line-x" data-remove="${esc(line.id)}" aria-label="Remove line ${index + 1}">Remove</button>
-      </div>
-      ${renderResult(e)}
-      ${renderAttestation(line, hasFigure(e))}
-      ${verified ? renderVerifiedDelta(e, comparison) : ''}
-    </article>`;
+  return linePlate(line, index, {
+    result: renderResult(e),
+    attestation: renderAttestation(line, hasFigure(e)),
+    delta: verified ? renderVerifiedDelta(e, comparison) : '',
+    tierLabel: tierLabel(line.tier),
+  }, plate);
 }
 
 /**
@@ -851,7 +780,7 @@ export function renderLineCard(
  * import since it is not exported there. `never` in the default arm keeps this exhaustive against
  * CertificateEstimate the same way renderResult's own switch is, just above.
  */
-function tableFigures(e: CertificateEstimate): { certs: string | null; costEur: string | null } {
+export function tableFigures(e: CertificateEstimate): { certs: string | null; costEur: string | null } {
   switch (e.status) {
     case 'ok':
     case 'zero_by_fiat': return { certs: e.figure.certificates, costEur: e.figure.costEur };
@@ -2642,7 +2571,7 @@ export function initCbam(): void {
     // THE LIST'S LIVE REGION IS OFF (quality review item 5, now in markup on #cbList): every add,
     // remove and attest rebuilds every card, and reading that wall back after each click buried
     // the answer. #cbStatus carries a short, current summary instead (below).
-    listEl!.innerHTML = yearsHtml + renderTotals(totals, exempt) + pairs.map((p, i) => p.e
+    listEl!.innerHTML = yearsHtml + totalTile(totals, exempt) + pairs.map((p, i) => p.e
       ? renderLineCard(p.l, p.e, i, p.cmp)
       : `<article class="cb-line" data-line="${esc(p.l.id)}">
            <div class="cb-line-head">

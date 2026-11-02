@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   buildPrintDocument, decimalProblem, decorateSnapshot, inputFor, massRefusal, nextRoute, noRouteReason, parseVerifiedFields,
   priceNoteFor, renderAttestation, renderDraftThreshold, renderLineCard, renderPriceRow, renderResult,
-  renderThreshold, renderTotals, renderYearThreshold, stampedTierOf, verifiedInputOf,
+  renderThreshold, renderYearThreshold, stampedTierOf, verifiedInputOf,
 } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
@@ -16,7 +16,7 @@ import { outlook } from '../../src/scripts/cbam-outlook.ts';
 import {
   renderDeck, renderEstimateIdle, renderEstimateThrown, renderEstimateTiles,
 } from '../../src/scripts/cbam-ui/tiles-estimate.ts';
-import { yearTile } from '../../src/scripts/cbam-ui/tiles-list.ts';
+import { totalTile, yearTile } from '../../src/scripts/cbam-ui/tiles-list.ts';
 
 /**
  * The CBAM engine is the GeoCBAM SaaS's, copied byte-for-byte. Its UI is not — the
@@ -1161,7 +1161,7 @@ test('renderYearThreshold: indeterminate is tagged pending, not the green of a r
 /* ── the totals card ────────────────────────────────────────────────────────── */
 
 test('renderTotals: a pending total is tagged a what-if and shows no false euro', () => {
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '214.395', costEur: null, chargeableTco2e: '214.395',
     pricedLines: 2, refusedLines: 1, anyPending: true,
   });
@@ -1173,7 +1173,7 @@ test('renderTotals: a pending total is tagged a what-if and shows no false euro'
 });
 
 test('renderTotals: a final priced total shows the euro figure and no what-if language', () => {
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '71.465', costEur: '5385.60', chargeableTco2e: '71.465',
     pricedLines: 1, refusedLines: 0, anyPending: false,
   });
@@ -1187,7 +1187,7 @@ test('renderTotals: a non-numeric costEur never prints as "€NaN" or the litera
   // is a non-empty but non-numeric string, so it still passes that guard and reaches eur().
   // Nothing in Totals' TYPE stops a future caller from constructing this; eur() must make it
   // safe to print rather than trust that every future call site re-derives the same guard.
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '71.465', costEur: 'not-a-number', chargeableTco2e: '71.465',
     pricedLines: 1, refusedLines: 0, anyPending: false,
   });
@@ -1199,7 +1199,7 @@ test('renderTotals: a whitespace-only costEur never prints as an invented "€0.
   // Number('   ') is 0 in JS, same quirk as Number('') — the first fix only special-cased the
   // exact empty string and missed this. A whitespace-only string is TRUTHY, so it passes the
   // `t.costEur ? eur(t.costEur) : fallback` guard at every call site exactly like a real value.
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '71.465', costEur: '   ', chargeableTco2e: '71.465',
     pricedLines: 1, refusedLines: 0, anyPending: false,
   });
@@ -1210,7 +1210,7 @@ test('renderTotals: a whitespace-only costEur never prints as an invented "€0.
 test('renderTotals: every entered line refused reads as a warning, never a claimed zero', () => {
   // Totals.certificates is '0' both for "genuinely zero" and "nothing was summed" — the card
   // must not let the second case read as a confirmed zero-liability result.
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '0', costEur: null, chargeableTco2e: '0',
     pricedLines: 0, refusedLines: 2, anyPending: false,
   });
@@ -1224,7 +1224,7 @@ test('renderTotals: no lines entered yet is a neutral empty state, not the same 
   // pricedLines === 0 with refusedLines === 0 is derivable from Totals as it stands — no line
   // was ever entered — and must not wear the same "unavail" tone as every-line-refused: an
   // empty form is not a form full of failures.
-  const html = renderTotals({
+  const html = totalTile({
     certificates: '0', costEur: null, chargeableTco2e: '0',
     pricedLines: 0, refusedLines: 0, anyPending: false,
   });
@@ -3604,7 +3604,7 @@ const C2_EXEMPT = { certificates: '98.948', costEur: '7456.74', chargeableTco2e:
 const C2_NONE = { certificates: '0', costEur: null, chargeableTco2e: '0', pricedLines: 0, refusedLines: 0, anyPending: false };
 
 test('C2: renderTotals shows exempt lines OUTSIDE the total, with their own figures', () => {
-  const html = renderTotals(C2_OWED, C2_EXEMPT);
+  const html = totalTile(C2_OWED, C2_EXEMPT);
   assert.match(html, /Total exposure · 1 line/);
   assert.match(html, /Exempt if your list is complete/);
   assert.match(html, /1 line below the de minimis threshold/);
@@ -3613,17 +3613,17 @@ test('C2: renderTotals shows exempt lines OUTSIDE the total, with their own figu
 });
 
 test('C2: when every priced line is exempt, the total is a stated nil, not "No lines yet"', () => {
-  const html = renderTotals(C2_NONE, C2_EXEMPT);
+  const html = totalTile(C2_NONE, C2_EXEMPT);
   assert.doesNotMatch(html, /No lines yet/);
   assert.match(html, /Nothing owed on the lines listed/);
   assert.match(html, /Exempt if your list is complete/);
 });
 
 test('C2: without exempt lines, renderTotals is unchanged', () => {
-  assert.equal(renderTotals(C2_OWED), renderTotals(C2_OWED, null));
-  assert.equal(renderTotals(C2_OWED), renderTotals(C2_OWED, C2_NONE));
-  assert.doesNotMatch(renderTotals(C2_OWED), /Exempt/);
-  assert.match(renderTotals(C2_NONE), /No lines yet/);
+  assert.equal(totalTile(C2_OWED), totalTile(C2_OWED, null));
+  assert.equal(totalTile(C2_OWED), totalTile(C2_OWED, C2_NONE));
+  assert.doesNotMatch(totalTile(C2_OWED), /Exempt/);
+  assert.match(totalTile(C2_NONE), /No lines yet/);
 });
 
 /* ── Follow-ups from the independent audit of the H1/C2 fixes (2026-11-02) ── */
@@ -3640,8 +3640,8 @@ test('H1 follow-up: exponents, oversize numbers and -0 are refused at the form',
 });
 
 test('C2 follow-up: the exempt amount says it is a what-if when it is one', () => {
-  assert.match(renderTotals(C2_OWED, C2_EXEMPT), /a what-if: the CSCF is unpublished/);
-  assert.doesNotMatch(renderTotals(C2_OWED, { ...C2_EXEMPT, anyPending: false }), /what-if: the CSCF/);
+  assert.match(totalTile(C2_OWED, C2_EXEMPT), /a what-if: the CSCF is unpublished/);
+  assert.doesNotMatch(totalTile(C2_OWED, { ...C2_EXEMPT, anyPending: false }), /what-if: the CSCF/);
 });
 
 

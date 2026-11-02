@@ -6,7 +6,9 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { rulerScale, yearTile } from '../../src/scripts/cbam-ui/tiles-list.ts';
+import {
+  linePlate, listView, refusedLinePlate, rulerScale, shareOfTotal, thresholdErrorTile, totalTile, yearTile,
+} from '../../src/scripts/cbam-ui/tiles-list.ts';
 
 const pack = JSON.parse(readFileSync(
   fileURLToPath(new URL('../../public/cbam/estimator-pack.json', import.meta.url)), 'utf8'));
@@ -59,4 +61,86 @@ test('yearTile: an unreadable mass keeps the verdict and drops only the ruler', 
   const html = yearTile(found({ knownEligibleMassT: 'abc' }));
   assert.doesNotMatch(html, /class="b-thr"/);
   assert.match(html, /cb-tag unavail/);
+});
+
+const T = (over) => ({ certificates: '474.049', costEur: '35901.31', chargeableTco2e: '474.049',
+  pricedLines: 3, refusedLines: 0, anyPending: true, ...over });
+const LINE = { id: 'L1', cn: '73063077', country: 'IN', route: '(C)', scope: 'direct', massT: '100',
+  date: '2026-03-15', tier: 'default+markup' };
+const PARTS = { result: '<section class="cb-card cb-res">R</section>', attestation: '', delta: '',
+  tierLabel: 'Commission default + mark-up' };
+
+test('shareOfTotal: a line\'s share of the total, judged against the exact ratio', () => {
+  // 329.8275 / 474.0485 = 69.5769…% — the preview's "69.6%".
+  assert.equal(shareOfTotal('329.8275', '474.0485'), '69.6');
+  assert.equal(shareOfTotal('474.0485', '474.0485'), '100.0');
+  // Exactly on a half: ROUND_HALF_UP, so 0.05% → '0.1', never banker's '0.0'.
+  assert.equal(shareOfTotal('1', '2000'), '0.1');
+});
+
+test('shareOfTotal: no share without a real, positive total — a zero total is not 0%', () => {
+  for (const [p, t] of [['1', '0'], ['1', ''], ['', '10'], ['x', '10'], ['-1', '10'], ['1', '-10']]) {
+    assert.equal(shareOfTotal(p, t), null, `${p} / ${t}`);
+  }
+});
+
+test('totalTile: a hero tile carrying the e2e hook, the actions and one bar segment per share', () => {
+  const html = totalTile(T({}), null, ['69.6', '24.8', '5.6']);
+  assert.match(html, /^\s*<section class="b-t b-s2 b-hero cb-total">/);
+  assert.match(html, /<h2 class="b-t-ti">Total\.<\/h2>/);
+  assert.match(html, /<div class="b-stackbar" aria-hidden="true"><b style="flex:69\.6"><\/b><b style="flex:24\.8"><\/b><b style="flex:5\.6"><\/b><\/div>/);
+  assert.match(html, /data-goto="export"[^>]*>Export</);
+  assert.match(html, /data-goto="estimate"[^>]*>Add a line</);
+});
+
+test('totalTile: no shares, no stack bar — never an empty bar that reads as zero', () => {
+  assert.doesNotMatch(totalTile(T({}), null, []), /b-stackbar/);
+  assert.doesNotMatch(totalTile(T({ pricedLines: 0, refusedLines: 2, certificates: '0', costEur: null }), null, ['50']), /b-stackbar/,
+    'a total with nothing priced draws no bar even if a caller passes shares');
+});
+
+test('linePlate: the e2e hooks, the 1-based title, the tier chip, the summary line', () => {
+  const html = linePlate(LINE, 0, PARTS, { goodName: 'Other tubes <welded>' });
+  assert.match(html, /^\s*<article class="b-t b-pass cb-line" data-line="L1">/);
+  assert.match(html, /<h2 class="b-t-ti">Line 1\.<\/h2>/);
+  assert.match(html, /<span class="chip bronze"><i aria-hidden="true"><\/i>Commission default \+ mark-up<\/span>/);
+  assert.match(html, /<p class="b-pass-name" title="Other tubes &lt;welded&gt;">Other tubes &lt;welded&gt;<\/p>/);
+  assert.match(html, /73063077 · IN · \(C\) · 100 t · 2026-03-15/);
+  assert.match(html, /<button type="button" class="b-rm cb-line-x" data-remove="L1" aria-label="Remove line 1">Remove<\/button>/);
+  assert.ok(html.includes(PARTS.result), 'the result card is carried verbatim');
+});
+
+test('linePlate: verified tiers wear cyan, the mixed tier wears both colours', () => {
+  assert.match(linePlate({ ...LINE, tier: 'actual-verified' }, 0, { ...PARTS, tierLabel: 'Verified actual' }), /<span class="chip cyan"><i aria-hidden="true"><\/i>Verified actual<\/span>/);
+  const mixed = linePlate({ ...LINE, tier: 'verified-direct+default-indirect' }, 0, { ...PARTS, tierLabel: 'Verified direct + Commission indirect' });
+  assert.match(mixed, /<span class="chip cyan"><i aria-hidden="true"><\/i>Verified direct<\/span><span class="chip bronze"><i aria-hidden="true"><\/i>Commission indirect<\/span>/);
+});
+
+test('linePlate: a share draws a bar; an exempt line says so instead; neither, nothing', () => {
+  const shared = linePlate(LINE, 0, PARTS, { sharePct: '69.6' });
+  assert.match(shared, /<div class="b-share-row"><span>Share of the total<\/span><span class="num">69\.6%<\/span><\/div><div class="b-share" aria-hidden="true"><b style="width:69\.6%"><\/b><\/div>/);
+  const exempt = linePlate(LINE, 0, PARTS, { exempt: true, sharePct: '69.6' });
+  assert.match(exempt, /Exempt if your list is complete · not in the total/);
+  assert.doesNotMatch(exempt, /b-share"/, 'an exempt line has no share of a total it is not in');
+  assert.doesNotMatch(linePlate(LINE, 0, PARTS), /b-share/);
+});
+
+test('refusedLinePlate: a thrown line shows its reason and no figure, with the same hooks', () => {
+  const html = refusedLinePlate({ ...LINE, id: 'X"1' }, 2, 'boom <b>');
+  assert.match(html, /<article class="b-t b-pass cb-line" data-line="X&quot;1">/);
+  assert.match(html, /Line 3\./);
+  assert.match(html, /<div class="cb-res cb-unavail"><div class="cb-tag unavail">No estimate<\/div>\s*<p class="cb-reason">boom &lt;b&gt;<\/p><\/div>/);
+  assert.match(html, /data-remove="X&quot;1" aria-label="Remove line 3"/);
+  assert.doesNotMatch(html, /cb-fig|b-share|cb-cost/);
+});
+
+test('thresholdErrorTile: the error, escaped, in a tile', () => {
+  const html = thresholdErrorTile('bad <year>');
+  assert.match(html, /<div class="cb-tag unavail">Threshold error<\/div>/);
+  assert.match(html, /<p class="cb-reason">bad &lt;year&gt;<\/p>/);
+});
+
+test('listView: Total then the years in one row, the lines in a three-column row', () => {
+  assert.equal(listView({ total: 'T', years: 'Y', plates: 'P' }),
+    '<div class="b-bento b-list">TY</div><div class="b-bento b-c3">P</div>');
 });

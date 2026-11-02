@@ -12,8 +12,8 @@
 // the Estimate draft card, the #cbStatus announcement and the print document must say a verdict
 // with ONE spelling, and they can only do that if they read the same function.
 import Decimal from 'decimal.js';
-import type { YearThreshold } from '../cbam-lines.ts';
-import { esc, num } from './format.ts';
+import type { Line, Totals, YearThreshold } from '../cbam-lines.ts';
+import { esc, eur, num } from './format.ts';
 
 /**
  * The 50 t de minimis figure itself lives in the consolidated Art 2(3); this is the amending act
@@ -221,4 +221,159 @@ export function yearTile(y: YearThreshold): string {
       ${attestControl(y)}
       <p class="cb-prov">${esc(y.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
     </section>`;
+}
+
+/**
+ * The summed exposure. A total containing any what-if is itself a what-if, and a total with no
+ * priced lines at all (Totals.certificates === '0' both for "genuinely zero" and "nothing was
+ * summed", per that field's own doc in cbam-lines.ts) must never render as a confirmed zero —
+ * hence its own states below, distinct from a real "Priced" verdict at 0.
+ *
+ * pricedLines === 0 is itself two different situations, distinguishable from Totals' EXISTING
+ * fields with no new signal needed: refusedLines === 0 means no line was even entered yet (a
+ * neutral empty state — nobody has done anything wrong); refusedLines > 0 means every entered
+ * line failed closed (a real "nothing here priced" warning). Showing the same red tag for both
+ * would make an empty form look like a form full of refusals.
+ *
+ * Rail phase 4: drawn as the List's hero tile. The tag span, figure block, sentences and exempt note
+ * are the pre-redesign card's, byte for byte; `shares` are the priced, non-exempt lines' shares of
+ * this total, in list order, for the stack bar.
+ */
+export function totalTile(t: Totals, exempt: Totals | null = null, shares: readonly string[] = []): string {
+  // C2 (audit 2026-11-02): lines an attested below-threshold year exempts are summed apart and
+  // shown OUTSIDE the total. Before, "Below threshold" sat beside a total that still billed them.
+  const exemptNote = exempt && exempt.pricedLines > 0
+    ? `<p class="cb-sub cb-exempt"><b>Exempt if your list is complete:</b> ${exempt.pricedLines} line${
+        exempt.pricedLines === 1 ? '' : 's'} below the de minimis threshold for the year you attested, ${
+        num(exempt.certificates)} certificates${exempt.costEur ? ` · ${eur(exempt.costEur)}` : ''}${
+        exempt.anyPending ? ' (a what-if: the CSCF is unpublished)' : ''} — not included in the total.</p>`
+    : '';
+  const head = (sub: string, tone: string, tag: string) => `
+      <div class="b-t-h"><div><h2 class="b-t-ti">Total.</h2><p class="b-t-sub">${sub}</p></div>
+        <span class="cb-tag ${tone}">${esc(tag)}</span></div>`;
+  const actions = `
+      <div class="b-row2"><button type="button" class="btn b-add" data-goto="export">Export</button><button type="button" class="btn b-ghost" data-goto="estimate">Add a line</button></div>`;
+  if (t.pricedLines === 0 && t.refusedLines === 0 && exemptNote) return `
+    <section class="b-t b-s2 b-hero cb-total">${head('Total exposure', 'ok', 'Below threshold')}
+      <p class="cb-sub">Nothing owed on the lines listed, on your statement that they are all your imports for the year.</p>
+      ${exemptNote}${actions}
+    </section>`;
+
+  if (t.pricedLines === 0 && t.refusedLines === 0) return `
+    <section class="b-t b-s2 b-hero cb-total">${head('Total exposure', 'pending', 'No lines yet')}
+      <p class="cb-sub">Add at least one line to see a total.</p>
+    </section>`;
+
+  if (t.pricedLines === 0) return `
+    <section class="b-t b-s2 b-hero cb-total">${head('Total exposure', 'unavail', 'Nothing priced')}
+      <p class="cb-sub">No line has a priced estimate, so there is no total to show — not even a zero. ${
+        refusedLineNote(t.refusedLines)}</p>
+      ${exemptNote}${actions}
+    </section>`;
+
+  const tone = t.anyPending ? 'pending' : 'ok';
+  const tag = totalsTag(t.anyPending);
+  const bar = shares.length
+    ? `<div class="b-stackbar" aria-hidden="true">${shares.map((s) => `<b style="flex:${esc(s)}"></b>`).join('')}</div>`
+    : '';
+  return `
+    <section class="b-t b-s2 b-hero cb-total">${head(`Total exposure · ${t.pricedLines} line${t.pricedLines === 1 ? '' : 's'}`, tone, tag)}
+      <div class="cb-fig"><span class="cb-n">${num(t.certificates)}</span></div>
+      <div class="cb-u">certificates</div>
+      ${t.costEur ? `<div class="cb-cost">${eur(t.costEur)}</div>`
+        : '<div class="cb-sub">No € total — at least one line has no published certificate price.</div>'}
+      ${t.refusedLines ? `<p class="cb-sub cb-warn">${refusedLineNote(t.refusedLines)}</p>` : ''}
+      ${exemptNote}${bar}${actions}
+    </section>`;
+}
+
+/**
+ * A line's share of the total, in percent to 1 dp (ROUND_HALF_UP), or null when there is no real
+ * positive total to be a share of — a zero or unreadable total gives no share, never "0%".
+ */
+export function shareOfTotal(part: string, total: string): string | null {
+  let p: Decimal;
+  let t: Decimal;
+  try { p = new Decimal(part); t = new Decimal(total); } catch { return null; }
+  if (!p.isFinite() || !t.isFinite() || p.isNeg() || t.lte(0)) return null;
+  return p.div(t).times(100).toFixed(1, Decimal.ROUND_HALF_UP);
+}
+
+/** The strings cbam-app.ts computes for a line (see renderLineCard): carried into the plate verbatim. */
+export interface LinePlateParts { result: string; attestation: string; delta: string; tierLabel: string }
+/** What the List knows about a line beyond its estimate. All optional: a bare plate is still honest. */
+export interface LinePlateContext { goodName?: string; sharePct?: string | null; exempt?: boolean }
+
+/**
+ * The tier chip. Colour marks provenance only (spec §3): bronze for the Commission's default
+ * values and mark-up, cyan for the importer's verified figures, and the mixed tier wears both,
+ * each on the half it describes. Switched with `never`, so a fourth tier is a build error here.
+ */
+function tierChip(tier: Line['tier'], label: string): string {
+  const chip = (tone: 'bronze' | 'cyan', text: string) => `<span class="chip ${tone}"><i aria-hidden="true"></i>${esc(text)}</span>`;
+  switch (tier) {
+    case 'default+markup': return chip('bronze', label);
+    case 'actual-verified': return chip('cyan', label);
+    case 'verified-direct+default-indirect': return chip('cyan', 'Verified direct') + chip('bronze', 'Commission indirect');
+    default: {
+      const _exhaustive: never = tier;
+      // `?? ''`: the unit suite builds many lines with no `tier` at all (they predate the field).
+      // Such a line gets no chip rather than the text "undefined" or a crash in esc().
+      return _exhaustive ?? '';
+    }
+  }
+}
+
+const lineHead = (line: Line, index: number, chips: string, goodName: string | undefined, summary: string) => `
+      <div class="b-t-h"><h2 class="b-t-ti">Line ${index + 1}.</h2><span class="b-chips">${chips}</span></div>
+      ${goodName ? `<p class="b-pass-name" title="${esc(goodName)}">${esc(goodName)}</p>` : ''}
+      <p class="b-t-sub num cb-line-sum">${summary}</p>`;
+
+const removeButton = (line: Line, index: number) =>
+  `<button type="button" class="b-rm cb-line-x" data-remove="${esc(line.id)}" aria-label="Remove line ${index + 1}">Remove</button>`;
+
+/** One plate per line (spec §5.4): the tile shell around the line's own result card. */
+export function linePlate(line: Line, index: number, parts: LinePlateParts, ctx: LinePlateContext = {}): string {
+  const share = ctx.exempt
+    ? '<p class="b-share-row">Exempt if your list is complete · not in the total</p>'
+    : ctx.sharePct
+      ? `<div class="b-share-row"><span>Share of the total</span><span class="num">${esc(ctx.sharePct)}%</span></div><div class="b-share" aria-hidden="true"><b style="width:${esc(ctx.sharePct)}%"></b></div>`
+      : '';
+  return `
+    <article class="b-t b-pass cb-line" data-line="${esc(line.id)}">${lineHead(line, index, tierChip(line.tier, parts.tierLabel), ctx.goodName,
+      `${esc(line.cn)} · ${esc(line.country)} · ${esc(line.route)} · ${num(line.massT)} t · ${esc(line.date)}`)}
+      ${share}
+      ${parts.result}
+      ${parts.attestation}
+      ${parts.delta}
+      ${removeButton(line, index)}
+    </article>`;
+}
+
+/**
+ * A line whose estimate THREW (safeEstimates in cbam-app.ts): its reason, verbatim, in place of
+ * the figures, and no chip — no tier priced it. The summary keeps the old card's three fields.
+ */
+export function refusedLinePlate(line: Line, index: number, message: string, goodName?: string): string {
+  return `
+    <article class="b-t b-pass cb-line" data-line="${esc(line.id)}">${lineHead(line, index, '', goodName,
+      `${esc(line.cn)} · ${esc(line.country)} · ${num(line.massT)} t`)}
+      <div class="cb-res cb-unavail"><div class="cb-tag unavail">No estimate</div>
+      <p class="cb-reason">${esc(message)}</p></div>
+      ${removeButton(line, index)}
+    </article>`;
+}
+
+/** thresholdByYear threw: the error, verbatim, where the year tiles would be. */
+export function thresholdErrorTile(message: string): string {
+  return `
+    <section class="b-t b-s2 cb-thresh-error"><h2 class="b-t-ti">Annual de minimis.</h2>
+      <div class="cb-res cb-unavail"><div class="cb-tag unavail">Threshold error</div>
+      <p class="cb-reason">${esc(message)}</p></div>
+    </section>`;
+}
+
+/** The List view: Total and the year tiles in one bento row, the line plates in three columns. */
+export function listView(p: { total: string; years: string; plates: string }): string {
+  return `<div class="b-bento b-list">${p.total}${p.years}</div><div class="b-bento b-c3">${p.plates}</div>`;
 }
