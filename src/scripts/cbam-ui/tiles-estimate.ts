@@ -1,0 +1,208 @@
+// src/scripts/cbam-ui/tiles-estimate.ts
+// The Estimate view's result tiles (spec §5.1): Certificates (the inverted hero), Chargeable (the
+// card is the bar), Three years (a stacked deck) and Provenance (the snapshot as dots). Pure
+// functions returning HTML strings, like every renderer on this page, so cbam-render.test.mjs can
+// render and assert. Every tile renders every state its model can return (spec §6.1).
+//
+// HOOKS (spec §6.4). The e2e suite reads .cb-fig, .cb-n, .cb-cost, .cb-res, .cb-tag inside #cbOut.
+// They sit on the hero ALONE, beside the b- classes, so `#cbOut .cb-n` stays one element. The deck
+// carries no cb-ol-* class: cbam-lines.spec.ts reads .cb-ol-n and .cb-ol-yr page-wide.
+//
+// WHAT IS HANDED IN, NOT BUILT HERE: the de minimis card (renderDraftThreshold) and the
+// attestation (renderAttestation(…, hasFigure(e))). cbam-render.test.mjs pins, by source text,
+// that cbam-app.ts calls those exactly as it always has; this module only places their output.
+import Decimal from 'decimal.js';
+import type { CertificateEstimate, DataTier, EstimateFigure } from '../cbam-algos/cbam/certificate-estimate.ts';
+import { formatDecimal, formatPackDate, unpricedYears, type Outlook, type OutlookFigureYear } from '../cbam-outlook.ts';
+import { renderFingerprint } from './fingerprint.ts';
+import {
+  esc, eur, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
+} from './format.ts';
+
+type Priced = Exclude<CertificateEstimate, { status: 'unavailable' }>;
+
+/** The engine's figure for a priced line: the final figure, or the labelled what-if. */
+const figureOf = (e: Priced): EstimateFigure => (e.status === 'cscf_pending' ? e.scenario : e.figure);
+
+/** Colour law (spec §3): bronze = Commission default, cyan = verified, ink = neither alone. */
+export function tierTone(tier: DataTier): 'bronze' | 'cyan' | 'ink' {
+  switch (tier) {
+    case 'default+markup': return 'bronze';
+    case 'actual-verified': return 'cyan';
+    case 'verified-direct+default-indirect': return 'ink';
+    default: {
+      const _exhaustive: never = tier;
+      return _exhaustive;
+    }
+  }
+}
+
+/** The status tag, in renderResult's own words: the tag is what tells a figure from a refusal. */
+function statusTag(e: CertificateEstimate): string {
+  let tone: 'ok' | 'pending' | 'unavail';
+  let text: string;
+  switch (e.status) {
+    case 'ok': tone = 'ok'; text = 'Priced'; break;
+    case 'zero_by_fiat': tone = 'ok'; text = 'Priced · free allocation nil by law'; break;
+    case 'cscf_pending': tone = 'pending'; text = `What-if · CSCF for ${e.cscfYear} unpublished`; break;
+    case 'unavailable': tone = 'unavail'; text = 'No estimate'; break;
+    default: {
+      const _exhaustive: never = e;
+      return _exhaustive;
+    }
+  }
+  return `<span class="b-tag cb-tag ${tone}">${esc(text)}</span>`;
+}
+
+function hero(e: CertificateEstimate, importDate: string, attestation: string): string {
+  const head = '<div class="b-t-h"><div><h3 class="b-t-ti">Certificates.</h3>'
+    + `<p class="b-t-sub">Import of ${esc(formatPackDate(importDate))}</p></div>`
+    + `<span class="chip ${tierTone(e.stamp.tier)}"><i></i>${esc(tierLabel(e.stamp.tier))}</span></div>`;
+  if (e.status === 'unavailable') {
+    // NON-NEGOTIABLE 2: no figure block, no cost, no zero. The reason and the selector, verbatim.
+    const sel = e.selector
+      ? `<div class="cb-sel"><span>${inputRefusal(e.selector) ? 'Refused input' : 'Missing rule'}</span>`
+        + `<code>${esc(e.selector)}</code></div>`
+      : '';
+    return `<section class="b-t b-hero b-s2 cb-res cb-unavail">${head}<div class="b-tags">${statusTag(e)}</div>`
+      + `<p class="cb-reason">${esc(e.reason)}</p>${sel}`
+      + '<p class="b-t-sub">We show no deduction rather than guess one. Picking a nearby benchmark '
+      + 'would produce a number that looks authoritative and is not.</p>'
+      + `${attestation}</section>`;
+  }
+  const f = figureOf(e);
+  let note: string;
+  switch (e.status) {
+    case 'ok':
+      note = `<p class="b-t-sub">Cross-sectoral correction factor ${esc(e.cscf)}</p>`;
+      break;
+    case 'zero_by_fiat':
+      note = `<p class="b-t-sub">No free allocation applies · ${esc(e.locator)}</p>`;
+      break;
+    case 'cscf_pending':
+      // NON-NEGOTIABLE 3, word for word renderResult's paragraph (a twin test compares the two).
+      note = '<p class="b-t-sub cb-warn">Not a final figure. The Commission has not published the '
+        + `cross-sectoral correction factor for ${esc(String(e.cscfYear))}; this assumes `
+        + `CSCF&nbsp;=&nbsp;${esc(e.scenario.assumedCscf)}, the largest the factor can legally be `
+        + '(the last value actually set, 2021–25). CSCF only ever reduces the free allocation that '
+        + 'offsets a bill, so this is a floor: the real figure cannot be lower, and may be higher.</p>';
+      break;
+    default: {
+      const _exhaustive: never = e;
+      return _exhaustive;
+    }
+  }
+  return `<section class="b-t b-hero b-s2 cb-res">${head}`
+    + `<div class="b-mega cb-fig"><span class="cb-n">${num(f.certificates)}</span></div>`
+    + '<p class="b-t-sub cb-u">certificates</p>'
+    + `<div class="b-tags">${f.costEur ? `<span class="b-tag cb-cost">${eur(f.costEur)}</span>` : ''}${statusTag(e)}</div>`
+    + `${renderPriceRow(e)}${note}${attestation}</section>`;
+}
+
+export interface ChargeableSplit { chargeablePct: string; restPct: string; floored: boolean }
+
+/**
+ * The share of the embedded emissions that is charged, to 1 dp half up, and its complement (so
+ * the two always sum to 100.0). Null when nothing is embedded: no share is invented. `floored`
+ * is the engine's own floor, max(0, direct − free allocation): FA larger than the direct term.
+ */
+export function chargeableSplit(directTco2e: string, f: EstimateFigure): ChargeableSplit | null {
+  const total = new Decimal(f.totalEmbeddedTco2e);
+  if (!total.isFinite() || total.lte(0)) return null;
+  const pct = new Decimal(f.netTco2e).div(total).times(100).toDecimalPlaces(1, Decimal.ROUND_HALF_UP);
+  return {
+    chargeablePct: pct.toFixed(1),
+    restPct: new Decimal(100).minus(pct).toFixed(1),
+    floored: new Decimal(f.faaTco2e).gt(directTco2e),
+  };
+}
+
+/** Under this share the fill cannot hold its own text, so it is drawn as a strip (decision 5). */
+const LOW_SHARE = 40;
+const CHARGEABLE_EMPTY = '<section class="b-t b-fill b-s2 b-fill-none"><div class="b-fl-in">'
+  + '<h3 class="b-t-ti">Chargeable.</h3></div></section>';
+
+function chargeable(e: CertificateEstimate): string {
+  if (e.status === 'unavailable') return CHARGEABLE_EMPTY;
+  const f = figureOf(e);
+  const split = chargeableSplit(e.emissionsTco2e, f);
+  const low = !split || Number(split.chargeablePct) < LOW_SHARE;
+  const share = (v: string | undefined): string => (v === undefined ? '—' : `${v}<span class="b-u">%</span>`);
+  // The indirect term is its OWN tag, never folded into "embedded" (pinned in cbam-render.test.mjs).
+  const indirect = Number(f.indirectTco2e) > 0
+    ? `<span class="b-tag">+ Indirect (electricity) · no free allocation · ${num(f.indirectTco2e)} tCO₂e</span>`
+    : '';
+  return `<section class="b-t b-fill b-s2 b-fill-${tierTone(e.stamp.tier)}${low ? ' b-fill-low' : ''}" `
+    + `style="--share:${split ? split.chargeablePct : '0'}%">`
+    + '<i class="b-fl-bar" aria-hidden="true"></i>'
+    + '<div class="b-fl-in"><h3 class="b-t-ti">Chargeable.</h3>'
+    + `<div class="b-mid">${share(split?.chargeablePct)}</div>`
+    + `<p class="b-t-sub">${num(f.netTco2e)} tCO₂e</p></div>`
+    + '<div class="b-fl-rest">'
+    + `<div class="b-tags"><span class="b-tag">Embedded emissions (direct) · ${num(e.emissionsTco2e)} tCO₂e</span>${indirect}</div>`
+    + '<h3 class="b-t-ti">Free allocation.</h3>'
+    + `<div class="b-mid">${share(split?.restPct)}</div>`
+    + `<p class="b-t-sub">${num(f.faaTco2e)} tCO₂e · CBAM factor ${esc(String(e.terms.cbamFactorYear))} ${esc(e.terms.cbamFactor)}</p>`
+    + (split?.floored
+      ? '<p class="b-t-sub">Free allocation exceeds the direct emissions, so the direct charge is zero. It never goes below zero.</p>'
+      : '')
+    + '</div></section>';
+}
+
+/** The deck's shell; paintOutlook (cbam-app.ts) fills [data-deck] from the outlook it computes. */
+const DECK_SHELL = '<section class="b-t b-s2 b-yrs" aria-live="off">'
+  + '<button type="button" class="b-go" data-goto="three-years" aria-label="Open Three years">'
+  + '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M4 10 10 4M5 4h5v5"/></svg></button>'
+  + '<h3 class="b-t-ti">Three years.</h3><div data-deck></div></section>';
+
+const PROVENANCE_EMPTY = '<section class="b-t b-s2 b-prov"><div class="b-pv"><h3 class="b-t-ti">Provenance.</h3></div></section>';
+
+/** NON-NEGOTIABLE 5: the stamp on every branch, refusals included. Notes fold (spec §5.1). */
+function provenance(e: CertificateEstimate): string {
+  const s = e.stamp;
+  const rows: [string, string][] = [
+    ['Data tier', tierLabel(s.tier)],
+    ['Origin basis', originBasisLabel(s.originBasis)],
+    ['Rule packages', s.rulePackages.join(' · ') || '—'],
+    ['Snapshot', snapshotLabel(s.snapshotHash)],
+  ];
+  const notes = s.notes.length
+    ? `<details class="disc quiet"><summary><span>Notes · ${s.notes.length}</span>`
+      + '<span class="chev" aria-hidden="true">›</span></summary>'
+      + `<ul class="notes cb-notes">${s.notes.map((n) => `<li class="foot">${esc(n)}</li>`).join('')}</ul></details>`
+    : '';
+  return `<section class="b-t b-s2 b-prov">${renderFingerprint(s.snapshotHash)}<div class="b-pv">`
+    + '<h3 class="b-t-ti">Provenance.</h3>'
+    + `<dl class="kv">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`
+    + (s.provisional ? '<p class="b-t-sub cb-prov">Provisional — at least one input is not final</p>' : '')
+    + `${notes}</div></section>`;
+}
+
+export interface EstimateTilesInput {
+  estimate: CertificateEstimate;
+  /** The form's import date (ISO day), for "Import of 15 Mar 2026". */
+  importDate: string;
+  /** renderDraftThreshold's output, '' when no card is owed. Rendered first: its copy says "below". */
+  threshold: string;
+  /** renderAttestation(…, hasFigure(e))'s output, '' for a default line. Placed whole in the hero. */
+  attestation: string;
+}
+
+export function renderEstimateTiles(t: EstimateTilesInput): string {
+  const thresh = t.threshold ? `<div class="b-s2 b-legacy cb-out">${t.threshold}</div>` : '';
+  return thresh + hero(t.estimate, t.importDate, t.attestation) + chargeable(t.estimate) + DECK_SHELL
+    + provenance(t.estimate);
+}
+
+/** Every pre-engine state (incomplete form, no route, mass or verified refusal): the message, escaped. */
+export function renderEstimateIdle(message: string): string {
+  return `<section class="b-t b-hero b-s2"><h3 class="b-t-ti">Certificates.</h3><p class="cb-idle">${esc(message)}</p></section>`
+    + CHARGEABLE_EMPTY + DECK_SHELL + PROVENANCE_EMPTY;
+}
+
+/** The engine threw (a DomainError names what is missing): show it, never a generic failure. */
+export function renderEstimateThrown(message: string): string {
+  return '<section class="b-t b-hero b-s2 cb-res cb-unavail"><div class="b-t-h"><h3 class="b-t-ti">Certificates.</h3>'
+    + `<span class="b-tag cb-tag unavail">No estimate</span></div><p class="cb-reason">${esc(message)}</p></section>`
+    + CHARGEABLE_EMPTY + DECK_SHELL + PROVENANCE_EMPTY;
+}
