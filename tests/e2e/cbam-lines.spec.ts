@@ -1981,6 +1981,41 @@ test.describe('CBAM estimate — the graphs', () => {
     await expect(g.locator('.cg-card')).toHaveCount(8);
   });
 
+  test('a redraw keeps a keyboard user\'s focus on an origins mark, and its tooltip', async ({ page }) => {
+    // Commit 288c29b. draw() restored focus BEFORE the origins card was refilled, and a redraw draws
+    // that card empty, so a user on one of its marks (marks 24-50 of the page) fell to <body> and the
+    // new tooltip never got `on`. A redraw is forced here the way a width change forces it: the
+    // ResizeObserver fires and draw() runs after its 150 ms debounce. Engine-independent: the focus
+    // is dropped by replacing the node, in Chromium as in Firefox.
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, TUBE_LINE);
+    await view(page, 'why');
+    const g = page.locator('#cbGraphs');
+    const marks = g.locator('[data-cg-card="origins"] .cg-m');
+    await expect(g.locator('.cg-card')).toHaveCount(8);
+    await expect(marks.nth(6)).toBeAttached();
+
+    const mark = marks.nth(6);
+    const country = await mark.getAttribute('data-country');
+    expect(country).toMatch(/^[A-Z]{2}$/);
+    await mark.focus();
+    await expect(g.locator('.cg-tip')).toHaveClass(/on/);
+    const before = await mark.elementHandle();
+    expect(before).not.toBeNull();
+
+    // A new width for the section: the redraw replaces every mark.
+    await g.evaluate((el) => { (el as HTMLElement).style.maxWidth = '200px'; });
+    await expect.poll(() => before!.evaluate((e) => e.isConnected), { message: 'the redraw replaced the focused mark', timeout: 5000 }).toBe(false);
+
+    // Once it has settled, the keyboard is on the same origin's mark and its tooltip is showing.
+    await expect.poll(() => page.evaluate(() => {
+      const a = document.activeElement;
+      return a && a.matches('#cbGraphs [data-cg-card="origins"] .cg-m') ? a.getAttribute('data-country') : `${a?.tagName ?? 'nothing'} is focused`;
+    }), { message: 'focus after the redraw', timeout: 5000 }).toBe(country);
+    await expect(g.locator('.cg-tip')).toHaveClass(/on/);
+  });
+
   test('320 px, axe, and paper: no sideways scroll, no violation, and a printer gets the tables', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 800 });
     await page.goto('/cbam/cbam-calculator/');
