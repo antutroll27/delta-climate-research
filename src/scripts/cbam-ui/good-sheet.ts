@@ -102,7 +102,13 @@ export function mountGoodSheet(d: GoodSheetDeps): void {
   const setInert = (on: boolean): void => {
     d.root.querySelectorAll<HTMLElement>(OUTSIDE).forEach((el) => el.toggleAttribute('inert', on));
   };
+  // Escape is heard on the document while the sheet is open: a click on non-focusable sheet chrome
+  // (the header, a gap) leaves focus on <body>, where a listener on the sheet itself would never hear it.
+  const onEscape = (ev: KeyboardEvent): void => {
+    if (ev.key === 'Escape') { ev.preventDefault(); close(); }
+  };
   const open = async (): Promise<void> => {
+    document.addEventListener('keydown', onEscape);
     d.scrim.hidden = false;
     d.sheet.hidden = false;
     setInert(true);
@@ -117,14 +123,15 @@ export function mountGoodSheet(d: GoodSheetDeps): void {
       else results.innerHTML = '<p class="b-help">The goods list could not be loaded. Type the CN code in the Good field instead.</p>';
     }
   };
-  const close = (): void => {
+  function close(): void {
     if (d.sheet.hidden) return;
+    document.removeEventListener('keydown', onEscape);
     d.sheet.hidden = true;
     d.scrim.hidden = true;
     setInert(false);
     d.trigger.setAttribute('aria-expanded', 'false');
     d.trigger.focus();
-  };
+  }
   const choose = (code: string): void => {
     d.input.value = code;
     d.input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -152,7 +159,6 @@ export function mountGoodSheet(d: GoodSheetDeps): void {
     if (res?.dataset.code) choose(res.dataset.code);
   });
   d.sheet.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape') { ev.preventDefault(); close(); return; }
     if (ev.key !== 'Tab') return;
     const f = [...d.sheet.querySelectorAll<HTMLElement>('button, input, [tabindex]:not([tabindex="-1"])')]
       .filter((el) => !el.hasAttribute('disabled'));

@@ -189,3 +189,87 @@ test('no outlook, no deck', () => {
 test('the mass is escaped: it is the user\'s own text', () => {
   assert.match(renderDeck(ol(), '<b>'), /same &lt;b&gt; t\./);
 });
+
+/* ── review fixes (phase 2 review): what-if everywhere, true terms when floored, neutral refusal chip ── */
+
+const section = (html, cls) => new RegExp(`<section class="b-t [^"]*${cls}[^"]*"[\\s\\S]*?</section>`).exec(html)?.[0] ?? '';
+const WHATIF = '<span class="b-tag pending">What-if · CSCF for 2026 unpublished</span>';
+
+test('review 1 — the Chargeable tile of a what-if estimate carries the hero\'s what-if tag', () => {
+  const e = est();
+  assert.equal(e.status, 'cscf_pending', 'premise');
+  const html = tiles(e);
+  assert.ok(section(html, 'b-fill').includes(WHATIF), 'the tile\'s share and tonnage rest on CSCF = 1');
+  assert.ok(section(html, 'b-hero').includes('>What-if · CSCF for 2026 unpublished</span>'), 'premise: the hero tag');
+  assert.equal((html.match(/\bcb-tag\b/g) ?? []).length, 1, 'the e2e hook stays on the hero alone');
+});
+
+test('review 1 — the deck carries the strip\'s notes: the CSCF caveat and each pending price row\'s locator', () => {
+  const view = ol({ cn: '2523100090', country: 'DZ', route: '(A)', date: '2026-03-15' });
+  const html = renderDeck(view, '100');
+  assert.ok(html.includes('Certificate counts assume no cross-sectoral correction: the Commission has not '
+    + 'published the factor for these years, and it can only reduce the free allocation deducted.'));
+  assert.ok(html.includes('Certificate price, 2027 and 2028: From 2027 the Commission sets a weekly certificate price'));
+  assert.doesNotMatch(html, /cb-ol-/, 'the strip\'s e2e hooks stay off the deck');
+  assert.ok(html.indexOf('Certificate counts assume') > html.indexOf('</ol>'), 'the notes sit under the counts');
+  assert.doesNotMatch(renderDeck(ol({ cn: '72052100', route: '(G)', massT: '60' }), '60'), /Certificate counts assume/,
+    'no figure year, no notes');
+});
+
+test('review 2 — a floored charge prints no free-allocation share, but the true terms and the floor sentence', () => {
+  const e = estimateFromPack(pack, {
+    cn: '2523100090', country: 'DZ', route: '(A)', massT: '100', date: '2026-03-15',
+    emissionsScope: 'direct_and_indirect', verified: { directTco2ePerT: '0.1' },
+  });
+  const rest = /<div class="b-fl-rest">[\s\S]*<\/section>/.exec(section(tiles(e), 'b-fill'))[0];
+  assert.doesNotMatch(rest, /69\.4/, 'free allocation is 64.935 of 10 direct tonnes, not 69.4 % of anything');
+  assert.doesNotMatch(rest, /class="b-mid"/, 'no share is printed on the free-allocation side');
+  assert.ok(rest.includes('<dt>− Free allocation</dt><dd>64.935 tCO₂e</dd>'));
+  assert.ok(rest.includes('<dt>= Chargeable</dt><dd>4.4 tCO₂e</dd>'));
+  assert.ok(rest.includes('<dt>CBAM factor 2026</dt><dd>0.975</dd>'));
+  assert.ok(rest.includes('Free allocation exceeds the direct emissions, so the direct charge is zero. It never goes below zero.'));
+  assert.ok(rest.includes('Embedded emissions (direct) · 10 tCO₂e'));
+  assert.ok(rest.includes('+ Indirect (electricity) · no free allocation · 4.4 tCO₂e'));
+  // the ordinary case keeps its share and prints no term list
+  const plain = section(tiles(est()), 'b-fill');
+  assert.match(plain, />30\.6<span class="b-u">%<\/span>/);
+  assert.doesNotMatch(plain, /<dt>/);
+});
+
+test('review 3 — a refusal\'s selector is set in the data mono, as the old card set it', () => {
+  const css = readFileSync(fileURLToPath(new URL('../../src/styles/cbam-bento.css', import.meta.url)), 'utf8');
+  const rule = /\.cbx \.b-hero \.cb-sel code\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  assert.match(rule, /font-family:var\(--font-data\)/);
+});
+
+test('review 4 — a refusal\'s tier chip is neutral ink, never the bronze of a Commission figure', () => {
+  const e = est({ route: '(D)' });
+  assert.equal(e.status, 'unavailable', 'premise');
+  assert.equal(e.stamp.tier, 'default+markup', 'premise: the stamp still names the attempted tier');
+  const html = tiles(e);
+  assert.match(html, /class="chip ink"><i><\/i>Commission default \+ mark-up</);
+  assert.doesNotMatch(html, /chip bronze/);
+  assert.match(tiles(est()), /chip bronze/, 'premise: a priced default line keeps bronze');
+});
+
+test('review 5 — the residual-basis note is open on the tiles, outside the folded Notes', () => {
+  const e = estimateFromPack(pack, { cn: '2523100090', country: 'AQ', route: '(A)', massT: '100', date: '2026-03-15' });
+  assert.equal(e.stamp.originBasis, 'residual', 'premise');
+  const html = tiles(e);
+  const note = 'The Commission does not publish a default for this good from this country of origin, so this figure '
+    + 'uses its &quot;Other Countries and Territories&quot; residual default — a world-average value, not your country&#39;s own.';
+  assert.ok(html.includes(note), 'premise: the note is printed');
+  const folded = /<details[\s\S]*?<\/details>/.exec(html)[0];
+  assert.ok(!folded.includes('residual default'), 'not inside the fold');
+  assert.ok(html.replace(folded, '').includes(note), 'open, in the Provenance tile');
+  assert.ok(folded.includes(`Notes · ${e.stamp.notes.length - 1}`), 'the fold counts only what it holds');
+  assert.ok(html.replace(folded, '').indexOf(note) > html.indexOf('Provenance.'));
+  // a line with no residual basis keeps all its notes folded
+  assert.ok(/<details[\s\S]*Art 9 deduction/.test(tiles(est())));
+});
+
+test('review 9 — the default tier card says what is true of every origin, residual included', () => {
+  const page = readFileSync(fileURLToPath(new URL('../../src/pages/cbam/cbam-calculator.astro', import.meta.url)), 'utf8');
+  assert.ok(page.includes('<b>Commission default + mark-up</b><span>The Commission\'s published default value, with its mark-up.</span>'));
+  assert.doesNotMatch(page, /published value for this origin and route/);
+});

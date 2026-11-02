@@ -133,6 +133,22 @@ test.describe('CBAM Estimate view', () => {
     await expect(page.locator('#cbGoodSheet')).toBeHidden();
   });
 
+  test('the good sheet closes on Escape even when focus has fallen to <body>', async ({ page }) => {
+    await page.goto(URL);
+    const open = page.locator('[data-good-open]');
+    await open.click();
+    await expect(page.locator('#cbGoodSheet')).toBeVisible();
+    // Non-focusable sheet chrome: the click drops focus from the search box to <body>.
+    await page.locator('#cbGoodSub').click();
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('BODY');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#cbGoodSheet')).toBeHidden();
+    await expect(open).toBeFocused();
+    // The listener leaves with the sheet: Escape on the closed page does nothing.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#cbGoodSheet')).toBeHidden();
+  });
+
   test('the mass ruler and the date caption read the pack', async ({ page }) => {
     await page.goto(URL);
     await pick(page, '2523100090', 'DZ');

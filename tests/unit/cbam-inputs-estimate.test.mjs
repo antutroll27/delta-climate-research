@@ -77,3 +77,11 @@ test('the date caption: the engine\'s quarter and the pack\'s price, or "none pu
   assert.equal(renderDatePeriod(pack.prices, '2027-1-15'), '');
   assert.equal(renderDatePeriod(pack.prices, '2029-03-15'), '', 'no row: #cbDateNote speaks instead');
 });
+
+test('review 6 — from 2027 the price is weekly: the caption stays, the quarter strip is not drawn', () => {
+  const html = renderDatePeriod(pack.prices, '2027-03-15');
+  assert.doesNotMatch(html, /b-qtr/, 'four quarter segments would imply a quarterly price');
+  assert.equal(html, '<p class="b-help">Certificate price · imports in 2027-Q1: none published</p>');
+  assert.doesNotMatch(renderDatePeriod(pack.prices, '2028-12-31'), /b-qtr/);
+  assert.match(renderDatePeriod(pack.prices, '2026-12-31'), /b-qtr/, 'premise: 2026 is quarterly');
+});

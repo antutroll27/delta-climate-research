@@ -13,7 +13,10 @@
 // that cbam-app.ts calls those exactly as it always has; this module only places their output.
 import Decimal from 'decimal.js';
 import type { CertificateEstimate, DataTier, EstimateFigure } from '../cbam-algos/cbam/certificate-estimate.ts';
-import { formatDecimal, formatPackDate, unpricedYears, type Outlook, type OutlookFigureYear } from '../cbam-outlook.ts';
+import {
+  formatDecimal, formatPackDate, renderOutlookNotes, unpricedYears, type Outlook, type OutlookFigureYear,
+} from '../cbam-outlook.ts';
+import { MIXED_RESIDUAL_INDIRECT_NOTE, RESIDUAL_BASIS_NOTE } from '../cbam-algos/cbam/certificate-estimate.ts';
 import { renderFingerprint } from './fingerprint.ts';
 import {
   esc, eur, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
@@ -38,7 +41,7 @@ export function tierTone(tier: DataTier): 'bronze' | 'cyan' | 'ink' {
 }
 
 /** The status tag, in renderResult's own words: the tag is what tells a figure from a refusal. */
-function statusTag(e: CertificateEstimate): string {
+function statusTag(e: CertificateEstimate, hook = 'cb-tag'): string {
   let tone: 'ok' | 'pending' | 'unavail';
   let text: string;
   switch (e.status) {
@@ -51,13 +54,15 @@ function statusTag(e: CertificateEstimate): string {
       return _exhaustive;
     }
   }
-  return `<span class="b-tag cb-tag ${tone}">${esc(text)}</span>`;
+  return `<span class="b-tag${hook ? ` ${hook}` : ''} ${tone}">${esc(text)}</span>`;
 }
 
 function hero(e: CertificateEstimate, importDate: string, attestation: string): string {
+  // Colour is provenance only: a refusal has no Commission figure to mark, so its chip is neutral ink.
+  const tone = e.status === 'unavailable' ? 'ink' : tierTone(e.stamp.tier);
   const head = '<div class="b-t-h"><div><h3 class="b-t-ti">Certificates.</h3>'
     + `<p class="b-t-sub">Import of ${esc(formatPackDate(importDate))}</p></div>`
-    + `<span class="chip ${tierTone(e.stamp.tier)}"><i></i>${esc(tierLabel(e.stamp.tier))}</span></div>`;
+    + `<span class="chip ${tone}"><i></i>${esc(tierLabel(e.stamp.tier))}</span></div>`;
   if (e.status === 'unavailable') {
     // NON-NEGOTIABLE 2: no figure block, no cost, no zero. The reason and the selector, verbatim.
     const sel = e.selector
@@ -131,6 +136,20 @@ function chargeable(e: CertificateEstimate): string {
   const indirect = Number(f.indirectTco2e) > 0
     ? `<span class="b-tag">+ Indirect (electricity) · no free allocation · ${num(f.indirectTco2e)} tCO₂e</span>`
     : '';
+  // A what-if figure wears the hero's tag wherever it is drawn (the e2e hook stays on the hero alone).
+  const whatIf = e.status === 'cscf_pending' ? statusTag(e, '') : '';
+  // Floored: free allocation exceeds the direct emissions, so "100 − chargeable" is NOT its share.
+  // Print the terms renderWaterfall printed instead of a percentage that would be false.
+  const rest = split?.floored
+    ? '<h3 class="b-t-ti">Free allocation.</h3>'
+      + '<dl class="kv">'
+      + `<div><dt>− Free allocation</dt><dd>${num(f.faaTco2e)} tCO₂e</dd></div>`
+      + `<div><dt>= Chargeable</dt><dd>${num(f.netTco2e)} tCO₂e</dd></div>`
+      + `<div><dt>CBAM factor ${esc(String(e.terms.cbamFactorYear))}</dt><dd>${esc(e.terms.cbamFactor)}</dd></div></dl>`
+      + '<p class="b-t-sub">Free allocation exceeds the direct emissions, so the direct charge is zero. It never goes below zero.</p>'
+    : '<h3 class="b-t-ti">Free allocation.</h3>'
+      + `<div class="b-mid">${share(split?.restPct)}</div>`
+      + `<p class="b-t-sub">${num(f.faaTco2e)} tCO₂e · CBAM factor ${esc(String(e.terms.cbamFactorYear))} ${esc(e.terms.cbamFactor)}</p>`;
   return `<section class="b-t b-fill b-s2 b-fill-${tierTone(e.stamp.tier)}${low ? ' b-fill-low' : ''}" `
     + `style="--share:${split ? split.chargeablePct : '0'}%">`
     + '<i class="b-fl-bar" aria-hidden="true"></i>'
@@ -138,14 +157,8 @@ function chargeable(e: CertificateEstimate): string {
     + `<div class="b-mid">${share(split?.chargeablePct)}</div>`
     + `<p class="b-t-sub">${num(f.netTco2e)} tCO₂e</p></div>`
     + '<div class="b-fl-rest">'
-    + `<div class="b-tags"><span class="b-tag">Embedded emissions (direct) · ${num(e.emissionsTco2e)} tCO₂e</span>${indirect}</div>`
-    + '<h3 class="b-t-ti">Free allocation.</h3>'
-    + `<div class="b-mid">${share(split?.restPct)}</div>`
-    + `<p class="b-t-sub">${num(f.faaTco2e)} tCO₂e · CBAM factor ${esc(String(e.terms.cbamFactorYear))} ${esc(e.terms.cbamFactor)}</p>`
-    + (split?.floored
-      ? '<p class="b-t-sub">Free allocation exceeds the direct emissions, so the direct charge is zero. It never goes below zero.</p>'
-      : '')
-    + '</div></section>';
+    + `<div class="b-tags">${whatIf}<span class="b-tag">Embedded emissions (direct) · ${num(e.emissionsTco2e)} tCO₂e</span>${indirect}</div>`
+    + `${rest}</div></section>`;
 }
 
 /** The deck's shell; paintOutlook (cbam-app.ts) fills [data-deck] from the outlook it computes. */
@@ -165,11 +178,17 @@ function provenance(e: CertificateEstimate): string {
     ['Rule packages', s.rulePackages.join(' · ') || '—'],
     ['Snapshot', snapshotLabel(s.snapshotHash)],
   ];
-  const notes = s.notes.length
-    ? `<details class="disc quiet"><summary><span>Notes · ${s.notes.length}</span>`
-      + '<span class="chev" aria-hidden="true">›</span></summary>'
-      + `<ul class="notes cb-notes">${s.notes.map((n) => `<li class="foot">${esc(n)}</li>`).join('')}</ul></details>`
-    : '';
+  // The residual-bucket disclosures are claims about the figure itself: printed open, as the old card
+  // printed them. Every other note folds.
+  const isResidual = (n: string): boolean => n === RESIDUAL_BASIS_NOTE || n === MIXED_RESIDUAL_INDIRECT_NOTE;
+  const items = (ns: readonly string[]): string => ns.map((n) => `<li class="foot">${esc(n)}</li>`).join('');
+  const open = s.notes.filter(isResidual);
+  const folded = s.notes.filter((n) => !isResidual(n));
+  const notes = (open.length ? `<ul class="notes cb-notes">${items(open)}</ul>` : '')
+    + (folded.length
+      ? `<details class="disc quiet"><summary><span>Notes · ${folded.length}</span>`
+        + `<span class="chev" aria-hidden="true">›</span></summary><ul class="notes cb-notes">${items(folded)}</ul></details>`
+      : '');
   return `<section class="b-t b-s2 b-prov">${renderFingerprint(s.snapshotHash)}<div class="b-pv">`
     + '<h3 class="b-t-ti">Provenance.</h3>'
     + `<dl class="kv">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`
@@ -251,5 +270,8 @@ export function renderDeck(view: Outlook | null, massT: string): string {
   return `<p class="b-t-sub">Same line, same ${esc(massT)} t.${markup}</p>`
     + `<ol class="b-stack ${allDefault ? 'b-stack-bz' : 'b-stack-ink'}">${plates}</ol>`
     + (foot.length ? `<p class="b-t-foot">${foot.map(esc).join(' · ')}</p>` : '')
-    + why;
+    + why
+    // The strip's own notes (the CSCF caveat, each pending price row's locator), under the deck's class:
+    // the counts are never shown without them, and cb-ol-note stays off the deck (e2e reads cb-ol-*).
+    + renderOutlookNotes(view).replace(/cb-ol-note/g, 'b-help');
 }

@@ -58,10 +58,10 @@
 .cbx .b-hero :is(.cb-reason,.cb-idle){margin:auto 0 12px;max-width:52ch;font-size:18px;line-height:1.45;color:var(--on-ink)}
 .cbx .b-hero .cb-sel{margin:0 0 10px}
 .cbx .b-hero .cb-sel span{display:block;font-size:11px;font-weight:600;color:var(--hero-muted)}
-.cbx .b-hero .cb-sel code{font-size:12.5px;color:var(--on-ink);word-break:break-all}
+.cbx .b-hero .cb-sel code{font-family:var(--font-data);font-size:12.5px;color:var(--on-ink);word-break:break-all}
 
 /* chargeable: the card is the bar (its width IS the share; never widened to fit a label) */
-.cbx .b-fill{flex-direction:row;padding:0;background:var(--well)}
+.cbx .b-fill{flex-direction:row;padding:0;background:var(--well);container-type:inline-size}
 .cbx .b-fl-bar{position:absolute;inset:0 auto 0 0;width:var(--share,0%);border-radius:26px;background:var(--fill-bz)}
 .cbx .b-fill-cyan .b-fl-bar{background:var(--fill-cy)}
 .cbx .b-fill-ink .b-fl-bar{background:var(--ink)}
@@ -73,6 +73,9 @@
 .cbx .b-fl-rest{flex:1;align-items:flex-start}
 .cbx .b-fl-rest .b-tags{align-self:flex-end;justify-content:flex-end}
 .cbx .b-fl-rest .b-tag{background:var(--card)}
+/* The numeral is sized to the narrowest fill the bar can have (LOW_SHARE, 40 %), so its text never leaves
+   the bar onto the well: fill = 0.4 * tile - 40px padding, the numeral is 1.91 em wide, 4px to spare. */
+.cbx .b-fill:not(.b-fill-low) .b-fl-in .b-mid{font-size:min(64px,calc(20.5cqi - 24px))}
 /* low share, and every phone: the bar is a strip along the foot, the text sits on the plate */
 .cbx .b-fill-low{flex-wrap:wrap;padding-bottom:14px}
 .cbx .b-fill-low .b-fl-bar{inset:auto auto 0 0;height:14px;border-radius:0 7px 7px 0}
@@ -82,6 +85,7 @@
   .cbx .b-fill{flex-direction:column;padding-bottom:14px}
   .cbx .b-fill .b-fl-bar{inset:auto auto 0 0;height:14px;border-radius:0 7px 7px 0}
   .cbx .b-fill .b-fl-in{flex:none}
+  .cbx .b-fill:not(.b-fill-low) .b-fl-in .b-mid{font-size:64px}
   .cbx .b-fill .b-fl-in,.cbx .b-fill .b-fl-in :is(.b-t-sub,.b-u){color:var(--ink)}
   .cbx .b-fl-rest .b-tags{align-self:flex-start;justify-content:flex-start}
 }

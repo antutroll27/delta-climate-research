@@ -86,7 +86,8 @@ export function renderDatePeriod(prices: readonly { quarter: string; priceEur: s
   const row = prices.find((r) => r.quarter === p.quarter);
   if (!row) return '';
   const q = Number(p.quarter.slice(-1));
-  const strip = `<div class="b-qtr" aria-hidden="true">${[1, 2, 3, 4].map((n) => (n === q ? '<i class="on"></i>' : '<i></i>')).join('')}</div>`;
+  // From 2027 the price is weekly: four quarter segments would imply a quarterly price that does not exist.
+  const strip = Number(p.quarter.slice(0, 4)) >= 2027 ? '' : `<div class="b-qtr" aria-hidden="true">${[1, 2, 3, 4].map((n) => (n === q ? '<i class="on"></i>' : '<i></i>')).join('')}</div>`;
   return `${strip}<p class="b-help">Certificate price · imports in ${esc(p.quarter)}: ${row.priceEur ? eur(row.priceEur) : 'none published'}</p>`;
 }
 
