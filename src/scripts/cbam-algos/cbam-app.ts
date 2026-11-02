@@ -47,6 +47,9 @@ import {
 } from '../cbam-ui/inputs-estimate.ts';
 import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
 import {
+  AMENDED_BY_2025_2083, refusedLineNote, sectorList, totalsTag, yearVerdictTag,
+} from '../cbam-ui/tiles-list.ts';
+import {
   esc, eur, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
 } from '../cbam-ui/format.ts';
 // cbam-render.test.mjs imports renderPriceRow from this module; the format module owns it now.
@@ -150,13 +153,6 @@ function renderStamp(e: CertificateEstimate): string {
 }
 
 /**
- * The 50 t de minimis figure itself lives in the consolidated Art 2(3); this is the amending act
- * that put it there. Both threshold cards cite it (single-line and per-year) — one constant so
- * the citation can't drift between them.
- */
-const AMENDED_BY_2025_2083 = 'as amended by Reg (EU) 2025/2083';
-
-/**
  * Where this ONE line sits against the annual de minimis threshold — Reg (EU)
  * 2023/956 Art 2(3) as amended by Reg (EU) 2025/2083, 50 t per importer per
  * calendar year across cement, iron & steel, aluminium and fertilisers.
@@ -206,84 +202,6 @@ export function renderThreshold(t: ThresholdView): string {
       <p class="cb-prov">${esc(t.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
     </section>`;
 }
-
-/**
- * How a threshold sector KEY is said on either threshold card — and, where a card names several,
- * in the order it says them. An ordered list rather than a map, because it settles both questions
- * at once and they are both load-bearing.
- *
- * THE PROSE IS NOT THE KEY, and no transformation gets from one to the other. `iron_and_steel` is
- * said "iron & steel" (an ampersand, not "and"), and `fertilisers` is said "fertiliser" (singular,
- * from a plural key). A `.replace(/_/g, ' ')` — the obvious shortcut — is wrong on two of the four
- * keys the shipped pack contains, which is why unknown keys below are not passed through one.
- *
- * THE ORDER IS NOT THE PACK'S. The shipped 2026 row lists cement, aluminium, fertilisers,
- * iron_and_steel; the per-year verdict has always read cement, iron & steel, aluminium and
- * fertiliser. Rendering in pack order would have silently re-ordered live legal copy. So known
- * sectors are named in THIS list's order, whatever order the row happens to store them in. The
- * single-line card names one sector and so has no order to get wrong — it needs only the prose.
- */
-const SECTOR_PROSE: ReadonlyArray<readonly [key: string, prose: string]> = [
-  ['cement', 'cement'],
-  ['iron_and_steel', 'iron & steel'],
-  ['aluminium', 'aluminium'],
-  ['fertilisers', 'fertiliser'],
-];
-
-/**
- * "cement, iron & steel, aluminium and fertiliser" — a threshold row's sectors, said the way the
- * cards say them. PLAIN TEXT, escaped by the caller: the ampersand in 'iron & steel' has to
- * reach esc() as a bare '&' to come out as '&amp;', and a key arriving from pack JSON is
- * untrusted input that must be escaped like any other.
- *
- * TWO CALLERS, AND ONE OF THEM HANDS IT A SINGLE SECTOR. renderYearThreshold passes a whole row's
- * `includedSectors`; renderThreshold passes `[t.sector]`, the one sector its line belongs to. The
- * `< 2` branch below is what serves that call — it returns the bare prose with no "and" — so it
- * is not dead code guarding only the empty row, and must not be narrowed to a length-0 test.
- *
- * AN UNKNOWN KEY IS PRINTED VERBATIM, underscores and all. Not prettified: this file cannot know
- * what the Commission calls a sector it has never seen, and the two counter-examples above prove
- * a mechanical guess gets it wrong more often than not. A key rendered raw reads as a datum and
- * tells a maintainer to add a line to SECTOR_PROSE; a key rendered as "organic chemicals" reads
- * as reviewed copy and would ship a name nobody chose, on the one sentence in this card that
- * states what was actually measured. Awkward and honest over fluent and possibly wrong.
- *
- * Unknowns are named LAST, in the row's own order — they cannot be placed in a prose order that
- * does not yet include them, and appending keeps the four known sectors reading exactly as they
- * always have when a fifth is added.
- *
- * An empty row yields '' and the sentence reads "Your imports for…". Deliberately unguarded: HTML
- * collapses the doubled space, and there is no honest word to substitute for a list of sectors a
- * rule declined to name. A row that measures nothing is a pack defect, and the card would already
- * be reporting 0 t beside it.
- */
-const sectorList = (sectors: readonly string[]): string => {
-  const known = SECTOR_PROSE.filter(([key]) => sectors.includes(key)).map(([, prose]) => prose);
-  const unknown = sectors.filter((s) => !SECTOR_PROSE.some(([key]) => key === s));
-  const names = [...known, ...unknown];
-  if (names.length < 2) return names.join('');
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-};
-
-/**
- * The per-year card's own tag text — for BOTH branches of the union, including the year that has
- * no published rule at all. Reused by #cbStatus's multi-line announcement (renderAll, initCbam)
- * for the same reason totalsTag is: with the results panel's aria-live turned off in multi-line
- * mode, the announcement is the only thing a screen-reader user hears — and a year's verdict can
- * flip from "indeterminate" to "below threshold" as a DIRECT result of the user ticking their own
- * attestation checkbox. Reusing this function, rather than a second phrasing in the announcement,
- * is what keeps the spoken verdict from ever disagreeing with the card's own.
- *
- * Takes the FULL `YearThreshold` union, not just its `ruleFound: true` member: the announcement
- * must say something for a year with no published rule too — a sighted user gets an explicit "No
- * published rule" card for it, and silently skipping that year in the announcement would be the
- * same "sighted users only" gap this whole reuse pattern exists to close, just a milder one
- * (omission, not misstatement).
- */
-const yearVerdictTag = (y: YearThreshold): string => {
-  if (!y.ruleFound) return 'No published rule';
-  return y.state === 'above_threshold' ? 'Above threshold' : y.state === 'below_threshold' ? 'Below threshold' : 'Indeterminate';
-};
 
 /**
  * One card per calendar year present in the line list. This is the multi-line counterpart of
@@ -411,18 +329,6 @@ export function renderDraftThreshold(
 }
 
 /**
- * "N line(s) has/have no estimate and is/are excluded…" — the pluralisation was duplicated
- * verbatim at both renderTotals call sites below; one helper means it can only disagree with
- * itself if this function's own logic is wrong, not by the two copies drifting apart.
- *
- * Also reused by initCbam's #cbStatus announcement (renderAll) — the multi-line panel's
- * aria-live region is turned off (see renderAll's own doc), so this note is the ONLY way a
- * screen-reader user learns a line was refused; a refusal only sighted users learn about is not
- * a refusal. Reusing this exact function, rather than writing the announcement's own phrasing,
- * is what keeps the spoken text from ever disagreeing with the visible card about which lines
- * were excluded or how many.
- */
-/**
  * "A", "A or B", "A, B or C" — an English list, because these are read out of a <select> option
  * by someone deciding what to type next, and a bare comma-joined run of ten-digit codes reads as
  * one number. Kept tiny and local: Intl.ListFormat would do it, but it is not available in every
@@ -431,20 +337,6 @@ export function renderDraftThreshold(
 const orList = (items: readonly string[]): string => (items.length < 2
   ? (items[0] ?? '')
   : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`);
-
-const refusedLineNote = (refusedLines: number) =>
-  `${refusedLines} line${refusedLines === 1 ? ' has' : 's have'} no estimate and ${
-    refusedLines === 1 ? 'is' : 'are'} excluded from this total.`;
-
-/**
- * The totals card's own tag text — "What-if · CSCF unpublished" vs "Priced". Also reused by the
- * #cbStatus announcement (renderAll), for the same reason refusedLineNote is: with the panel's
- * aria-live off in multi-line mode, the announcement is the only thing a screen-reader user
- * hears, and it must not state a pending, assumed-CSCF scenario as a settled euro figure when
- * the visible card right next to it says otherwise — the exact false-certainty failure the §4
- * caveats and the cscf_pending status exist to prevent everywhere else in this file.
- */
-const totalsTag = (anyPending: boolean) => (anyPending ? 'What-if · CSCF unpublished' : 'Priced');
 
 /**
  * The summed exposure. A total containing any what-if is itself a what-if, and a total with no
