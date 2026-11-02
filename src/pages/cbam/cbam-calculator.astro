@@ -250,14 +250,11 @@ import { renderTitleCard } from '../../scripts/cbam-ui/title-card.ts';
 
       <section data-view="list" aria-labelledby="cbxH-list" hidden>
         <h1 id="cbxH-list" class="cbx-h1" tabindex="-1">Shipment list. <span>Every line, the annual de minimis test and the total.</span></h1>
-        <div class="cbx-actions"><button type="button" class="cb-btn" data-goto="estimate">Add a line</button></div>
         <!-- THE LIST'S OWN CONTAINER (spec §6.3). aria-live="off" for the reason renderAll's
              comment gives: every add, remove and attest rebuilds every card, and reading that
              wall back on each click buried the answer. #cbStatus carries the spoken summary. -->
-        <div class="cb-out">
         <div id="cbList" aria-live="off"></div>
         <div class="cbx-plate cbx-empty"><p>No lines yet. Price a line on Estimate, then add it to the list.</p><button type="button" class="cb-btn" data-goto="estimate">Go to Estimate</button></div>
-        </div>
       </section>
 
       <section data-view="export" aria-labelledby="cbxH-export" hidden>

@@ -48,7 +48,8 @@ import {
 import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
 import {
   AMENDED_BY_2025_2083, attestControl, noRuleSentence, refusedLineNote, sectorList, totalsTag, yearSentence,
-  yearVerdictTag, linePlate, totalTile, type LinePlateContext,
+  yearVerdictTag, linePlate, listView, refusedLinePlate, shareOfTotal, thresholdErrorTile, totalTile, yearTile,
+  type LinePlateContext,
 } from '../cbam-ui/tiles-list.ts';
 import {
   esc, eur, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
@@ -2550,11 +2551,9 @@ export function initCbam(): void {
     let yearsHtml: string;
     try {
       years = thresholdByYear(lines, fingerprints, attested, pack!);
-      yearsHtml = years.map(renderYearThreshold).join('');
+      yearsHtml = years.map(yearTile).join('');
     } catch (err) {
-      yearsHtml = `<div class="cb-res cb-unavail">
-        <div class="cb-tag unavail">Threshold error</div>
-        <p class="cb-reason">${esc((err as Error).message)}</p></div>`;
+      yearsHtml = thresholdErrorTile((err as Error).message);
       // years stays [] — the announcement below must not claim a verdict computed from data that
       // just failed to compute.
     }
@@ -2571,18 +2570,21 @@ export function initCbam(): void {
     // THE LIST'S LIVE REGION IS OFF (quality review item 5, now in markup on #cbList): every add,
     // remove and attest rebuilds every card, and reading that wall back after each click buried
     // the answer. #cbStatus carries a short, current summary instead (below).
-    listEl!.innerHTML = yearsHtml + totalTile(totals, exempt) + pairs.map((p, i) => p.e
-      ? renderLineCard(p.l, p.e, i, p.cmp)
-      : `<article class="cb-line" data-line="${esc(p.l.id)}">
-           <div class="cb-line-head">
-             <span class="cb-line-n">Line ${i + 1}</span>
-             <span class="cb-line-sum">${esc(p.l.cn)} · ${esc(p.l.country)} · ${num(p.l.massT)} t</span>
-             <button type="button" class="cb-line-x" data-remove="${esc(p.l.id)}"
-               aria-label="Remove line ${i + 1}">Remove</button>
-           </div>
-           <div class="cb-res cb-unavail"><div class="cb-tag unavail">No estimate</div>
-           <p class="cb-reason">${esc(p.err!)}</p></div>
-         </article>`).join('');
+    // Rail phase 4: the List view's tiles (spec §5.4). Shares are of the total as summed above —
+    // priced, non-exempt lines only — so an exempt or refused line has no share of a sum it is
+    // not in. The good's name is the pack's CN description, untruncated (spec §11, D5).
+    const nameOf = (cnCode: string) => pack!.classifications.find((c) => c.code === cnCode)?.description;
+    const shares: string[] = [];
+    const plates = pairs.map((p, i) => {
+      if (!p.e) return refusedLinePlate(p.l, i, p.err!, nameOf(p.l.cn));
+      const exemptLine = isExempt(p);
+      const certs = tableFigures(p.e).certs;
+      const sharePct = !exemptLine && certs !== null && totals.pricedLines > 0
+        ? shareOfTotal(certs, totals.certificates) : null;
+      if (sharePct) shares.push(sharePct);
+      return renderLineCard(p.l, p.e, i, p.cmp, { goodName: nameOf(p.l.cn), sharePct, exempt: exemptLine });
+    }).join('');
+    listEl!.innerHTML = listView({ total: totalTile(totals, exempt, shares), years: yearsHtml, plates });
     csvBtn && (csvBtn.disabled = false);
     docBtn && (docBtn.disabled = false);
 

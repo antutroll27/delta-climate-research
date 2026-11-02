@@ -2055,3 +2055,24 @@ test.describe('CBAM estimate — the graphs', () => {
     await page.emulateMedia({ media: 'screen' });
   });
 });
+
+test.describe('rail views, phase 4 — List, Export, Rules', () => {
+  const CALC = '/cbam/cbam-calculator/';
+
+  test('List: a Total tile, a de minimis tile, and one plate per line with a share of the total', async ({ page }) => {
+    await page.goto(CALC);
+    await addLine(page);
+    await addLine(page, { mass: '60' });
+    await view(page, 'list');
+    await expect(page.locator('#cbList .cb-total h2')).toHaveText('Total.');
+    await expect(page.locator('#cbList .cb-total')).toContainText('2 lines');
+    await expect(page.locator('#cbList .cb-thresh h2')).toHaveText('Annual de minimis.');
+    await expect(page.locator('#cbList .cb-line')).toHaveCount(2);
+    const shares = await page.locator('#cbList .b-share-row .num').allTextContents();
+    expect(shares).toHaveLength(2);
+    const sum = shares.reduce((a, s) => a + Number(s.replace('%', '')), 0);
+    expect(Math.abs(sum - 100)).toBeLessThanOrEqual(0.1);
+    // 30 t and 60 t of the same good: one third and two thirds.
+    expect(shares).toEqual(['33.3%', '66.7%']);
+  });
+});
