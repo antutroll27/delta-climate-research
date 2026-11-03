@@ -19,6 +19,21 @@ export async function view(page: Page, name: ViewName): Promise<void> {
   await expect(page.locator(`[data-view="${name}"]`)).toBeVisible();
 }
 
+/**
+ * Fill the mass and wait until #cbOut shows the figure for IT. The page re-prices on a 250 ms debounce after a mass
+ * keystroke, so "the cost is visible" alone is satisfied by the PREVIOUS line's result (a 40 t figure shot beside a
+ * 100 t mass). When the mass changes, the cost text must change before the helper returns; an unchanged mass has
+ * nothing pending (the other inputs refresh at once).
+ */
+async function fillMassAndSettle(page: Page, mass: string): Promise<void> {
+  const cost = page.locator('#cbOut .cb-cost');
+  const massChanged = (await page.inputValue('#cbMass')) !== mass;
+  const before = massChanged && await cost.count() ? await cost.first().textContent() : null;
+  await page.fill('#cbMass', mass);
+  await expect(cost).toBeVisible();
+  if (massChanged && before !== null) await expect.poll(async () => cost.first().textContent()).not.toBe(before);
+}
+
 /** Cement, Algeria, route (A), 100 t: priced on Commission defaults, and above the 50 t threshold. */
 export async function priceLine(page: Page): Promise<void> {
   await page.fill('#cbCn', '2523100090');
@@ -28,8 +43,7 @@ export async function priceLine(page: Page): Promise<void> {
   await page.selectOption('#cbCountry', 'DZ');
   await expect(page.locator('#cbRoute option[value="(A)"]')).toBeAttached();
   await page.selectOption('#cbRoute', '(A)');
-  await page.fill('#cbMass', '100');
-  await expect(page.locator('#cbOut .cb-cost')).toBeVisible();
+  await fillMassAndSettle(page, '100');
 }
 
 export interface RefLine { cn: string; country: string; route: string | null; mass: string; date: string }
@@ -53,6 +67,5 @@ export async function priceWith(page: Page, l: RefLine): Promise<void> {
     await expect(page.locator(`#cbRoute option[value="${route}"]`)).toBeAttached();
     await page.selectOption('#cbRoute', route);
   }
-  await page.fill('#cbMass', l.mass);
-  await expect(page.locator('#cbOut .cb-cost')).toBeVisible();
+  await fillMassAndSettle(page, l.mass);
 }
