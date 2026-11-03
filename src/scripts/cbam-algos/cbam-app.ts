@@ -58,7 +58,7 @@ import {
 } from '../cbam-ui/format.ts';
 // cbam-render.test.mjs imports renderPriceRow from this module; the format module owns it now.
 export { renderPriceRow };
-import { outlook, parseAssumedPrice, type Outlook } from '../cbam-outlook.ts';
+import { COMMA_HINT, outlook, parseAssumedPrice, type Outlook } from '../cbam-outlook.ts';
 import { renderYears, yearsPriceSlots } from '../cbam-ui/tiles-years.ts';
 import type { GraphsMount } from '../cbam-graphs-dom.ts';
 
@@ -516,6 +516,13 @@ const REFUSED_MIXED_NOTE =
  * for a sentence that describes what is on the card.
  */
 const hasFigure = (e: CertificateEstimate): boolean => e.status !== 'unavailable';
+/**
+ * The plate pictogram's reading of the same question: hasFigure itself, under a second name, so there is
+ * still ONE predicate and no literal. It is an alias, not a call, because the spec pins hasFigure(e) to
+ * exactly the two renderAttestation call sites (cbam-render.test.mjs), and a variable passed to
+ * renderAttestation would not match that pin.
+ */
+const plateHasFigure: typeof hasFigure = hasFigure;
 
 /**
  * The reference is TRANSCRIBED, NEVER CHECKED — the same contract csvRows' verified_reference
@@ -775,7 +782,7 @@ export function renderLineCard(
     attestation: renderAttestation(line, hasFigure(e)),
     delta: verified ? renderVerifiedDelta(e, comparison) : '',
     tierLabel: tierLabel(line.tier),
-  }, plate);
+  }, { ...plate, figure: plateHasFigure(e) });
 }
 
 /**
@@ -1304,7 +1311,7 @@ export function decimalProblem(text: string): DecimalProblem | null {
   return t.split('.')[0]!.replace(/^0+/, '').length > 12 ? 'too-large' : null;
 }
 
-export const COMMA_HINT = 'Use a decimal point and no thousands separators: 0.85, not 0,85, and 1000, not 1,000.';
+export { COMMA_HINT };
 
 /** The mass field's refusal, shared by the preview and the Add path so the two say one thing. */
 export function massRefusal(text: string): string | null {

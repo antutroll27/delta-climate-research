@@ -91,3 +91,40 @@ test('fingerprintsBody: the all-zero placeholder digest is never drawn as though
   assert.doesNotMatch(html, /00000000/);
   assert.equal((html.match(/no fingerprint/g) ?? []).length, 2);
 });
+
+// ---- audit F-02: the footer sentence names the locator columns the CSV really has ----
+const LOCATOR_LABEL = { cbam_factor_locator: 'CBAM factor', cscf_locator: 'CSCF', benchmark_locator: 'benchmark' };
+const footerOf = (html) => html.match(/<p class="b-t-foot">(.*?)<\/p>/s)[1];
+const carries = (html) => footerOf(html).split('The file carries ')[1];
+
+test('F-02: the CSV has exactly the three rule locators the sentence names — none of default, mark-up or price', () => {
+  const header = Object.keys(realRows(1)[0]);
+  const locators = header.filter((c) => c.endsWith('_locator'));
+  for (const c of locators) assert.ok(c in LOCATOR_LABEL, `a locator column the sentence has no label for: ${c}`);
+  assert.deepEqual(locators.map((c) => LOCATOR_LABEL[c]), ['CBAM factor', 'CSCF', 'benchmark']);
+  const sentence = carries(csvTileBody({ rows: realRows(2) }));
+  assert.equal(sentence, 'every column, unrounded, with the CBAM factor, CSCF and benchmark rule locators and both fingerprints.');
+  assert.doesNotMatch(sentence, /every rule locator/);
+  for (const c of locators) assert.ok(sentence.includes(LOCATOR_LABEL[c]), `names ${c}`);
+  assert.deepEqual(header.filter((c) => /fingerprint|snapshot/.test(c)), ['line_fingerprint', 'pack_snapshot'], '"both fingerprints" is the line digest and the pack snapshot');
+  assert.ok(!header.some((c) => /(default|markup|mark_up|rate|price).*locator|locator.*(default|markup|price)/.test(c)), 'no default, mark-up or price locator exists to claim');
+});
+
+test('F-02: the sentence follows the real header — a locator the CSV lacks is not named, one it gains is', () => {
+  const base = realRows(1)[0];
+  const without = { ...base }; delete without.cscf_locator;
+  assert.equal(carries(csvTileBody({ rows: [without] })), 'every column, unrounded, with the CBAM factor and benchmark rule locators and both fingerprints.');
+  const none = { ...base }; for (const k of Object.keys(none)) if (k.endsWith('_locator')) delete none[k];
+  assert.equal(carries(csvTileBody({ rows: [none] })), 'every column, unrounded, and both fingerprints.');
+  assert.match(carries(csvTileBody({ rows: [{ ...base, price_locator: 'x' }] })), /CBAM factor, CSCF, benchmark and price rule locators/);
+});
+
+test('F-02: the column count in both sentences is the real header length, not a literal', () => {
+  const rows = realRows(2);
+  const html = csvTileBody({ rows });
+  const n = toCsv(rows).split('\n')[0].split(',').length;
+  assert.equal(n, Object.keys(rows[0]).length);
+  assert.ok(html.includes(`${n} columns · 2 lines`) && html.includes(`${PREVIEW_COLUMNS.length} of ${n} columns`));
+  const wider = csvTileBody({ rows: [{ ...rows[0], extra_col: '1' }] });
+  assert.ok(wider.includes(`${n + 1} columns · 1 line`) && wider.includes(`of ${n + 1} columns`));
+});

@@ -6,6 +6,8 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { estimateFromPack } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
+import { renderLineCard } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   linePlate, listView, refusedLinePlate, rulerScale, shareOfTotal, thresholdErrorTile, totalTile, yearTile,
 } from '../../src/scripts/cbam-ui/tiles-list.ts';
@@ -180,4 +182,92 @@ test('P5-3 - the gauge is drawn on an above-threshold year and on no other verdi
     ['no rule', found({ ruleFound: false })],
   ]) assert.doesNotMatch(yearTile(y), /data-ill=/, name);
   assert.doesNotMatch(thresholdErrorTile('x'), /data-ill=/);
+});
+
+// ---- founder 2026-11-03: the sector pictogram on a line plate ----
+const pictOf = (cn, ctx = { figure: true }) => linePlate({ ...LINE, cn }, 0, PARTS, ctx).match(/<svg class="b-pict" data-ill="([a-z]+)"/)?.[1] ?? null;
+
+test('linePlate: the sector pictogram follows the CN — steel a tube, cement a bag, aluminium an ingot', () => {
+  assert.equal(pictOf('73063077'), 'tube');
+  assert.equal(pictOf('25232900'), 'bag');
+  assert.equal(pictOf('76011010'), 'ingot');
+});
+
+test('linePlate: fertilisers and hydrogen have no approved drawing, so no pictogram (P5-4)', () => {
+  assert.equal(pictOf('31021000'), null);
+  assert.equal(pictOf('28041000'), null);
+  assert.equal(pictOf('99999999'), null, 'an unclassified code draws nothing either');
+});
+
+test('linePlate: no figure, no pictogram — and a bare plate (no context) draws none', () => {
+  assert.equal(pictOf('73063077', { figure: false }), null);
+  assert.equal(pictOf('73063077', {}), null);
+  assert.doesNotMatch(refusedLinePlate({ ...LINE, cn: '73063077' }, 0, 'no published default'), /<svg/);
+});
+
+test('linePlate: the pictogram is aria-hidden, sits between the head and the name, and carries no bronze or cyan', () => {
+  const html = linePlate(LINE, 0, PARTS, { figure: true, goodName: 'Tube' });
+  const svgHtml = html.match(/<svg class="b-pict"[^>]*>.*?<\/svg>/s)?.[0] ?? '';
+  assert.match(svgHtml, /aria-hidden="true"/);
+  assert.doesNotMatch(svgHtml, /bronze|cyan|#[0-9a-f]{3,6}/i);
+  assert.ok(html.indexOf('</div>') < html.indexOf('<svg') && html.indexOf('<svg') < html.indexOf('b-pass-name'));
+});
+
+test('renderLineCard: a priced steel line wears the tube; an unavailable line (no figure) wears nothing', () => {
+  const est = (l) => estimateFromPack(pack, { cn: l.cn, country: l.country, route: l.route, massT: l.massT, date: l.date });
+  const priced = { ...LINE, cn: '73063077' };
+  const refused = { ...LINE, id: 'R', cn: '72061000', country: 'IN', route: '(D)' };
+  assert.equal(est(priced).status === 'unavailable', false);
+  assert.equal(est(refused).status, 'unavailable');
+  assert.match(renderLineCard(priced, est(priced), 0, undefined, {}), /<svg class="b-pict" data-ill="tube"/);
+  assert.doesNotMatch(renderLineCard(refused, est(refused), 1, undefined, {}), /b-pict/);
+});
+
+// ---- audit F-10: the de minimis numeral is exact, and the gauge needle reads the real ratio ----
+const mid = (html) => html.match(/<div class="b-mid num">([^<]*)<span class="b-u">t<\/span>/)[1];
+const needleAt = (html) => {   // the needle's tip, as a percentage of the arc (0 = left end, 100 = right end)
+  const m = html.match(/class="b-needle" d="M80 90L([\d.]+) ([\d.]+)"/);
+  return (1 - Math.atan2(90 - Number(m[2]), Number(m[1]) - 80) / Math.PI) * 100;
+};
+
+test('F-10 - the eligible mass is printed exactly: 49.9999, 50, 50.0001 and 120 t', () => {
+  const at = (m, state) => yearTile(found({ knownEligibleMassT: m, state }));
+  assert.equal(mid(at('49.9999', 'below_threshold')), '49.9999');
+  assert.equal(mid(at('50', 'below_threshold')), '50');
+  assert.equal(mid(at('50.0001', 'above_threshold')), '50.0001', 'a mass over the threshold never prints as the threshold');
+  assert.equal(mid(at('120', 'above_threshold')), '120');
+  assert.match(at('49.9999', 'below_threshold'), /total 49\.9999&nbsp;t, below the 50&nbsp;t threshold/);
+});
+
+test('F-10 - a line plate prints its own mass exactly too', () => {
+  assert.match(linePlate({ ...LINE, massT: '50.0001' }, 0, PARTS), /· 50\.0001 t ·/);
+  assert.match(refusedLinePlate({ ...LINE, massT: '49.9999' }, 0, 'x'), /· 49\.9999 t/);
+});
+
+test('F-10 - the gauge needle sits at the real mass over the ruler, not at one fixed angle', () => {
+  const needle = (m) => needleAt(yearTile(found({ knownEligibleMassT: m })));
+  // ruler: 0 to the next multiple of 50 t, never under 100 t
+  assert.ok(Math.abs(needle('50.0001') - 50) < 0.5, '50.0001 t on a 100 t ruler is mid-arc');
+  assert.ok(Math.abs(needle('120') - 80) < 0.5, '120 t on a 150 t ruler');
+  assert.ok(Math.abs(needle('260') - 86.7) < 0.5, '260 t on 300 t: the approved reference');
+  assert.ok(Math.abs(needle('5000') - 100) < 0.5, '5,000 t fills the ruler, clamped');
+  assert.notEqual(Math.round(needle('50.0001')), Math.round(needle('5000')), 'the needle moves');
+});
+
+test('F-10 - the gauge threshold tick sits where the threshold is, and the drawing keeps its hooks', () => {
+  const html = yearTile(found({ knownEligibleMassT: '120' }));
+  assert.equal(illCount(html, 'gauge'), 1);
+  assert.equal((html.match(/class="b-needle"/g) ?? []).length, 1);
+  assert.match(html, /aria-hidden="true"/);
+  // an unreadable mass draws no ruler and no gauge: a fixed needle would be a made-up reading
+  assert.doesNotMatch(yearTile(found({ knownEligibleMassT: 'abc' })), /data-ill=/);
+});
+
+test('F-10 - the tick marks the threshold on the same arc as the needle', () => {
+  const tickAt = (html) => {
+    const m = html.match(/class="b-tick" d="M([\d.]+) ([\d.]+)L([\d.]+) ([\d.]+)"/);
+    return (1 - Math.atan2(90 - Number(m[4]), Number(m[3]) - 80) / Math.PI) * 100;
+  };
+  assert.ok(Math.abs(tickAt(yearTile(found({ knownEligibleMassT: '120' }))) - 33.3) < 0.5, '50 t on a 150 t ruler');
+  assert.ok(Math.abs(tickAt(yearTile(found({ knownEligibleMassT: '260' }))) - 16.7) < 0.5, '50 t on a 300 t ruler');
 });

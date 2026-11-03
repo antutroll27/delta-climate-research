@@ -79,6 +79,26 @@ export const ILL: Readonly<Record<IllName, string>> = {
     + `<circle cx="80" cy="90" r="8" ${F('c')}/>`),
 };
 
+/**
+ * The de minimis gauge with its needle and threshold tick placed from the ruler's own numbers (audit F-10):
+ * `fillPct` is the mass on the 0 to max ruler, `markPct` the threshold, each 0 to 100 and clamped. ILL.gauge is the
+ * approved reference's drawing of one case (260 t of 300 t, threshold at 16.7%) and is kept byte for byte; this is
+ * the same drawing, same geometry (centre 80,90; arc radius 70; the tick spans radius 57 to 82; the needle's tip is
+ * at radius 52), with the angles computed. Not finite: no drawing, never a needle that points at nothing.
+ */
+export function gaugeIll(fillPct: number, markPct: number): string {
+  if (!Number.isFinite(fillPct) || !Number.isFinite(markPct)) return '';
+  const at = (r: number, pct: number): string => {
+    const th = Math.PI * (1 - Math.min(100, Math.max(0, pct)) / 100);
+    return `${(80 + r * Math.cos(th)).toFixed(1)} ${(90 - r * Math.sin(th)).toFixed(1)}`;
+  };
+  return ill('gauge', '0 0 160 100', '<path d="M10 90A70 70 0 01150 90" style="fill:none;stroke:var(--ic-n);stroke-width:14;stroke-linecap:round"/>'
+    + `<path d="M10 90A70 70 0 01${at(70, fillPct)}" style="fill:none;stroke:var(--ic-a);stroke-width:14;stroke-linecap:round"/>`
+    + `<path class="b-tick" d="M${at(57, markPct)}L${at(82, markPct)}" style="stroke:var(--card);stroke-width:5"/>`
+    + `<path class="b-needle" d="M80 90L${at(52, fillPct)}" style="stroke:var(--ic-c);stroke-width:5;stroke-linecap:round"/>`
+    + `<circle cx="80" cy="90" r="8" ${F('c')}/>`);
+}
+
 // ---------- input-step illustrations (smaller, top right of each step) ----------
 const MONTHS = [0, 1, 2, 3].flatMap((r) => [0, 1, 2].map((c) =>
   `<rect x="${17 + c * 32}" y="${44 + r * 15}" width="26" height="11" rx="4" ${r === 0 ? F('a') : 'style="fill:var(--card);opacity:.55"'}/>`)).join('');
@@ -105,6 +125,17 @@ const GOOD: Partial<Record<ImportSector, readonly [name: string, body: string]>>
 export function goodIll(sector: ImportSector | null): string {
   const g = sector ? GOOD[sector] : undefined;
   return g ? svg('b-ill b-ill-inp', `good-${g[0]}`, '0 0 220 150', g[1]) : '';
+}
+
+/**
+ * The pictogram on a Shipment list line plate (founder, 3 Nov): the same three drawings and the same
+ * sector map as the Good step, in flow at the reference's `.b-pass .b-pict` size. A sector with no
+ * approved drawing (fertilisers, hydrogen, electricity, an unclassified code) gets none (P5-4).
+ */
+const PLATE: Partial<Record<ImportSector, PictName>> = { iron_and_steel: 'tube', cement: 'bag', aluminium: 'ingot' };
+export function platePict(sector: ImportSector | null): string {
+  const n = sector ? PLATE[sector] : undefined;
+  return n ? pict(n) : '';
 }
 
 /**

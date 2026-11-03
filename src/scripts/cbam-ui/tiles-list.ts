@@ -13,8 +13,9 @@
 // with ONE spelling, and they can only do that if they read the same function.
 import Decimal from 'decimal.js';
 import type { Line, Totals, YearThreshold } from '../cbam-lines.ts';
-import { esc, eur, num } from './format.ts';
-import { ILL, insertIll } from './illustrations.ts';
+import { esc, eur, exactNum, num } from './format.ts';
+import { sectorForCn } from '../cbam-algos/cbam/sector.ts';
+import { ILL, gaugeIll, insertIll, platePict } from './illustrations.ts';
 
 /**
  * The 50 t de minimis figure itself lives in the consolidated Art 2(3); this is the amending act
@@ -159,7 +160,7 @@ export function yearSentence(y: FoundYear): string {
       // computed from the new set, stating the wrong basis with nothing to catch it. See
       // sectorList for why the prose is a table rather than a transformation of the keys, and why
       // its order is not the row's.
-      ? `Your ${esc(sectorList(y.includedSectors))} imports for ${esc(String(y.calendarYear))} total ${num(y.knownEligibleMassT)}&nbsp;t, below the ${num(y.thresholdT)}&nbsp;t threshold for those sectors.${outside} This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
+      ? `Your ${esc(sectorList(y.includedSectors))} imports for ${esc(String(y.calendarYear))} total ${exactNum(y.knownEligibleMassT)}&nbsp;t, below the ${num(y.thresholdT)}&nbsp;t threshold for those sectors.${outside} This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
       : `Under the threshold so far, but unattested. Tick the box only if this list is genuinely every ${esc(String(y.calendarYear))} CBAM import; the verdict is only as good as that statement.`;
   return sub;
 }
@@ -217,13 +218,14 @@ export function yearTile(y: YearThreshold): string {
     <section class="b-t b-s2 cb-thresh">
       <div class="b-t-h"><div><h2 class="b-t-ti">Annual de minimis, ${year}.</h2><p class="b-t-sub">Eligible mass · ${n} line${n === 1 ? '' : 's'}</p></div>
         <span class="cb-tag ${tone}">${esc(yearVerdictTag(y))}</span></div>
-      <div class="b-mid num">${num(y.knownEligibleMassT)}<span class="b-u">t</span></div>${ruler}
+      <div class="b-mid num">${exactNum(y.knownEligibleMassT)}<span class="b-u">t</span></div>${ruler}
       <p class="cb-sub">${yearSentence(y)}</p>
       ${attestControl(y)}
       <p class="cb-prov">${esc(y.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
     </section>`;
-  // Plan 05, P5-3: the needle sits near the top of the arc, so it is drawn only where the verdict is "above".
-  return above ? insertIll(plate, ILL.gauge, 'b-t') : plate;
+  // Plan 05, P5-3: drawn only where the verdict is "above". F-10: the needle and the threshold tick are placed from
+  // the same ruler the bar uses, so 50.0001 t and 5,000 t no longer draw one fixed needle; no ruler, no gauge.
+  return above && r ? insertIll(plate, gaugeIll(Number(r.fillPct), Number(r.markPct)), 'b-t') : plate;
 }
 
 /**
@@ -306,7 +308,11 @@ export function shareOfTotal(part: string, total: string): string | null {
 /** The strings cbam-app.ts computes for a line (see renderLineCard): carried into the plate verbatim. */
 export interface LinePlateParts { result: string; attestation: string; delta: string; tierLabel: string }
 /** What the List knows about a line beyond its estimate. All optional: a bare plate is still honest. */
-export interface LinePlateContext { goodName?: string; sharePct?: string | null; exempt?: boolean }
+export interface LinePlateContext {
+  goodName?: string; sharePct?: string | null; exempt?: boolean;
+  /** The engine produced a figure for this line. The sector pictogram is drawn only then, like every illustration. */
+  figure?: boolean;
+}
 
 /**
  * The tier chip. Colour marks provenance only (spec §3): bronze for the Commission's default
@@ -329,8 +335,9 @@ function tierChip(tier: Line['tier'], label: string): string {
   }
 }
 
-const lineHead = (line: Line, index: number, chips: string, goodName: string | undefined, summary: string) => `
+const lineHead = (line: Line, index: number, chips: string, goodName: string | undefined, summary: string, pic = '') => `
       <div class="b-t-h"><h2 class="b-t-ti">Line ${index + 1}.</h2><span class="b-chips">${chips}</span></div>
+      ${pic}
       ${goodName ? `<p class="b-pass-name" title="${esc(goodName)}">${esc(goodName)}</p>` : ''}
       <p class="b-t-sub num cb-line-sum">${summary}</p>`;
 
@@ -346,7 +353,8 @@ export function linePlate(line: Line, index: number, parts: LinePlateParts, ctx:
       : '';
   return `
     <article class="b-t b-pass cb-line" data-line="${esc(line.id)}">${lineHead(line, index, tierChip(line.tier, parts.tierLabel), ctx.goodName,
-      `${esc(line.cn)} · ${esc(line.country)} · ${esc(line.route)} · ${num(line.massT)} t · ${esc(line.date)}`)}
+      `${esc(line.cn)} · ${esc(line.country)} · ${esc(line.route)} · ${exactNum(line.massT)} t · ${esc(line.date)}`,
+      ctx.figure ? platePict(sectorForCn(line.cn.trim())) : '')}
       ${share}
       ${parts.result}
       ${parts.attestation}
@@ -362,7 +370,7 @@ export function linePlate(line: Line, index: number, parts: LinePlateParts, ctx:
 export function refusedLinePlate(line: Line, index: number, message: string, goodName?: string): string {
   return `
     <article class="b-t b-pass cb-line" data-line="${esc(line.id)}">${lineHead(line, index, '', goodName,
-      `${esc(line.cn)} · ${esc(line.country)} · ${num(line.massT)} t`)}
+      `${esc(line.cn)} · ${esc(line.country)} · ${exactNum(line.massT)} t`)}
       <div class="cb-res cb-unavail"><div class="cb-tag unavail">No estimate</div>
       <p class="cb-reason">${esc(message)}</p></div>
       ${removeButton(line, index)}

@@ -387,11 +387,30 @@ function priceSourceDate(pack: EstimatorPack, years: OutlookYear[]): string | nu
  * published, a figure that looks like a finding.
  */
 export function parseAssumedPrice(text: string): string | null {
-  const parsed = nonNegativeDecimal(text);
+  // F-07: the box is a text field, so what was typed arrives as typed. A decimal comma, an exponent and a run
+  // of digits no price has are refused here, the one place every consumer reads the price through, so no
+  // figure is ever worked out from a mis-read value. The same three refusals the mass field makes (decimalProblem).
+  const t = text.trim();
+  if (t.includes(',') || /[eE]/.test(t) || t.split('.')[0]!.replace(/^[+-]?0+/, '').length > 12) return null;
+  const parsed = nonNegativeDecimal(t);
   if (!parsed || !parsed.isFinite()) return null;
   const cents = new D(parsed.toFixed()).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
   if (cents.lessThan('0.01')) return null;
   return cents.toFixed();
+}
+
+/** The mass field's wording for a decimal comma (cbam-app.ts re-exports it), here so the price boxes say the same thing. */
+export const COMMA_HINT = 'Use a decimal point and no thousands separators: 0.85, not 0,85, and 1000, not 1,000.';
+
+/**
+ * Why a typed price was not used (audit F-07): 'comma' is named, because it is the decimal mark in most of the
+ * exporting world; anything else unreadable (garbage, an exponent, a minus, less than a cent) is 'unreadable'.
+ * Blank is no problem: an empty box is simply no price.
+ */
+export function assumedPriceProblem(text: string): 'comma' | 'unreadable' | null {
+  if (text.trim() === '') return null;
+  if (text.includes(',')) return 'comma';
+  return parseAssumedPrice(text) === null ? 'unreadable' : null;
 }
 
 /**
@@ -651,9 +670,9 @@ export function renderOutlookPriceNote(view: Outlook, priceText: string): string
   const fills = `Fills the cost for ${yearList(years)}, where no certificate price is published for the import's date.`;
   const mine = 'It is your own assumption: not a forecast and not a published price. '
     + 'It stays on this page and is not saved, exported or sent.';
-  if (priceText.trim() !== '' && parseAssumedPrice(priceText) === null) {
-    return `Enter a price of at least €0.01. ${mine}`;
-  }
+  const problem = assumedPriceProblem(priceText);
+  if (problem === 'comma') return `Your price: ${COMMA_HINT} ${mine}`;
+  if (problem === 'unreadable') return `Enter a price of at least €0.01. ${mine}`;
   return `${fills} ${mine}`;
 }
 

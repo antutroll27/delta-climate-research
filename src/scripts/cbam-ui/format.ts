@@ -3,6 +3,7 @@
 // cbam-app.ts in phase 2 of the rail redesign (spec §7) so the tile renderers in cbam-ui/ print a
 // fact in the same words as the line card and the printable document. cbam-app.ts imports these
 // back; cbam-ui modules import them directly (importing cbam-app.ts would be a cycle).
+import Decimal from 'decimal.js';
 import type { CertificateEstimate, DataTier } from '../cbam-algos/cbam/certificate-estimate.ts';
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) =>
@@ -31,6 +32,21 @@ export const num = (s: string, dp = 3) => {
   // esc() on the fallback: every other path into innerHTML in this file is escaped,
   // and this is the only one that returns its argument verbatim.
   return Number.isFinite(n) ? n.toLocaleString('en-GB', { maximumFractionDigits: dp }) : esc(s);
+};
+
+/**
+ * A mass printed exactly (audit F-10): every digit the value carries, trailing zeros trimmed, the integer part
+ * grouped. `num` rounds to 3 dp through a float, so 50.0001 t printed as "50 t" beside "Above threshold" and 49.9999 t
+ * as "50 t" beside "below the 50 t threshold". Use this wherever a value is judged against a threshold. Blank is a
+ * dash and anything that is not a finite number is shown escaped, as `num` does.
+ */
+export const exactNum = (s: string): string => {
+  if (s.trim() === '') return '—';
+  let d: Decimal;
+  try { d = new Decimal(s.trim()); } catch { return esc(s); }
+  if (!d.isFinite()) return esc(s);
+  const [int = '0', frac] = d.toFixed().split('.');
+  return BigInt(int).toLocaleString('en-GB') + (frac ? `.${frac}` : '');
 };
 
 /**

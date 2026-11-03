@@ -63,10 +63,30 @@ test.describe('CBAM shell', () => {
   test('remove and attest work on the List view and are announced', async ({ page }) => {
     await page.goto(URL);
     await priceLine(page);
+    // Under 50 t, so the year is below the de minimis threshold and offers the completeness box to tick.
+    await page.fill('#cbMass', '40');
+    await expect(page.locator('#cbOut .cb-cost')).toBeVisible();
     await page.click('#cbAdd');
     await view(page, 'list');
     await expect(page.locator('#cbStatus')).toBeVisible();
     await expect(page.locator('#cbStatus')).toContainText('1 line in this estimate');
+    // Audit F-13: the test was titled "attest" and never ticked the box. Ticking it announces what the tick
+    // DID to the year's verdict (the checkbox's own state is announced natively, the verdict is not), and the
+    // rebuild of the list must not drop keyboard focus to <body>.
+    const attest = page.locator('#cbList [data-attest="2026"]');
+    await expect(page.locator('#cbStatus')).toContainText('Threshold 2026 indeterminate');
+    await expect(attest).not.toBeChecked();
+    await attest.check();
+    await expect(attest).toBeChecked();
+    await expect(attest).toBeFocused();
+    await expect(page.locator('#cbStatus')).toContainText('Threshold 2026 below threshold');
+    await expect(page.locator('#cbStatus')).not.toContainText('indeterminate');
+    await attest.uncheck();
+    await expect(attest).toBeFocused();
+    await expect(page.locator('#cbStatus')).toContainText('Threshold 2026 indeterminate');
+    await attest.check();
+    await expect(attest).toBeFocused();
+    await expect(page.locator('#cbStatus')).toContainText('Threshold 2026 below threshold');
     await page.locator('#cbList [data-remove]').first().click();
     await expect(page.locator('#cbList .cb-line')).toHaveCount(0);
     await expect(page.locator('[data-view="list"] .cbx-empty')).toBeVisible();

@@ -1518,6 +1518,48 @@ test.describe('CBAM estimate — the three-year strip', () => {
     await expect(box).toHaveValue('80.5');
   });
 
+  /* AUDIT F-07. Both price boxes were type="number", so a decimal comma was re-read by the browser before the page
+     saw it. They are text fields with a decimal keypad now, and the comma is named, as in the mass field. */
+  test('a decimal comma in the price boxes is named and never priced; a point prices', async ({ page }) => {
+    await page.goto('/cbam/cbam-calculator/');
+    await setLine(page, TUBE_LINE);
+    await view(page, 'three-years');
+    const cards = page.locator('#cbOutlook .cb-ol-yr');
+    const box = page.locator('#cbOlPrice');
+    await expect(cards).toHaveCount(3);
+    await expect(box).toHaveAttribute('type', 'text');
+    await expect(box).toHaveAttribute('inputmode', 'decimal');
+    const hint = 'Use a decimal point and no thousands separators: 0.85, not 0,85, and 1000, not 1,000.';
+    await box.focus();
+    await page.keyboard.type('80,5');
+    await expect(box).toHaveValue('80,5');
+    await expect(page.locator('#cbOutlook [data-ol="pricenote"]')).toContainText(`Your price: ${hint}`);
+    await expect(cards.nth(1)).toContainText('none published');
+    await expect(cards.nth(1)).not.toContainText('€');
+    await expect(cards.nth(1)).not.toContainText('assumed');
+    for (const bad of ['1e3', 'abc']) {
+      await box.fill(bad);
+      await expect(page.locator('#cbOutlook [data-ol="pricenote"]')).toContainText('Enter a price of at least €0.01.');
+      await expect(cards.nth(1)).not.toContainText('assumed');
+    }
+    await box.fill('80.5');
+    await expect(page.locator('#cbOutlook [data-ol="pricenote"]')).not.toContainText('Your price:');
+    await expect(cards.nth(1)).toContainText('€30,328.78');
+    await expect(cards.nth(1)).toContainText('at your assumed €80.50');
+
+    // The graphs' second price: the same.
+    await view(page, 'why');
+    const second = page.locator('#cgSecond');
+    await expect(second).toHaveAttribute('type', 'text');
+    await expect(second).toHaveAttribute('inputmode', 'decimal');
+    await second.fill('90,5');
+    await expect(page.locator('[data-cg="second-note"]')).toHaveText(`Second price: ${hint}`);
+    await expect(page.locator('[data-cg-card="cost"] .cg-t')).toContainText('At your own €80.50 a certificate');
+    await expect(page.locator('[data-cg-card="cost"] .cg-t')).not.toContainText('€80.50 to');
+    await second.fill('90.5');
+    await expect(page.locator('[data-cg-card="cost"] .cg-t')).toContainText('€80.50 to €90.50');
+  });
+
   test('the strip is about one previewed line: absent when idle, past the corpus, and in a document', async ({ page }) => {
     await page.goto('/cbam/cbam-calculator/');
     await expect(page.locator('#cbOutlook')).toBeEmpty();

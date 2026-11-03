@@ -586,3 +586,20 @@ test('P5-2 - no split, no staircase: the dash needs no drawing; a refusal draws 
   assert.equal(illN(html, 'scale'), 1, 'Charged still has its figure');
   for (const r of ['no-estimate', 'some-years-refused']) assert.doesNotMatch(renderWhy(r, STATE(), WIDTHS), /data-ill=/, r);
 });
+
+/* ── audit F-07: the second price box, same treatment ─────────────────────── */
+
+test('F-07: #cgSecond is a text field; a decimal comma there is named and never drawn as a range', () => {
+  const both = { ...STATE(), priceText: '80', secondText: '90,5' };
+  const html = renderWhy(TUBE, both, WIDTHS);
+  const input = html.match(/<input id="cgSecond"[^>]*>/)[0];
+  assert.match(input, /type="text"/);
+  assert.match(input, /inputmode="decimal"/);
+  assert.doesNotMatch(input, /type="number"|min=|step=/);
+  assert.equal(secondNote(both), 'Second price: Use a decimal point and no thousands separators: 0.85, not 0,85, and 1000, not 1,000.');
+  assert.deepEqual(assumedRange('80', '90,5'), ['80'], 'the mis-read second price is ignored, not guessed');
+  assert.doesNotMatch(text(html), /At your own €80 to/);
+  assert.equal(secondNote({ ...both, secondText: 'abc' }), 'Enter a price of at least €0.01.');
+  assert.equal(secondNote({ ...both, secondText: '' }), '€ per certificate. Your first price is the one in Three years.');
+  assert.equal(secondNote({ ...both, secondText: '90.5' }), '€ per certificate. Your first price is the one in Three years.');
+});

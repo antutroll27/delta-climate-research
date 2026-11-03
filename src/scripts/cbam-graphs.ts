@@ -28,7 +28,7 @@ import {
   type EstimatorInput, type EstimatorPack,
 } from './cbam-algos/estimator/estimate-from-pack.ts';
 import {
-  assumedCost, benchmarkScope, formatDecimal, formatPackDate, parseAssumedPrice, splitBetween,
+  assumedCost, assumedPriceProblem, benchmarkScope, COMMA_HINT, formatDecimal, formatPackDate, parseAssumedPrice, splitBetween,
   type Outlook, type OutlookFigureYear, type OutlookSplit,
 } from './cbam-outlook.ts';
 
@@ -534,9 +534,14 @@ const legendDot = (kind: 'fill' | 'ring'): string => (kind === 'fill'
  * and says why, so it can never draw a cost the strip above does not show.
  */
 export const secondUsable = (state: GraphsState): boolean => parseAssumedPrice(state.priceText) !== null;
-export const secondNote = (state: GraphsState): string => (secondUsable(state)
-  ? '€ per certificate. Your first price is the one in Three years.'
-  : 'Type your first price in Three years. This one then makes a range.');
+export function secondNote(state: GraphsState): string {
+  if (!secondUsable(state)) return 'Type your first price in Three years. This one then makes a range.';
+  // F-07: a second price that was not read is named, never silently dropped (the range ignores it).
+  const problem = assumedPriceProblem(state.secondText);
+  if (problem === 'comma') return `Second price: ${COMMA_HINT}`;
+  if (problem === 'unreadable') return 'Enter a price of at least €0.01.';
+  return '€ per certificate. Your first price is the one in Three years.';
+}
 
 /** The cost card's changing parts, for the page to refill while a price is being typed. */
 export function costParts(m: GraphsModel, w: number, state: GraphsState): { title: string; plot: string; table: string } {

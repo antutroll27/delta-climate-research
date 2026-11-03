@@ -6,7 +6,7 @@ import Decimal from 'decimal.js';
 
 import {
   assumedCost, dateInYear, formatDecimal, formatPackDate, outlook, outlookWhy, outlookYears,
-  parseAssumedPrice, unpricedYears,
+  COMMA_HINT, assumedPriceProblem, parseAssumedPrice, renderOutlookPriceNote, unpricedYears,
 } from '../../src/scripts/cbam-outlook.ts';
 import {
   markupDots, renderYearPlates, renderYears, renderYearsWhy, yearsPriceSlots,
@@ -674,4 +674,41 @@ test('L4: the published price line reads "published €75.36 · 2026-Q1", and pl
   const html = renderYears(priced);
   assert.match(html, /<ol class="cb-ol-years b-years-wide" data-ol="years">/);
   assert.match(html, /<section class="b-t b-own cb-ol-price"[^>]* hidden>/);
+});
+
+/* ── audit F-07: a decimal comma is named, never re-read ─────────────────── */
+
+test('F-07: the price box refuses a decimal comma, an exponent, a minus and a long digit run — it never prices from them', () => {
+  for (const bad of ['80,5', '0,85', '1,000', '80,', ',5', '1e3', '2.5E1', '8e1', '-80', '1' + '0'.repeat(12), '9'.repeat(13) + '.5']) {
+    assert.equal(parseAssumedPrice(bad), null, JSON.stringify(bad));
+  }
+  assert.equal(parseAssumedPrice('80.5'), '80.5');
+  assert.equal(parseAssumedPrice('1' + '0'.repeat(11)), '1' + '0'.repeat(11), 'twelve integer digits is the limit, as for the mass');
+});
+
+test('F-07: assumedPriceProblem names the comma; everything else unreadable; blank and a good price are no problem', () => {
+  assert.equal(assumedPriceProblem('80,5'), 'comma');
+  assert.equal(assumedPriceProblem('1,000'), 'comma');
+  for (const bad of ['abc', '1e3', '-5', '0', '0.004', '0x10']) assert.equal(assumedPriceProblem(bad), 'unreadable', bad);
+  for (const ok of ['', '   ', '80', '80.5', ' 0.01 ']) assert.equal(assumedPriceProblem(ok), null, JSON.stringify(ok));
+});
+
+test('F-07: the price note shows the mass field comma hint, then no cost is computed from the text', () => {
+  const view = outlook(pack, line());
+  assert.equal(COMMA_HINT, 'Use a decimal point and no thousands separators: 0.85, not 0,85, and 1000, not 1,000.');
+  assert.ok(renderOutlookPriceNote(view, '80,5').startsWith(`Your price: ${COMMA_HINT} It is your own assumption`));
+  assert.match(renderOutlookPriceNote(view, 'abc'), /^Enter a price of at least €0\.01\./);
+  assert.doesNotMatch(renderOutlookPriceNote(view, '80.5'), /Your price:|at least/);
+  const slots = yearsPriceSlots(view, '80,5');
+  assert.doesNotMatch(slots.years + slots.rows, /assumed|€30,|€34,/, 'no cost at a price that was not read');
+  assert.match(yearsPriceSlots(view, '80.5').years, /at your assumed €80\.50/);
+});
+
+test('F-07: #cbOlPrice is a text field with a decimal keypad, not type="number"', () => {
+  const html = renderYears(outlook(pack, line()), '80,5');
+  const input = html.match(/<input id="cbOlPrice"[^>]*>/)[0];
+  assert.match(input, /type="text"/);
+  assert.match(input, /inputmode="decimal"/);
+  assert.doesNotMatch(input, /type="number"|min=|step=/);
+  assert.match(input, /value="80,5"/, 'what was typed stays in the box, so the hint has something to point at');
 });

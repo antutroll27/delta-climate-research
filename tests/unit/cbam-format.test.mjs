@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import { renderPriceRow as fromApp } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
-  eur, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
+  eur, exactNum, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
 } from '../../src/scripts/cbam-ui/format.ts';
 
 test('one price row: cbam-app re-exports the format module\'s, not a copy of it', () => {
@@ -30,4 +30,23 @@ test('the moved helpers behave exactly as before', () => {
   assert.equal(eur('24855.80'), '€24,855.80');
   assert.equal(eur(null), '—');
   assert.equal(tierLabel('verified-direct+default-indirect'), 'Verified direct + Commission indirect');
+});
+
+// ---- audit F-10: an eligible mass is printed exactly, so it can never round across the 50 t threshold ----
+test('exactNum: every digit the Decimal carries, trailing zeros trimmed, thousands grouped', () => {
+  assert.equal(exactNum('49.9999'), '49.9999');
+  assert.equal(exactNum('50'), '50');
+  assert.equal(exactNum('50.0'), '50');
+  assert.equal(exactNum('50.0001'), '50.0001');
+  assert.equal(exactNum('120'), '120');
+  assert.equal(exactNum('1234567.250'), '1,234,567.25');
+  assert.equal(exactNum('0.0004'), '0.0004');
+  assert.equal(exactNum('12345678901234567890.123456789'), '12,345,678,901,234,567,890.123456789', 'no float in the path');
+});
+
+test('exactNum: blank is a dash, garbage is escaped, nothing becomes a figure it was not', () => {
+  assert.equal(exactNum('   '), '—');
+  assert.equal(exactNum('<b>'), '&lt;b&gt;');
+  assert.equal(exactNum('Infinity'), 'Infinity');
+  assert.notEqual(num('50.0001'), exactNum('50.0001'), 'premise: num() rounds 50.0001 to 50');
 });
