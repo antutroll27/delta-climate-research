@@ -18,6 +18,7 @@
 import Decimal from 'decimal.js';
 import { formatDecimal, formatPackDate } from '../cbam-outlook.ts';
 import { whatIfTag } from './format.ts';
+import { ILL, insertIll } from './illustrations.ts';
 import {
   chargedCells, chargedLegend, chargedTip, costParts, esc, legendDot, listOf, n1, n3, offShared, pct1, plus,
   renderTable, secondNote, secondUsable, sentenceCharged, sentenceMarkup, sentenceOrigins,
@@ -190,7 +191,7 @@ export function renderWhy(model: GraphsModel | GraphsRefusal, state: GraphsState
   const cost = costParts(m, widths.cost, state);
   const unpriced = unpricedQuarters(m);
 
-  const share = tile('share', {
+  const shareTile = tile('share', {
     span: 2, hero: true, title: 'Mark-up share.',
     big: m.split ? `${formatDecimal(m.usesDefault ? m.split.markupSharePct : '0', 1, true)}<span class="b-u">%</span>` : '—',
     whatIf: m.whatIf, sentence: sentenceShare(m), plot: shareBar(m),
@@ -201,7 +202,7 @@ export function renderWhy(model: GraphsModel | GraphsRefusal, state: GraphsState
       : { head: ['Cause', 'Certificates'], rows: [['Not divided for this line', '—']] }),
   });
 
-  const charged = tile('charged', {
+  const chargedTile = tile('charged', {
     span: 2, title: 'Charged.', sub: 'Certificates per 100 tCO₂e of emissions counted.',
     head: `<div class="b-seg cg-mini" role="group" aria-label="Year">${Y.map((y, j) => `<button type="button" data-cg-year="${j}" aria-pressed="${j === yi}">${y.year}</button>`).join('')}</div>`,
     whatIf: m.whatIf, sentence: sentenceCharged(m, yi), plot: waffle(m, yi),
@@ -209,6 +210,10 @@ export function renderWhy(model: GraphsModel | GraphsRefusal, state: GraphsState
     cap: 'One cell = 1% of the emissions counted for this shipment, rounded to whole cells.',
     open: !!state.open.charged, tbl: renderTable(tableCharged(m)),
   });
+
+  // Plan 05, P5-2: a drawing only beside a figure. No split means "The counts in Three years stand." and a dash.
+  const share = m.split ? insertIll(shareTile, ILL.steps, 'b-t') : shareTile;
+  const charged = insertIll(chargedTile, ILL.scale, 'b-t');
 
   const markup = tile('markup', {
     span: 2, title: 'What the mark-up adds.', whatIf: m.whatIf, sentence: sentenceMarkup(m), plot: markupColumns(m),

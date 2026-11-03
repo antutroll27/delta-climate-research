@@ -14,6 +14,7 @@
 import Decimal from 'decimal.js';
 import type { Line, Totals, YearThreshold } from '../cbam-lines.ts';
 import { esc, eur, num } from './format.ts';
+import { ILL, insertIll } from './illustrations.ts';
 
 /**
  * The 50 t de minimis figure itself lives in the consolidated Art 2(3); this is the amending act
@@ -212,7 +213,7 @@ export function yearTile(y: YearThreshold): string {
   const ruler = r ? `
       <div class="b-thr" aria-hidden="true"><b style="width:${r.fillPct}%"></b><em style="left:${r.markPct}%"></em></div>
       <p class="b-t-foot num"><span>0</span><span>${num(y.thresholdT)} t threshold</span><span>${num(r.maxT)} t</span></p>` : '';
-  return `
+  const plate = `
     <section class="b-t b-s2 cb-thresh">
       <div class="b-t-h"><div><h2 class="b-t-ti">Annual de minimis, ${year}.</h2><p class="b-t-sub">Eligible mass · ${n} line${n === 1 ? '' : 's'}</p></div>
         <span class="cb-tag ${tone}">${esc(yearVerdictTag(y))}</span></div>
@@ -221,6 +222,8 @@ export function yearTile(y: YearThreshold): string {
       ${attestControl(y)}
       <p class="cb-prov">${esc(y.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
     </section>`;
+  // Plan 05, P5-3: the needle sits near the top of the arc, so it is drawn only where the verdict is "above".
+  return above ? insertIll(plate, ILL.gauge, 'b-t') : plate;
 }
 
 /**
@@ -276,7 +279,7 @@ export function totalTile(t: Totals, exempt: Totals | null = null, shares: reado
   const bar = shares.length
     ? `<div class="b-stackbar" aria-hidden="true">${shares.map((s) => `<b style="flex:${esc(s)}"></b>`).join('')}</div>`
     : '';
-  return `
+  const figures = `
     <section class="b-t b-s2 b-hero cb-total">${head(`Total exposure · ${t.pricedLines} line${t.pricedLines === 1 ? '' : 's'}`, tone, tag)}
       <div class="cb-fig"><span class="cb-n">${num(t.certificates)}</span></div>
       <div class="cb-u">certificates</div>
@@ -285,6 +288,7 @@ export function totalTile(t: Totals, exempt: Totals | null = null, shares: reado
       ${t.refusedLines ? `<p class="cb-sub cb-warn">${refusedLineNote(t.refusedLines)}</p>` : ''}
       ${exemptNote}${bar}${actions}
     </section>`;
+  return insertIll(figures, ILL.box, 'b-t');
 }
 
 /**

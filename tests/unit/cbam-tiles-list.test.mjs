@@ -151,3 +151,33 @@ test('linePlate: a tier outside the three known ones draws no chip and no raw te
   const html = linePlate({ ...LINE, tier: '<b>x</b>' }, 0, PARTS);
   assert.doesNotMatch(html, /<b>x<\/b>|class="chip/, 'never the unescaped value, never a chip');
 });
+
+// ── plan 05, P5-2 and P5-3: the crates beside a total, the gauge only above the threshold ──
+const illCount = (html, name) => (html.match(new RegExp(`data-ill="${name}"`, 'g')) ?? []).length;
+
+test('P5-2 - the crates sit in a priced Total, and in no other Total state', () => {
+  assert.equal(illCount(totalTile(T({}), null, ['69.6', '24.8', '5.6']), 'box'), 1);
+  assert.equal(illCount(totalTile(T({}), null, []), 'box'), 1, 'a total with no bar segments is still a figure');
+  assert.match(totalTile(T({}), null, []), /^\s*<section class="b-t b-s2 b-hero cb-total"><svg[^>]*data-ill="box"/);
+  const states = [
+    ['no lines yet', T({ pricedLines: 0, refusedLines: 0, certificates: '0', costEur: null })],
+    ['nothing priced', T({ pricedLines: 0, refusedLines: 2, certificates: '0', costEur: null })],
+  ];
+  for (const [name, t] of states) assert.doesNotMatch(totalTile(t, null, []), /data-ill=/, name);
+  const exemptOnly = totalTile(T({ pricedLines: 0, refusedLines: 0, certificates: '0', costEur: null }),
+    T({ pricedLines: 1, certificates: '12.5', costEur: '900', anyPending: false }), []);
+  assert.match(exemptOnly, /Exempt if your list is complete/, 'premise: the exempt-only state');
+  assert.doesNotMatch(exemptOnly, /data-ill=/, 'exempt-only: nothing owed, nothing drawn');
+});
+
+test('P5-3 - the gauge is drawn on an above-threshold year and on no other verdict', () => {
+  const above = yearTile(found({}));
+  assert.equal(illCount(above, 'gauge'), 1);
+  assert.match(above, /<section class="b-t b-s2 cb-thresh"><svg[^>]*data-ill="gauge"/);
+  for (const [name, y] of [
+    ['below', found({ state: 'below_threshold', knownEligibleMassT: '30' })],
+    ['indeterminate', found({ state: 'indeterminate' })],
+    ['no rule', found({ ruleFound: false })],
+  ]) assert.doesNotMatch(yearTile(y), /data-ill=/, name);
+  assert.doesNotMatch(thresholdErrorTile('x'), /data-ill=/);
+});

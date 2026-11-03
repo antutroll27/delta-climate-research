@@ -547,3 +547,25 @@ test('M3: a bar segment too narrow for its label has a container query to hide i
   const big = { ...TUBE, split: { rise: '2000', markup: '1234.5', factor: '700', benchmark: '65.5', markupSharePct: '61.725' } };
   assert.match(shareBar(big), /class="b-sp b-sp-bz" style="flex-grow:1234\.5" data-long>/);
 });
+
+// ── plan 05, P5-2: the staircase beside a mark-up share, the scale beside Charged; none beside a non-figure ──
+const illN = (html, name) => (html.match(new RegExp(`data-ill="${name}"`, 'g')) ?? []).length;
+const tileOf = (html, id) => new RegExp(`<section class="b-t [^"]*cg-${id}"[\\s\\S]*?</section>`).exec(html)?.[0] ?? '';
+
+test('P5-2 - a Why view with a figure draws the staircase on Mark-up share and the scale on Charged, each once', () => {
+  const html = renderWhy(TUBE, STATE(), WIDTHS, phaseModel(pack, TUBE));
+  assert.ok(TUBE.split, 'premise: the tube has a mark-up split');
+  assert.equal(illN(tileOf(html, 'share'), 'steps'), 1);
+  assert.equal(illN(tileOf(html, 'charged'), 'scale'), 1);
+  assert.equal(illN(html, 'steps') + illN(html, 'scale'), 2, 'on no other tile');
+  assert.match(tileOf(html, 'share'), /^<section class="b-t [^"]*"[^>]*><svg[^>]*data-ill="steps"/);
+});
+
+test('P5-2 - no split, no staircase: the dash needs no drawing; a refusal draws nothing', () => {
+  const floored = modelOf(line({ verified: { directTco2ePerT: '1.0' } }));
+  assert.equal(floored.split, null, 'premise: floored, so no division into causes');
+  const html = renderWhy(floored, STATE(), WIDTHS);
+  assert.equal(illN(html, 'steps'), 0);
+  assert.equal(illN(html, 'scale'), 1, 'Charged still has its figure');
+  for (const r of ['no-estimate', 'some-years-refused']) assert.doesNotMatch(renderWhy(r, STATE(), WIDTHS), /data-ill=/, r);
+});

@@ -18,6 +18,7 @@ import {
 } from '../cbam-outlook.ts';
 import { MIXED_RESIDUAL_INDIRECT_NOTE, RESIDUAL_BASIS_NOTE } from '../cbam-algos/cbam/certificate-estimate.ts';
 import { renderFingerprint } from './fingerprint.ts';
+import { ILL, insertIll } from './illustrations.ts';
 import {
   esc, eur, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel, whatIfTag,
 } from './format.ts';
@@ -183,7 +184,7 @@ function chargeable(e: CertificateEstimate): string {
     const label = split.floored
       ? `${split.chargeablePct}% chargeable, the rest covered by free allocation`
       : `${split.chargeablePct}% chargeable, ${split.restPct}% free allocation`;
-    return `<section class="b-t b-fill b-s2 b-fill-${tone} b-fill-strip">`
+    const stripHtml = `<section class="b-t b-fill b-s2 b-fill-${tone} b-fill-strip">`
       + `<div class="b-sp-bar" role="img" aria-label="${label}">`
       + `<i class="b-sp-bc" style="width:${split.chargeablePct}%"></i><i class="b-sp-bf" style="width:${split.restPct}%"></i></div>`
       + '<div class="b-sp-lg">'
@@ -191,8 +192,11 @@ function chargeable(e: CertificateEstimate): string {
       + `<p class="b-t-sub">${num(f.netTco2e)} tCO₂e</p></div>`
       + `<div class="b-sp-f"><h3 class="b-t-ti">Free allocation.</h3>${freeBody}</div></div>`
       + `${tags}</section>`;
+    // No drawing on the strip: the reference has no such layout (decision 4A is later), its two label tiles
+    // have no room for a 180 px factory beside a 44 px numeral, and a unit test pins their markup byte for byte.
+    return stripHtml;
   }
-  return `<section class="b-t b-fill b-s2 b-fill-${tone}${low ? ' b-fill-low' : ''}" `
+  const blocksHtml = `<section class="b-t b-fill b-s2 b-fill-${tone}${low ? ' b-fill-low' : ''}" `
     + `style="--share:${split ? split.chargeablePct : '0'}%">`
     + '<i class="b-fl-bar" aria-hidden="true"></i>'
     + '<div class="b-fl-in"><h3 class="b-t-ti">Chargeable.</h3>'
@@ -200,6 +204,7 @@ function chargeable(e: CertificateEstimate): string {
     + `<p class="b-t-sub">${num(f.netTco2e)} tCO₂e</p></div>`
     + '<div class="b-fl-rest">'
     + `${tags}${rest}</div></section>`;
+  return insertIll(insertIll(blocksHtml, ILL.fac, 'b-fl-in'), ILL.vou, 'b-fl-rest');
 }
 
 /** The deck's shell; paintOutlook (cbam-app.ts) fills [data-deck] from the outlook it computes. */

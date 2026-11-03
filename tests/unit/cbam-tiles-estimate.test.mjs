@@ -370,3 +370,29 @@ test('4A: the bar\'s CSS pads no segment (true to scale), and the free-allocatio
   assert.match(css, /\.cbx \.b-fl-rest\{[^}]*container-type:inline-size\}/);
   assert.match(css, /\.cbx \.b-fl-rest \.b-mid\{font-size:min\(64px,calc\(\(100cqi - 4px\) \/ 1\.91\)\)\}/);
 });
+
+// ── plan 05, P5-2: the factory and the voucher sit on the figures branch of Chargeable, and nowhere else ──
+const ill = (html, name) => (html.match(new RegExp(`data-ill="${name}"`, 'g')) ?? []).length;
+
+test('P5-2 - the Chargeable block layout draws one factory in the chargeable half and one voucher in the free-allocation half', () => {
+  const html = section(tiles(est()), 'b-fill');
+  assert.equal(ill(html, 'fac'), 1);
+  assert.equal(ill(html, 'vou'), 1);
+  const inHalf = /<div class="b-fl-in"><svg[^>]*data-ill="fac"/.test(html);
+  const restHalf = /<div class="b-fl-rest"><svg[^>]*data-ill="vou"/.test(html);
+  assert.ok(inHalf && restHalf, 'the factory is the first child of .b-fl-in, the voucher of .b-fl-rest');
+});
+
+test('P5-2 - the strip layout (4A) draws no illustration: the reference has no such layout and its label tiles have no room', () => {
+  const html = section(tiles(atShare(91.8)), 'b-fill');
+  assert.match(html, /b-fill-strip/, 'premise: 91.8 % is a strip');
+  assert.doesNotMatch(html, /data-ill=/);
+});
+
+test('P5-2 - idle, thrown and refused draw no illustration anywhere on the Estimate tiles', () => {
+  const refused = est({ route: '(D)' });
+  assert.equal(refused.status, 'unavailable', 'premise: (D) has no direct default for India');
+  for (const [name, html] of [
+    ['idle', renderEstimateIdle(IDLE)], ['thrown', renderEstimateThrown('Bad thing')], ['refused', tiles(refused)],
+  ]) assert.doesNotMatch(html, /data-ill=|class="b-ill/, name);
+});
