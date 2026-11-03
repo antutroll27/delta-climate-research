@@ -156,7 +156,9 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     widths = estimate();
     const phase = packNow && typeof model !== 'string' ? phaseModel(packNow, model) : undefined;
     el.innerHTML = renderWhy(model, state, widths, phase);
-    const real = measured();
+    // Hidden (clientWidth 0) there is nothing to measure: measured() would answer 200 against the
+    // 600 estimate and draw everything a second time for no one. The show (paintedAt 0) redraws.
+    const real = el.clientWidth === 0 ? null : measured();
     if (real && CARDS.some((id) => Math.abs(real[id] - widths![id]) > 1)) {
       widths = real;
       el.innerHTML = renderWhy(model, state, widths, phase);
@@ -306,6 +308,10 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     // a keyboard user was focusing them (Firefox e2e, 2 runs in 10).
     if (model === null || el.clientWidth === 0 || Math.abs(el.clientWidth - paintedAt) < 2) return;
     window.clearTimeout(timer);
+    // Hidden to shown (painted while hidden, paintedAt 0): draw now. A callback runs before the
+    // frame is painted, so the cards are replaced before anyone sees them. Waiting 150 ms replaced
+    // them mid entry animation. A real resize keeps its debounce.
+    if (paintedAt === 0) { draw(); return; }
     timer = window.setTimeout(draw, 150);
   }).observe(el);
 

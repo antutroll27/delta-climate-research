@@ -80,6 +80,44 @@ test.describe('CBAM entry motion', () => {
     expect(after.map((c) => c.i)).toEqual(after.map((_, i) => String(i)));
   });
 
+  test('P5-M2: after a line change, Why is drawn once while hidden and is not replaced after it is shown', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto(CBAM_URL);
+    await priceLine(page);
+    await page.click('#cbAdd');
+    await view(page, 'why');
+    await view(page, 'estimate');
+    await expect(page.locator('[data-view="why"]')).toBeHidden();
+    // From here every replacement of the Why cards is a childList record on #cbGraphs, stamped with
+    // the time and whether the view was shown (width > 0) when it happened.
+    await page.evaluate(() => {
+      const w = window as unknown as { __rec: { t: number; shown: boolean }[]; __tShown: number };
+      const g = document.querySelector<HTMLElement>('#cbGraphs')!;
+      w.__rec = []; w.__tShown = -1;
+      new MutationObserver((rs) => { for (const r of rs) if (r.target === g) w.__rec.push({ t: performance.now(), shown: g.clientWidth > 0 }); })
+        .observe(g, { childList: true });
+      const tick = () => { if (w.__tShown < 0 && g.clientWidth > 0) w.__tShown = performance.now(); else if (w.__tShown < 0) requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    });
+    await page.fill('#cbMass', '120');                 // a different line: the graphs are repainted while hidden
+    await expect(page.locator('#cbOut .cb-cost')).toBeVisible();
+    await page.waitForTimeout(600);                    // the debounced recalculation has settled
+    const hidden = await page.evaluate(() => (window as unknown as { __rec: { shown: boolean }[] }).__rec.length);
+    expect(hidden, 'one drawing while hidden, not an estimate and a measure').toBe(1);
+    await view(page, 'why');
+    await page.waitForTimeout(700);
+    const r = await page.evaluate(() => {
+      const w = window as unknown as { __rec: { t: number; shown: boolean }[]; __tShown: number };
+      return { tShown: w.__tShown, after: w.__rec.filter((x) => x.shown || x.t >= w.__tShown).map((x) => Math.round(x.t - w.__tShown)) };
+    });
+    expect(r.tShown, 'the view was seen shown').toBeGreaterThan(0);
+    // The drawing at the shown width (an estimate, then the measured widths) runs in the frame the view
+    // appears, before paint. A second drawing a debounce later replaced every card mid entry animation
+    // (a long task, and the animations restarted).
+    expect(r.after.filter((ms) => ms > 80), `replacements more than 80 ms after the view appeared: ${JSON.stringify(r.after)}`).toEqual([]);
+    expect(r.after.length, `drawings once shown: ${JSON.stringify(r.after)}`).toBeLessThanOrEqual(2);
+  });
+
   test('spec §9: the shell paints while the pack is still loading', async ({ page }) => {
     let release: () => void = () => {};
     const held = new Promise<void>((r) => { release = r; });
