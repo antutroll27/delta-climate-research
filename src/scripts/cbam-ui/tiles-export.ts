@@ -29,7 +29,7 @@ export function csvTileBody(csv: { rows: readonly Record<string, string>[] } | {
   const shown = rows.slice(0, PREVIEW_ROWS);
   const cut = rows.length > PREVIEW_ROWS ? ` and the first ${PREVIEW_ROWS} of ${rows.length} lines` : '';
   return `<p class="b-t-sub">${cols} columns · ${rows.length} line${rows.length === 1 ? '' : 's'} · full precision</p>`
-    + '<div class="b-csvwrap"><table class="b-csv num"><thead><tr>'
+    + '<div class="b-csvwrap" tabindex="0" role="region" aria-label="CSV preview"><table class="b-csv num"><thead><tr>'
     + PREVIEW_COLUMNS.map((c) => `<th scope="col">${c}</th>`).join('')
     + '</tr></thead><tbody>'
     + shown.map((r) => `<tr>${PREVIEW_COLUMNS.map((c) => `<td>${esc(r[c] ?? '')}</td>`).join('')}</tr>`).join('')

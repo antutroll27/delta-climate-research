@@ -56,7 +56,7 @@
 .cbx-nav svg{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .cbx-nav:hover{color:var(--ink);background:var(--well)}
 .cbx-nav[aria-current="page"]{background:var(--ink);color:var(--on-ink)}
-.cbx-badge{margin-left:auto;min-width:20px;height:20px;border-radius:10px;background:var(--bronze-bg);color:var(--bronze-t);font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 6px;font-style:normal}
+.cbx-badge{margin-left:auto;min-width:20px;height:20px;border-radius:10px;background:var(--bronze-bg);color:var(--bronze-t);font-size:12px;font-weight:700;display:grid;place-items:center;padding:0 6px;font-style:normal}
 .cbx-nav[aria-current="page"] .cbx-badge{background:var(--on-ink);color:var(--ink)}
 .cbx-collapse{margin-top:auto;border-top:1px solid var(--line);border-radius:0 0 14px 14px}
 .cbx[data-rail="collapsed"] .cbx-lbl,.cbx[data-rail="collapsed"] .cbx-badge{opacity:0;pointer-events:none}
@@ -81,7 +81,10 @@
 :is(#cbOutlook,#cbGraphs,#cbList):not(:empty)+.cbx-empty{display:none}
 
 /* The status strip: outside every view, so it is announced from any of them (spec §6.3). */
-.cbx-status{position:sticky;bottom:12px;margin:16px 4px 0;padding:12px 16px;border-radius:14px;background:var(--ink);color:var(--on-ink);font-size:13px;box-shadow:var(--shadow)}
+/* Plan 05 Task 8: not sticky. A bar floating over the foot of the page hid whatever was scrolled under it (the
+   pixel contrast sweep read it as the ground of 13 words, and on a phone it covered 70 px); it is the written
+   twin of the live region, so it sits after the last tile. */
+.cbx-status{margin:16px 4px 0;padding:12px 16px;border-radius:14px;background:var(--ink);color:var(--on-ink);font-size:13px;box-shadow:var(--shadow)}
 .cbx-status:empty{display:none}
 
 /* Phone (spec §4.1) */

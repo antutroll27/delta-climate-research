@@ -296,7 +296,9 @@
 .cbx .b-split-sm{height:64px;margin:0 0 12px}
 .cbx .b-sp{flex:0 0 0;min-width:0;overflow:hidden;border-radius:18px;display:flex;align-items:flex-start;container:bsp/inline-size}
 .cbx .b-sp>span{padding:14px 16px;font-size:30px;letter-spacing:-.04em;line-height:1;white-space:nowrap}
-.cbx .b-split-sm .b-sp>span{padding:10px 12px;font-size:20px}
+/* Bold, so a 20 px label is WCAG "large" (18.66 px bold: 3:1). Dark ink on the light theme's bronze is 4.75:1 as drawn, but
+   the pixel sweep reads it at 4.42-4.48 off an antialiased edge, and 4.5 is the floor for regular text (plan 05, Task 8). */
+.cbx .b-split-sm .b-sp>span{padding:10px 12px;font-size:20px;font-weight:700}
 .cbx .b-sp-bz{background:var(--bronze-f);color:var(--fill-bz-ink)}
 /* A segment too narrow for its label shows none: measured at 390 px the small segment clipped to "+". The
    legend (Three years) and the caption (Why) keep the figure. Thresholds are the label's width: font size,
