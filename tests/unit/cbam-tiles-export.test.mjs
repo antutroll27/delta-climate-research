@@ -30,7 +30,27 @@ test('csvTileBody: the real column and line counts, and the first six rows, cell
   assert.match(html, new RegExp(`<p class="b-t-sub">${cols} columns · 8 lines · full precision</p>`));
   assert.equal((html.match(/<tr>/g) ?? []).length, 1 + 6, 'a header row and six data rows');
   for (const r of rows.slice(0, 6)) for (const c of PREVIEW_COLUMNS) assert.ok(html.includes(`<td>${r[c]}</td>`), `${c}=${r[c]}`);
-  assert.match(html, new RegExp(`6 of ${cols} columns and the first 6 of 8 lines shown`));
+  // The caption counts the columns the table really draws (it said a hard-coded 6 until status joined them).
+  assert.equal(PREVIEW_COLUMNS.length, 8);
+  assert.match(html, new RegExp(`${PREVIEW_COLUMNS.length} of ${cols} columns and the first 6 of 8 lines shown`));
+});
+
+test('csvTileBody: a CSCF-pending row carries its what-if marker, a refused row its status', () => {
+  const pending = { id: 'P', cn: '2523100090', country: 'DZ', route: '(A)', scope: 'direct', massT: '30', date: '2027-03-15', tier: 'default+markup' };
+  const refused = { id: 'R', cn: '72061000', country: 'IN', route: '(D)', scope: 'direct', massT: '100', date: '2026-03-15', tier: 'default+markup' };
+  const lines = [pending, refused];
+  const results = lines.map((l) => estimateFromPack(pack, { cn: l.cn, country: l.country, route: l.route, massT: l.massT, date: l.date }));
+  assert.equal(results[0].status, 'cscf_pending');
+  assert.equal(results[1].status, 'unavailable');
+  const rows = csvRows(lines, results, new Map(lines.map((l) => [l.id, 'a'.repeat(64)])), 'f'.repeat(64), pack);
+  const html = csvTileBody({ rows });
+  const bodyRows = html.split('<tbody>')[1].split('</tr>').filter((r) => r.includes('<td>'));
+  assert.equal(bodyRows.length, 2);
+  assert.ok(bodyRows[0].includes('<td>pending (what-if)</td>'), 'the pending row says what-if beside its certificates and cost');
+  assert.ok(bodyRows[0].includes(`<td>${rows[0].certificates}</td>`) && rows[0].certificates !== '');
+  assert.ok(bodyRows[1].includes('<td>unavailable</td>'), 'the refused row says why its figure cells are blank');
+  assert.ok(bodyRows[1].includes('<td></td><td></td>'), 'and its certificates and cost are blank, not zero');
+  assert.match(html, /<th scope="col">cscf_status<\/th><th scope="col">status<\/th>/);
 });
 
 test('csvTileBody: one line is singular and says nothing about rows it did not cut', () => {

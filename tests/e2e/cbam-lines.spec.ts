@@ -2081,7 +2081,7 @@ test.describe('rail views, phase 4 — List, Export, Rules', () => {
     await addLine(page);
     await addLine(page, { mass: '60' });
     await view(page, 'export');
-    await expect(page.locator('#cbExportCsv th')).toHaveText(['line_id', 'cn_code', 'origin', 'mass_t', 'certificates', 'cost_eur']);
+    await expect(page.locator('#cbExportCsv th')).toHaveText(['line_id', 'cn_code', 'origin', 'mass_t', 'certificates', 'cost_eur', 'cscf_status', 'status']);
     const [download] = await Promise.all([page.waitForEvent('download'), page.click('#cbCsv')]);
     const [headerLine, ...rowLines] = readFileSync(await download.path(), 'utf8').trim().split('\n');
     const header = parseCsvRow(headerLine!);
@@ -2090,7 +2090,7 @@ test.describe('rail views, phase 4 — List, Export, Rules', () => {
     await expect(shown).toHaveCount(2);
     for (const [r, line] of rowLines.entries()) {
       const cells = parseCsvRow(line);
-      const want = ['line_id', 'cn_code', 'origin', 'mass_t', 'certificates', 'cost_eur'].map((c) => cells[header.indexOf(c)]!);
+      const want = ['line_id', 'cn_code', 'origin', 'mass_t', 'certificates', 'cost_eur', 'cscf_status', 'status'].map((c) => cells[header.indexOf(c)]!);
       await expect(shown.nth(r).locator('td')).toHaveText(want);
     }
     await expect(page.locator('#cbExportFps figure')).toHaveCount(3);

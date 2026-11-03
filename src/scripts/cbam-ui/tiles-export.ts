@@ -6,8 +6,14 @@ import { formatPackDate } from '../cbam-outlook.ts';
 import { esc } from './format.ts';
 import { renderFingerprint } from './fingerprint.ts';
 
-/** The six CSV columns the preview shows, by their real header names (csvRows in cbam-lines.ts). */
-export const PREVIEW_COLUMNS = ['line_id', 'cn_code', 'origin', 'mass_t', 'certificates', 'cost_eur'] as const;
+/**
+ * The CSV columns the preview shows, by their real header names (csvRows in cbam-lines.ts), in the
+ * file's own order. The last two are what make the figures honest to read: cscf_status says
+ * "pending (what-if)" beside a certificate count that assumes a CSCF the Commission has not
+ * published, and status says "unavailable" beside the blank cells of a refused line (cscf_status
+ * is blank there, so neither column alone covers both).
+ */
+export const PREVIEW_COLUMNS = ['line_id', 'cn_code', 'origin', 'mass_t', 'certificates', 'cost_eur', 'cscf_status', 'status'] as const;
 const PREVIEW_ROWS = 6;
 
 /**
