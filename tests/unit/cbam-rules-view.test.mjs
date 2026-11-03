@@ -50,9 +50,22 @@ test('D4: the method footnote prints the measured count, of the pack\'s own good
   assert.ok(m.goods > 0, 'sanity: the sweep found the known gap (72052100 on (C))');
   assert.deepEqual([...m.sectors.keys()], ['iron_and_steel'],
     `the footnote says every such good is iron and steel; the pack now says ${JSON.stringify([...m.sectors])}. Rewrite the clause.`);
-  assert.ok(page.includes(`— ${m.goods} of ${pack.classifications.length} offered goods have at least one such route, and all ${m.goods} are iron and steel.`),
+  assert.ok(page.includes(`— ${m.goods} of ${pack.classifications.length} offered goods have at least one such route withheld, and all ${m.goods} are iron and steel.`),
     `the footnote must print ${m.goods} of ${pack.classifications.length}, measured from the pack`);
   assert.ok(!page.includes('183 of 574'), 'the stale count is gone');
+});
+
+test('D4: the footnote says the route is not OFFERED, never that the tool "gives no figure" for it', () => {
+  // routesFor withholds the 56 gap pairs, so the form never reaches an estimate for them: a footnote
+  // saying the tool "gives no figure" described a refusal that cannot be asked for.
+  assert.ok(page.includes('this tool does not offer that route rather than price it with a nearby one — '),
+    'the clause is the exact approved wording');
+  assert.ok(!page.includes('this tool gives no figure rather than substituting a nearby one'), 'the inaccurate clause is gone');
+});
+
+test('Rules: the Framing tile says which views the banner governs', () => {
+  assert.ok(page.includes('<h2 id="cbRulesFramingH" class="b-t-ti">Framing.</h2><p class="b-t-sub">Applies to every figure on Estimate, Three years, Why, Shipment list and Export.</p>'));
+  assert.ok(!page.includes('<p class="b-t-sub">Read first.</p>'), 'the sub-line no longer says only "Read first."');
 });
 
 const S = 'f6af39aed68a4cb332b9dbdf4233ed35b6ca1165cc67f69f1240992f97d7cfdf';
