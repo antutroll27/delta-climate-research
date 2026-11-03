@@ -16,6 +16,24 @@ import { isRealDigest, renderFingerprint } from './fingerprint.ts';
 export const PREVIEW_COLUMNS = ['line_id', 'cn_code', 'origin', 'mass_t', 'cscf_status', 'status', 'certificates', 'cost_eur'] as const;
 const PREVIEW_ROWS = 6;
 
+/** How the file's `*_locator` columns read in a sentence. A locator column not listed reads as its own name. */
+const LOCATOR_LABEL: Readonly<Record<string, string>> = { cbam_factor: 'CBAM factor', cscf: 'CSCF', benchmark: 'benchmark' };
+
+/**
+ * What the file carries, said from its real header (audit F-02): "every rule locator" was false, the CSV has
+ * a locator for the CBAM factor, the CSCF and the benchmark and none for the default value, mark-up or price.
+ * The locator names come from the columns ending `_locator`, in file order, so a column added or dropped
+ * changes the sentence with it.
+ */
+function carriesSentence(cols: readonly string[]): string {
+  const names = cols.filter((c) => c.endsWith('_locator')).map((c) => {
+    const stem = c.slice(0, -'_locator'.length);
+    return LOCATOR_LABEL[stem] ?? stem.replace(/_/g, ' ');
+  });
+  const list = names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `The file carries every column, unrounded, ${list ? `with the ${list} rule locator${names.length === 1 ? '' : 's'} and ` : 'and '}both fingerprints.`;
+}
+
 /**
  * The CSV tile: the real column and line counts, and the first six rows of the real rows — the
  * same csvRows output onCsv downloads, never a re-derivation. Values are shown at full precision,
@@ -25,7 +43,8 @@ export function csvTileBody(csv: { rows: readonly Record<string, string>[] } | {
   if ('error' in csv) return `<p class="b-lead2">The CSV cannot be built: ${esc(csv.error)}</p>`;
   const { rows } = csv;
   if (!rows.length) return '<p class="b-lead2">No line has a priced estimate; nothing to export.</p>';
-  const cols = Object.keys(rows[0]!).length;
+  const header = Object.keys(rows[0]!);
+  const cols = header.length;
   const shown = rows.slice(0, PREVIEW_ROWS);
   const cut = rows.length > PREVIEW_ROWS ? ` and the first ${PREVIEW_ROWS} of ${rows.length} lines` : '';
   return `<p class="b-t-sub">${cols} columns · ${rows.length} line${rows.length === 1 ? '' : 's'} · full precision</p>`
@@ -34,7 +53,7 @@ export function csvTileBody(csv: { rows: readonly Record<string, string>[] } | {
     + '</tr></thead><tbody>'
     + shown.map((r) => `<tr>${PREVIEW_COLUMNS.map((c) => `<td>${esc(r[c] ?? '')}</td>`).join('')}</tr>`).join('')
     + '</tbody></table></div>'
-    + `<p class="b-t-foot">${PREVIEW_COLUMNS.length} of ${cols} columns${cut} shown. The file carries every column, unrounded, with every rule locator and both fingerprints.</p>`;
+    + `<p class="b-t-foot">${PREVIEW_COLUMNS.length} of ${cols} columns${cut} shown. ${carriesSentence(header)}</p>`;
 }
 
 /**
