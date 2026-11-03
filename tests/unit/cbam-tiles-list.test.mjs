@@ -222,3 +222,52 @@ test('renderLineCard: a priced steel line wears the tube; an unavailable line (n
   assert.match(renderLineCard(priced, est(priced), 0, undefined, {}), /<svg class="b-pict" data-ill="tube"/);
   assert.doesNotMatch(renderLineCard(refused, est(refused), 1, undefined, {}), /b-pict/);
 });
+
+// ---- audit F-10: the de minimis numeral is exact, and the gauge needle reads the real ratio ----
+const mid = (html) => html.match(/<div class="b-mid num">([^<]*)<span class="b-u">t<\/span>/)[1];
+const needleAt = (html) => {   // the needle's tip, as a percentage of the arc (0 = left end, 100 = right end)
+  const m = html.match(/class="b-needle" d="M80 90L([\d.]+) ([\d.]+)"/);
+  return (1 - Math.atan2(90 - Number(m[2]), Number(m[1]) - 80) / Math.PI) * 100;
+};
+
+test('F-10 - the eligible mass is printed exactly: 49.9999, 50, 50.0001 and 120 t', () => {
+  const at = (m, state) => yearTile(found({ knownEligibleMassT: m, state }));
+  assert.equal(mid(at('49.9999', 'below_threshold')), '49.9999');
+  assert.equal(mid(at('50', 'below_threshold')), '50');
+  assert.equal(mid(at('50.0001', 'above_threshold')), '50.0001', 'a mass over the threshold never prints as the threshold');
+  assert.equal(mid(at('120', 'above_threshold')), '120');
+  assert.match(at('49.9999', 'below_threshold'), /total 49\.9999&nbsp;t, below the 50&nbsp;t threshold/);
+});
+
+test('F-10 - a line plate prints its own mass exactly too', () => {
+  assert.match(linePlate({ ...LINE, massT: '50.0001' }, 0, PARTS), /· 50\.0001 t ·/);
+  assert.match(refusedLinePlate({ ...LINE, massT: '49.9999' }, 0, 'x'), /· 49\.9999 t/);
+});
+
+test('F-10 - the gauge needle sits at the real mass over the ruler, not at one fixed angle', () => {
+  const needle = (m) => needleAt(yearTile(found({ knownEligibleMassT: m })));
+  // ruler: 0 to the next multiple of 50 t, never under 100 t
+  assert.ok(Math.abs(needle('50.0001') - 50) < 0.5, '50.0001 t on a 100 t ruler is mid-arc');
+  assert.ok(Math.abs(needle('120') - 80) < 0.5, '120 t on a 150 t ruler');
+  assert.ok(Math.abs(needle('260') - 86.7) < 0.5, '260 t on 300 t: the approved reference');
+  assert.ok(Math.abs(needle('5000') - 100) < 0.5, '5,000 t fills the ruler, clamped');
+  assert.notEqual(Math.round(needle('50.0001')), Math.round(needle('5000')), 'the needle moves');
+});
+
+test('F-10 - the gauge threshold tick sits where the threshold is, and the drawing keeps its hooks', () => {
+  const html = yearTile(found({ knownEligibleMassT: '120' }));
+  assert.equal(illCount(html, 'gauge'), 1);
+  assert.equal((html.match(/class="b-needle"/g) ?? []).length, 1);
+  assert.match(html, /aria-hidden="true"/);
+  // an unreadable mass draws no ruler and no gauge: a fixed needle would be a made-up reading
+  assert.doesNotMatch(yearTile(found({ knownEligibleMassT: 'abc' })), /data-ill=/);
+});
+
+test('F-10 - the tick marks the threshold on the same arc as the needle', () => {
+  const tickAt = (html) => {
+    const m = html.match(/class="b-tick" d="M([\d.]+) ([\d.]+)L([\d.]+) ([\d.]+)"/);
+    return (1 - Math.atan2(90 - Number(m[4]), Number(m[3]) - 80) / Math.PI) * 100;
+  };
+  assert.ok(Math.abs(tickAt(yearTile(found({ knownEligibleMassT: '120' }))) - 33.3) < 0.5, '50 t on a 150 t ruler');
+  assert.ok(Math.abs(tickAt(yearTile(found({ knownEligibleMassT: '260' }))) - 16.7) < 0.5, '50 t on a 300 t ruler');
+});
