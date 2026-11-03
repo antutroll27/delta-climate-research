@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { fingerprintBits, renderFingerprint } from '../../src/scripts/cbam-ui/fingerprint.ts';
+import { fingerprintBits, isRealDigest, renderFingerprint } from '../../src/scripts/cbam-ui/fingerprint.ts';
 
 const bitString = (h) => fingerprintBits(h).map((b) => (b ? '1' : '0')).join('');
 
@@ -39,4 +39,16 @@ test('the grid: 64 dots, hidden from assistive tech, and no hex text in it', () 
   assert.doesNotMatch(html, /[0-9a-f]{6}/, 'the drawing must not carry the hash as text');
   assert.equal(renderFingerprint(h), html, 'deterministic');
   assert.match(renderFingerprint(h, 'b-fp-sm'), /^<div class="b-fp b-fp-sm"/);
+});
+
+test('isRealDigest: a hash of 16+ hex digits that is not all zeros; the placeholder and non-hash are not', () => {
+  assert.equal(isRealDigest('8bbba79e7f33f0e4943140c28e91a8810612f2fa770bd6dcad33fdb7045e4c05'), true);
+  assert.equal(isRealDigest('0123456789abcdef'), true);
+  assert.equal(isRealDigest('0'.repeat(64)), false, 'the all-zero placeholder is not a hash');
+  assert.equal(isRealDigest('0'.repeat(16)), false);
+  assert.equal(isRealDigest('0123456789abcde'), false, 'fewer than 16 digits');
+  assert.equal(isRealDigest('not-a-hash-not-a-hash'), false);
+  assert.equal(isRealDigest(''), false);
+  assert.equal(isRealDigest(null), false);
+  assert.equal(isRealDigest(undefined), false);
 });

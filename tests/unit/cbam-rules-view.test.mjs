@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { estimateFromPack, selectFactorFromPack } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
 import { sectorForCn } from '../../src/scripts/cbam-algos/cbam/sector.ts';
-import { renderNotYetPublished, renderRulePack, renderSources } from '../../src/scripts/cbam-ui/tiles-rules.ts';
+import { renderNotYetPublished, renderRulePack, renderSources, spanQuarters, spanYears } from '../../src/scripts/cbam-ui/tiles-rules.ts';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const pack = JSON.parse(read('../../public/cbam/estimator-pack.json'));
@@ -81,6 +81,39 @@ test('renderRulePack: the pack\'s identity, dated, and its snapshot drawn as dot
   assert.match(html, /class="b-fp/);
   assert.match(html, /Snapshot f6af39aed68a4cb3…/);
   assert.doesNotMatch(renderRulePack(pack, ''), /b-fp|Snapshot/, 'no snapshot yet, no dots');
+  assert.doesNotMatch(renderRulePack(pack, '0'.repeat(64)), /b-fp|Snapshot/, 'an all-zero snapshot is the placeholder: no dots, no caption');
+});
+
+test('spanQuarters: whole calendar years by year; a part-year by quarter; a gap is listed, never a range', () => {
+  const q = (y, ns) => ns.map((n) => `${y}-Q${n}`);
+  assert.equal(spanQuarters([...q(2027, [1, 2, 3, 4]), ...q(2028, [1, 2, 3, 4])]), '2027 to 2028');
+  assert.equal(spanQuarters(q(2027, [1, 2, 3, 4])), '2027');
+  assert.equal(spanQuarters(['2026-Q4']), '2026-Q4');
+  assert.equal(spanQuarters(['2026-Q4', ...q(2027, [1, 2])]), '2026-Q4 to 2027-Q2');
+  // a missing 2027-Q3 must not be papered over by "2027-Q1 to 2028-Q4"
+  const gap = spanQuarters([...q(2027, [1, 2, 4]), ...q(2028, [1, 2, 3, 4])]);
+  assert.equal(gap, '2027-Q1 to 2027-Q2, 2027-Q4 to 2028-Q4');
+  assert.ok(!gap.includes('2027-Q1 to 2028'));
+  assert.equal(spanQuarters(['2028-Q1', '2027-Q4']), '2027-Q4 to 2028-Q1', 'input order does not matter');
+  assert.equal(spanQuarters(['2027-Q1', '2027-Q3']), '2027-Q1, 2027-Q3', 'two single quarters with a gap are listed');
+  assert.equal(spanQuarters(['soon', '2027-Q1']), '2027-Q1, soon', 'an unparseable label is listed as is after the quarters, never ranged');
+  assert.equal(spanQuarters([]), '');
+});
+
+test('spanYears: consecutive years are a range, a gap is listed', () => {
+  assert.equal(spanYears([2026, 2027, 2028, 2029, 2030]), '2026 to 2030');
+  assert.equal(spanYears([2026, 2027]), '2026 to 2027');
+  assert.equal(spanYears([2027]), '2027');
+  assert.equal(spanYears([2026, 2028, 2029]), '2026, 2028 to 2029');
+  assert.equal(spanYears([]), '');
+});
+
+test('renderNotYetPublished: a gap in a pending group is never titled as one continuous range', () => {
+  const loc = 'IR 2025/2548 Art 5 (weekly certificate price)';
+  const html = renderNotYetPublished({ cscf: [{ year: 2026, status: 'pending', sourceLocator: 'x' }, { year: 2028, status: 'pending', sourceLocator: 'y' }],
+    prices: ['2027-Q1', '2027-Q2', '2027-Q4'].map((quarter) => ({ quarter, status: 'pending', sourceLocator: loc })) });
+  assert.match(html, /Cross-sectoral correction factor, 2026, 2028\./);
+  assert.match(html, /Certificate price, 2027-Q1 to 2027-Q2, 2027-Q4\./);
 });
 
 test('renderNotYetPublished: every pending CSCF year and price row, from the pack, never typed', () => {
@@ -92,7 +125,8 @@ test('renderNotYetPublished: every pending CSCF year and price row, from the pac
   for (const loc of new Set(pendingPrices.map((r) => r.sourceLocator))) assert.ok(html.includes(loc.replace(/&/g, '&amp;')), loc);
   assert.match(html, new RegExp(`Cross-sectoral correction factor, ${pendingCscf[0].year} to ${pendingCscf.at(-1).year}\\.`));
   assert.match(html, /Certificate price, 2026-Q4\./);
-  assert.match(html, /Certificate price, 2027-Q1 to 2028-Q4\./);
+  assert.match(html, /Certificate price, 2027 to 2028\./, 'quarters that fill whole calendar years are titled by year');
+  assert.doesNotMatch(html, /2027-Q1 to 2028-Q4/);
   assert.match(html, /a floor/, 'the CSCF item says which way the unknown can move the figure');
   // IR 2025/2548: the 2027/28 price is WEEKLY. The pack's own locator says so, and nothing here may
   // re-describe it as quarterly.

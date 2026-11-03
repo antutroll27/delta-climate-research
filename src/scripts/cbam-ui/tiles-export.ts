@@ -4,7 +4,7 @@
 // re-created by innerHTML); these functions fill the containers beside them.
 import { formatPackDate } from '../cbam-outlook.ts';
 import { esc } from './format.ts';
-import { renderFingerprint } from './fingerprint.ts';
+import { isRealDigest, renderFingerprint } from './fingerprint.ts';
 
 /**
  * The CSV columns the preview shows, by their real header names (csvRows in cbam-lines.ts), in the
@@ -54,9 +54,8 @@ export function docTileBody(lineCount: number, todayIso: string): string {
  */
 export function fingerprintsBody(snapshot: string, lines: readonly { n: number; hex: string | null }[]): string {
   const fig = (label: string, hex: string | null) => {
-    const ok = hex !== null && /^[0-9a-f]{16,}$/i.test(hex) && !/^0+$/.test(hex);
-    return `<figure>${ok ? renderFingerprint(hex!) : ''}<figcaption><b>${esc(label)}</b><span class="num">${
-      ok ? `${esc(hex!.slice(0, 8))}…` : 'no fingerprint'}</span></figcaption></figure>`;
+    return `<figure>${isRealDigest(hex) ? renderFingerprint(hex) : ''}<figcaption><b>${esc(label)}</b><span class="num">${
+      isRealDigest(hex) ? `${esc(hex.slice(0, 8))}…` : 'no fingerprint'}</span></figcaption></figure>`;
   };
   return `<div class="b-fps">${fig('Rule pack', snapshot || null)}${lines.map((l) => fig(`Line ${l.n}`, l.hex)).join('')}</div>`;
 }
