@@ -66,12 +66,11 @@
 /* Parked polish (2 Nov): a refused Why view is one sentence, not a 232 px plate with ~190 px of nothing in it. */
 .cbx .b-bento:has(>.b-t>.cg-none){grid-auto-rows:auto}
 
-/* Pictograms in flow (the reference's .b-pict). Only the Framing shield is placed in this phase; the xs/sm
-   sizes are the reference's modifiers. */
+/* Pictograms in flow (the reference's .b-pict). None is placed now: the Framing shield was removed (audit F-11, founder 2026-11-03) because it can read as a seal of
+   assurance beside the not-validated disclaimer. The generator and these sizes stay for the golden set. */
 .cbx .b-pict{width:82%;max-width:240px;margin:10px auto 0;display:block}
 .cbx .b-pict-sm{width:46%;max-width:150px;margin:6px 0 10px}
 .cbx .b-pict-xs{width:64px;flex:none;margin:0}
-.cbx .b-frame .b-pict-sm{width:90px;margin:14px auto}
 
 /* ===== Entry animation (spec §8.3, approved 2 Nov). Replayed on every view entry by views.ts
    through motion.ts: the class goes off, a reflow, the class back on. Transform and opacity only. ===== */
