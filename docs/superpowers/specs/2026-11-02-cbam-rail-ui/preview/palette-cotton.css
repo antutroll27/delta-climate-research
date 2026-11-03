@@ -1,0 +1,15 @@
+/* Palette trial: Cotton #F4F3F1 · Electric Blue #3171C6 · Moonless Night #2D2D2D.
+   Overrides system.css tokens only; delete the <link> to return to bronze/teal.
+   The "bronze" slot (Commission defaults) now carries Electric Blue. The "cyan" slot (verified) is untouched, pending a decision. */
+:root{
+  --ground:#F4F3F1; --card:#FFFFFF; --well:rgba(45,45,45,.06); --well-2:rgba(45,45,45,.11); --line:rgba(45,45,45,.13);
+  --ink:#2D2D2D; --ink-2:#444444; --ink-3:#5A5A5A; --unit:#6B6B6B; --on-ink:#F4F3F1; --focus:#3171C6;
+  --shadow:0 1px 2px rgba(45,45,45,.06),0 18px 40px -22px rgba(45,45,45,.28);
+  --bronze-t:#2A62B0; --bronze-f:#3171C6; --bronze-bg:rgba(49,113,198,.11);
+}
+:root[data-theme="dark"]{
+  --ground:#222222; --card:#2D2D2D; --well:#363636; --well-2:#404040; --line:rgba(244,243,241,.12);
+  --ink:#F4F3F1; --ink-2:#D9D8D5; --ink-3:#B3B2AE; --unit:#A6A5A1; --on-ink:#2D2D2D; --focus:#8DB3EA;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 24px 48px -24px rgba(0,0,0,.6);
+  --bronze-t:#8DB3EA; --bronze-f:#5A8FDA; --bronze-bg:rgba(90,143,218,.16);
+}

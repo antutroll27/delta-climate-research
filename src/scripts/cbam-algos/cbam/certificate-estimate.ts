@@ -70,14 +70,15 @@ export interface CertificateEstimateInput {
   /**
    * Where the DEFAULT that produced these emissions came from:
    *  - 'country'  — the origin's own published values
-   *  - 'residual' — the Commission's "Other Countries and Territories" sheet, i.e. a
-   *                 world-average bucket, because the origin has no published value for this good
+   *  - 'residual' — the Commission's "Other Countries and Territories" sheet, a default set
+   *                 from the highest-emitting exporters (not an all-producer mean), because the
+   *                 origin has no published value for this good
    *  - null       — the figure this field describes rests on no default. Every 'actual-verified'
    *                 line, and also 'verified-direct+default-indirect', whose DIRECT figure is the
    *                 importer's own. That third tier's INDIRECT half does rest on a default, and
    *                 that default can come from the residual bucket — reported by
    *                 `residualIndirectDefault` below, NOT by this field. Setting 'residual' here
-   *                 would claim the audited direct figure rests on a world average, and would
+   *                 would claim the audited direct figure rests on the residual default, and would
    *                 fire a note that says exactly that.
    * A residual-derived number LOOKS exactly like a country-specific one; if we do not say which,
    * we let a user believe the Commission priced their country's good when it did not.
@@ -270,26 +271,26 @@ function baseOf(
 
 export const RESIDUAL_BASIS_NOTE =
   'The Commission does not publish a default for this good from this country of origin, so ' +
-  'this figure uses its "Other Countries and Territories" residual default — a world-average ' +
-  'value, not your country\'s own.'
+  'this figure uses its "Other Countries and Territories" residual default — set from the ' +
+  'highest-emitting exporting countries, not your country\'s own value.'
 
 /**
  * The residual disclosure for a MIXED line, where RESIDUAL_BASIS_NOTE would be a false statement.
  *
- * That note says "this figure" rests on the world-average bucket. On a
+ * That note says "this figure" rests on the residual bucket. On a
  * 'verified-direct+default-indirect' line only the electricity half does; the direct half is the
  * importer's own attested number, which the verified path never derives from a default (see
  * estimateFromPack — the corpus is not consulted for it at all, so no residual value can reach
  * it, and free allocation is keyed on CN, route and date rather than origin). Firing the other
- * note here would tell an importer their audited figure is a world average.
+ * note here would tell an importer their audited figure is a residual default.
  *
  * Deliberately says the same two things about the BUCKET in the same words as its neighbour — it
  * is the same bucket — while scoping the claim to electricity and naming what is untouched.
  */
 export const MIXED_RESIDUAL_INDIRECT_NOTE =
   'The electricity default substituted on this line is the Commission\'s "Other Countries and ' +
-  'Territories" residual — a world-average value, not your country\'s own. Your direct figure ' +
-  'is unaffected: it is your own attested claim.'
+  'Territories" residual — set from the highest-emitting exporting countries, not your ' +
+  'country\'s own value. Your direct figure is unaffected: it is your own attested claim.'
 
 export const NO_BENCHMARK_REASON =
   'The published rules do not give a free-allocation benchmark for this good, production ' +
@@ -308,9 +309,9 @@ export const NO_BENCHMARK_REASON =
  * holds on both paths: an attested figure replaces a default, never the benchmark.
  */
 export const NO_PRICE_REASON =
-  'The Commission has not published the CBAM certificate price for the quarter this import ' +
+  'The Commission has not published the CBAM certificate price for the period this import ' +
   'falls in, so no figure is shown. The good and its benchmark are present — only the price ' +
-  'is missing, and prices are published quarterly in arrears.'
+  'is missing, and prices are published in arrears: quarterly for 2026, weekly from 2027.'
 
 /**
  * Blames the SNAPSHOT, not the regulation — the distinction is the whole point.
@@ -373,9 +374,9 @@ export const NO_PRECURSOR_REASON =
  * telling them to correct what they entered would address the wrong person.
  */
 export const BAD_DATE_REASON =
-  'The import date is not a readable calendar date, so the quarter it falls in cannot be ' +
-  'determined and no figure is shown. The CBAM certificate price is published per quarter, ' +
-  'so without a readable date there is no price to apply.'
+  'The import date is not a readable calendar date, so the price period it falls in cannot ' +
+  'be determined and no figure is shown. The CBAM certificate price changes by period ' +
+  '(quarterly in 2026, weekly from 2027), so without a readable date there is no price to apply.'
 
 /**
  * Names the PHASE-OUT SCHEDULE as the gap, and UNDER-charging as the harm.

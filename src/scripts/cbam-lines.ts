@@ -274,7 +274,7 @@ export type YearThreshold =
       attested: boolean;
       eligibleLineCount: number;
       // No linesInYear and no includedSectors on this arm, deliberately. It reports that the
-      // Commission has published no row for the year, so it makes no de minimis claim at all —
+      // pack carries no row for the year, so it makes no de minimis claim at all —
       // there is nothing for a denominator or a list of tested sectors to qualify, and carrying
       // either would imply a test that never ran. There is also no rule to read them FROM.
     };
@@ -287,7 +287,7 @@ export type YearThreshold =
  * as 60 t "above" — a liability that does not exist.
  *
  * A year with no published threshold row returns ruleFound: false rather than a
- * fabricated default. The Commission has published 2026 only, as of this pack.
+ * fabricated default. The pack carries a row for each year 2026-2030; a later year has none.
  *
  * `completeness` comes from the caller's attestation set — 'complete' only when
  * the user has explicitly ticked "these are all my {year} imports". The tool
@@ -425,6 +425,18 @@ export function thresholdByYear(
   // markup) keeps its exhaustive `ruleFound` switch and cannot forget a null element. A refused
   // year is ABSENT from this array, exactly like a year no line resolves to.
   }).filter((card): card is YearThreshold => card !== null);
+}
+
+/**
+ * C2 (audit 2026-11-02): the lines a year's de minimis verdict exempts, so the total can leave
+ * them out. Only a year the user ATTESTED complete can be `below_threshold` (evaluateThreshold
+ * returns 'indeterminate' for a partial list), and only the lines in that year's basis
+ * (`entryIds`, the four sectors Art 2a counts) are exempt. A hydrogen or electricity line in
+ * the same year is outside the basis and stays owed. A year whose card failed to compute
+ * contributes nothing, so a failure can only over-state the total, never hide a bill.
+ */
+export function exemptLineIds(years: readonly YearThreshold[]): Set<string> {
+  return new Set(years.flatMap((y) => (y.ruleFound && y.state === 'below_threshold' ? y.entryIds : [])));
 }
 
 export interface Totals {

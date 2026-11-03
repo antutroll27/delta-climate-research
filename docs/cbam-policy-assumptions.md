@@ -762,7 +762,7 @@ default stands in — **with its mark-up intact**.
 **Behaviour.** Such a line gets its own data tier, spelled out rather than called "mixed": *Verified
 direct + Commission indirect*. It appears verbatim in the export an auditor reads, and the on-screen
 attestation paragraph is rewritten for it — the fully-attested wording "would tell an importer their
-audited figure is a world average" and is refused.
+audited figure is a residual default" and is refused.
 
 **Alternative.** Documented and rejected. The earlier behaviour priced the unattested electricity
 component **at zero**, which the code calls "a silent under-charge on a page whose governing rule is
@@ -896,7 +896,7 @@ Inherited.
 
 ---
 
-### D10 · A country that has its own sheet but no value for a particular good is refused — it does **not** fall back to the world-average bucket
+### D10 · A country that has its own sheet but no value for a particular good is refused — it does **not** fall back to the residual bucket
 
 **Claim.** The Commission's "Other Countries and Territories" sheet prices *origins* it does not list
 individually. It does not backfill *goods* that a listed origin's sheet omits. Where a listed origin
@@ -909,7 +909,7 @@ residual bucket answers **only** when the origin is a real assigned ISO alpha-2 
 sheet of its own; (3) otherwise refuse.
 
 **Alternative.** **Documented with two named consequences, both quantified:**
-- "Mali hydrogen (the Commission published 0) would resolve to the world average 17.74 — **inventing
+- "Mali hydrogen (the Commission published 0) would resolve to the residual default 17.74 — **inventing
   19,514 tCO₂e on a 1,000 t line** out of a published zero."
 - "Albania white clinker route (B), which Albania's sheet simply does not carry, would borrow a value
   the Commission never stated for Albania."
@@ -925,7 +925,7 @@ row the workbook marks N/A and any whose published value is zero).
 
 ---
 
-### D11 · An origin code that is not a real ISO country code is refused, never given world-average values
+### D11 · An origin code that is not a real ISO country code is refused, never given residual values
 
 **Claim.** A typo like `XX`, a user-assigned range, or a truncated field is an input error to be
 surfaced — never an origin the Commission priced. Only genuinely assigned ISO 3166-1 alpha-2 codes
@@ -943,7 +943,7 @@ ship."
 **Alternative.** Not documented.
 
 **If wrong.** A code the tool refuses but the Commission recognises returns no estimate. A code the
-tool accepts but should not silently receives world-average values. The list carries **no version or
+tool accepts but should not silently receives residual values. The list carries **no version or
 date**, and ISO reassigns codes.
 
 **Evidence.** **Assumed** for currency — the standard is named, but no edition, date or machine
@@ -1147,7 +1147,7 @@ greater-than. 50.0 t is exempt; 50.01 t is not.
 2025/2083".
 
 **Behaviour.** Strict `>`. Threshold value **50 t**, sectors **cement, aluminium, fertilisers, iron &
-steel**, one row, calendar year 2026 only.
+steel**, one row per calendar year, 2026 to 2030 (Art 2a and Annex VII have no end date; the pack stops at 2030, and a later year gets no verdict).
 
 **Alternative.** Documented in the data contract: the "not exceeding" wording is quoted as the reason
 the comparison is strict.
@@ -1521,7 +1521,7 @@ customers who file short and face a penalty they will attribute to us.*
 | **1** | **B1** · CBAM factor is allocation *retained* (0.975), not the phase-out complement (0.025) | **Over-charge** | **~39×** the deduction. On one 1,000 t clinker line: €66,290 → €113,971 | Quoted + corroborated ×2 |
 | **2** | **A2** · Benchmark column decided by scope of the emissions figure | **Over-charge** | Severalfold; **total loss of deduction** where Column A is 0. Worked: €66,290 → €115,225 | Inferred |
 | **3** | **D2** · Fertilisers carry 1% mark-up, not 10/20/30% | **Over-charge** | Up to **+28.7%** of intensity in 2028, across **14,496 of 41,100** published values. A competitor got this wrong | Inherited, machine-checked |
-| **4** | **D10** · A listed origin's silence about a good fails closed, no world-average fallback | **Over-charge** | Mali hydrogen: **19,514 tCO₂e invented on a 1,000 t line** ≈ **€1.47 m** | Inferred |
+| **4** | **D10** · A listed origin's silence about a good fails closed, no residual fallback | **Over-charge** | Mali hydrogen: **19,514 tCO₂e invented on a 1,000 t line** ≈ **€1.47 m** | Inferred |
 | **5** | **E1** · 50 t threshold, strict greater-than, four sectors | **Both — binary** | **Whole-liability switch.** Exactly 50 t is exempt or is not | Quoted (strictness); **Assumed** (amending act) |
 
 ## Tier 2 — wrong by a component, not a multiple
@@ -1572,7 +1572,7 @@ because no certificate price is published for those years.*
 | **D9** | Applying a total-verified mark-up per component | ~0.46% systematic under-charge on 2,770 selectors |
 | **E7** | The heading→sector map itself (the *granularity* choice is documented; the mapping is not) | Decides which threshold a good is tested against |
 | **D18** | Country sheet name → ISO code, by hand | Congo / DR Congo |
-| **D11** | The 249-code ISO list — standard named, no edition or date | Decides which origins get world-average values |
+| **D11** | The 249-code ISO list — standard named, no edition or date | Decides which origins get residual values |
 | **F2** | The date→quarter rule | No instrument cited |
 | **F3** | Certificate rounding | Disclosed as an open question — honest, but still unsupported |
 

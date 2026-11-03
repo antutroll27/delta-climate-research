@@ -8,7 +8,7 @@ const rawPack = readFileSync(new URL('../../public/cbam/estimator-pack.json', im
 const integrity = {
   schemaVersion: 1,
   algorithm: 'sha256',
-  packSha256: 'cc1d817bf5c86ed78f383b1bee245200f3ae1bba1184997c678ba9e6ef62100e',
+  packSha256: 'dc9cf4a7ae58f1f3f8e87e138fded3cee8c1ffd31cbd05b58255058da9548ba6',
   generatedAt: '2026-08-18T00:00:00.000Z',
 };
 

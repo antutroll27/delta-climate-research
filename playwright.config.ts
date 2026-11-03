@@ -119,7 +119,7 @@ export default defineConfig({
        and reported timeouts, which reads as a slow machine.
 
        The name says the tier now, so the gap cannot be re-opened by accident. */
-    { name: 'chromium-tier0', testIgnore: ['**/._*', '**/obos-v2-*.spec.ts'], use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium-tier0', testIgnore: ['**/._*', '**/obos-v2-*.spec.ts', '**/cbam-perf.spec.ts'], use: { ...devices['Desktop Chrome'] } },
 
     /* THE RELIEF PATH, on a real GPU. `--use-angle=metal` gets Apple Silicon's
        Metal backend instead of SwiftShader, which lifts render-quality.ts to tier 2
@@ -177,9 +177,16 @@ export default defineConfig({
         launchOptions: { args: [...PERF_METAL] },
       },
     }]),
+    /* CBAM entry-motion perf (plan 05, Task 9). LOCAL ONLY: a runner has no GPU. New headless on Metal, the
+       founder's no-window rule, exactly as chromium-v2-relief. */
+    ...(process.env.CI ? [] : [{
+      name: 'chromium-cbam-perf',
+      testMatch: ['**/cbam-perf.spec.ts'],
+      use: { ...devices['Desktop Chrome'], headless: false, launchOptions: { args: [...PERF_METAL] } },
+    }]),
     {
       name: 'firefox-cbam',
-      testMatch: '**/cbam-lines.spec.ts',
+      testMatch: /cbam-(lines|shell|estimate|contrast)\.spec\.ts/,
       use: { ...devices['Desktop Firefox'] },
     },
     // WEBKIT RUNS LOCALLY, NOT IN CI, and the reason is apt rather than the browser.
@@ -201,7 +208,7 @@ export default defineConfig({
     // running against a Playwright container that already has them.
     ...(process.env.CI && !process.env.PLAYWRIGHT_WEBKIT ? [] : [{
       name: 'webkit-cbam',
-      testMatch: '**/cbam-lines.spec.ts',
+      testMatch: /cbam-(lines|shell|estimate|contrast)\.spec\.ts/,
       use: { ...devices['Desktop Safari'] },
     }]),
   ]),

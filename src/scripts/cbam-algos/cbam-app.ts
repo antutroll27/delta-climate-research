@@ -25,19 +25,41 @@
  */
 import Decimal from 'decimal.js';
 import {
-  estimateFromPack, nonNegativeDecimal, resolveThreshold, routesFor, selectIndirectFactorFromPack,
+  estimateFromPack, resolveThreshold, routesFor, selectIndirectFactorFromPack,
   type EstimatorInput, type EstimatorPack, type ThresholdView,
 } from './estimator/estimate-from-pack.ts';
 import { loadEstimatorPack, type PackIntegrity } from './estimator/load-pack.ts';
 import type { LoadedEstimatorPack } from './estimator/pack-v2.ts';
 import type { CertificateEstimate, DataTier } from './cbam/certificate-estimate.ts';
-import { parseRegulatoryDate } from './cbam/input.ts';
+import { parseNonNegativeDecimal, parseRegulatoryDate } from './cbam/input.ts';
 import {
-  csvRows, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
+  csvRows, exemptLineIds, lineFingerprint, packSnapshotHash, sumTotals, thresholdByYear, toCsv, yearOf,
   type Line, type Totals, type YearThreshold,
 } from '../cbam-lines.ts';
 import { ROUTE_GLOSSARY } from '../cbam-route-glossary.ts';
-import { outlook, outlookPriceSlots, parseAssumedPrice, renderOutlook, type Outlook } from '../cbam-outlook.ts';
+import { renderTitleCard, titleSummary, type TitleLine } from '../cbam-ui/title-card.ts';
+import {
+  renderDeck, renderEstimateIdle, renderEstimateThrown, renderEstimateTiles,
+} from '../cbam-ui/tiles-estimate.ts';
+import {
+  defaultOriginBasis, defaultTierSentence, mountRadioMirror, renderDatePeriod, renderMassRuler, renderRouteSegments, segmentLabel, verifiedOnlyNote,
+  verifiedOnlyRoutes,
+} from '../cbam-ui/inputs-estimate.ts';
+import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
+import { csvTileBody, docTileBody, fingerprintsBody } from '../cbam-ui/tiles-export.ts';
+import { renderNotYetPublished, renderRulePack, renderSources } from '../cbam-ui/tiles-rules.ts';
+import {
+  SECTOR_PROSE, attestControl, noRuleSentence, refusedLineNote, sectorList, thresholdCitation, totalsTag, yearSentence,
+  yearVerdictTag, linePlate, listView, refusedLinePlate, shareOfTotal, thresholdErrorTile, totalTile, yearTile,
+  type LinePlateContext,
+} from '../cbam-ui/tiles-list.ts';
+import {
+  esc, eur, exactNum, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
+} from '../cbam-ui/format.ts';
+// cbam-render.test.mjs imports renderPriceRow from this module; the format module owns it now.
+export { renderPriceRow };
+import { COMMA_HINT, outlook, parseAssumedPrice, type Outlook } from '../cbam-outlook.ts';
+import { renderYears, yearsPriceSlots } from '../cbam-ui/tiles-years.ts';
 import type { GraphsMount } from '../cbam-graphs-dom.ts';
 
 const PACK_URL = '/cbam/estimator-pack.json';
@@ -55,7 +77,7 @@ const PACK_URL = '/cbam/estimator-pack.json';
 const PACK_INTEGRITY: PackIntegrity = {
   schemaVersion: 1,
   algorithm: 'sha256',
-  packSha256: 'cc1d817bf5c86ed78f383b1bee245200f3ae1bba1184997c678ba9e6ef62100e',
+  packSha256: 'dc9cf4a7ae58f1f3f8e87e138fded3cee8c1ffd31cbd05b58255058da9548ba6',
   generatedAt: '2026-08-18T00:00:00.000Z',
 };
 
@@ -86,9 +108,6 @@ function loadPack(): Promise<LoadedEstimatorPack> {
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T | null;
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) =>
-  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
-
 /** Country names for the origin select. Falls back to the bare code. */
 let regionNames: Intl.DisplayNames | null = null;
 try { regionNames = new Intl.DisplayNames(['en'], { type: 'region' }); } catch { /* older runtime */ }
@@ -96,66 +115,6 @@ const countryName = (code: string) => {
   if (code === 'OTHER') return 'Other countries and territories (residual)';
   try { return regionNames?.of(code) ?? code; } catch { return code; }
 };
-
-/**
- * tCO2e and certificate counts carry long decimal tails; 3 dp is plenty to read.
- *
- * Blank input is special-cased AHEAD of `Number()`: `Number('')` is `0`, and — the gap the first
- * fix here missed — so is `Number('   ')`. Both are a genuine JS quirk (`Number()` trims the
- * string before parsing, same as `parseFloat`), not a missing-value signal, so blank input used
- * to sail through `Number.isFinite` and render as a confirmed "0", indistinguishable from a real
- * zero the engine computed. `s.trim() === ''` catches both; it does NOT catch a real number with
- * incidental whitespace around it (`' 100 '` still parses to 100 and renders normally — only
- * whitespace with no digits in it counts as blank). Every caller before Task 5 fed this engine
- * output (always a real numeric string); `Line.massT` is free-typed by the user with no format
- * guarantee and can be left blank or cleared to spaces, and that must read as missing input, not
- * as a claimed zero — the same rule `Totals.certificates`'s own doc already states for "nothing
- * was summed." Other non-numeric input (never reachable from the engine, only from a user's
- * stray keystrokes in `Line`) still falls through to the `esc(s)` branch below, unchanged:
- * showing exactly what was typed beats hiding it behind a fabricated number.
- */
-const num = (s: string, dp = 3) => {
-  if (s.trim() === '') return '—';
-  const n = Number(s);
-  // esc() on the fallback: every other path into innerHTML in this file is escaped,
-  // and this is the only one that returns its argument verbatim.
-  return Number.isFinite(n) ? n.toLocaleString('en-GB', { maximumFractionDigits: dp }) : esc(s);
-};
-/**
- * ALWAYS returns a printable string, never `null` — every call site embeds the return directly
- * in a template (`${eur(x)}`), and `null` interpolated into a template literal prints the
- * literal three characters "null" onto the page, which is a worse failure than what this
- * function exists to prevent. Every call site today decides whether to call `eur` at all by
- * checking the ORIGINAL input first (`t.costEur ? eur(t.costEur) : fallback`) — this function's
- * job is only to make whatever value reaches it safe to print. Blank input — `''`, and (the gap
- * the first fix here missed) whitespace-only strings like `'   '`, which are TRUTHY in JS and so
- * pass every call site's `t.costEur ? eur(t.costEur) : fallback` guard exactly like a real value
- * would — and other non-finite input (never reachable from the engine, which only ever produces
- * `null` or a real Decimal string; only a future caller that skips that guard could reach this)
- * render as the same '—' placeholder `num` uses, not as `Number('garbage')` → `NaN` → the
- * literal string `'€NaN'`, or `Number('   ')` → `0` → an invented `'€0.00'`, either printed as
- * though it were money.
- */
-const eur = (s: string | null): string => {
-  if (s === null || s.trim() === '') return '—';
-  const n = Number(s);
-  return Number.isFinite(n)
-    ? `€${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
-};
-
-/**
- * Does this refusal blame the user's input, or the Commission's corpus?
- *
- * Every refusal carries a `selector` locating the problem, and its first segment is the
- * namespace: `default/`, `indirect/`, `benchmark/` and `certificate-price/` name a rule nobody
- * has published, while `mass/` and `verified/` name a value the user typed. Only the second kind
- * is fixable by the person reading the card, and telling someone a rule is "missing" when they
- * have in fact mistyped a tonnage sends them to look for a gap in the regulation.
- *
- * Matched on the namespace rather than the whole string so a selector gaining or losing a
- * trailing segment cannot silently flip the caption — that shape has already changed twice.
- */
-const inputRefusal = (selector: string): boolean => /^(mass|verified)\//.test(selector);
 
 /**
  * The card shell. Every branch renders one, so the status tag is the ONLY thing
@@ -177,55 +136,17 @@ const figure = (certs: string, costEur: string | null) => `
   <div class="cb-u">certificates</div>
   ${costEur ? `<div class="cb-cost">${eur(costEur)}</div>` : ''}`;
 
-/**
- * Which corpus priced a line, in words — ONE wording, used by the on-screen provenance stamp and
- * by the printable document's §1 column alike. A second literal in the document would let the
- * paper artefact and the card a user saw name the same tier differently ("Verified" vs "Verified
- * actual"), which is the kind of drift an auditor reads as two different claims.
- *
- * Takes the tier rather than a stamp or a Line: the stamp says which tier actually PRICED the
- * figure, the Line says which tier was CLAIMED, and the two callers legitimately want different
- * ones (see buildPrintDocument's row for why the document reads the line). `Line['tier']` is
- * declared as the same two literals for the reason cbam-lines.ts gives, so both callers pass.
- *
- * SWITCHED ON EVERY MEMBER, WITH `never` IN THE DEFAULT ARM — this file's own exhaustiveness idiom
- * (renderResult, tableFigures). It was written as a `string` parameter with a ternary, which was a
- * silent widening of the engine's `DataTier` union: a third tier added upstream would have compiled
- * here and confidently printed "Commission default + mark-up" for it, on BOTH the on-screen
- * provenance stamp and the audit document, with nothing type-checking against it. Naming a tier
- * wrongly on a document handed to an auditor is exactly the class of failure the `never` assertions
- * elsewhere in this file exist to make a build error instead.
- */
-function tierLabel(tier: DataTier): string {
-  switch (tier) {
-    case 'actual-verified': return 'Verified actual';
-    case 'default+markup': return 'Commission default + mark-up';
-    // NAMES BOTH HALVES, because both are true of the figure and neither alone is. "Verified"
-    // on its own would read as the mark-up having been dropped from the whole line, when it was
-    // only dropped from the direct half; "Commission default" on its own would bury the one
-    // number the importer had audited and paid a verifier for. This label is what an auditor
-    // reads in §1 of the printable document beside the row's figures, so it has to say which
-    // corpus priced which half in the space of a table cell.
-    case 'verified-direct+default-indirect': return 'Verified direct + Commission indirect';
-    default: {
-      const _exhaustive: never = tier;
-      return _exhaustive;
-    }
-  }
-}
-
 /* ── the provenance stamp — rendered on EVERY branch, refusals included ─────── */
 function renderStamp(e: CertificateEstimate): string {
   const s = e.stamp;
   const rows: [string, string][] = [
     ['Data tier', tierLabel(s.tier)],
-    ['Origin basis', s.originBasis === 'residual' ? 'Residual bucket' :
-                     s.originBasis === 'country' ? "Origin's own published value" : '—'],
+    ['Origin basis', originBasisLabel(s.originBasis)],
     ['Rule packages', s.rulePackages.join(' · ') || '—'],
     // A real snapshot is a 64-char sha256 and wants truncating; the browser build's
     // is the literal 'browser-prototype', and a blind slice(0,16) rendered that as
     // "browser-prototyp", which reads as a typo rather than a hash.
-    ['Snapshot', s.snapshotHash.length > 24 ? `${s.snapshotHash.slice(0, 16)}…` : s.snapshotHash],
+    ['Snapshot', snapshotLabel(s.snapshotHash)],
   ];
   return `
     <div class="cb-stamp">
@@ -237,18 +158,18 @@ function renderStamp(e: CertificateEstimate): string {
 }
 
 /**
- * The 50 t de minimis figure itself lives in the consolidated Art 2(3); this is the amending act
- * that put it there. Both threshold cards cite it (single-line and per-year) — one constant so
- * the citation can't drift between them.
- */
-const AMENDED_BY_2025_2083 = 'as amended by Reg (EU) 2025/2083';
-
-/**
  * Where this ONE line sits against the annual de minimis threshold — Reg (EU)
  * 2023/956 Art 2(3) as amended by Reg (EU) 2025/2083, 50 t per importer per
  * calendar year across cement, iron & steel, aluminium and fertilisers.
  *
- * WHY THIS CARD EXISTS AT ALL. Below the threshold an importer owes nothing, and
+ * THE 50 t IS ONE TEST ACROSS EVERY IN-SCOPE SECTOR (audit F-06). Art 2a(1), as inserted by Reg (EU)
+ * 2025/2083: the threshold "shall apply to the total net mass of goods under all CN codes aggregated per
+ * importer and per calendar year"; Art 2a(4) leaves out electricity and hydrogen. So the indeterminate
+ * sentence asks for ALL the importer's other CBAM goods, not "your other <this sector>" — that
+ * understated the aggregation. The sectors named come from the year's threshold row (`includedSectors`,
+ * handed in by renderDraftThreshold); ThresholdView carries only this line's own sector.
+ *
+ * WHY THIS CARD EXISTS AT ALL. Below the threshold an importer is exempt for the year, and
  * without it the tool quoted a four-figure cost to someone who may be exempt —
  * an error in the most expensive direction, on a page whose argument is that it
  * says what it cannot compute.
@@ -267,8 +188,13 @@ const AMENDED_BY_2025_2083 = 'as amended by Reg (EU) 2025/2083';
  * two of the four shipped keys. Sharing the table is also what carries the unknown-key convention
  * here: a sector this file has no prose for prints raw, rather than as a name nobody chose.
  */
-export function renderThreshold(t: ThresholdView): string {
+export function renderThreshold(
+  t: ThresholdView,
+  includedSectors: readonly string[] = SECTOR_PROSE.map(([key]) => key),
+): string {
   const above = t.state === 'above_threshold';
+  // Masses are printed with exactNum, not num (audit N-02): num rounds to 3 dp through a float, so 50.0001 t
+  // read "50 t" beside "Above threshold". Same on the per-year card and the print document's verdict list/table.
   // 'pending' (amber), not 'ok' (green): an unresolved verdict is not good news. This line can
   // only ever land here or on 'above_threshold' (see the doc above), so there is no 'ok' tone to
   // reach from this function at all — reserved for renderYearThreshold's genuine below_threshold.
@@ -279,98 +205,20 @@ export function renderThreshold(t: ThresholdView): string {
         <span class="cb-tag ${above ? 'unavail' : 'pending'}">${above ? 'Above threshold' : 'Indeterminate'}</span>
       </div>
       <div class="cb-water">
-        <div class="cb-row"><span>This line</span><b>${num(t.knownEligibleMassT)} t</b></div>
+        <div class="cb-row"><span>This line</span><b>${exactNum(t.knownEligibleMassT)} t</b></div>
         <div class="cb-row"><span>Threshold · ${esc(String(t.calendarYear))}</span><b>${num(t.thresholdT)} t</b></div>
         <div class="cb-row"><span>Sector</span><b>${esc(sectorList([t.sector]))}</b></div>
       </div>
       <p class="cb-sub">${above
         ? `This line alone exceeds the ${num(t.thresholdT)}&nbsp;t annual threshold, so the exemption
-           does not apply and the exposure below stands.`
-        : `Below ${num(t.thresholdT)}&nbsp;t an importer owes nothing for the year. This is ONE line,
-           not your annual total, so it cannot show you are under the threshold — only that this
-           line by itself does not cross it. Add your other ${esc(sectorList([t.sector]))}
-           imports for ${esc(String(t.calendarYear))} before relying on the exemption.`}</p>
-      <p class="cb-prov">${esc(t.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
+           does not apply to your ${esc(String(t.calendarYear))} imports.`
+        : `The exemption covers an importer whose CBAM goods total ${num(t.thresholdT)}&nbsp;t or less in a
+           calendar year. This is one line, not your annual total, so it cannot show you are under the
+           threshold. Add all your other CBAM imports for ${esc(String(t.calendarYear))} —
+           ${esc(sectorList(includedSectors))} — before relying on the exemption.`}</p>
+      <p class="cb-prov">${thresholdCitation(t.sourceLocator)}</p>
     </section>`;
 }
-
-/**
- * How a threshold sector KEY is said on either threshold card — and, where a card names several,
- * in the order it says them. An ordered list rather than a map, because it settles both questions
- * at once and they are both load-bearing.
- *
- * THE PROSE IS NOT THE KEY, and no transformation gets from one to the other. `iron_and_steel` is
- * said "iron & steel" (an ampersand, not "and"), and `fertilisers` is said "fertiliser" (singular,
- * from a plural key). A `.replace(/_/g, ' ')` — the obvious shortcut — is wrong on two of the four
- * keys the shipped pack contains, which is why unknown keys below are not passed through one.
- *
- * THE ORDER IS NOT THE PACK'S. The shipped 2026 row lists cement, aluminium, fertilisers,
- * iron_and_steel; the per-year verdict has always read cement, iron & steel, aluminium and
- * fertiliser. Rendering in pack order would have silently re-ordered live legal copy. So known
- * sectors are named in THIS list's order, whatever order the row happens to store them in. The
- * single-line card names one sector and so has no order to get wrong — it needs only the prose.
- */
-const SECTOR_PROSE: ReadonlyArray<readonly [key: string, prose: string]> = [
-  ['cement', 'cement'],
-  ['iron_and_steel', 'iron & steel'],
-  ['aluminium', 'aluminium'],
-  ['fertilisers', 'fertiliser'],
-];
-
-/**
- * "cement, iron & steel, aluminium and fertiliser" — a threshold row's sectors, said the way the
- * cards say them. PLAIN TEXT, escaped by the caller: the ampersand in 'iron & steel' has to
- * reach esc() as a bare '&' to come out as '&amp;', and a key arriving from pack JSON is
- * untrusted input that must be escaped like any other.
- *
- * TWO CALLERS, AND ONE OF THEM HANDS IT A SINGLE SECTOR. renderYearThreshold passes a whole row's
- * `includedSectors`; renderThreshold passes `[t.sector]`, the one sector its line belongs to. The
- * `< 2` branch below is what serves that call — it returns the bare prose with no "and" — so it
- * is not dead code guarding only the empty row, and must not be narrowed to a length-0 test.
- *
- * AN UNKNOWN KEY IS PRINTED VERBATIM, underscores and all. Not prettified: this file cannot know
- * what the Commission calls a sector it has never seen, and the two counter-examples above prove
- * a mechanical guess gets it wrong more often than not. A key rendered raw reads as a datum and
- * tells a maintainer to add a line to SECTOR_PROSE; a key rendered as "organic chemicals" reads
- * as reviewed copy and would ship a name nobody chose, on the one sentence in this card that
- * states what was actually measured. Awkward and honest over fluent and possibly wrong.
- *
- * Unknowns are named LAST, in the row's own order — they cannot be placed in a prose order that
- * does not yet include them, and appending keeps the four known sectors reading exactly as they
- * always have when a fifth is added.
- *
- * An empty row yields '' and the sentence reads "Your imports for…". Deliberately unguarded: HTML
- * collapses the doubled space, and there is no honest word to substitute for a list of sectors a
- * rule declined to name. A row that measures nothing is a pack defect, and the card would already
- * be reporting 0 t beside it.
- */
-const sectorList = (sectors: readonly string[]): string => {
-  const known = SECTOR_PROSE.filter(([key]) => sectors.includes(key)).map(([, prose]) => prose);
-  const unknown = sectors.filter((s) => !SECTOR_PROSE.some(([key]) => key === s));
-  const names = [...known, ...unknown];
-  if (names.length < 2) return names.join('');
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-};
-
-/**
- * The per-year card's own tag text — for BOTH branches of the union, including the year that has
- * no published rule at all. Reused by #cbStatus's multi-line announcement (renderAll, initCbam)
- * for the same reason totalsTag is: with the results panel's aria-live turned off in multi-line
- * mode, the announcement is the only thing a screen-reader user hears — and a year's verdict can
- * flip from "indeterminate" to "below threshold" as a DIRECT result of the user ticking their own
- * attestation checkbox. Reusing this function, rather than a second phrasing in the announcement,
- * is what keeps the spoken verdict from ever disagreeing with the card's own.
- *
- * Takes the FULL `YearThreshold` union, not just its `ruleFound: true` member: the announcement
- * must say something for a year with no published rule too — a sighted user gets an explicit "No
- * published rule" card for it, and silently skipping that year in the announcement would be the
- * same "sighted users only" gap this whole reuse pattern exists to close, just a milder one
- * (omission, not misstatement).
- */
-const yearVerdictTag = (y: YearThreshold): string => {
-  if (!y.ruleFound) return 'No published rule';
-  return y.state === 'above_threshold' ? 'Above threshold' : y.state === 'below_threshold' ? 'Below threshold' : 'Indeterminate';
-};
 
 /**
  * One card per calendar year present in the line list. This is the multi-line counterpart of
@@ -393,7 +241,7 @@ export function renderYearThreshold(y: YearThreshold): string {
         <h3 class="cb-card-label">Annual de minimis · ${esc(String(y.calendarYear))}</h3>
         <span class="cb-tag pending">${esc(yearVerdictTag(y))}</span>
       </div>
-      <p class="cb-sub">No de minimis threshold has been published for ${esc(String(y.calendarYear))}. We show no verdict rather than assume one.</p>
+      <p class="cb-sub">${noRuleSentence(y.calendarYear)}</p>
     </section>`;
 
   const above = y.state === 'above_threshold';
@@ -402,32 +250,6 @@ export function renderYearThreshold(y: YearThreshold): string {
   // as a genuine below-threshold answer — see renderThreshold's identical fix just above.
   const tone = above ? 'unavail' : below ? 'ok' : 'pending';
   const tag = yearVerdictTag(y);
-  const attest = above ? '' : `
-    <label class="cb-attest">
-      <input type="checkbox" data-attest="${esc(String(y.calendarYear))}" ${y.attested ? 'checked' : ''} />
-      These are all my ${esc(String(y.calendarYear))} imports of CBAM goods
-    </label>`;
-  // Art 2(3) is a MASS test over four sectors, so a hydrogen or electricity line is rightly
-  // outside the basis — and the verdict used to generalise that into "an importer owes nothing
-  // for the year". MEASURED: 40 t cement + 1000 t hydrogen rendered "owes nothing for 2026"
-  // beside EUR 525,302.23 (the hydrogen line alone was EUR 523,015.36) on the same page.
-  // COUNTED, NEVER EXPLAINED PER LINE: two filters run in series (ours on rule.includedSectors,
-  // aggregateThresholdBasis's own massSectors) and eligibleLineCount's own doc warns they agree
-  // today only by coincidence of the shipped 2026 row, so naming a cause for a specific line
-  // would be a claim this card cannot support. It says how many, and what the test measures.
-  const excluded = y.linesInYear - y.eligibleLineCount;
-  const outside = excluded === 0 ? '' : ` ${excluded} of your ${y.linesInYear} lines for ${esc(String(y.calendarYear))} ${excluded === 1 ? 'is' : 'are'} outside that test — goods not measured by mass for de minimis, such as hydrogen and electricity, are chargeable regardless. This verdict does not mean you owe nothing.`;
-  const sub = above
-    ? `The listed ${esc(String(y.calendarYear))} imports exceed the threshold; the exemption does not apply.`
-    : below
-      // The sectors come from the CARD (y.includedSectors, straight off the year's own threshold
-      // row) — they used to be four words typed into this string. The row is data: the day the
-      // Commission widens it, this sentence would have gone on naming the old four beside a mass
-      // computed from the new set, stating the wrong basis with nothing to catch it. See
-      // sectorList for why the prose is a table rather than a transformation of the keys, and why
-      // its order is not the row's.
-      ? `Your ${esc(sectorList(y.includedSectors))} imports for ${esc(String(y.calendarYear))} total ${num(y.knownEligibleMassT)}&nbsp;t, below the ${num(y.thresholdT)}&nbsp;t threshold for those sectors.${outside} This verdict rests on your attested statement that the list is complete — it is your completeness claim, verified by no one, not by the Commission or by us.`
-      : `Under the threshold so far, but unattested. Tick the box only if this list is genuinely every ${esc(String(y.calendarYear))} CBAM import; the verdict is only as good as that statement.`;
   return `
     <section class="cb-card cb-thresh">
       <div class="cb-card-head">
@@ -435,31 +257,30 @@ export function renderYearThreshold(y: YearThreshold): string {
         <span class="cb-tag ${tone}">${esc(tag)}</span>
       </div>
       <div class="cb-water">
-        <div class="cb-row"><span>Eligible mass · ${y.eligibleLineCount} line${y.eligibleLineCount === 1 ? '' : 's'}</span><b>${num(y.knownEligibleMassT)} t</b></div>
+        <div class="cb-row"><span>Eligible mass · ${y.eligibleLineCount} line${y.eligibleLineCount === 1 ? '' : 's'}</span><b>${exactNum(y.knownEligibleMassT)} t</b></div>
         <div class="cb-row"><span>Threshold</span><b>${num(y.thresholdT)} t</b></div>
       </div>
-      <p class="cb-sub">${sub}</p>
-      ${attest}
-      <p class="cb-prov">${esc(y.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
+      <p class="cb-sub">${yearSentence(y)}</p>
+      ${attestControl(y)}
+      <p class="cb-prov">${thresholdCitation(y.sourceLocator)}</p>
     </section>`;
 }
 
 /**
  * The threshold statement for the ONE line the form currently describes: the verdict card, the
- * "no published rule" card, or deliberate silence.
+ * "year not covered" card, or deliberate silence.
  *
  * `resolveThreshold` answers `null` for FOUR different reasons and says which for none of them,
  * so the preview rendered `t ? renderThreshold(t) : ''` and dropped the card with nothing at all
  * in its place. Enumerated against the shipped pack, as the form can actually reach them:
  *
- *   1. NO THRESHOLD ROW FOR THE YEAR. The pack publishes exactly one row (2026), so EVERY other
- *      year lands here, and 2027/2028 are ordinary dates a user types. Worse, the estimate that
- *      renders beside it refuses on the certificate PRICE and reassures in so many words that
- *      "the good and its benchmark are present" — so the only thing on screen that could have
- *      explained the missing de minimis verdict says instead that nothing is wrong with the
- *      good. THIS is the case the user is owed an explanation for, and it gets the SAME card the
- *      multi-line panel already shows for such a year (renderYearThreshold's `ruleFound: false`
- *      arm) rather than a second phrasing here that could drift away from it.
+ *   1. NO THRESHOLD ROW FOR THE YEAR. The pack carries a 50 t row for each year 2026-2030
+ *      (Reg (EU) 2023/956 Art 2a and Annex VII have no end date), so only a year past its last
+ *      row lands here. It once held 2026 alone, so 2027/2028 — ordinary dates a user types —
+ *      landed here and were told, falsely, that no threshold had been published. A year that
+ *      does land here is owed an explanation, and it gets the SAME card the multi-line panel
+ *      already shows for such a year (renderYearThreshold's `ruleFound: false` arm) rather than a
+ *      second phrasing here that could drift away from it.
  *   2. THE SECTOR IS OUTSIDE THE YEAR'S ROW — hydrogen (28041000, priceable from 93 origins in
  *      this pack), and electricity, which this pack does not classify at all. Reg (EU) 2025/2083
  *      leaves both out of the 50 t exemption, so an "indeterminate" card would imply an
@@ -473,7 +294,7 @@ export function renderYearThreshold(y: YearThreshold): string {
  *      predicate (nonNegativeDecimal) well above this call and never reaches the threshold.
  *
  * THE YEAR IS TESTED FIRST, exactly as resolveThreshold tests it first, so a hydrogen line dated
- * 2027 says "no rule published for 2027" on this surface and on the multi-line one alike — the
+ * 2031 says "year not covered" on this surface and on the multi-line one alike — the
  * two cards agree about the year rather than each answering a different question about it.
  */
 export function renderDraftThreshold(
@@ -481,7 +302,12 @@ export function renderDraftThreshold(
   input: { cn: string; massT: string; date: string },
 ): string {
   const t = resolveThreshold(pack, input);
-  if (t) return renderThreshold(t);
+  if (t) {
+    // The row's own sector list, so the indeterminate sentence names every sector Art 2a(1) aggregates
+    // (resolveThreshold's ThresholdView carries only the one sector this line belongs to).
+    const row = pack.thresholds.find((r) => r.calendarYear === t.calendarYear);
+    return row ? renderThreshold(t, row.includedSectors) : renderThreshold(t);
+  }
   // The SAME year resolveThreshold derives, off the same string and by the same expression, so
   // the two can never disagree about which year has no published row. run()'s completeness gate
   // has already refused an empty date by the time this runs; the guard is what keeps the
@@ -498,18 +324,6 @@ export function renderDraftThreshold(
 }
 
 /**
- * "N line(s) has/have no estimate and is/are excluded…" — the pluralisation was duplicated
- * verbatim at both renderTotals call sites below; one helper means it can only disagree with
- * itself if this function's own logic is wrong, not by the two copies drifting apart.
- *
- * Also reused by initCbam's #cbStatus announcement (renderAll) — the multi-line panel's
- * aria-live region is turned off (see renderAll's own doc), so this note is the ONLY way a
- * screen-reader user learns a line was refused; a refusal only sighted users learn about is not
- * a refusal. Reusing this exact function, rather than writing the announcement's own phrasing,
- * is what keeps the spoken text from ever disagreeing with the visible card about which lines
- * were excluded or how many.
- */
-/**
  * "A", "A or B", "A, B or C" — an English list, because these are read out of a <select> option
  * by someone deciding what to type next, and a bare comma-joined run of ten-digit codes reads as
  * one number. Kept tiny and local: Intl.ListFormat would do it, but it is not available in every
@@ -518,68 +332,6 @@ export function renderDraftThreshold(
 const orList = (items: readonly string[]): string => (items.length < 2
   ? (items[0] ?? '')
   : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`);
-
-const refusedLineNote = (refusedLines: number) =>
-  `${refusedLines} line${refusedLines === 1 ? ' has' : 's have'} no estimate and ${
-    refusedLines === 1 ? 'is' : 'are'} excluded from this total.`;
-
-/**
- * The totals card's own tag text — "What-if · CSCF unpublished" vs "Priced". Also reused by the
- * #cbStatus announcement (renderAll), for the same reason refusedLineNote is: with the panel's
- * aria-live off in multi-line mode, the announcement is the only thing a screen-reader user
- * hears, and it must not state a pending, assumed-CSCF scenario as a settled euro figure when
- * the visible card right next to it says otherwise — the exact false-certainty failure the §4
- * caveats and the cscf_pending status exist to prevent everywhere else in this file.
- */
-const totalsTag = (anyPending: boolean) => (anyPending ? 'What-if · CSCF unpublished' : 'Priced');
-
-/**
- * The summed exposure. A total containing any what-if is itself a what-if, and a total with no
- * priced lines at all (Totals.certificates === '0' both for "genuinely zero" and "nothing was
- * summed", per that field's own doc in cbam-lines.ts) must never render as a confirmed zero —
- * hence its own states below, distinct from a real "Priced" verdict at 0.
- *
- * pricedLines === 0 is itself two different situations, distinguishable from Totals' EXISTING
- * fields with no new signal needed: refusedLines === 0 means no line was even entered yet (a
- * neutral empty state — nobody has done anything wrong); refusedLines > 0 means every entered
- * line failed closed (a real "nothing here priced" warning). Showing the same red tag for both
- * would make an empty form look like a form full of refusals.
- */
-export function renderTotals(t: Totals): string {
-  if (t.pricedLines === 0 && t.refusedLines === 0) return `
-    <section class="cb-card cb-res cb-total">
-      <div class="cb-card-head">
-        <h3 class="cb-card-label">Total exposure</h3>
-        <span class="cb-tag pending">No lines yet</span>
-      </div>
-      <p class="cb-sub">Add at least one line to see a total.</p>
-    </section>`;
-
-  if (t.pricedLines === 0) return `
-    <section class="cb-card cb-res cb-total">
-      <div class="cb-card-head">
-        <h3 class="cb-card-label">Total exposure</h3>
-        <span class="cb-tag unavail">Nothing priced</span>
-      </div>
-      <p class="cb-sub">No line has a priced estimate, so there is no total to show — not even a zero. ${
-        refusedLineNote(t.refusedLines)}</p>
-    </section>`;
-
-  const tone = t.anyPending ? 'pending' : 'ok';
-  const tag = totalsTag(t.anyPending);
-  return `
-    <section class="cb-card cb-res cb-total">
-      <div class="cb-card-head">
-        <h3 class="cb-card-label">Total exposure · ${t.pricedLines} line${t.pricedLines === 1 ? '' : 's'}</h3>
-        <span class="cb-tag ${tone}">${esc(tag)}</span>
-      </div>
-      <div class="cb-fig"><span class="cb-n">${num(t.certificates)}</span></div>
-      <div class="cb-u">certificates</div>
-      ${t.costEur ? `<div class="cb-cost">${eur(t.costEur)}</div>`
-        : '<div class="cb-sub">No € total — at least one line has no published certificate price.</div>'}
-      ${t.refusedLines ? `<p class="cb-sub cb-warn">${refusedLineNote(t.refusedLines)}</p>` : ''}
-    </section>`;
-}
 
 /** The subtraction, shown as terms rather than a single opaque number. */
 function renderWaterfall(e: Extract<CertificateEstimate, { terms: unknown }>, fig: {
@@ -604,25 +356,6 @@ function renderWaterfall(e: Extract<CertificateEstimate, { terms: unknown }>, fi
       <div class="cb-row"><span>CBAM factor ${esc(String(e.terms.cbamFactorYear))}</span><b>${esc(e.terms.cbamFactor)}</b></div>
       ${renderPriceRow(e)}
     </div>`;
-}
-
-/**
- * The certificate-price row of the breakdown.
- *
- * "imports in <quarter>", NEVER "<quarter> price", AND NEVER "(pending)". The quarter is the
- * engine's lookup key: the import date's quarter. Only 2026 has a price per quarter. From 2027
- * the Commission sets the price weekly and it applies to the certificates sold that week
- * (IR (EU) 2025/2548 Arts 5 and 8), so "Certificate price 2027-Q1 · not published (pending)"
- * described a figure that will never be published, and "(pending)" promised it. This row used to
- * read exactly that, and nobody saw it because every 2027 date refused before reaching here.
- *
- * ONE WORDING FOR EVERY PENDING ROW, with no year test: "none published" is true of 2026-Q3 and
- * of 2027-Q1 alike, and stays true the day the corpus changes. What differs between the two
- * regimes is said by the pack, in the price row's own sourceLocator, not decided here.
- */
-export function renderPriceRow(e: { priceQuarter: string; priceEur: string | null }): string {
-  return `<div class="cb-row"><span>Certificate price · imports in ${esc(e.priceQuarter)}</span><b>${
-    e.priceEur ? eur(e.priceEur) : 'none published'}</b></div>`;
 }
 
 /**
@@ -799,6 +532,13 @@ const REFUSED_MIXED_NOTE =
  * for a sentence that describes what is on the card.
  */
 const hasFigure = (e: CertificateEstimate): boolean => e.status !== 'unavailable';
+/**
+ * The plate pictogram's reading of the same question: hasFigure itself, under a second name, so there is
+ * still ONE predicate and no literal. It is an alias, not a call, because the spec pins hasFigure(e) to
+ * exactly the two renderAttestation call sites (cbam-render.test.mjs), and a variable passed to
+ * renderAttestation would not match that pin.
+ */
+const plateHasFigure: typeof hasFigure = hasFigure;
 
 /**
  * The reference is TRANSCRIBED, NEVER CHECKED — the same contract csvRows' verified_reference
@@ -1036,6 +776,8 @@ export function renderLineCard(
    * sentences (see deltaSentence): only one of them is a claim about the Commission's corpus.
    */
   comparison?: CertificateEstimate | null,
+  /** Rail phase 4: what the List knows beyond the estimate (good name, share, exemption). */
+  plate: LinePlateContext = {},
 ): string {
   // GATED ON THE LINE'S TIER, NOT ON THE ARGUMENT. A default-tier line IS the Commission
   // default: it has nothing to attest and nothing to compare itself against, and would render a
@@ -1051,17 +793,12 @@ export function renderLineCard(
   // is unchecked. defaultPathComparison decides with the SAME predicate — no longer a matching
   // pair two readers must keep in step, but one spelling both read; see isAttested.
   const verified = isAttested(line.tier);
-  return `
-    <article class="cb-line" data-line="${esc(line.id)}">
-      <div class="cb-line-head">
-        <span class="cb-line-n">Line ${index + 1}</span>
-        <span class="cb-line-sum">${esc(line.cn)} · ${esc(line.country)} · ${esc(line.route)} · ${num(line.massT)} t · ${esc(line.date)}</span>
-        <button type="button" class="cb-line-x" data-remove="${esc(line.id)}" aria-label="Remove line ${index + 1}">Remove</button>
-      </div>
-      ${renderResult(e)}
-      ${renderAttestation(line, hasFigure(e))}
-      ${verified ? renderVerifiedDelta(e, comparison) : ''}
-    </article>`;
+  return linePlate(line, index, {
+    result: renderResult(e),
+    attestation: renderAttestation(line, hasFigure(e)),
+    delta: verified ? renderVerifiedDelta(e, comparison) : '',
+    tierLabel: tierLabel(line.tier),
+  }, { ...plate, figure: plateHasFigure(e) });
 }
 
 /**
@@ -1070,7 +807,7 @@ export function renderLineCard(
  * import since it is not exported there. `never` in the default arm keeps this exhaustive against
  * CertificateEstimate the same way renderResult's own switch is, just above.
  */
-function tableFigures(e: CertificateEstimate): { certs: string | null; costEur: string | null } {
+export function tableFigures(e: CertificateEstimate): { certs: string | null; costEur: string | null } {
   switch (e.status) {
     case 'ok':
     case 'zero_by_fiat': return { certs: e.figure.certificates, costEur: e.figure.costEur };
@@ -1197,12 +934,14 @@ export function buildPrintDocument(input: {
   results: readonly (CertificateEstimate | LineEstimateFailure)[];
   yearCards: readonly YearThreshold[];
   totals: Totals;
+  /** C2: lines an attested below-threshold year exempts, summed apart. Optional for older callers. */
+  exempt?: Totals;
   packSnapshot: string;
   rulePackages: readonly string[];
   pack: Pick<EstimatorPack, 'sources'>;
   generatedOn: string;
 }): string {
-  const { lines, results, yearCards, totals, packSnapshot, rulePackages, pack, generatedOn } = input;
+  const { lines, results, yearCards, totals, exempt, packSnapshot, rulePackages, pack, generatedOn } = input;
   if (lines.length !== results.length) {
     // Matches csvRows's own idiom in cbam-lines.ts: name the mismatch loudly rather than let
     // `results[i]!` below hand back a bare `undefined` with nothing to debug from.
@@ -1241,7 +980,7 @@ export function buildPrintDocument(input: {
       // estimate that never came back, and a verified line that threw is still a verified claim.
       return `<tr>
         <td>${esc(l.cn)}</td><td>${esc(l.country)}</td><td>${esc(l.route)}</td>
-        <td>${num(l.massT)}</td><td>${esc(l.date)}</td>
+        <td>${exactNum(l.massT)}</td><td>${esc(l.date)}</td>
         <td class="cbp-loc">${tierCell(l)}</td>
         <td>no estimate (error)</td>
         <td>—</td>
@@ -1254,7 +993,7 @@ export function buildPrintDocument(input: {
     const bm = 'terms' in e ? e.terms.benchmarks[0] : null;
     return `<tr>
       <td>${esc(l.cn)}</td><td>${esc(l.country)}</td><td>${esc(l.route)}</td>
-      <td>${num(l.massT)}</td><td>${esc(l.date)}</td>
+      <td>${exactNum(l.massT)}</td><td>${esc(l.date)}</td>
       <td class="cbp-loc">${tierCell(l)}</td>
       <td>${certs === null ? 'no estimate' : `${num(certs)}${pending ? ' (what-if)' : ''}`}</td>
       <td>${costEur ? eur(costEur) : '—'}</td>
@@ -1263,8 +1002,8 @@ export function buildPrintDocument(input: {
   }).join('');
 
   const verdicts = yearCards.map((y) => y.ruleFound
-    ? `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> at ${num(y.knownEligibleMassT)} t of ${num(y.thresholdT)} t — completeness box ${y.attested ? 'TICKED by the user' : 'not ticked'}.</li>`
-    : `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> — no de minimis threshold published; no verdict.</li>`).join('');
+    ? `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> at ${exactNum(y.knownEligibleMassT)} t of ${num(y.thresholdT)} t — completeness box ${y.attested ? 'TICKED by the user' : 'not ticked'}.</li>`
+    : `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> — this tool does not carry that year's de minimis threshold; no verdict.</li>`).join('');
 
   /**
    * §2 HAS TO BRANCH ON `pricedLines`, THE WAY THE SCREEN'S OWN TOTALS CARD ALREADY DOES.
@@ -1298,7 +1037,9 @@ export function buildPrintDocument(input: {
       <tbody>${lineRows}</tbody></table>
 
     <h2>2 · What we computed</h2>
-    ${totals.pricedLines === 0
+    ${totals.pricedLines === 0 && totals.refusedLines === 0 && exempt?.pricedLines
+      ? '<p>Nothing owed on the lines listed, on your statement that they are all your imports for the year.</p>'
+      : totals.pricedLines === 0
       ? `<p>No line could be priced, so there is <b>no total</b> — not a total of zero. ${
           totals.refusedLines} line${totals.refusedLines === 1 ? '' : 's'} refused; the last column
           of §1 names what was missing for each. Nothing on this page states that the exposure is
@@ -1307,6 +1048,10 @@ export function buildPrintDocument(input: {
           totals.costEur ? ` · <b>${eur(totals.costEur)}</b>` : ' · no € total (a certificate price is unpublished)'}${
           totals.anyPending ? ' — a <b>what-if</b>, because the CSCF is unpublished (see §4)' : ''}. ${
           totals.refusedLines ? `${totals.refusedLines} line(s) refused and excluded.` : ''}</p>`}
+    ${exempt?.pricedLines ? `<p>Exempt if your list is complete: ${exempt.pricedLines} line(s) below the de minimis
+      threshold for the year you attested, ${num(exempt.certificates)} certificates${
+      exempt.costEur ? ` · ${eur(exempt.costEur)}` : ''}${
+      exempt.anyPending ? ' (a what-if: the CSCF is unpublished)' : ''} — not included in the total.</p>` : ''}
     <ul>${verdicts || '<li>No de minimis verdict — no eligible lines.</li>'}</ul>
 
     <h2>3 · On what authority</h2>
@@ -1554,29 +1299,43 @@ export function decorateSnapshot(e: CertificateEstimate, snapshotHash: string): 
 }
 
 /**
- * One verified per-tonne figure as the FORM should judge it, or null.
+ * H1 (audit 2026-11-02). The three figure fields are type="text" inputmode="decimal", because
+ * type="number" re-read '0,85' as '085' in Chromium and priced 8,500 tCO₂e beside "transcribed
+ * exactly as entered". So every figure field is now read by the ENGINE's own parser and nothing
+ * else: what this accepts is exactly what the engine prices. The comma is the one mistake common
+ * enough to name: it is the decimal mark in most of the exporting world, and a thousands separator
+ * in the rest.
  *
- * DELIBERATELY LOOSER THAN THE ENGINE'S OWN GATE, and the looseness is the design. The
- * authority on what may be priced is `verifiedPerT` in estimate-from-pack.ts — a vendored
- * function this file cannot import (it is not exported) and must not copy, because a copied
- * regex is a second rule that drifts from the first. That gate is stricter than this one: it
- * refuses '0x10', '1_000', '5.' and '+5', all of which `Number()` happily reads. Those reach
- * the engine and come back as a REFUSAL CARD naming the input — fail-closed, just one step
- * later and in a different place on screen. What this catches is the ordinary case — prose, an
- * empty field, Infinity — where an inline message beside the field beats a refused card.
- *
- * SIGNS PASS THROUGH ON PURPOSE. `Number('-1')` is perfectly finite, so a negative figure is
- * NOT this function's refusal to make: it must reach the caller's own `< 0` test, which is what
- * gives a negative its own specific message ("enter zero if the verified figure really is nil")
- * rather than the generic "not a number".
- *
- * ZERO IS LEGAL. A 100%-scrap EAF producer genuinely attests a near-zero figure, and this is
- * exactly the importer the verified tier exists to reward — a falsy check here would refuse the
- * best-documented line on the form.
+ * This replaces verifiedFigure(), which read with Number() on the premise that the engine's gate
+ * could not be imported. It can: the engine prices verified figures through nonNegativeDecimal,
+ * which is parseNonNegativeDecimal. A negative keeps its own class so its message can say
+ * "enter zero", and zero stays legal (the best-documented producer attests near-zero).
  */
-function verifiedFigure(value: string): number | null {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+export type DecimalProblem = 'comma' | 'negative' | 'unreadable' | 'too-large';
+export function decimalProblem(text: string): DecimalProblem | null {
+  const t = text.trim();
+  if (t.includes(',')) return 'comma';
+  // A form field is stricter than the engine in two ways the engine cannot be (the audit of
+  // these fixes measured both). Exponent notation: type="number" used to blank '1e400', and a
+  // text field let '1e100000' through to a render that froze the tab for minutes. And size: no
+  // real shipment or per-tonne figure needs more than 12 integer digits, while a pasted
+  // 20,000-digit number costs the same freeze. '-0' is refused like any other minus sign.
+  if (/[eE]/.test(t)) return 'unreadable';
+  if (t.startsWith('-')) return parseNonNegativeDecimal(t.slice(1)).ok ? 'negative' : 'unreadable';
+  const parsed = parseNonNegativeDecimal(t);
+  if (!parsed.ok) return parsed.code === 'NEGATIVE_NUMBER' ? 'negative' : 'unreadable';
+  return t.split('.')[0]!.replace(/^0+/, '').length > 12 ? 'too-large' : null;
+}
+
+export { COMMA_HINT };
+
+/** The mass field's refusal, shared by the preview and the Add path so the two say one thing. */
+export function massRefusal(text: string): string | null {
+  const p = decimalProblem(text);
+  if (p === null) return null;
+  if (p === 'comma') return `Net mass: ${COMMA_HINT}`;
+  if (p === 'too-large') return 'Net mass is too large: enter it in tonnes, at most 12 digits before the decimal point.';
+  return 'Net mass must be a number of tonnes, zero or greater.';
 }
 
 /** What the verified panel contributes to a draft Line, or the reason it cannot.
@@ -1635,23 +1394,27 @@ export function parseVerifiedFields(v: {
     return { error: 'Enter your verified direct emissions in tCO₂e per tonne of good, '
       + 'or switch this line back to the Commission defaults.' };
   }
-  const d = verifiedFigure(direct);
-  if (d === null) {
+  const dp = decimalProblem(direct);
+  if (dp === 'comma') return { error: `Verified direct emissions: ${COMMA_HINT}` };
+  if (dp === 'too-large') return { error: 'Verified direct emissions are too large to be a per-tonne figure.' };
+  if (dp === 'unreadable') {
     return { error: `Verified direct emissions must be a number of tCO₂e per tonne — `
       + `“${direct}” is not one.` };
   }
-  if (d < 0) {
+  if (dp === 'negative') {
     return { error: 'Verified direct emissions cannot be negative — enter zero if the '
       + 'verified figure really is nil.' };
   }
 
   if (indirect) {
-    const i = verifiedFigure(indirect);
-    if (i === null) {
+    const ip = decimalProblem(indirect);
+    if (ip === 'comma') return { error: `Verified indirect emissions: ${COMMA_HINT}` };
+    if (ip === 'too-large') return { error: 'Verified indirect emissions are too large to be a per-tonne figure.' };
+    if (ip === 'unreadable') {
       return { error: `Verified indirect emissions must be a number of tCO₂e per tonne — `
         + `“${indirect}” is not one. Leave the field empty if you are not claiming one.` };
     }
-    if (i < 0) {
+    if (ip === 'negative') {
       return { error: 'Verified indirect emissions cannot be negative — enter zero, or leave '
         + 'the field empty if you are not claiming one.' };
     }
@@ -1866,7 +1629,23 @@ export function initCbam(): void {
   const outWrap = $('cbOutWrap');
   const outlookEl = $('cbOutlook');
   const graphsEl = $('cbGraphs');
-  if (!cn || !country || !route || !mass || !date || !out || !status) return;
+  // The rail shell (spec §6.3): the list has its own container, so #cbOut only ever previews the
+  // draft. The title card and the List badge are optional, so a stripped-down page still runs.
+  const listEl = $('cbList');
+  const titleEl = $('cbTitle'), titlePhone = $('cbTitlePhone');
+  const badges = document.querySelectorAll<HTMLElement>('[data-list-badge]');
+  const listHeading = $('cbxH-list');
+  const exportCsvEl = $('cbExportCsv'), exportDocEl = $('cbExportDoc'), exportFpsEl = $('cbExportFps');
+  // The static "add a line" copy, kept to restore when the list empties.
+  const exportIdle = [exportCsvEl, exportDocEl].map((el) => el?.innerHTML ?? '');
+  const notYetEl = $('cbNotYet'), rulePackEl = $('cbRulePack'), sourcesEl = $('cbSources');
+  // Phase 2 (spec §5.1): the Estimate input column's new controls. All optional, so a stripped
+  // page still runs; the hidden #cbRoute and #cbTier stay the source of truth either way.
+  const routeSeg = $('cbRouteSeg'), routeVo = $('cbRouteVo'), tierCards = $('cbTierCards');
+  const datePeriod = $('cbDatePeriod'), massRuler = $('cbMassRuler'), cnName = $('cbCnName');
+  const cbx = $('cbx'), goodSheet = $('cbGoodSheet'), goodScrim = $('cbGoodScrim');
+  const goodOpen = document.querySelector<HTMLButtonElement>('[data-good-open]');
+  if (!cn || !country || !route || !mass || !date || !out || !status || !listEl) return;
 
   /**
    * GUARD AGAINST DOUBLE INIT. The page's <script> calls `boot()` directly AND listens for
@@ -1937,6 +1716,9 @@ export function initCbam(): void {
    * is a rebuild doing it.
    */
   let lastRoutePick = '';
+  // M3: why no route can be offered for the current good, origin and year, or null. Set by
+  // syncRoutes, read by runPreview so the reason reaches the live region.
+  let noRoute: string | null = null;
 
   /**
    * ONE LOAD IN FLIGHT, SHARED BY EVERY CALLER. Two listeners ask for the pack before it has
@@ -1978,6 +1760,10 @@ export function initCbam(): void {
     }
     pack = loaded.pack;
     snapshot = hash;
+    // Rules & sources (spec §5.6, §7): its pack-dependent tiles fill once, here, from the pack.
+    if (notYetEl) notYetEl.innerHTML = renderNotYetPublished(pack);
+    if (rulePackEl) rulePackEl.innerHTML = renderRulePack(pack, snapshot);
+    if (sourcesEl) sourcesEl.innerHTML = renderSources(pack.sources);
     // 572 goods; the datalist is the whole corpus, filtered natively by the browser. Five of
     // them are 10-digit TARIC codes, and an 8-digit CN is a PREFIX of its TARIC — so a user
     // typing the code off their customs paperwork still surfaces the published one here.
@@ -2003,6 +1789,8 @@ export function initCbam(): void {
   }
 
   function syncRoutes(): void {
+    noRoute = null;
+    if (routeVo) routeVo.textContent = '';
     // Read the user's pick BEFORE the rebuild wipes it — and remember it, because a rebuild that
     // empties the list wipes it BEFORE the next call gets here (see lastRoutePick). Reading
     // `route.value` alone is only enough while every rebuild leaves a real option selected.
@@ -2035,7 +1823,8 @@ export function initCbam(): void {
     // passed for the third of those: it is the only one of the three the pairing sentence hides
     // completely, because nothing else on screen says the typed code is not an offered good.
     if (!rs.length) {
-      route!.innerHTML = `<option value="">${esc(noRouteReason(pack, year, cn!.value))}</option>`;
+      noRoute = noRouteReason(pack, year, cn!.value);
+      route!.innerHTML = `<option value="">${esc(noRoute)}</option>`;
       return;
     }
     // The indicator ALONE asks an importer to pick their plant's technology from a letter, and
@@ -2048,10 +1837,15 @@ export function initCbam(): void {
     // selectors all speak. 'default' keeps its own label and is NOT in the glossary: it is not an
     // Annex indicator, and it is always alone in its list (measured 53,070 of 53,070), which is
     // what makes "single route" accurate.
+    // A route the Commission publishes no direct default for prices from verified figures only
+    // (spec §5.1). Asked of the engine, marked on the option, so the select stays the one truth
+    // and the radio mirror reads it from there.
+    const vo = verifiedOnlyRoutes(pack, cn!.value, country!.value, year, rs);
     const opts = rs.map((r) => {
       const text = r === 'default' ? 'single route' : `${r} ${ROUTE_GLOSSARY[r]?.label ?? ''}`.trim();
-      return `<option value="${esc(r)}">${esc(text)}</option>`;
+      return `<option value="${esc(r)}"${vo.has(r) ? ' data-vo' : ''}>${esc(text)}</option>`;
     }).join('');
+    if (routeVo) routeVo.textContent = verifiedOnlyNote(rs.filter((r) => vo.has(r)).map(segmentLabel), countryName(country!.value));
     const want = nextRoute(rs, prev);
     // want === '' means the pairing publishes several routes and the user has not
     // chosen among them. A disabled placeholder holds the selection empty, and
@@ -2138,7 +1932,9 @@ export function initCbam(): void {
     const has = !!pack && !!cn!.value && !!country!.value && !!route!.value
       && selectIndirectFactorFromPack(pack, {
         cn: cn!.value, country: country!.value, route: route!.value,
-        massT: mass!.value || '1', date: date!.value,
+        // H1: the mass field is free text now, so only a mass the engine can read is passed; the
+        // probe asks whether an indirect default EXISTS, which no mass changes.
+        massT: massRefusal(mass!.value) ? '1' : mass!.value.trim() || '1', date: date!.value,
       }).kind !== 'none';
     scopeRow.hidden = !has;
   }
@@ -2252,8 +2048,15 @@ export function initCbam(): void {
    * the engine's reason in each year, which is the honest picture of that line.
    */
   function runPreview(): EstimatorInput | null {
+    // M3 (audit 2026-11-02): when no route CAN be offered, the reason must reach the live region.
+    // Inside the disabled <select> it was invisible to keyboard and screen-reader users, while this
+    // panel told someone who had filled every field to "choose a route".
+    if (pack && cn!.value && country!.value && noRoute) {
+      out!.innerHTML = renderEstimateIdle(`No estimate: ${noRoute}.`);
+      return null;
+    }
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value || !date!.value) {
-      out!.innerHTML = '<p class="cb-idle">Choose a good, origin, route, mass and import date to see the provisional exposure.</p>';
+      out!.innerHTML = renderEstimateIdle('Choose a good, origin, route, mass and import date to see the provisional exposure.');
       return null;
     }
     // REFUSE AN IMPOSSIBLE MASS RATHER THAN PRICING IT. `min="0"` on the input is
@@ -2288,8 +2091,9 @@ export function initCbam(): void {
     // this one. Deciding with the function that does the parsing makes the drift structurally
     // impossible rather than merely unreachable. Checked here, not against the markup's `min`,
     // so that editing the .astro cannot silently disarm it.
-    if (!nonNegativeDecimal(mass!.value)) {
-      out!.innerHTML = '<p class="cb-idle">Net mass must be a number of tonnes, zero or greater.</p>';
+    const massProblem = massRefusal(mass!.value);
+    if (massProblem) {
+      out!.innerHTML = renderEstimateIdle(massProblem);
       return null;
     }
     // The verified panel is read through the SAME parse the added line uses (readVerified's own
@@ -2300,14 +2104,14 @@ export function initCbam(): void {
     // estimate.
     const v = readVerified();
     if ('error' in v) {
-      out!.innerHTML = `<p class="cb-idle">${esc(v.error)}</p>`;
+      out!.innerHTML = renderEstimateIdle(v.error);
       return null;
     }
     // ONE object, priced here and handed to the strip, so the three-year view is about exactly
     // the line this card shows and cannot be built from a second reading of the form.
     const input: EstimatorInput = {
       cn: cn!.value, country: country!.value, route: route!.value,
-      massT: mass!.value, date: date!.value,
+      massT: mass!.value.trim(), date: date!.value,
       emissionsScope: (scope?.value as 'direct' | 'direct_and_indirect') ?? 'direct_and_indirect',
       verified: verifiedInputOf(v.ok),
     };
@@ -2322,10 +2126,10 @@ export function initCbam(): void {
       // THROUGH renderDraftThreshold, NOT resolveThreshold DIRECTLY. That function returns null
       // for four unrelated reasons and this line used to render every one of them as the empty
       // string, so a year with no published threshold row lost its card silently — while the
-      // multi-line panel showed an explicit "No published rule" card for the same year. See
+      // multi-line panel showed an explicit "Year not covered" card for the same year. See
       // renderDraftThreshold for the enumeration and for which of the four are still, correctly,
       // silent.
-      const t = renderDraftThreshold(pack, { cn: cn!.value, massT: mass!.value, date: date!.value });
+      const t = renderDraftThreshold(pack, { cn: cn!.value, massT: mass!.value.trim(), date: date!.value });
       // The attestation travels with the PREVIEW too, not just the added line's card. This is the
       // surface with the largest audience — it is what the page shows before anyone clicks Add, so
       // a visitor who never adds a line sees only this — and on the verified tier it shows the
@@ -2349,15 +2153,18 @@ export function initCbam(): void {
       // preview is where that matters MOST — it renders before anyone clicks Add, so it is all a
       // visitor who never adds a line ever sees, and it is the surface this pair was missed on
       // both previous times. The card passes the same predicate over its own estimate.
-      out!.innerHTML = t + renderResult(e)
-        + renderAttestation({ tier: e.stamp.tier, verifiedRef: v.ok.verifiedRef }, hasFigure(e));
+      // Spec §5.1 tiles. The threshold card goes first inside them (its copy says "the exposure
+      // below"), and the attestation is still built HERE, by the same call and the same predicate,
+      // because cbam-render.test.mjs pins this call site by its source text.
+      out!.innerHTML = renderEstimateTiles({
+        estimate: e, importDate: date!.value, threshold: t,
+        attestation: renderAttestation({ tier: e.stamp.tier, verifiedRef: v.ok.verifiedRef }, hasFigure(e)),
+      });
       return input;
     } catch (err) {
       // A DomainError is the engine refusing, and it names what is missing. Show it
       // rather than a generic failure — the reason is the useful part.
-      out!.innerHTML = `<div class="cb-res cb-unavail">
-        <div class="cb-tag unavail">No estimate</div>
-        <p class="cb-reason">${esc((err as Error).message)}</p></div>`;
+      out!.innerHTML = renderEstimateThrown((err as Error).message);
       return null;
     }
   }
@@ -2392,6 +2199,9 @@ export function initCbam(): void {
   function paintOutlook(line: EstimatorInput | null): void {
     if (!outlookEl) return;
     outlookView = line && pack ? outlook(pack, line) : null;
+    // The Estimate deck (spec §5.1) is drawn from this same outlook, never a second engine run.
+    const deck = out!.querySelector<HTMLElement>('[data-deck]');
+    if (deck) deck.innerHTML = renderDeck(outlookView, line?.massT ?? '');
     if (!outlookView) {
       outlookEl.innerHTML = '';
       return;
@@ -2402,7 +2212,7 @@ export function initCbam(): void {
     // '80' then '.5' read '.580'. Moving the live element into the new markup keeps its caret.
     const live = document.activeElement instanceof HTMLInputElement && document.activeElement.id === 'cbOlPrice'
       ? document.activeElement : null;
-    outlookEl.innerHTML = renderOutlook(outlookView, assumedPriceText, open);
+    outlookEl.innerHTML = renderYears(outlookView, assumedPriceText, open);
     const fresh = live && outlookEl.querySelector<HTMLInputElement>('#cbOlPrice');
     if (live && fresh) { fresh.replaceWith(live); live.focus(); }
   }
@@ -2450,13 +2260,13 @@ export function initCbam(): void {
     else if (found) graphsChunkUrl = found;
     if (!graphsEl || !graphsWanted) return;
     // ONE PLAIN SENTENCE AND A WAY BACK, in place of an empty space that says nothing. The
-    // figures above are complete without the graphs, and the sentence says so. If the address in
+    // figures on the other views are complete without the graphs, and the sentence says so. If the address in
     // the error is not this site's own script, nothing is imported from it: the way back is a
     // reload of the page.
     graphsEl.innerHTML = graphsReloadOnly
-      ? `<p class="cg-none" role="status">The graphs could not be loaded. The figures above are complete without them.
+      ? `<p class="cg-none" role="status">The graphs could not be loaded. The figures on Estimate and Three years are complete without them.
       <button type="button" class="cg-retry" data-cg="reload">Reload the page</button></p>`
-      : `<p class="cg-none" role="status">The graphs could not be loaded. The figures above are complete without them.
+      : `<p class="cg-none" role="status">The graphs could not be loaded. The figures on Estimate and Three years are complete without them.
       <button type="button" class="cg-retry" data-cg="retry">Try again</button></p>`;
   }
   function paintGraphs(line: EstimatorInput | null): void {
@@ -2490,7 +2300,7 @@ export function initCbam(): void {
     const box = ev.target;
     if (!(box instanceof HTMLInputElement) || box.id !== 'cbOlPrice' || !outlookEl || !outlookView) return;
     assumedPriceText = box.value;
-    const slots = outlookPriceSlots(outlookView, assumedPriceText);
+    const slots = yearsPriceSlots(outlookView, assumedPriceText);
     for (const [name, html] of Object.entries(slots)) {
       const slot = outlookEl.querySelector(`[data-ol="${name}"]`);
       if (slot) slot.innerHTML = html;
@@ -2501,8 +2311,43 @@ export function initCbam(): void {
   }
 
   /** The preview and, beneath it, the same shipment in each covered year. */
+  /** The rail's title card and the phone top bar follow the draft line (spec §4.1). */
+  function paintTitle(line: EstimatorInput | null): void {
+    const t: TitleLine | null = line && pack ? {
+      cn: line.cn,
+      name: pack.classifications.find((c) => c.code === line.cn)?.description ?? '',
+      origin: countryName(line.country),
+      originCode: line.country,
+      route: line.route,
+      massT: line.massT,
+      date: line.date,
+    } : null;
+    if (titleEl) titleEl.innerHTML = renderTitleCard(t);
+    if (titlePhone) titlePhone.textContent = titleSummary(t);
+  }
+
+  /** Steps 3 and 4's captions (spec §5.1): the price period for the date, the line against 50 t. */
+  function paintInputs(): void {
+    // Decision 3B: the default card says whose value the default is, asked of the engine for the
+    // form's good, origin and route. The server-rendered generic sentence stands until all three are chosen.
+    const defaultSentence = tierCards?.querySelector('[data-value="default+markup"] span');
+    if (defaultSentence) {
+      const year = Number(date!.value.slice(0, 4)) || 2026;
+      defaultSentence.textContent = defaultTierSentence(
+        pack ? defaultOriginBasis(pack, cn!.value, country!.value, route!.value, year) : null);
+    }
+    if (datePeriod) datePeriod.innerHTML = pack ? renderDatePeriod(pack.prices, date!.value) : '';
+    if (massRuler) {
+      massRuler.innerHTML = pack && cn!.value && date!.value && !massRefusal(mass!.value)
+        ? renderMassRuler(resolveThreshold(pack, { cn: cn!.value, massT: mass!.value.trim(), date: date!.value }))
+        : '';
+    }
+  }
+
   function run(): void {
+    paintInputs();
     const line = runPreview();
+    paintTitle(line);
     paintOutlook(line);
     paintGraphs(line);
   }
@@ -2533,7 +2378,7 @@ export function initCbam(): void {
   /**
    * Builds the next line from the form's current values, or null if the line is not ready to
    * add. Refuses an impossible mass with the SAME predicate run() previews with —
-   * nonNegativeDecimal, the function the engine itself parses with — never a second opinion that
+   * massRefusal, over the engine's own parser (H1) — never a second opinion that
    * merely looks equivalent (checked here, not left to the markup's inert `min="0"`, for the
    * same reason run() gives; see the call site for what the two gates disagreed about).
    *
@@ -2547,6 +2392,8 @@ export function initCbam(): void {
    */
   function draftLine(): Line | null {
     draftReason = null;
+    // M3: the Add path names why no route can be offered, as the preview does.
+    if (pack && cn!.value && country!.value && noRoute) { draftReason = `No estimate: ${noRoute}.`; return null; }
     if (!pack || !cn!.value || !country!.value || !route!.value || !mass!.value || !date!.value) return null;
     // THE DATE HERE IS FOR AGREEMENT, NOT FOR DEFENCE — measured, because the obvious reading is
     // wrong. Adding `!date!.value` to run()'s gate is load-bearing (revert it alone and the
@@ -2581,7 +2428,8 @@ export function initCbam(): void {
     // Those were measured on the FUNCTION, not through the form — <input type="number"> admits
     // none of those strings, so none was user-reachable. thresholdByYear now carries its own
     // gate, so this one is the outer of two rather than the only one.
-    if (!nonNegativeDecimal(mass!.value)) return null;
+    const massProblem = massRefusal(mass!.value);
+    if (massProblem) { draftReason = massProblem; return null; }
     // The verified panel's contribution — the tier, and on the verified branch the attested
     // figures and any reference — or the reason it cannot contribute one. Its refusals are
     // SPECIFIC ("tick the attestation", "that is not a number"), unlike the four checks above,
@@ -2592,7 +2440,7 @@ export function initCbam(): void {
     const l: Line = {
       id: crypto.randomUUID(), cn: cn!.value, country: country!.value, route: route!.value,
       scope: (scope?.value as Line['scope']) ?? 'direct_and_indirect',
-      massT: mass!.value, date: date!.value,
+      massT: mass!.value.trim(), date: date!.value,
       // Spread LAST and unconditionally: `tier` is required on Line (see its doc in
       // cbam-lines.ts) and v.ok is typed to always carry one, so the compiler — not a default
       // written here — is what guarantees every line states which tier priced it. The optional
@@ -2713,36 +2561,49 @@ export function initCbam(): void {
    * deliberate, independent clicks landing within the same fingerprint-hashing window) whose
    * worst outcome is a sub-second flicker. Documented per review guidance, not papered over.
    */
-  function renderAll(): void {
-    if (!lines.length) {
-      lastPairs = [];
-      // Single-line mode keeps its ORIGINAL, tested contract: the whole panel is one aria-live
-      // region, because a refusal only sighted users learn about is not a refusal (the .astro
-      // file's own framing-banner comment). Restore "polite" in case a prior multi-line render
-      // (below) turned it off.
-      outWrap?.setAttribute('aria-live', 'polite');
-      // MUST clear #cbStatus here too — found on review of f04b95b. Once that commit made
-      // #cbStatus the authoritative channel for screen-reader users in multi-line mode (the panel
-      // itself goes aria-live="off" while lines exist), a stale summary left here after the list
-      // empties back out is no longer a cosmetic stale line-count next to a live panel — it is a
-      // stale euro figure ("1 line in this estimate... €5,882.98.") announced as current to
-      // exactly the users who have no other way to learn it is gone, sitting right next to a
-      // panel whose OWN aria-live is restored to "polite" and will correctly (re)announce
-      // whatever run() puts there. Clearing avoids double-announcing on top of that restored
-      // region rather than composing a redundant second summary here.
-      status!.textContent = '';
-      run();
+  /**
+   * The Export view (spec §5.5), repainted whenever the list changes. The CSV preview is built by
+   * the SAME csvRows call onCsv makes, over the same lastPairs, so the table is the file's own
+   * first rows. A throw is shown as the tile's text — onCsv reports the same throw on click.
+   */
+  function paintExport(): void {
+    if (!lines.length || !pack) {
+      if (exportCsvEl) exportCsvEl.innerHTML = exportIdle[0]!;
+      if (exportDocEl) exportDocEl.innerHTML = exportIdle[1]!;
+      if (exportFpsEl) exportFpsEl.innerHTML = '';
       return;
     }
-    // The three-year strip is about ONE previewed line. With lines in the document there is no
-    // such line on screen, and a strip left over from the last preview would sit under a
-    // document total it has nothing to do with.
-    paintOutlook(null);
-    paintGraphs(null);
+    const ok = lastPairs.filter((p) => p.e !== null);
+    let csv: { rows: Record<string, string>[] } | { error: string };
+    try {
+      csv = { rows: csvRows(ok.map((p) => p.l), ok.map((p) => p.e!), fingerprints, snapshot, pack) };
+    } catch (err) {
+      csv = { error: (err as Error).message };
+    }
+    if (exportCsvEl) exportCsvEl.innerHTML = csvTileBody(csv);
+    if (exportDocEl) exportDocEl.innerHTML = docTileBody(lines.length, new Date().toISOString().slice(0, 10));
+    if (exportFpsEl) exportFpsEl.innerHTML = fingerprintsBody(snapshot,
+      lines.map((l, i) => ({ n: i + 1, hex: fingerprints.get(l.id) ?? null })));
+  }
+
+  function renderAll(): void {
+    // SPEC §6.3: THE DRAFT ALWAYS PREVIEWS. The list has its own view and container (#cbList),
+    // so adding, removing or attesting never touches #cbOut, #cbOutlook or #cbGraphs. Those show
+    // the line being edited, and refresh() keeps them current whether or not lines exist. That is
+    // why this function no longer calls run(): nothing it changes is part of the draft.
+    badges.forEach((b) => { b.textContent = String(lines.length); b.hidden = lines.length === 0; });
+    if (!lines.length) {
+      lastPairs = [];
+      listEl!.innerHTML = '';
+      // MUST clear #cbStatus (found on review of f04b95b): a stale summary left here after the list
+      // empties is a stale euro figure announced as current to the users who rely on it.
+      status!.textContent = '';
+      paintExport();
+      return;
+    }
     const pairs = safeEstimates(lines);
     lastPairs = pairs;
     const ok = pairs.filter((p) => p.e !== null);
-    const totals = sumTotals(ok.map((p) => p.e!));
 
     // thresholdByYear THROWS on any in-scope line missing a fingerprint (its own doc: this
     // fires inside the per-year map, so one bad line discards EVERY year's card, not just its
@@ -2759,42 +2620,41 @@ export function initCbam(): void {
     let yearsHtml: string;
     try {
       years = thresholdByYear(lines, fingerprints, attested, pack!);
-      yearsHtml = years.map(renderYearThreshold).join('');
+      yearsHtml = years.map(yearTile).join('');
     } catch (err) {
-      yearsHtml = `<div class="cb-res cb-unavail">
-        <div class="cb-tag unavail">Threshold error</div>
-        <p class="cb-reason">${esc((err as Error).message)}</p></div>`;
+      yearsHtml = thresholdErrorTile((err as Error).message);
       // years stays [] — the announcement below must not claim a verdict computed from data that
       // just failed to compute.
     }
+    // C2: computed AFTER the verdicts, from the same `years` the cards show. If they failed, no
+    // line is exempt and the total over-states rather than hides.
+    // Only a PRICED line can be exempt. A refused one stays in the owed set, where sumTotals counts
+    // it as refused: otherwise the refusal vanished from the total, the status and the document.
+    const exemptIds = exemptLineIds(years);
+    const isExempt = (p: { l: Line; e: CertificateEstimate | null }) =>
+      exemptIds.has(p.l.id) && p.e!.status !== 'unavailable';
+    const totals = sumTotals(ok.filter((p) => !isExempt(p)).map((p) => p.e!));
+    const exempt = sumTotals(ok.filter(isExempt).map((p) => p.e!));
 
-    // MULTI-LINE MODE NARROWS THE LIVE REGION (quality review item 5). #cbOut's aria-live was
-    // written for the single-line preview, where one edit replaces one card. In multi-line mode
-    // the SAME region holds every year card, every line card, every waterfall and provenance
-    // stamp, and renderAll replaces all of it on every add, remove and attest toggle — so a
-    // screen-reader user ticking ONE checkbox got the ENTIRE, ever-growing panel read back. This
-    // file already fixed the identical shape of problem once (see the mass-input debounce below:
-    // a screen-reader user "heard the whole result... once per keystroke"); there is no debounce
-    // lever here — these are discrete clicks, not rapid typing — so instead the panel's live
-    // region is turned OFF for the duration of multi-line mode, and #cbStatus (its own, already
-    // separately-live region) carries a short, current summary instead: the line count, as
-    // before, plus the headline total when one exists. TRADE-OFF, taken deliberately: a
-    // screen-reader user no longer hears per-line detail automatically after each edit — they
-    // still can, by navigating into the (unchanged, still fully marked-up) panel — in exchange
-    // for not being read a wall of cards after every single click.
-    outWrap?.setAttribute('aria-live', 'off');
-    out!.innerHTML = yearsHtml + renderTotals(totals) + pairs.map((p, i) => p.e
-      ? renderLineCard(p.l, p.e, i, p.cmp)
-      : `<article class="cb-line" data-line="${esc(p.l.id)}">
-           <div class="cb-line-head">
-             <span class="cb-line-n">Line ${i + 1}</span>
-             <span class="cb-line-sum">${esc(p.l.cn)} · ${esc(p.l.country)} · ${num(p.l.massT)} t</span>
-             <button type="button" class="cb-line-x" data-remove="${esc(p.l.id)}"
-               aria-label="Remove line ${i + 1}">Remove</button>
-           </div>
-           <div class="cb-res cb-unavail"><div class="cb-tag unavail">No estimate</div>
-           <p class="cb-reason">${esc(p.err!)}</p></div>
-         </article>`).join('');
+    // THE LIST'S LIVE REGION IS OFF (quality review item 5, now in markup on #cbList): every add,
+    // remove and attest rebuilds every card, and reading that wall back after each click buried
+    // the answer. #cbStatus carries a short, current summary instead (below).
+    // Rail phase 4: the List view's tiles (spec §5.4). Shares are of the total as summed above —
+    // priced, non-exempt lines only — so an exempt or refused line has no share of a sum it is
+    // not in. The good's name is the pack's CN description, untruncated (spec §11, D5).
+    const nameOf = (cnCode: string) => pack!.classifications.find((c) => c.code === cnCode)?.description;
+    const shares: string[] = [];
+    const plates = pairs.map((p, i) => {
+      if (!p.e) return refusedLinePlate(p.l, i, p.err!, nameOf(p.l.cn));
+      const exemptLine = isExempt(p);
+      const certs = tableFigures(p.e).certs;
+      const sharePct = !exemptLine && certs !== null && totals.pricedLines > 0
+        ? shareOfTotal(certs, totals.certificates) : null;
+      if (sharePct) shares.push(sharePct);
+      return renderLineCard(p.l, p.e, i, p.cmp, { goodName: nameOf(p.l.cn), sharePct, exempt: exemptLine });
+    }).join('');
+    listEl!.innerHTML = listView({ total: totalTile(totals, exempt, shares), years: yearsHtml, plates });
+    paintExport();
     csvBtn && (csvBtn.disabled = false);
     docBtn && (docBtn.disabled = false);
 
@@ -2818,7 +2678,7 @@ export function initCbam(): void {
     // announcement does not say what the tick actually DID to the year's verdict, and nothing
     // else in aria-live="off" mode would. yearVerdictTag() reuses the exact tag text the card
     // itself shows, for the same anti-drift reason as the other two — every year, NOT filtered to
-    // `ruleFound`: a year with no published rule gets an explicit "No published rule" card for
+    // `ruleFound`: a year with no threshold row gets an explicit "Year not covered" card for
     // sighted users, and silently dropping it here would be the same gap, just a milder one
     // (omission rather than misstatement).
     const yearVerdicts = years
@@ -2832,6 +2692,7 @@ export function initCbam(): void {
     status!.textContent = `${lines.length} line${lines.length === 1 ? '' : 's'} in this estimate.`
       + (yearVerdicts ? ` Threshold ${yearVerdicts}.` : '')
       + totalsHeadline
+      + (exempt.pricedLines ? ` ${exempt.pricedLines} line${exempt.pricedLines === 1 ? ' is' : 's are'} exempt if your list is complete and not in the total.` : '')
       + refusedNote;
   }
 
@@ -2922,10 +2783,10 @@ export function initCbam(): void {
       // down by one, so the button now sitting at the removed line's own index `i` is the line
       // that visually took its place — focus that. If `i` ran past the end (the removed line was
       // the last one and others remain), Math.min falls back to the new last Remove button. If no
-      // lines remain, both are absent and focus falls to the Add button, the only actionable
-      // control left once the panel returns to the single-line preview.
-      const remaining = out!.querySelectorAll<HTMLButtonElement>('[data-remove]');
-      (remaining[Math.min(i, remaining.length - 1)] ?? add)?.focus();
+      // lines remain, both are absent and focus goes to the List heading: the Add button is on
+      // the Estimate view, which is hidden while the user is here (spec §6.3).
+      const remaining = listEl!.querySelectorAll<HTMLButtonElement>('[data-remove]');
+      (remaining[Math.min(i, remaining.length - 1)] ?? listHeading)?.focus();
       return;
     }
     const attestBox = t?.closest?.<HTMLInputElement>('[data-attest]') ?? null;
@@ -2938,7 +2799,7 @@ export function initCbam(): void {
       // survives the rebuild as its data-attest value (derived from the year, not the DOM node
       // itself), so re-find it by that and restore focus — otherwise a keyboard user loses their
       // place on every single tick.
-      out!.querySelector<HTMLInputElement>(`[data-attest="${CSS.escape(at)}"]`)?.focus();
+      listEl!.querySelector<HTMLInputElement>(`[data-attest="${CSS.escape(at)}"]`)?.focus();
     }
   }
 
@@ -3006,6 +2867,11 @@ export function initCbam(): void {
       status!.textContent = `Could not build the document: ${(err as Error).message}`;
       return;
     }
+    // C2: the document's total leaves out what the year cards exempt, exactly as the panel does.
+    const exemptIds = exemptLineIds(years);
+    const isExempt = (p: { l: Line; e: CertificateEstimate | null }) =>
+      exemptIds.has(p.l.id) && p.e!.status !== 'unavailable';
+    const pricedPairs = lastPairs.filter((p) => p.e !== null);
     // Same exposure as onCsv's, found the same way: buildPrintDocument throws on a
     // lines/results length mismatch (its own guard), and an uncaught throw here would leave
     // #cbPrint holding the PREVIOUS export's markup while the print dialog never opens — a
@@ -3017,7 +2883,8 @@ export function initCbam(): void {
       html = buildPrintDocument({
         lines, results,
         yearCards: years,
-        totals: sumTotals(priced),
+        totals: sumTotals(pricedPairs.filter((p) => !isExempt(p)).map((p) => p.e!)),
+        exempt: sumTotals(pricedPairs.filter(isExempt).map((p) => p.e!)),
         packSnapshot: snapshot,
         rulePackages: priced[0]?.stamp.rulePackages ?? [],
         pack, generatedOn: new Date().toISOString().slice(0, 10),
@@ -3070,11 +2937,9 @@ export function initCbam(): void {
     }
   }
 
-  // route/scope/mass/date/cn/country changes preview the draft line only while `lines` is empty
-  // (the single-line path, byte-compatible with the pre-Task-6 behaviour); once lines exist, the
-  // form is purely the editor for the NEXT prospective line and must not touch the multi-line
-  // render underneath it.
-  const refresh = () => { if (!lines.length) run(); };
+  // Spec §6.3: the form previews the line being edited whether or not lines exist. The list has
+  // its own view now, so a preview can no longer overwrite it.
+  const refresh = () => run();
   // syncVerifiedRows() ALWAYS runs after syncScope(), never before: it reads the `scopeRow.hidden`
   // that syncScope() has just computed, and running it first would judge the indirect field
   // against the PREVIOUS good's scope row for one turn — showing an indirect input for a good
@@ -3120,6 +2985,17 @@ export function initCbam(): void {
   // A tick is one discrete action, not typing — announce it immediately, as the year-card
   // attestation checkbox already does.
   attest?.addEventListener('change', refresh);
+  // Spec §6.5: the visible radio groups mirror the hidden selects both ways, so cbam-app.ts and
+  // the e2e suite keep reading and setting the selects. Mounted after the listeners above, so a
+  // pick's `change` reaches syncRouteNote/syncScope/refresh exactly as a select change does.
+  if (routeSeg) mountRadioMirror(route, routeSeg, renderRouteSegments);
+  if (tier && tierCards) mountRadioMirror(tier, tierCards);
+  if (cbx && goodSheet && goodScrim && goodOpen) {
+    mountGoodSheet({
+      root: cbx, sheet: goodSheet, scrim: goodScrim, trigger: goodOpen, input: cn, caption: cnName,
+      load: async () => (await ensurePack())?.classifications ?? null,
+    });
+  }
   // ONCE, AT WIRING TIME, and not only on the first user interaction: Firefox (and bfcache
   // restores generally) repopulate <select> and <input> values across a reload, so #cbTier can
   // come back reading 'actual-verified' while #cbVerifiedRow is still `hidden` from the markup —
@@ -3134,8 +3010,12 @@ export function initCbam(): void {
   add?.addEventListener('click', () => { void onAdd(); });
   csvBtn?.addEventListener('click', onCsv);
   docBtn?.addEventListener('click', onDoc);
-  out.addEventListener('click', onOutClick);
-  out.addEventListener('change', onOutClick);
+  // The Rules view's "Load the rule pack" buttons: the pack is never fetched at page load (37 MB),
+  // so a visitor who opens Rules first asks for it here. The fill above replaces the buttons.
+  document.querySelectorAll<HTMLButtonElement>('[data-load-pack]').forEach((b) =>
+    b.addEventListener('click', () => { void ensurePack(); }));
+  listEl.addEventListener('click', onOutClick);
+  listEl.addEventListener('change', onOutClick);
   outlookEl?.addEventListener('input', onOutlookInput);
   // THE BOX SHOWS THE PRICE USED: on leaving it, a price rounded to the cent is written back.
   outlookEl?.addEventListener('change', (ev) => {

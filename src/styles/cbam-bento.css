@@ -1,0 +1,572 @@
+/* src/styles/cbam-bento.css — the bento tiles (spec §4.3, §5). Class names are the approved
+   preview's own (docs/superpowers/specs/2026-11-02-cbam-rail-ui/preview/bento.css), verbatim, so
+   phases 3–4 append their view sections here with the same primitives. Scoped under .cbx.
+   Not here until phase 5: the .b-ill-* illustrations and the b-anim entry motion. */
+
+/* Tile tokens. Every text/background pair below is held to WCAG AA in both themes by
+   tests/unit/cbam-bento-contrast.test.mjs, which parses these blocks: plain hex only. */
+.cbx{--seg-3:#4A4D49;--hero-bz:#A87A28;--hero-muted:#BFC1BD;--hero-well:#2A2C2A;--hero-bronze:#E0B766;--hero-cyan:#6FCAD6;--fill-bz:#A87A28;--fill-bz-ink:#141614;--fill-cy:#0B6E7C;--fill-cy-ink:#FFFFFF;--fill-cy-k:#071A1D;--deck-1:#E3D3B1;--deck-ink-1:#141614;--deck-2:#B88A3A;--deck-ink-2:#141614}
+@media (prefers-color-scheme:dark){.cbx:not([data-theme="light"]){--seg-3:#7C8C8B;--hero-muted:#4A4D49;--hero-well:#DADFDA;--hero-bronze:#6E4E14;--hero-cyan:#095E6A;--fill-bz:#CFA24A;--fill-bz-ink:#141614;--fill-cy:#6FCAD6;--fill-cy-ink:#071A1D;--deck-1:#3A3524;--deck-ink-1:#F1F3F0;--deck-2:#B88A3A;--deck-ink-2:#141614}}
+.cbx[data-theme="dark"]{--seg-3:#7C8C8B;--hero-muted:#4A4D49;--hero-well:#DADFDA;--hero-bronze:#6E4E14;--hero-cyan:#095E6A;--fill-bz:#CFA24A;--fill-bz-ink:#141614;--fill-cy:#6FCAD6;--fill-cy-ink:#071A1D;--deck-1:#3A3524;--deck-ink-1:#F1F3F0;--deck-2:#B88A3A;--deck-ink-2:#141614}
+
+/* ===== shared primitives (every view) ===== */
+.cbx .b-bento{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:minmax(232px,auto);gap:12px}
+.cbx .b-t{position:relative;overflow:hidden;background:var(--card);color:var(--ink);border:0;border-radius:26px;padding:20px 20px 18px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0}
+.cbx .b-t>*{flex-shrink:0}
+.cbx .b-t :is(h2,h3,p,dl,dd,ul,ol){margin:0}
+.cbx .b-s2{grid-column:span 2}
+.cbx .b-s4{grid-column:span 4}
+.cbx .b-r2{grid-row:span 2}
+.cbx .b-t-h{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.cbx .b-t-ti{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.cbx .b-t-sub{font-size:12.5px;color:var(--ink-3);margin-top:2px;line-height:1.4}
+.cbx .b-t-foot{margin-top:auto;font-size:11.5px;color:var(--ink-3)}
+.cbx .b-mid{font-size:64px;font-weight:400;letter-spacing:-.05em;line-height:1;margin:auto 0 10px;font-variant-numeric:tabular-nums}
+.cbx .b-u{font-size:.42em;letter-spacing:-.01em;margin-left:3px}
+.cbx .b-tags{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
+.cbx .b-tag{display:inline-flex;align-items:center;min-height:26px;padding:3px 11px;border-radius:99px;background:var(--well);color:var(--ink);font-size:12px;font-weight:600}
+.cbx .b-go{position:absolute;top:16px;right:16px;z-index:3;width:30px;height:30px;padding:0;border:0;border-radius:50%;background:var(--ink);display:grid;place-items:center;cursor:pointer}
+.cbx .b-go svg{width:14px;height:14px;fill:none;stroke:var(--on-ink);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.cbx .b-help{font-size:11.5px;line-height:1.4;color:var(--ink-3)}
+.cbx .b-help:empty{display:none}
+.cbx .num{font-variant-numeric:tabular-nums}
+.cbx .chip{display:inline-flex;align-items:center;gap:6px;min-height:22px;padding:2px 9px;border-radius:99px;background:var(--well);color:var(--ink-2);font-size:11px;font-weight:600;white-space:nowrap}
+.cbx .chip i{width:8px;height:8px;background:currentColor;display:inline-block}
+.cbx .chip.bronze{background:var(--bronze-bg);color:var(--bronze-t)}
+.cbx .chip.cyan{background:var(--cyan-bg);color:var(--cyan-t)}
+.cbx .chip.ink{background:var(--ink);color:var(--on-ink)}
+.cbx .kv{margin-top:8px}
+.cbx .kv>div{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.cbx .kv>div:last-child{border-bottom:0}
+.cbx .kv dt{color:var(--ink-2)}
+.cbx .kv dd{margin:0;font-weight:700;text-align:right;overflow-wrap:anywhere}
+.cbx details.disc summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;font-size:12px;font-weight:600;color:var(--ink-3)}
+.cbx details.disc summary::-webkit-details-marker{display:none}
+.cbx .chev{width:24px;height:24px;border-radius:50%;background:var(--well);display:grid;place-items:center;flex:none;font-size:14px}
+.cbx details[open]>summary .chev{transform:rotate(90deg)}
+.cbx .notes{display:flex;flex-direction:column;gap:6px;padding:0;list-style:none}
+.cbx .notes .foot{font-size:11.5px;line-height:1.55;color:var(--ink-3)}
+
+/* hero: the inverted tile */
+.cbx .b-hero{background:var(--ink);color:var(--on-ink);container-type:inline-size;--ink-3:var(--hero-muted);--well:var(--hero-well);--bronze-t:var(--hero-bronze);--bronze-bg:var(--hero-well);--cyan-t:var(--hero-cyan);--cyan-bg:var(--hero-well)}
+.cbx .b-hero .b-tag{color:var(--on-ink)}
+.cbx .b-hero .b-lead2{color:var(--ink-3)}
+.cbx .b-hero .chip.ink{background:var(--on-ink);color:var(--ink)}
+.cbx .b-hero .b-mega{font-size:min(150px,16cqi);font-weight:400;letter-spacing:-.06em;line-height:.9;margin:auto 0 6px;font-variant-numeric:tabular-nums}
+.cbx .b-hero .cb-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--hero-well);font-size:12.5px;color:var(--hero-muted)}
+.cbx .b-hero .cb-row b{color:var(--on-ink);font-weight:600}
+.cbx .b-hero :is(.cb-warn,.cb-attested){margin-top:10px;max-width:72ch;font-size:12.5px;line-height:1.5;color:var(--hero-muted)}
+.cbx .b-hero :is(.cb-reason,.cb-idle){margin:auto 0 12px;max-width:52ch;font-size:18px;line-height:1.45;color:var(--on-ink)}
+.cbx .b-hero .cb-sel{margin:0 0 10px}
+.cbx .b-hero .cb-sel span{display:block;font-size:11px;font-weight:600;color:var(--hero-muted)}
+.cbx .b-hero .cb-sel code{font-family:var(--font-data);font-size:12.5px;color:var(--on-ink);word-break:break-all}
+
+/* chargeable: the card is the bar (its width IS the share; never widened to fit a label) */
+.cbx .b-fill{flex-direction:row;padding:0;background:var(--well);container-type:inline-size}
+.cbx .b-fl-bar{position:absolute;inset:0 auto 0 0;width:var(--share,0%);border-radius:26px;background:var(--fill-bz)}
+.cbx .b-fill-cyan .b-fl-bar{background:var(--fill-cy)}
+.cbx .b-fill-ink .b-fl-bar{background:var(--ink)}
+.cbx :is(.b-fl-in,.b-fl-rest){position:relative;z-index:1;padding:20px;display:flex;flex-direction:column;min-width:0}
+.cbx .b-fl-in{flex:0 0 var(--share,0%)}
+.cbx .b-fill-bronze .b-fl-in,.cbx .b-fill-bronze .b-fl-in :is(.b-t-sub,.b-u){color:var(--fill-bz-ink)}
+.cbx .b-fill-cyan .b-fl-in,.cbx .b-fill-cyan .b-fl-in :is(.b-t-sub,.b-u){color:var(--fill-cy-ink)}
+.cbx .b-fill-ink .b-fl-in,.cbx .b-fill-ink .b-fl-in :is(.b-t-sub,.b-u){color:var(--on-ink)}
+.cbx .b-fl-rest{flex:1;align-items:flex-start;container-type:inline-size}
+/* The free-allocation numeral is sized to the fill it sits in, as the chargeable one is: at 30.6 % the rest
+   block is ~65 px of content on a 345 px tile and a 64 px "30.6%" ran out of the tile (measured, 2026-11-03).
+   1.91 em is the numeral's width; 100cqi here is the rest block's own content width. */
+.cbx .b-fl-rest .b-mid{font-size:min(64px,calc((100cqi - 4px) / 1.91))}
+.cbx .b-fl-rest .b-tags{align-self:flex-end;justify-content:flex-end}
+.cbx .b-fl-rest .b-tag{background:var(--card)}
+/* The numeral is sized to the narrowest fill the bar can have (LOW_SHARE, 40 %), so its text never leaves
+   the bar onto the well: fill = 0.4 * tile - 40px padding, the numeral is 1.91 em wide, 4px to spare. */
+.cbx .b-fill:not(.b-fill-low) .b-fl-in .b-mid{font-size:min(64px,calc(20.5cqi - 24px))}
+/* low share, and every phone: the bar is a strip along the foot, the text sits on the plate */
+.cbx .b-fill-low{flex-wrap:wrap;padding-bottom:14px}
+.cbx .b-fill-low .b-fl-bar{inset:auto auto 0 0;height:14px;border-radius:0 7px 7px 0}
+.cbx .b-fill-low .b-fl-in{flex:1 1 0}
+.cbx .b-fill-low .b-fl-in,.cbx .b-fill-low .b-fl-in :is(.b-t-sub,.b-u){color:var(--ink)}
+@media (max-width:640px){
+  .cbx .b-fill{flex-direction:column;padding-bottom:14px}
+  .cbx .b-fill .b-fl-bar{inset:auto auto 0 0;height:14px;border-radius:0 7px 7px 0}
+  .cbx .b-fill .b-fl-in{flex:none}
+  .cbx .b-fill:not(.b-fill-low) .b-fl-in .b-mid{font-size:64px}
+  .cbx .b-fill .b-fl-in,.cbx .b-fill .b-fl-in :is(.b-t-sub,.b-u){color:var(--ink)}
+  .cbx .b-fl-rest .b-tags{align-self:flex-start;justify-content:flex-start}
+}
+
+/* chargeable, strip layout (decision 4A): when the smaller share is under 20 % the card is not the bar.
+   A full-width bar drawn to scale (widths are the shares; no minimum width on either segment), then two
+   label tiles with all the room they need. Bronze/cyan = the chargeable tier colour, ink = the free
+   allocation; the ink tier (verified direct + default indirect) outlines its free allocation instead. */
+.cbx .b-fill-strip{flex-direction:column;padding:20px 20px 8px;background:var(--card);gap:14px}
+.cbx .b-sp-bar{display:flex;height:22px;border-radius:99px;overflow:hidden;background:var(--well);flex:none}
+.cbx .b-sp-bar>i{display:block;flex:none;height:100%}
+.cbx .b-sp-bc{background:var(--fill-bz)}
+.cbx .b-fill-cyan .b-sp-bc{background:var(--fill-cy)}
+.cbx .b-fill-ink .b-sp-bc{background:var(--ink)}
+.cbx .b-sp-bf{background:var(--ink)}
+.cbx .b-fill-ink .b-sp-bf{background:var(--well-2);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cbx .b-sp-lg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.cbx :is(.b-sp-c,.b-sp-f){min-width:0;padding:14px 14px 12px;border-radius:18px;display:flex;flex-direction:column;overflow-wrap:anywhere}
+.cbx :is(.b-sp-c,.b-sp-f) .b-t-ti{display:flex;align-items:center;gap:8px}
+.cbx :is(.b-sp-c,.b-sp-f) .b-t-ti::before{content:"";flex:none;width:10px;height:10px;border-radius:3px;background:currentColor}
+.cbx :is(.b-sp-c,.b-sp-f) .b-mid{margin:12px 0 6px;font-size:min(44px,calc(11cqi - 4px))}
+.cbx .b-sp-c{background:var(--fill-bz);color:var(--fill-bz-ink)}
+.cbx .b-sp-c .b-t-sub,.cbx .b-sp-c .b-u{color:var(--fill-bz-ink)}
+.cbx .b-fill-cyan .b-sp-c{background:var(--fill-cy);color:var(--fill-cy-ink)}
+.cbx .b-fill-cyan .b-sp-c :is(.b-t-sub,.b-u){color:var(--fill-cy-ink)}
+.cbx .b-fill-ink .b-sp-c{background:var(--ink);color:var(--on-ink)}
+.cbx .b-fill-ink .b-sp-c :is(.b-t-sub,.b-u){color:var(--on-ink)}
+.cbx .b-sp-f{background:var(--well);color:var(--ink)}
+.cbx .b-sp-f .b-t-ti::before{background:var(--ink)}
+.cbx .b-fill-ink .b-sp-f .b-t-ti::before{background:var(--well-2);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cbx .b-sp-f .kv>div{flex-wrap:wrap;gap:2px 10px}
+.cbx .b-fill-strip>.b-tags{margin:0 0 12px}
+.cbx .b-fill-strip>.b-tags .b-tag{background:var(--well)}
+
+/* three years: a stacked deck */
+.cbx .b-yrs .b-t-ti{padding-right:40px}
+.cbx .b-yrs>[data-deck]>.b-t-sub{margin-bottom:14px}
+.cbx .b-stack{display:flex;flex-direction:column;margin:auto 0 12px;padding:0;list-style:none}
+.cbx .b-st{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:12px 16px;border-radius:18px;margin-top:-8px;position:relative;background:var(--well-2);color:var(--ink)}
+.cbx .b-st span{font-size:12px;font-weight:600}
+.cbx .b-st b{font-size:28px;font-weight:400;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.cbx .b-st-none b{font-size:15px;font-weight:600;letter-spacing:0}
+.cbx .b-st0{z-index:3;margin-top:0}
+.cbx .b-st1{z-index:2;margin-left:10px;margin-right:10px;padding-top:18px}
+.cbx .b-st2{z-index:1;margin-left:20px;margin-right:20px;padding-top:18px}
+.cbx .b-stack-bz .b-st1{background:var(--deck-1);color:var(--deck-ink-1)}
+.cbx .b-stack-bz .b-st2{background:var(--deck-2);color:var(--deck-ink-2)}
+
+/* provenance: the snapshot as dots */
+.cbx .b-prov{gap:16px}
+.cbx .b-fp{flex:none;display:grid;grid-template-columns:repeat(8,1fr);gap:6px;width:150px;padding:14px;border-radius:18px;background:var(--well)}
+.cbx .b-fp i{aspect-ratio:1;border-radius:50%;background:color-mix(in oklab,var(--ink) 14%,transparent)}
+.cbx .b-fp i.on{background:var(--ink)}
+.cbx .b-pv{min-width:0}
+
+/* ===== Estimate: inputs left, results right ===== */
+.cbx .b-est{display:grid;grid-template-columns:minmax(360px,440px) minmax(0,1fr);gap:12px;align-items:start;margin-top:18px}
+@media (max-width:1100px){.cbx .b-est{grid-template-columns:minmax(0,1fr)}}
+.cbx .b-inputs{display:flex;flex-direction:column;gap:10px;min-width:0}
+.cbx .b-inputs :is(h2,h3,p){margin:0}
+.cbx .b-in-head{padding:2px 6px 4px}
+.cbx .b-inp{min-height:0;padding:18px 18px 16px 52px;gap:6px}
+.cbx .b-step{position:absolute;left:16px;top:17px;z-index:2;width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--on-ink);font-size:12px;font-weight:700;display:grid;place-items:center}
+.cbx .b-inp>.b-t-ti{margin-bottom:8px}
+.cbx .b-lab{font-size:11px;font-weight:600;color:var(--ink-3);margin-top:6px}
+.cbx .b-field{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:0 6px 0 14px;border-radius:14px;background:var(--well);color:var(--ink);box-shadow:inset 0 0 0 1.5px transparent}
+.cbx .b-field:hover{box-shadow:inset 0 0 0 1.5px var(--ink-3)}
+.cbx .b-field:focus-within{box-shadow:inset 0 0 0 2px var(--ink)}
+.cbx .b-field :is(input,select){flex:1;min-width:0;height:44px;border:0;background:transparent;color:var(--ink);font:inherit;font-size:15px;outline:0}
+.cbx .b-field select{appearance:none;cursor:pointer;padding-right:28px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888b87' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 8px center}
+.cbx .b-field select:disabled{cursor:not-allowed;color:var(--ink-3)}
+.cbx .b-fi-ic{width:18px;height:18px;flex:none;fill:none;stroke:var(--ink-3);stroke-width:1.8;stroke-linecap:round}
+.cbx .b-pill{flex:none;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:99px;background:var(--ink);color:var(--on-ink)}
+.cbx .b-field-big{min-height:64px}
+.cbx .b-field-big input{height:62px;font-size:40px;letter-spacing:-.04em}
+.cbx .b-field-big span{font-size:20px;color:var(--ink-3);padding-right:10px}
+.cbx .b-clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* the thumb (em) reaches 5px past the bar; the label row clears it: 10px margin top and bottom */
+.cbx .b-thr{position:relative;height:12px;border-radius:6px;background:var(--well-2);margin:10px 0 10px}
+.cbx .b-thr b{position:absolute;left:0;top:0;bottom:0;width:var(--fill,0%);border-radius:6px;background:var(--ink)}
+.cbx .b-thr em{position:absolute;left:50%;top:-5px;bottom:-5px;width:3px;margin-left:-1.5px;border-radius:2px;background:var(--card);box-shadow:0 0 0 1px var(--ink)}
+.cbx .b-thr-l2{display:flex;justify-content:space-between;gap:8px}
+.cbx .b-qtr{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0 4px}
+.cbx .b-qtr i{height:8px;border-radius:4px;background:var(--well-2)}
+.cbx .b-qtr i.on{background:var(--ink)}
+.cbx .b-segrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:6px}
+.cbx .b-segrow button{position:relative;height:42px;border:0;border-radius:12px;background:var(--well);color:var(--ink);font:inherit;font-size:15px;cursor:pointer}
+.cbx .b-segrow button.on{background:var(--ink);color:var(--on-ink)}
+.cbx .b-segrow i{position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--cyan-f)}
+.cbx .b-seg-empty{grid-column:1/-1;padding:10px 0}
+.cbx .b-opts{display:grid;gap:6px}
+.cbx .b-opt{text-align:left;border:0;border-radius:14px;padding:12px 14px;background:var(--well);color:var(--ink);font:inherit;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.cbx .b-opt b{font-size:14px}
+.cbx .b-opt span{font-size:11.5px;line-height:1.4;color:var(--ink-3)}
+.cbx .b-opt-bz.on,.cbx .b-opt-bz.on span{background:var(--fill-bz);color:var(--fill-bz-ink)}
+.cbx .b-opt-cy b{color:var(--cyan-t)}
+.cbx .b-opt-cy.on{background:var(--cyan-bg);box-shadow:inset 0 0 0 2px var(--cyan-f)}
+.cbx .b-vfields{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.cbx .b-vfields .cb-check{display:flex;gap:8px;align-items:baseline;margin-top:8px;font-size:12px;line-height:1.5;color:var(--ink-2)}
+.cbx .b-vfields .cb-check input{accent-color:var(--ink);flex:none}
+.cbx .b-native{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.cbx .b-add{width:100%;height:46px;border:0;border-radius:99px;background:var(--ink);color:var(--on-ink);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.cbx .b-out{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:auto}
+.cbx .b-out>*{grid-column:1/-1}
+.cbx .b-out>:is(.b-yrs,.b-prov){grid-column:auto;min-height:232px}
+.cbx .b-out>.b-yrs{align-self:start}
+.cbx .b-out>.b-hero{min-height:400px}
+.cbx .b-out>.b-fill{min-height:232px}
+.cbx .b-legacy{min-width:0}
+/* The de minimis card on Estimate is the legacy plate (renderDraftThreshold), kept on purpose and restyled here as a
+   bento tile: the card surface of .b-t, sans type, no mono caps, and ONE neutral pill for every verdict (colour law,
+   spec §3: bronze = the Commission default and the mark-up only, so INDETERMINATE and "above" are ink, never bronze,
+   cyan or amber). Scoped to .b-legacy so nothing else on the page can pick it up. */
+.cbx .b-legacy .cb-card{background:var(--card);color:var(--ink);border-radius:26px;padding:20px 20px 18px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0}
+.cbx .b-legacy .cb-card+.cb-card{margin-top:12px}
+.cbx .b-legacy .cb-card-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px 12px}
+.cbx .b-legacy .cb-card-label{margin:0;font-family:var(--sans);font-size:15px;font-weight:600;letter-spacing:-.01em;text-transform:none;color:var(--ink)}
+.cbx .b-legacy .cb-tag{--c:var(--ink-3);display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:99px;background:var(--well);color:var(--ink-2);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;white-space:nowrap}
+.cbx .b-legacy .cb-tag::before{display:none}
+.cbx .b-legacy .cb-tag.unavail{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor;color:var(--ink)}
+.cbx .b-legacy .cb-water{margin-top:10px;display:flex;flex-direction:column;gap:0}
+.cbx .b-legacy .cb-row{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px solid var(--line);font-family:var(--sans);font-size:12.5px;letter-spacing:0;text-transform:none;color:var(--ink-2)}
+.cbx .b-legacy .cb-row b{font-weight:700;text-align:right;overflow-wrap:anywhere;color:var(--ink)}
+.cbx .b-legacy .cb-sub{margin:10px 0 0;max-width:none;font-size:13px;line-height:1.5;color:var(--ink-2)}
+.cbx .b-legacy .cb-prov{margin:0;padding-top:10px;font-family:var(--sans);font-size:11.5px;line-height:1.5;letter-spacing:0;text-transform:none;color:var(--ink-3)}
+@media (max-width:640px){
+  .cbx .b-out{grid-template-columns:minmax(0,1fr)}
+  .cbx .b-out>:is(.b-yrs,.b-prov){grid-column:1/-1}
+  .cbx .b-out>.b-hero{min-height:0}
+  .cbx .b-inp{padding-left:48px}
+}
+
+/* legacy Estimate markup, kept for its pins, restyled so the light theme stays legible */
+.cbx [data-view="estimate"] .cb-datenote{margin:4px 0 0;color:var(--ink-2)}
+.cbx .b-results .cb-source{margin:10px 4px 0;font-family:var(--sans);font-size:11.5px;color:var(--ink-3)}
+
+/* ===== the good sheet: a dialog from the LEFT, over the inputs ===== */
+.cbx .b-scrim{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:40}
+.cbx .b-sheet{position:fixed;top:16px;left:16px;bottom:16px;width:min(440px,calc(100vw - 32px));z-index:41;background:var(--card);color:var(--ink);border-radius:28px;box-shadow:0 30px 80px -20px rgba(0,0,0,.5);padding:20px 22px;display:flex;flex-direction:column;gap:10px;overflow:auto}
+.cbx .b-sheet[hidden],.cbx .b-scrim[hidden]{display:none}
+/* Phone: the tab bar (z 8) and top bar (z 7) sit under the scrim (z 40) already; the sheet is a bottom-bleed
+   panel so the tab bar's labels cannot peek out of the 16px gap or the rounded corners below it. */
+@media (max-width:899px){
+  .cbx .b-sheet{top:10px;left:0;right:0;bottom:0;width:auto;border-radius:28px 28px 0 0;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+}
+.cbx .b-sheet :is(h2,p){margin:0}
+.cbx .b-sheet header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.cbx .b-x{width:32px;height:32px;border-radius:50%;border:0;background:var(--well);color:var(--ink-2);font-size:20px;cursor:pointer;line-height:1}
+.cbx .b-big-in{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:20px;background:var(--well)}
+.cbx .b-big-in:focus-within{box-shadow:inset 0 0 0 2px var(--ink)}
+.cbx .b-big-in input{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:inherit;font-size:28px;letter-spacing:-.03em;outline:0}
+.cbx .b-chips{display:flex;flex-wrap:wrap;gap:6px}
+.cbx .b-chipbtn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:99px;border:0;background:var(--well);color:var(--ink-2);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.cbx .b-chipbtn[aria-pressed="true"]{background:var(--ink);color:var(--on-ink)}
+.cbx .b-reslist{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.cbx .b-res{display:flex;flex-direction:column;gap:4px;width:100%;text-align:left;padding:12px 14px;border-radius:18px;border:0;background:var(--well);color:var(--ink);font:inherit;cursor:pointer}
+.cbx .b-res.on{box-shadow:inset 0 0 0 2px var(--ink)}
+.cbx .b-res b{font-size:16px}
+.cbx .b-res-d{font-size:12px;line-height:1.45;color:var(--ink-2)}
+.cbx .b-sheet .b-t-foot{margin-top:4px}
+
+/* Primitives the plan assumed from phase 2 but phase 2 did not carry (b-none, b-lead, b-lead2):
+   copied verbatim from the visual reference, preview/bento.css lines 71-74, scoped under .cbx. */
+.cbx .b-lead{font-size:15px;line-height:1.45;max-width:46ch;margin-bottom:14px}
+.cbx .b-lead2{font-size:14px;line-height:1.5;color:var(--ink-2);margin-top:10px;max-width:72ch}
+.cbx .b-none{background:transparent;box-shadow:inset 0 0 0 1.5px var(--ink-3);border:0;color:var(--ink-3)}
+/* ── Three years (cbam-ui/tiles-years.ts → #cbOutlook), spec §5.2 ─────────────────────────
+   Colour law (spec §3): bronze marks only the mark-up. Free allocation and the benchmark are
+   ink; the visitor's own price is dashed ink, never a colour that means a source. */
+.cbx .cb-ol{display:flex;flex-direction:column;gap:12px;min-width:0}
+/* rows follow their content here: the plates hold their own height, and the closed working is not padded to 232 px */
+.cbx .cb-ol .b-bento{grid-auto-rows:auto}
+.cbx .cb-ol-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.cbx .cb-ol-head .cb-card-label{margin:0;font-size:13px;font-weight:600;color:var(--ink-2)}
+/* "Law as published" is a date stamp, not a status: a neutral pill (the legacy .cb-tag pending tone is bronze,
+   and bronze means the Commission's default or the mark-up only). The cb-tag class stays as the e2e hook. */
+.cbx .cb-ol-head .cb-tag{--c:var(--ink-3);font-family:var(--sans);font-size:12px;letter-spacing:0;text-transform:none;padding:3px 11px;color:var(--ink-2);background:var(--well)}
+.cbx .cb-ol-head .cb-tag::before{display:none}
+.cbx .cb-ol-years{grid-column:span 3;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:12px;list-style:none;margin:0;padding:0;min-width:0}
+.cbx .b-yr{min-height:232px}
+/* Every plate's header and cost block hold one height, so the three numerals share a baseline whether or
+   not a plate carries the what-if tag or a published price. */
+.cbx .b-yr .b-t-h{min-height:56px;flex-wrap:wrap;align-content:flex-start;row-gap:6px}
+/* year and rise on one row, the what-if tag on its own line beneath (it is too wide to share a plate's header) */
+.cbx .b-yr .b-t-h>div{display:contents}
+.cbx .b-yr .b-t-h>.b-t-sub{margin:0 0 0 auto;text-align:right}
+.cbx .b-yr .b-t-h::after{content:"";order:1;flex:0 0 100%;height:0}
+.cbx .b-yr .b-t-h .b-tag{order:2;white-space:nowrap}
+.cbx .b-yr-cost{min-height:72px}
+/* narrower plates wrap "Certificate price · imports in 2027-Q1" onto two lines; the published plate holds the same height */
+@media (max-width:1240px) and (min-width:900px){.cbx .b-yr-cost{min-height:90px}}
+.cbx .b-wi{margin-top:6px}
+.cbx .cb-ol-years.b-years-wide{grid-column:1/-1}
+.cbx .b-yr .b-mid{margin:auto 0 0;font-size:clamp(40px,4.4vw,64px)}
+.cbx .b-yr-cost{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:14px 0}
+.cbx .b-yr.b-hero .b-tag{background:color-mix(in oklab,var(--on-ink) 12%,transparent);color:inherit}
+.cbx .b-hero.b-yr .b-t-sub{color:color-mix(in oklab,var(--on-ink) 72%,transparent)}
+.cbx .cb-ol-e.cb-ol-mine{background:transparent;outline:1.5px dashed currentColor;outline-offset:-1.5px}
+.cbx .b-mk{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0;font-size:11.5px;font-weight:600;color:var(--ink-3)}
+.cbx .b-hero .b-mk{color:color-mix(in oklab,var(--on-ink) 72%,transparent)}
+.cbx .b-d10{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;width:110px}
+.cbx .b-d10 i{aspect-ratio:1;border-radius:50%;background:color-mix(in oklab,var(--ink) 16%,transparent)}
+.cbx .b-hero .b-d10 i{background:color-mix(in oklab,var(--on-ink) 22%,transparent)}
+.cbx .b-d10.b-bz i.on{background:var(--bronze-f)}
+.cbx .b-hero .b-d10.b-bz i.on{background:var(--hero-bz)}
+.cbx .cb-ol-refused .cb-ol-none{margin:auto 0 8px;font-size:28px;letter-spacing:-.02em}
+.cbx .cb-ol-reason{font-size:12.5px;line-height:1.5}
+.cbx .b-own{grid-column:span 1}
+.cbx .b-pricebox{display:flex;align-items:baseline;gap:6px;margin:auto 0 10px;padding:10px 16px;border-radius:20px;background:var(--well)}
+.cbx .b-pricebox:focus-within{box-shadow:0 0 0 2px var(--focus)}
+.cbx .b-pricebox span{font-size:40px;color:var(--ink-3)}
+.cbx .b-pricebox input{width:100%;min-width:0;border:0;background:transparent;font:inherit;font-size:56px;letter-spacing:-.05em;color:var(--ink);outline:0}
+.cbx .b-pricebox input::placeholder{color:var(--ink-3);font-size:24px;letter-spacing:0}
+.cbx .b-pricebox input{-moz-appearance:textfield;appearance:textfield}
+.cbx .b-pricebox input::-webkit-outer-spin-button,.cbx .b-pricebox input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.cbx .b-pricebox em{font-style:normal;font-size:12px;color:var(--ink-3);white-space:nowrap}
+.cbx .b-own .b-t-foot{display:block;line-height:1.5}
+.cbx .b-split{display:flex;gap:6px;height:120px;margin:16px 0 12px}
+.cbx .b-split-sm{height:64px;margin:0 0 12px}
+.cbx .b-sp{flex:0 0 0;min-width:0;overflow:hidden;border-radius:18px;display:flex;align-items:flex-start;container:bsp/inline-size}
+.cbx .b-sp>span{padding:14px 16px;font-size:30px;letter-spacing:-.04em;line-height:1;white-space:nowrap}
+/* Bold, so a 20 px label is WCAG "large" (18.66 px bold: 3:1). Dark ink on the light theme's bronze is 4.75:1 as drawn, but
+   the pixel sweep reads it at 4.42-4.48 off an antialiased edge, and 4.5 is the floor for regular text (plan 05, Task 8). */
+.cbx .b-split-sm .b-sp>span{padding:10px 12px;font-size:20px;font-weight:700}
+.cbx .b-sp-bz{background:var(--bronze-f);color:var(--fill-bz-ink)}
+/* A segment too narrow for its label shows none: measured at 390 px the small segment clipped to "+". The
+   legend (Three years) and the caption (Why) keep the figure. Thresholds are the label's width: font size,
+   padding and about five glyphs ("+11.2"), eight for a data-long label ("+1,234.5"). */
+@container bsp (max-width:103px){.cbx .b-split:not(.b-split-sm) .b-sp:not([data-long])>span{display:none}}
+@container bsp (max-width:159px){.cbx .b-split:not(.b-split-sm) .b-sp[data-long]>span{display:none}}
+@container bsp (max-width:71px){.cbx .b-split-sm .b-sp:not([data-long])>span{display:none}}
+@container bsp (max-width:99px){.cbx .b-split-sm .b-sp[data-long]>span{display:none}}
+/* On the inverted hero (pearl in dark, near-black in light) the dark theme's card bronze falls to 2.11:1, under
+   the 3:1 a mark needs; the hero draws the light theme's bronze there (3.4:1 on pearl, 4.8:1 on near-black), its label
+   still the dark ink (4.8:1). */
+.cbx .b-hero .b-sp-bz{background:var(--hero-bz)}
+.cbx .b-sp-ink{background:var(--ink);color:var(--on-ink)}
+.cbx .b-sp-ink2{background:var(--seg-3);color:var(--on-ink)}
+.cbx .b-sp-on{background:color-mix(in oklab,var(--on-ink) 22%,transparent);color:var(--on-ink)}
+.cbx .cb-ol-legend{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.cbx .cb-ol-legend li{display:grid;grid-template-columns:12px 1fr auto;gap:10px;align-items:baseline;font-size:14px;line-height:1.45}
+.cbx .cb-ol-legend small{display:block;font-size:12px;color:var(--ink-3)}
+.cbx .cb-ol-legend b{font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cbx .cb-ol-sw{display:inline-block;width:10px;height:10px;border-radius:3px}
+.cbx .cb-ol-sw.cb-ol-s1{background:var(--bronze-f)}
+.cbx .cb-ol-sw.cb-ol-s2{background:var(--ink)}
+.cbx .cb-ol-sw.cb-ol-s3{background:var(--seg-3)}
+.cbx .cb-ol-nosplit{max-width:72ch}
+.cbx .b-work summary{width:fit-content;margin-top:12px;padding:6px 14px;border-radius:99px;background:var(--well);cursor:pointer;list-style:none;font-size:12px;font-weight:600;color:var(--ink-2)}
+.cbx .b-work summary::-webkit-details-marker{display:none}
+.cbx .cb-ol-scroll{overflow-x:auto;min-width:0}
+.cbx .b-wk{width:100%;min-width:25rem;border-collapse:collapse;margin-top:14px;font-size:15px;font-variant-numeric:tabular-nums}
+.cbx .b-wk th,.cbx .b-wk td{text-align:right;padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top;font-weight:400}
+.cbx .b-wk thead th{font-size:12px;font-weight:600;color:var(--ink-3)}
+.cbx .b-wk tbody th{text-align:left;font-weight:600;font-size:13px}
+.cbx .b-wk small{display:block;margin-top:2px;font-size:11px;font-weight:400;color:var(--ink-3)}
+.cbx .b-wk .cb-ol-tot td{font-size:24px;letter-spacing:-.03em}
+.cbx .b-wk tr:last-child th,.cbx .b-wk tr:last-child td{border-bottom:0}
+.cbx .b-wk .cb-ol-np{font-weight:600;color:var(--ink)}
+.cbx .cb-ol-notes{margin-top:12px}
+.cbx .cb-ol-note{margin:6px 0 0;font-size:11.5px;line-height:1.55;color:var(--ink-3)}
+.cbx :is(.b-work summary,.cb-ol-scroll):focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+@media (max-width:1100px){.cbx .cb-ol-years,.cbx .b-own{grid-column:1/-1}}
+@media (max-width:899px){.cbx .cb-ol-years{grid-auto-flow:row;grid-template-columns:minmax(0,1fr)}}
+/* ── end Three years */
+
+/* ── Why it changes (cbam-ui/tiles-why.ts → #cbGraphs), spec §5.3 ──────────────────────
+   The --cg-* tokens the SVG plots read are mapped onto the bento tokens here and nowhere else.
+   Colour law (spec §3): the mark-up is bronze; free allocation and the benchmark are ink; the
+   visitor's own price (cost tile) is ink, dashed where none is published. */
+.cbx .cg-card{--cg-ink:var(--ink);--cg-muted:var(--ink-2);--cg-faint:var(--ink-3);--cg-hair:var(--line);--cg-accent:var(--ink);--cg-neutral:var(--ink-3);--cg-markup:var(--bronze-f);}
+.cbx .cg-cost{--cg-markup:var(--ink)}
+.cbx .cg-sub{margin:0 0 10px;font-size:12px;color:var(--ink-3)}
+.cbx .cg-card .cg-t{margin:0 0 4px;font-size:15px;line-height:1.45;max-width:46ch}
+.cbx .cg-card .cg-t b{font-weight:700}
+.cbx .cg-plot{margin:12px 0 0;min-width:0}
+.cbx .cg-plot svg{display:block;max-width:100%;height:auto;overflow:visible}
+.cbx .cg-plot text{fill:var(--cg-muted);font-variant-numeric:tabular-nums}
+.cbx .cg-plot .cg-num{fill:var(--cg-ink);font-weight:600}
+.cbx .cg-plot .cg-lab,.cbx .cg-plot .cg-faint{fill:var(--cg-faint)}
+.cbx .cg-plot .cg-hair{stroke:var(--cg-hair);stroke-width:1;fill:none}
+.cbx .cg-plot .cg-halo{display:none}
+.cbx .cg-m{outline:none}
+.cbx .cg-m:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.cbx .cg-foot{align-items:flex-end}
+.cbx .cg-cap{margin:0;font-size:11.5px;line-height:1.5;color:var(--ink-3)}
+.cbx .cg-tbl-btn{flex:none;min-height:2.25rem;padding:0 14px;border:0;border-radius:99px;background:var(--well);cursor:pointer;font:inherit;font-size:12px;font-weight:600;color:var(--ink-2)}
+.cbx .cg-tbl-btn[aria-expanded="true"]{background:var(--ink);color:var(--on-ink)}
+.cbx .b-hero .cg-tbl-btn{background:var(--well);color:var(--on-ink)}
+.cbx .b-hero .cg-tbl-btn[aria-expanded="true"]{background:var(--on-ink);color:var(--ink)}
+.cbx .cg-mini{display:flex;gap:4px}
+.cbx .cg-mini button{min-height:2.25rem;padding:0 11px;border:0;border-radius:11px;background:transparent;cursor:pointer;font:inherit;font-size:11.5px;font-weight:600;color:var(--ink-2)}
+.cbx .cg-mini button[aria-pressed="true"]{background:var(--ink);color:var(--on-ink)}
+.cbx :is(.cg-tbl-btn,.cg-mini button,.cg-second input,.cg-tbl):focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.cbx .cg-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:12.5px;color:var(--ink-2)}
+.cbx .cg-legend span{display:inline-flex;align-items:center;gap:6px}
+.cbx .cg-legend b{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.cbx .cg-legend svg{flex:none}
+.cbx .cg-second{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-top:12px;font-size:13px}
+.cbx .cg-second input{width:7rem;border:0;border-radius:12px;padding:8px 10px;background:var(--well);color:var(--ink);font:inherit;font-weight:600}
+.cbx .cg-second input:disabled{color:var(--ink-3);cursor:not-allowed}
+.cbx .cg-second span{flex:1 1 100%;font-size:12px;color:var(--ink-3)}
+.cbx .cg-tbl{margin-top:10px;overflow-x:auto;border-top:1px solid var(--line)}
+.cbx .cg-tbl.cg-closed{display:none}
+.cbx .cg-tbl table{width:100%;min-width:17rem;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+.cbx .cg-tbl th,.cbx .cg-tbl td{padding:8px;text-align:right;font-weight:400;white-space:nowrap;border-bottom:1px solid var(--line)}
+.cbx .cg-tbl th:first-child,.cbx .cg-tbl td:first-child{text-align:left}
+.cbx .cg-tbl thead th{font-size:11px;font-weight:600;color:var(--ink-3)}
+.cbx .cg-tbl caption{caption-side:bottom;text-align:left;padding:6px 8px 0;font-size:11px;color:var(--ink-3)}
+.cbx .cg-tip{position:fixed;z-index:60;left:0;top:0;pointer-events:none;max-width:17rem;white-space:pre-line;padding:8px 11px;border-radius:12px;background:var(--ink);color:var(--on-ink);font-size:12px;line-height:1.5;opacity:0;transform:translateY(4px);transition:opacity .18s var(--ease),transform .18s var(--ease)}
+.cbx .cg-tip.on{opacity:1;transform:none}
+.cbx .cg-none{margin:0;font-size:14px;line-height:1.6;color:var(--ink-2)}
+.cbx .cg-retry{margin-left:10px;min-height:2.25rem;padding:0 14px;border:0;border-radius:99px;background:var(--well);cursor:pointer;font:inherit;font-size:12px;font-weight:600;color:var(--ink)}
+.cbx .cg-retry:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+/* the HTML plots: zero-based, lengths are quantities */
+.cbx .b-waffle{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;width:190px}
+.cbx .b-waffle i{aspect-ratio:1;border-radius:50%;background:color-mix(in oklab,var(--ink) 14%,transparent)}
+.cbx .b-waffle i.on{background:var(--ink)}
+.cbx .b-mcols{display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));gap:14px;align-items:end;height:290px;margin:6px 0 4px}
+.cbx .b-mc{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
+.cbx .b-mc-top{margin-bottom:6px;font-size:20px;letter-spacing:-.03em}
+.cbx .b-mc-bar{display:flex;flex-direction:column;width:44%}
+.cbx .b-mc-bar>b,.cbx .b-mc-bar>i{display:block;flex-basis:0;min-height:0}
+.cbx .b-mc-bar>b{position:relative;background:var(--bronze-f);border-radius:8px 8px 0 0}
+.cbx .b-mc-bar>b em{position:absolute;right:calc(100% + 6px);top:0;font-style:normal;font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap}
+.cbx .b-mc-bar>i{background:var(--well-2);border-radius:0 0 8px 8px}
+.cbx .b-mc-bar>i:only-child{border-radius:8px}
+.cbx .b-mc-y{margin-top:8px;font-size:13px;font-weight:600}
+.cbx .b-phase{display:grid;grid-template-columns:repeat(var(--n,9),minmax(0,1fr));gap:6px;height:200px;margin:6px 0 4px}
+.cbx .b-ph{display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;min-width:0}
+.cbx .b-ph-bar{flex:1;width:100%;display:flex;align-items:flex-end}
+.cbx .b-ph-bar b{width:100%;border-radius:8px;background:color-mix(in oklab,var(--ink) 18%,transparent)}
+.cbx .b-ph-on .b-ph-bar b{background:var(--ink)}
+.cbx .b-ph span.num{font-size:10.5px;font-weight:600}
+.cbx .b-ph em{font-style:normal;font-size:10.5px;color:var(--ink-3)}
+.cbx .b-orig-big{display:flex;flex-wrap:wrap;align-items:baseline;gap:18px;margin:14px 0 8px;font-size:clamp(36px,5vw,64px);letter-spacing:-.05em;line-height:1}
+.cbx .b-orig-big small{display:block;margin-top:4px;font-size:12px;letter-spacing:0;color:var(--ink-3)}
+.cbx .b-arrow{color:var(--ink-3)}
+.cbx .b-me-big{margin-left:auto;padding:6px 12px;border-radius:99px;background:var(--ink);color:var(--on-ink);font-size:16px;font-weight:600;letter-spacing:0}
+.cbx .b-strip{position:relative;height:44px;margin:12px 6px;border-radius:22px;background:var(--well)}
+.cbx .b-strip:has(.b-strip-band){margin-bottom:32px}
+.cbx .b-strip i{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:color-mix(in oklab,var(--ink) 40%,transparent)}
+.cbx .b-strip i.b-me{z-index:1;width:22px;height:22px;margin:-11px 0 0 -11px;background:var(--ink);box-shadow:0 0 0 4px var(--card)}
+.cbx .b-strip-band{position:absolute;top:calc(100% + 6px);transform:translateX(-50%);font-size:11.5px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+/* below the rail breakpoint the Why board is one column, so a half tile is never squeezed to 150 px */
+@media (max-width:899px){.cbx .cg-board{grid-template-columns:minmax(0,1fr)}.cbx .cg-board>.b-t{grid-column:1/-1}.cbx .b-mc-top{font-size:17px}.cbx .b-mc-bar>b em{right:auto;left:calc(100% + 4px)}}
+@media (max-width:520px){.cbx .b-ph em{display:none}.cbx .b-ph span.num{font-size:9px}}
+@media (prefers-reduced-motion:reduce){.cbx .cg-tip{transition:none}}
+/* ON PAPER THE GRAPHS BECOME THEIR TABLES: each tile's sentence, caption and table in black on white. */
+@media print{
+  .cbx .cg-card{--cg-ink:black;--cg-muted:black;--cg-faint:rgb(51 51 51);--cg-hair:rgb(153 153 153);background:white!important;color:black!important;box-shadow:none!important;border:1px solid rgb(153 153 153);border-radius:0;break-inside:avoid}
+  .cbx .cg-card :is(.cg-t,.b-t-ti,.cg-big,.cg-cap){color:black!important}
+  .cbx :is(.cg-plot,.cg-mini,.cg-second,.cg-legend,.cg-tbl-btn,.cg-tip,.cg-sub){display:none!important}
+  .cbx .cg-tbl,.cbx .cg-tbl.cg-closed{display:block!important}
+  .cbx .cg-board{display:block}
+  .cbx .cg-card+.cg-card{margin-top:8pt}
+  /* The share tile's numeral is 150 px on screen; on paper it is a figure in a sentence's company. */
+  .cbx .cg-card .cg-big{font-size:20pt;line-height:1.1;margin:0 0 6pt}
+}
+/* ── end Why it changes */
+
+/* ── Phase 4: Shipment list, Export, Rules & sources (spec §5.4–5.6) ───────────────────────────
+   Ported from the preview's bento.css (source order kept), scoped under .cbx. */
+/* phase-4 fill: shared primitives phase 2 did not carry (btn, foot), verbatim from the preview; b-lead/b-lead2 are above */
+.cbx .btn{border:0;height:30px;padding:0 14px;border-radius:99px;background:var(--well);font:inherit;font-size:12px;font-weight:600;color:var(--ink-2);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
+.cbx .foot{font-size:11px;font-weight:400;color:var(--ink-3);line-height:1.55}
+
+.cbx h2.b-t-ti{margin:0}
+.cbx .b-list{margin-bottom:12px}
+.cbx .b-c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cbx .b-t-h>.b-chips{justify-content:flex-end;gap:4px}
+.cbx .b-row2{display:flex;gap:8px;margin-top:14px}
+.cbx .b-row2 .btn{flex:1;width:auto}
+.cbx .b-row2 :is(.b-add,.b-ghost){height:46px;font-size:14px}
+.cbx .b-hero .b-add{background:var(--on-ink);color:var(--ink)}
+.cbx .b-t>.btn.b-add,.cbx .b-t>.cb-btn.b-add{margin-top:auto}
+.cbx .b-ghost{height:46px;border-radius:99px;font-size:14px;font-weight:600;background:transparent;box-shadow:inset 0 0 0 1.5px color-mix(in oklab,var(--on-ink) 40%,transparent);color:var(--on-ink)}
+.cbx .b-stackbar{display:flex;gap:4px;height:14px;margin:14px 0 0}
+.cbx .b-stackbar b{border-radius:7px;background:color-mix(in oklab,var(--on-ink) 80%,transparent)}
+.cbx .b-stackbar b+b{background:color-mix(in oklab,var(--on-ink) 45%,transparent)}
+.cbx .b-stackbar b+b+b{background:color-mix(in oklab,var(--on-ink) 22%,transparent)}
+.cbx .b-pass-name{font-size:22px;font-weight:500;letter-spacing:-.02em;margin:6px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cbx .b-share-row{display:flex;justify-content:space-between;font-size:11.5px;font-weight:600;color:var(--ink-3);margin-top:10px}
+.cbx .b-share{position:relative;height:12px;border-radius:6px;background:var(--well);overflow:hidden;margin:6px 0 8px}
+.cbx .b-share b{position:absolute;left:0;top:0;bottom:0;background:var(--ink);border-radius:6px}
+.cbx .b-rm{align-self:flex-start;margin-top:8px;border:0;background:transparent;color:var(--ink-3);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:6px 0}
+.cbx .b-csvwrap{overflow-x:auto;border-radius:16px;background:var(--well);margin:12px 0 10px}
+.cbx .b-csv{border-collapse:collapse;font-size:12px;white-space:nowrap;width:100%}
+.cbx .b-csv th,.cbx .b-csv td{padding:8px 12px;text-align:left}
+.cbx .b-csv th{color:var(--ink-3);font-weight:600}
+.cbx .b-csv td{border-top:1px solid var(--line)}
+.cbx .b-csv td:first-child{max-width:11ch;overflow:hidden;text-overflow:ellipsis}
+.cbx .b-fps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}
+.cbx .b-fps figure{margin:0;display:flex;gap:14px;align-items:center}
+.cbx .b-fps .b-fp{width:112px;padding:12px;gap:4px}
+.cbx .b-fps figcaption b{display:block;font-size:14px}
+.cbx .b-fps figcaption span{font-size:12px;color:var(--ink-3)}
+.cbx .b-np{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.cbx .b-npi{display:flex;gap:14px}
+.cbx .b-npi b{font-size:15px}
+.cbx .b-npi p{font-size:13px;line-height:1.5;color:var(--ink-2);margin:4px 0 0}
+.cbx .b-npi ul.foot{margin:6px 0 0;padding-left:16px}
+.cbx .b-dash{flex:none;width:44px;height:44px;border-radius:12px;box-shadow:inset 0 0 0 2px var(--ink-3);background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in oklab,var(--ink) 10%,transparent) 6px 8px)}
+.cbx .b-key{display:flex;flex-direction:column;gap:6px;margin-top:auto}
+.cbx .b-k{border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;font-size:12.5px}
+.cbx .b-k b{font-size:15px}
+.cbx .b-k-bz{background:var(--bronze-f);color:var(--fill-bz-ink)}
+.cbx .b-k-cy{background:var(--cyan-f);color:var(--fill-cy-k)}
+.cbx .b-k-ink{background:var(--ink);color:var(--on-ink)}
+.cbx .b-fp-sm{width:96px;padding:10px;gap:3px;margin-top:12px}
+.cbx .b-srcs ol.src{list-style:none;margin:10px 0 0;padding:0;columns:2;column-gap:28px}
+.cbx .b-srcs .src li{break-inside:avoid;padding:10px 0;border-top:1px solid var(--line)}
+.cbx .b-srcs .src li:first-child{border-top:0}
+.cbx .b-srcs .src .row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.cbx .b-srcs .src b{font-size:13px;font-weight:600;max-width:34ch}
+.cbx .b-srcs .src a{color:var(--ink-2);overflow-wrap:anywhere}
+.cbx .b-t .cb-foot{margin:10px 0 0;max-width:72ch;font:400 14px/1.5 var(--sans);color:var(--ink-2)}
+.cbx .b-frame .cb-banner{margin:14px 0 0;padding:0;max-width:none;border-radius:0;background:none;font:400 15px/1.55 var(--sans);color:inherit}
+/* The Framing tile holds its text and nothing else (the shield is gone, audit F-11): size to the content rather than stretch across both rows. */
+.cbx .b-frame{align-self:start}
+.cbx .cb-frame-sum{margin:0 4px 16px;font-size:14px;color:var(--ink-2)}
+.cbx .cb-frame-link{border:0;background:none;padding:0;font:inherit;font-weight:600;color:var(--ink);text-decoration:underline;cursor:pointer}
+/* #cbCsv / #cbDoc keep the page's own .cb-btn class (their listeners and tests read the id), so the tile look
+   is set here at a higher specificity than the page's scoped mono-uppercase .cb-btn rule and its hover. */
+.cbx .b-t .cb-btn.b-add,.cbx .b-t .cb-btn.b-add:hover:not(:disabled){border:0;border-radius:99px;padding:0 22px;cursor:pointer;background:var(--ink);color:var(--on-ink);font:600 14px/1 var(--sans);letter-spacing:0;text-transform:none}
+.cbx .b-hero .cb-btn.b-add,.cbx .b-hero .cb-btn.b-add:hover:not(:disabled){background:var(--on-ink);color:var(--ink)}
+.cbx .b-t .cb-btn.b-add:disabled{opacity:.45;cursor:not-allowed}
+.cbx .b-t-foot.num{display:flex;justify-content:space-between;gap:8px;margin-top:0}
+.cbx :is(#cbExportCsv,#cbExportDoc){margin-bottom:14px}
+
+/* The honesty hooks inside tiles. Their markup is pinned by tests/unit/cbam-render.test.mjs, so
+   they are styled here and never renamed. Status tags are ink: colour is provenance only (spec §3).
+   SCOPED to the three Phase 4 views, with :where() so no specificity is added: Estimate draws its own
+   hero/tiles from the rules above, and these generic rules once leaked into it (a hero attestation
+   sentence painted the hero's own background, refused reasons shrank from 18px to 14px). */
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-tag{display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:99px;background:var(--well);color:inherit;font-size:12px;font-weight:600;white-space:nowrap}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-tag.unavail{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-fig{margin:auto 0 0}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-n{font-size:64px;font-weight:400;letter-spacing:-.05em;line-height:1}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-hero .cb-n{font-size:clamp(72px,7vw,120px);letter-spacing:-.06em;line-height:.9}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-u{font-size:12.5px;color:var(--ink-3);margin-top:4px}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-cost{display:inline-flex;align-self:flex-start;align-items:center;height:26px;margin-top:10px;padding:0 11px;border-radius:99px;background:var(--well);font-size:12px;font-weight:600}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-sub{margin:10px 0 0;font-size:13px;line-height:1.5;color:var(--ink-2)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-hero .cb-sub{color:var(--ink-3)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-warn{font-weight:600}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-prov{margin:auto 0 0;padding-top:10px;font-size:11px;line-height:1.5;color:var(--ink-3)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-attest{display:flex;gap:10px;align-items:flex-start;margin-top:12px;font-size:13px;font-weight:600}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-attest input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--ink)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-pass .cb-card{margin-top:12px;padding:0;border:0;background:transparent;box-shadow:none}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-pass .cb-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-pass .cb-card-label{margin:0;font-size:12px;font-weight:600;color:var(--ink-3)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-water,.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-stamp{margin-top:10px}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t:not(.b-hero) .cb-row{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t:not(.b-hero) .cb-row span{color:var(--ink-2)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t:not(.b-hero) .cb-row b{font-weight:700;text-align:right;overflow-wrap:anywhere}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-stamp-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-notes{margin:8px 0 0;padding-left:18px;font-size:12px;line-height:1.5;color:var(--ink-2)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-reason{margin:8px 0 0;font-size:14px;font-weight:600}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-sel{display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:12px;color:var(--ink-2)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-sel code{overflow-wrap:anywhere}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-delta{margin-top:10px;padding:12px 14px;border-radius:14px;background:var(--well)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-delta-h{font-size:12px;font-weight:600;color:var(--ink-3)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-attested{color:var(--ink)}
+
+@media (max-width:1100px){
+  .cbx .b-c3{grid-template-columns:1fr 1fr}
+  .cbx .b-fps{grid-template-columns:1fr 1fr}
+}
+@media (max-width:899px){
+  .cbx :is(.b-list,.b-export,.b-rules){grid-template-columns:minmax(0,1fr);grid-auto-rows:auto}
+  .cbx :is(.b-list,.b-export,.b-rules)>*{grid-column:auto;grid-row:auto}
+  .cbx .b-c3{grid-template-columns:1fr}
+  .cbx .b-fps{grid-template-columns:1fr 1fr}
+  .cbx .b-srcs ol.src{columns:1}
+}
+
+/* The status strip sits on var(--ink), so its text is var(--on-ink) in both themes. The page's scoped
+   .cb-note rule paints it cyan, which is 1.69:1 on the light ink of the dark theme (axe, phase 4). */
+.cbx #cbStatus.cbx-status{color:var(--on-ink);font-family:var(--sans);letter-spacing:0}

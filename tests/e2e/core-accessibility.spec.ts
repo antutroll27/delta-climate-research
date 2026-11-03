@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { CBAM_URL, VIEW_NAMES, priceLine, view } from './cbam-helpers';
+import { contrastFailures } from './obos-v2-helpers';
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -151,4 +153,54 @@ test('the team page has no automated WCAG A, AA, or 2.2 AA violations', async ({
     .analyze();
 
   expect(results.violations).toEqual([]);
+});
+
+const WCAG = ['wcag2a', 'wcag2aa', 'wcag22aa'];
+
+/** Spec §6.5 and §9: axe on the six views and the open good sheet; AA on both themes. */
+test.describe('CBAM calculator', () => {
+  async function open(page: Page, theme: 'light' | 'dark', width: number, height: number): Promise<void> {
+    await page.setViewportSize({ width, height });
+    await page.addInitScript(() => sessionStorage.setItem('delta:loaded', '1'));
+    await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: theme });
+    await page.goto(`${CBAM_URL}?theme=${theme}`);
+    await priceLine(page);
+    await page.click('#cbAdd');
+  }
+
+  for (const theme of ['light', 'dark'] as const) {
+    for (const vp of [{ n: 'desktop', w: 1440, h: 900 }, { n: 'phone', w: 390, h: 844 }] as const) {
+      test(`six views and the good sheet: no WCAG A/AA/2.2 AA violations · ${theme} · ${vp.n}`, async ({ page }) => {
+        test.setTimeout(180_000);
+        await open(page, theme, vp.w, vp.h);
+        const found: string[] = [];
+        const scan = async (label: string): Promise<void> => {
+          const r = await new AxeBuilder({ page }).withTags(WCAG).analyze();
+          for (const v of r.violations) found.push(`${label}: ${v.id} ×${v.nodes.length} ${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(' | ')}`);
+        };
+        for (const v of VIEW_NAMES) { await view(page, v); await scan(v); }
+        await view(page, 'estimate');
+        await page.locator('[data-view="estimate"]').getByRole('button', { name: /change/i }).first().click();
+        await expect(page.getByRole('dialog')).toBeVisible();
+        await scan('good sheet');
+        expect(found).toEqual([]);
+      });
+    }
+
+    test(`every word on every view meets AA against its own pixels · ${theme} · desktop`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, theme, 1440, 900);
+      const out: string[] = [];
+      for (const v of VIEW_NAMES) {
+        await view(page, v);
+        const room = await page.evaluate(() => { const m = document.querySelector<HTMLElement>('.cbx-main')!; return m.scrollHeight - m.clientHeight; });
+        for (const at of room > 24 ? [0, 0.5, 1] : [0]) {
+          await page.evaluate((y) => { document.querySelector<HTMLElement>('.cbx-main')!.scrollTop = y; }, Math.round(room * at));
+          await page.waitForTimeout(200);
+          for (const f of await contrastFailures(page)) out.push(`${v} @${Math.round(at * 100)}%: ${f.ratio}:1 (needs ${f.floor}) ${f.px}px ${f.color} on ${f.ground} "${f.text}" ${f.path}`);
+        }
+      }
+      expect([...new Set(out)]).toEqual([]);
+    });
+  }
 });

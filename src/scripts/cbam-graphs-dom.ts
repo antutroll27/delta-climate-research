@@ -12,16 +12,17 @@
 import type { EstimatorInput, EstimatorPack } from './cbam-algos/estimator/estimate-from-pack.ts';
 import { parseAssumedPrice, type Outlook } from './cbam-outlook.ts';
 import {
-  chargedCells, chargedLegend, chargedTip, costParts, graphsModel, originCountries, originRow, originsFrom, originsKey, originsParts, phaseModel,
-  renderGraphs, secondNote, secondUsable, type OriginsModel,
-  sentenceCharged,
-  type GraphsModel, type GraphsRefusal, type GraphsState,
+  chargedLegend, chargedTip, costParts, graphsModel, originCountries, originRow, originsFrom, originsKey, phaseModel,
+  secondNote, secondUsable, sentenceCharged,
+  type GraphsModel, type GraphsRefusal, type GraphsState, type OriginsModel,
 } from './cbam-graphs.ts';
+import { originsTileParts, renderWhy, type WhyWidths } from './cbam-ui/tiles-why.ts';
 
-type Widths = Parameters<typeof renderGraphs>[2];
+type Widths = WhyWidths;
 /** How long one slice of the origins computation may run before it yields. */
 const ORIGINS_SLICE_MS = 12;
-const CARDS = ['steps', 'cascade', 'share', 'markup', 'charged', 'cost', 'phase', 'origins'] as const;
+/** The tile whose plot is an SVG drawn at a measured pixel width. The HTML plots size themselves. */
+const CARDS = ['cost'] as const;
 
 export interface GraphsMount {
   /** Draw the graphs for a line and its outlook, or clear them when there is no outlook. */
@@ -42,8 +43,8 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     const w = el.clientWidth || 600;
     const pad = w < 420 ? 34 : 44;
     const full = Math.max(220, Math.floor(w - pad));
-    const half = w >= 560 ? Math.max(200, Math.floor((w - 14) / 2 - pad)) : full;
-    return { steps: full, cascade: full, share: half, markup: half, charged: half, cost: half, phase: full, origins: full };
+    // The cost rows are the one SVG plot; it sits in a full-width tile (b-s4).
+    return { cost: full };
   }
   function measured(): Widths | null {
     const out: Partial<Widths> = {};
@@ -59,26 +60,29 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
    * Where the keyboard is, in terms that survive a rebuild: the nth mark, the nth button, or the
    * second price box. The section is redrawn whole whenever the line changes, and a redraw that
    * dropped focus sent a keyboard user back to the top of the page (and hid the tooltip they
-   * had just opened). Returns a function that puts focus back on the same control.
+   * had just opened). Returns a function that puts focus back on the same control, and says
+   * whether it could: false when that control is not there yet (the origins card is drawn empty
+   * and filled a moment later), so the caller can try again once it is.
    */
-  function rememberFocus(): () => void {
+  function rememberFocus(): () => boolean {
     const active = document.activeElement;
-    if (!(active instanceof Element) || !el.contains(active)) return () => {};
+    if (!(active instanceof Element) || !el.contains(active)) return () => true;
     for (const selector of ['.cg-m', 'button', 'input', '.cg-tbl']) {
       const all = [...el.querySelectorAll(selector)];
       const index = all.indexOf(active);
       if (index < 0) continue;
       return () => {
         const again = el.querySelectorAll<HTMLElement | SVGElement>(selector)[index];
-        if (!again) return;
+        if (!again) return false;
         again.focus({ preventScroll: true });
         // A redraw during the scroll that brought a focused mark into view can cancel that scroll
         // (WebKit), leaving the mark outside the window: finish the job, without moving otherwise.
         const r = again.getBoundingClientRect();
         if (r.bottom < 0 || r.top > window.innerHeight) again.scrollIntoView({ block: 'nearest' });
+        return true;
       };
     }
-    return () => {};
+    return () => true;
   }
 
   /**
@@ -95,14 +99,24 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
   // Per pack object, then per whole input (originsKey): a new pack starts an empty cache.
   const originsCache = new WeakMap<EstimatorPack, Map<string, OriginsModel | null>>();
   let originsToken = 0;
+  /** A focus the last redraw could not give back, because its mark lives in the origins card, which
+      that redraw drew empty. fillOrigins gives it back; any focus the visitor moves meanwhile cancels it. */
+  let owedFocus: (() => boolean) | null = null;
+  el.addEventListener('focusin', () => { owedFocus = null; });
   function fillOrigins(o: OriginsModel | null): void {
     if (!widths) return;
-    const parts = originsParts(o, widths.origins);
+    // Replacing the marks drops the focus (Firefox says nothing, so the tooltip is left stale too):
+    // a keyboard user inside this card, or one whose focus a redraw just owed it, gets it back.
+    const restore = rememberFocus();
+    const parts = originsTileParts(o);
     const title = part('origins', 'title'), plot = part('origins', 'plot'), tbl = part('origins', 'table'), cap = part('origins', 'cap');
     if (title) title.innerHTML = parts.title;
     if (plot) plot.innerHTML = parts.plot;
     if (tbl) tbl.innerHTML = parts.table;
     if (cap) cap.textContent = parts.cap;
+    restore();
+    const owed = owedFocus;
+    if (owed && (document.activeElement === null || document.activeElement === document.body) && owed()) owedFocus = null;
   }
   function scheduleOrigins(): void {
     if (!packNow || !lineNow || model === null || typeof model === 'string') return;
@@ -141,15 +155,19 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     const restoreFocus = rememberFocus();
     widths = estimate();
     const phase = packNow && typeof model !== 'string' ? phaseModel(packNow, model) : undefined;
-    el.innerHTML = renderGraphs(model, state, widths, phase);
-    const real = measured();
+    el.innerHTML = renderWhy(model, state, widths, phase);
+    // Hidden (clientWidth 0) there is nothing to measure: measured() would answer 200 against the
+    // 600 estimate and draw everything a second time for no one. The show (paintedAt 0) redraws.
+    const real = el.clientWidth === 0 ? null : measured();
     if (real && CARDS.some((id) => Math.abs(real[id] - widths![id]) > 1)) {
       widths = real;
-      el.innerHTML = renderGraphs(model, state, widths, phase);
+      el.innerHTML = renderWhy(model, state, widths, phase);
     }
     paintedAt = el.clientWidth;
-    restoreFocus();
+    // The origins first: a card already computed for this line is filled by this call, and a mark
+    // in it (the 24th to the 50th of the page's marks) is not there to focus until it has been.
     scheduleOrigins();
+    owedFocus = restoreFocus() ? null : restoreFocus;
   }
 
   const card = (id: string): HTMLElement | null => el.querySelector<HTMLElement>(`[data-cg-card="${id}"]`);
@@ -170,22 +188,29 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
     if (note) note.textContent = secondNote(state);
   }
 
-  /** A year switch on the waffle: change opacity only, then the words around the grid. */
+  /**
+   * A year switch on the waffle: toggle which cells are lit, then the words around the grid.
+   * The cells' counts for every year are on the mark (data-cells), so nothing is redrawn and a
+   * focused control is never replaced.
+   */
   function showYear(index: number): void {
     if (model === null || typeof model === 'string' || !widths) return;
     state.chargedYear = index;
     const c = card('charged');
     if (!c) return;
-    c.querySelectorAll<SVGGElement>('.cg-cell').forEach((cell) => { cell.style.opacity = Number(cell.dataset.year) === index ? '1' : '0'; });
+    const m = c.querySelector<HTMLElement>('[data-cg="charged-mark"]');
+    const cells = (m?.dataset.cells ?? '').split(',').map(Number);
+    const lit = cells[index] ?? 0;
+    m?.querySelectorAll('i').forEach((cell, k) => cell.classList.toggle('on', k < lit));
     c.querySelectorAll<HTMLButtonElement>('[data-cg-year]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.cgYear) === index)));
     const title = part('charged', 'title'), legend = part('charged', 'legend');
     if (title) title.innerHTML = sentenceCharged(model, index);
     if (legend) legend.innerHTML = chargedLegend(model, index);
-    const m = c.querySelector<SVGGElement>('[data-cg="charged-mark"]');
     const y = model.years[index];
     if (m) {
-      m.dataset.charged = String(y.chargedPct === null ? 0 : chargedCells(y.chargedPct)); m.dataset.v = y.chargedPct ?? ''; m.dataset.tip = chargedTip(y);
+      m.dataset.charged = String(lit); m.dataset.v = y.chargedPct ?? ''; m.dataset.tip = chargedTip(y);
       m.setAttribute('aria-label', chargedTip(y).replace(/\n/g, '. '));
+      m.parentElement?.setAttribute('aria-label', `${lit} of 100 cells are certificates in ${y.year}.`);
     }
   }
 
@@ -229,7 +254,8 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
   let focused: Element | null = null;
   function showTip(markEl: Element, x: number, y: number): void {
     const tip = tipEl();
-    if (!tip || !(markEl instanceof SVGElement)) return;
+    // Marks are SVG (the cost rows; the D2 charts) or HTML (the bento plots): both carry data-tip.
+    if (!tip || !(markEl instanceof SVGElement || markEl instanceof HTMLElement)) return;
     tip.textContent = markEl.dataset.tip ?? '';
     tip.classList.add('on');
     const r = tip.getBoundingClientRect();
@@ -277,8 +303,15 @@ export function mountGraphs(el: HTMLElement): GraphsMount {
   // The plots are drawn at the pixel width of their cards, so a change of width redraws them.
   let timer = 0;
   new ResizeObserver(() => {
-    if (model === null || Math.abs(el.clientWidth - paintedAt) < 2) return;
+    // A hidden view (the rail shell's Why, while another view is shown) measures 0 wide. That is
+    // not a new width to draw at: redrawing on hide, then again on show, replaced every mark while
+    // a keyboard user was focusing them (Firefox e2e, 2 runs in 10).
+    if (model === null || el.clientWidth === 0 || Math.abs(el.clientWidth - paintedAt) < 2) return;
     window.clearTimeout(timer);
+    // Hidden to shown (painted while hidden, paintedAt 0): draw now. A callback runs before the
+    // frame is painted, so the cards are replaced before anyone sees them. Waiting 150 ms replaced
+    // them mid entry animation. A real resize keeps its debounce.
+    if (paintedAt === 0) { draw(); return; }
     timer = window.setTimeout(draw, 150);
   }).observe(el);
 

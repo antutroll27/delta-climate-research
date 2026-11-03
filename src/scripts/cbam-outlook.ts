@@ -4,6 +4,8 @@
  * This file is OURS (like cbam-lines.ts and cbam-app.ts, unlike everything else under
  * cbam-algos/). No DOM anywhere: `outlook` is a pure function of (pack, input) and the renderers
  * are pure functions of its result, so all of it runs under node:test against the real pack.
+ * The tiles in cbam-ui/tiles-years.ts draw it; the rows of the working, the notes and the price
+ * note are drawn here.
  *
  * IT HOLDS NO REGULATION ARITHMETIC. It never multiplies a benchmark by a factor or a default
  * value by a mark-up. Each year is one call to the engine with only the date changed, and every
@@ -385,11 +387,30 @@ function priceSourceDate(pack: EstimatorPack, years: OutlookYear[]): string | nu
  * published, a figure that looks like a finding.
  */
 export function parseAssumedPrice(text: string): string | null {
-  const parsed = nonNegativeDecimal(text);
+  // F-07: the box is a text field, so what was typed arrives as typed. A decimal comma, an exponent and a run
+  // of digits no price has are refused here, the one place every consumer reads the price through, so no
+  // figure is ever worked out from a mis-read value. The same three refusals the mass field makes (decimalProblem).
+  const t = text.trim();
+  if (t.includes(',') || /[eE]/.test(t) || t.split('.')[0]!.replace(/^[+-]?0+/, '').length > 12) return null;
+  const parsed = nonNegativeDecimal(t);
   if (!parsed || !parsed.isFinite()) return null;
   const cents = new D(parsed.toFixed()).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
   if (cents.lessThan('0.01')) return null;
   return cents.toFixed();
+}
+
+/** The mass field's wording for a decimal comma (cbam-app.ts re-exports it), here so the price boxes say the same thing. */
+export const COMMA_HINT = 'Use a decimal point and no thousands separators: 0.85, not 0,85, and 1000, not 1,000.';
+
+/**
+ * Why a typed price was not used (audit F-07): 'comma' is named, because it is the decimal mark in most of the
+ * exporting world; anything else unreadable (garbage, an exponent, a minus, less than a cent) is 'unreadable'.
+ * Blank is no problem: an empty box is simply no price.
+ */
+export function assumedPriceProblem(text: string): 'comma' | 'unreadable' | null {
+  if (text.trim() === '') return null;
+  if (text.includes(',')) return 'comma';
+  return parseAssumedPrice(text) === null ? 'unreadable' : null;
 }
 
 /**
@@ -444,6 +465,9 @@ const signedPct = (v: string): string => {
     ? `${text}%` : `+${text}%`;
 };
 
+/** The strip's own formatters, shared with cbam-ui/tiles-years.ts so the tiles print every figure the same way. */
+export { count1 as formatCount, euros as formatEuros, price as formatPrice, signedPct as formatSignedPct };
+
 /** The pack's date as "18 Aug 2026", read in UTC so it is the same day in every browser. */
 export function formatPackDate(iso: string): string {
   const d = new Date(iso);
@@ -467,50 +491,6 @@ const yearList = (years: number[]): string =>
   years.length <= 1 ? years.join('')
     : `${years.slice(0, -1).join(', ')} and ${years[years.length - 1]}`;
 
-function renderYearCost(y: OutlookFigureYear, view: Outlook, assumed: string | null): string {
-  // A PUBLISHED PRICE IS NEVER REPLACED. The engine's cost comes first and the visitor's number
-  // is not consulted at all for that year.
-  if (y.costEur !== null && y.price.priceEur !== null) {
-    return `<span class="cb-ol-e">${euros(y.costEur)}</span>
-      <span class="cb-ol-s">price published, ${price(y.price.priceEur)}</span>`;
-  }
-  if (assumed !== null) {
-    return `<span class="cb-ol-e cb-ol-mine">${euros(assumedCost(y.certificates, assumed))}</span>
-      <span class="cb-ol-s">at your assumed ${price(assumed)} · not a published price</span>`;
-  }
-  // ABOUT THIS YEAR'S OWN QUARTER. "2026 · none published" was false for a November shipment:
-  // two other 2026 quarters have a published price. The quarter is the engine's lookup key for
-  // this date, named the way the result card above names it ("imports in <quarter>").
-  return `<span class="cb-ol-s">Certificate price · imports in ${esc(y.price.quarter)}</span>
-      <span class="cb-ol-e">none published</span>
-      <span class="cb-ol-s">as at ${esc(formatPackDate(view.priceAsAt))}</span>`;
-}
-
-/** The year cards. */
-export function renderOutlookYears(view: Outlook, assumed: string | null): string {
-  const firstYear = view.years[0].year;
-  return view.years.map((y) => {
-    if (y.kind === 'refused') {
-      return `<li class="cb-ol-yr cb-ol-refused">
-        <div class="cb-ol-y">${y.year}</div>
-        <div class="cb-ol-none">No estimate</div>
-        <p class="cb-ol-reason">${esc(y.reason)}</p>
-      </li>`;
-    }
-    const delta = y.year === firstYear
-      ? '<div class="cb-ol-d cb-ol-zero">certificates</div>'
-      : y.riseOnFirstPct === null
-        ? '<div class="cb-ol-d cb-ol-zero">certificates</div>'
-        : `<div class="cb-ol-d"><span class="cb-ol-sr">certificates, </span>${signedPct(y.riseOnFirstPct)} on ${firstYear}</div>`;
-    return `<li class="cb-ol-yr">
-        <div class="cb-ol-y">${y.year}</div>
-        <div class="cb-ol-n">${count1(y.certificates)}</div>
-        ${delta}
-        <div class="cb-ol-p">${renderYearCost(y, view, assumed)}</div>
-      </li>`;
-  }).join('');
-}
-
 const benchmarkOf = (y: OutlookFigureYear): { value: string; route: string } | null =>
   y.benchmarks.length === 1 ? y.benchmarks[0] : null;
 
@@ -520,21 +500,47 @@ export function benchmarkScope(y: OutlookFigureYear): string {
   return bm && bm.route ? `for route ${esc(bm.route)}` : 'for this good';
 }
 
-/** "Why it rises": the bar and its legend, or the sentence said in their place. */
-export function renderOutlookWhy(view: Outlook): string {
+/** One part of the rise, as the strip names it. `title` and `sub` are HTML-safe (escaped here). */
+export interface OutlookWhyRow {
+  key: 'markup' | 'factor' | 'benchmark';
+  title: string;
+  sub: string;
+  /** The part's exact value, from the split. */
+  value: string;
+  /** The short name used in the bar's text alternative. */
+  label: string;
+}
+
+/**
+ * What "why it rises" says: nothing (a refused year — each year card already carries the engine's
+ * reason, verbatim), a sentence saying why the change is not divided, or the split's rows.
+ */
+export type OutlookWhy =
+  | { kind: 'none' }
+  | { kind: 'withheld'; reason: 'floor' | 'tier-changes'; sentence: string }
+  | { kind: 'split'; rise: string; lastYear: number; rows: OutlookWhyRow[] };
+
+/**
+ * "Why it rises" as data: the one place its wording is decided. The tiles (cbam-ui/tiles-years.ts)
+ * draw these rows and decide no word of them.
+ */
+export function outlookWhy(view: Outlook): OutlookWhy {
   const s = view.split;
   if (s === null) {
     switch (view.splitWithheld) {
       case 'floor':
-        return `<p class="cb-ol-nosplit">In at least one of these years the free allocation is as
-          large as the emissions counted, so the count is held at zero and the change between years
-          cannot be divided into causes. The counts above stand.</p>`;
+        return {
+          kind: 'withheld', reason: 'floor',
+          sentence: 'In at least one of these years the free allocation is as large as the emissions counted, so the count is held at zero and the change between years cannot be divided into causes. The counts above stand.',
+        };
       case 'tier-changes':
-        return `<p class="cb-ol-nosplit">These years do not rest on the same kind of figure, so the
-          change between them is not divided into causes. The counts above stand.</p>`;
+        return {
+          kind: 'withheld', reason: 'tier-changes',
+          sentence: 'These years do not rest on the same kind of figure, so the change between them is not divided into causes. The counts above stand.',
+        };
       case 'refused':
       case null:
-        return '';
+        return { kind: 'none' };
       default: {
         const _exhaustive: never = view.splitWithheld;
         return _exhaustive;
@@ -544,8 +550,7 @@ export function renderOutlookWhy(view: Outlook): string {
   const figures = figureYears(view);
   const first = figures[0];
   const last = figures[figures.length - 1];
-
-  const rows: { cls: string; title: string; sub: string; value: string; label: string }[] = [];
+  const rows: OutlookWhyRow[] = [];
 
   if (s.emissionsCause !== 'none') {
     const electricity = s.emissionsCause === 'markup-electricity';
@@ -569,7 +574,7 @@ export function renderOutlookWhy(view: Outlook): string {
       title = `${what} rises from ${esc(from)}% to ${esc(to)}%`;
     }
     rows.push({
-      cls: 'cb-ol-s1',
+      key: 'markup',
       title,
       sub: electricity
         ? 'It applies to the electricity figure, which is not your own verified one. With a verified electricity figure it no longer applies.'
@@ -581,7 +586,7 @@ export function renderOutlookWhy(view: Outlook): string {
 
   const cite = first.factorLocator.includes(':') ? first.factorLocator.slice(0, first.factorLocator.indexOf(':')) : '';
   rows.push({
-    cls: 'cb-ol-s2',
+    key: 'factor',
     title: first.factor === last.factor
       ? `Free allocation retained stays at ${share(first.factor)}`
       : `Free allocation retained falls from ${share(first.factor)} to ${share(last.factor)}`,
@@ -606,7 +611,7 @@ export function renderOutlookWhy(view: Outlook): string {
     benchTitle = `Benchmark ${scope} ${verb} in ${changedIn.year} (${esc(bmFirst.value)} → ${esc(bmLast.value)})`;
   }
   rows.push({
-    cls: 'cb-ol-s3',
+    key: 'benchmark',
     title: benchTitle,
     sub: view.benchmarkPeriods.length
       ? `Benchmarks are set by period: ${view.benchmarkPeriods.map(([a, b]) => `${a}–${b}`).join(', then ')}.`
@@ -614,21 +619,7 @@ export function renderOutlookWhy(view: Outlook): string {
     value: s.benchmarkPart,
     label: 'Benchmark',
   });
-
-  // A part that is zero draws no segment (it would be a zero-width box holding a gap open); its
-  // legend row still stands and says so.
-  const bar = rows.filter((r) => !new D(r.value).isZero()).map((r) => `<span class="${r.cls}" style="flex-grow:${
-    new D(r.value).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toFixed()}"></span>`).join('');
-  const aria = rows.map((r) => `${r.label} ${count1(r.value)}`).join(', ');
-  const legend = rows.map((r) => `<li>
-      <span class="cb-ol-sw ${r.cls}"></span>
-      <span>${r.title}<small>${r.sub}</small></span>
-      <b>${new D(r.value).isZero() ? '0.0' : `+${count1(r.value)}`}</b>
-    </li>`).join('');
-
-  return `<h4 class="cb-ol-h">Why it rises by ${count1(s.rise)} certificates by ${s.lastYear}</h4>
-    <div class="cb-ol-stack" role="img" aria-label="${esc(aria)}">${bar}</div>
-    <ul class="cb-ol-legend">${legend}</ul>`;
+  return { kind: 'split', rise: s.rise, lastYear: s.lastYear, rows };
 }
 
 /** The rows of the "Show the working" table. */
@@ -676,12 +667,12 @@ export function renderOutlookRows(view: Outlook, assumed: string | null): string
 /** The sentence under the price box. */
 export function renderOutlookPriceNote(view: Outlook, priceText: string): string {
   const years = unpricedYears(view);
-  const fills = `Fills the cost for ${yearList(years)}, where no price is published for the import's quarter.`;
+  const fills = `Fills the cost for ${yearList(years)}, where no certificate price is published for the import's date.`;
   const mine = 'It is your own assumption: not a forecast and not a published price. '
     + 'It stays on this page and is not saved, exported or sent.';
-  if (priceText.trim() !== '' && parseAssumedPrice(priceText) === null) {
-    return `Enter a price of at least €0.01. ${mine}`;
-  }
+  const problem = assumedPriceProblem(priceText);
+  if (problem === 'comma') return `Your price: ${COMMA_HINT} ${mine}`;
+  if (problem === 'unreadable') return `Enter a price of at least €0.01. ${mine}`;
   return `${fills} ${mine}`;
 }
 
@@ -703,60 +694,4 @@ export function renderOutlookNotes(view: Outlook): string {
     notes.push(`Certificate price, ${yearList(years)}: ${esc(y.price.locator)}.`);
   }
   return notes.map((n) => `<p class="cb-ol-note">${n}</p>`).join('');
-}
-
-/** The head of the card: its title and the "law as published" tag. */
-export function renderOutlookHead(view: Outlook): string {
-  const first = view.years[0].year;
-  const last = view.years[view.years.length - 1].year;
-  return `<h3 class="cb-card-label" id="cbOlTitle">The same shipment, ${first} to ${last}</h3>
-    <span class="cb-tag pending">Law as published · ${esc(formatPackDate(view.packDate))}</span>`;
-}
-
-/**
- * The whole strip. `priceText` is what the visitor has typed in the price box, restored into the
- * box when the strip is rebuilt; it is never read from anywhere but the caller's own variable.
- *
- * THE PARTS THE PRICE CHANGES SIT IN `data-ol` SLOTS so the page can refill them as the visitor
- * types without replacing the price box (which would drop the caret mid-number) or the <details>
- * (which would close it). See outlookPriceSlots.
- */
-export function renderOutlook(view: Outlook, priceText = '', workingOpen = false): string {
-  const assumed = parseAssumedPrice(priceText);
-  const hasFigures = figureYears(view).length > 0;
-  const priceBox = unpricedYears(view).length > 0;
-  return `<section class="cb-card cb-ol" aria-labelledby="cbOlTitle">
-    <div class="cb-card-head">${renderOutlookHead(view)}</div>
-    <ol class="cb-ol-years" data-ol="years">${renderOutlookYears(view, assumed)}</ol>
-    <div class="cb-ol-why">${renderOutlookWhy(view)}</div>
-    <details class="cb-ol-work"${workingOpen ? ' open' : ''}${hasFigures ? '' : ' hidden'}>
-      <summary>Show the working</summary>
-      <div class="cb-ol-scroll" tabindex="0" role="region" aria-label="The working, year by year">
-        <table>
-          <thead><tr><td></td>${view.years.map((y) => `<th scope="col">${y.year}</th>`).join('')}</tr></thead>
-          <tbody data-ol="rows">${renderOutlookRows(view, assumed)}</tbody>
-        </table>
-      </div>
-    </details>
-    <div class="cb-ol-price"${priceBox ? '' : ' hidden'}>
-      <label for="cbOlPrice">Your own price assumption, € per certificate</label>
-      <input id="cbOlPrice" class="cb-ol-px" type="number" min="0" step="any" inputmode="decimal"
-        placeholder="e.g. 80" autocomplete="off" aria-describedby="cbOlPriceNote" value="${esc(priceText)}" />
-      <p id="cbOlPriceNote" data-ol="pricenote">${renderOutlookPriceNote(view, priceText)}</p>
-    </div>
-    <div class="cb-ol-notes">${renderOutlookNotes(view)}</div>
-  </section>`;
-}
-
-/**
- * The three slots the visitor's price can change. The page refills these when the price box is
- * typed in, and leaves everything else — the box itself above all — exactly where it is.
- */
-export function outlookPriceSlots(view: Outlook, priceText: string): Record<'years' | 'rows' | 'pricenote', string> {
-  const assumed = parseAssumedPrice(priceText);
-  return {
-    years: renderOutlookYears(view, assumed),
-    rows: renderOutlookRows(view, assumed),
-    pricenote: renderOutlookPriceNote(view, priceText),
-  };
 }

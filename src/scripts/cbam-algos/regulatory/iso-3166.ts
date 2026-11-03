@@ -8,7 +8,7 @@
  * - A valid code the Commission does not list individually (e.g. NP) resolves to the workbook's
  *   "Other Countries and Territories" residual defaults, stamped as such.
  * - A code that is NOT assigned (a typo like `XX`, a user-assigned range, a truncated field)
- *   fails closed. It must never silently receive world-average defaults: a misspelled origin
+ *   fails closed. It must never silently receive the residual defaults: a misspelled origin
  *   that quietly produces a plausible number is the most expensive kind of wrong we can ship.
  *
  * Includes territories and dependencies (HK, MO, TW, PR, …), not just sovereign states: they are
