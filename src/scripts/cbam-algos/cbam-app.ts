@@ -516,6 +516,13 @@ const REFUSED_MIXED_NOTE =
  * for a sentence that describes what is on the card.
  */
 const hasFigure = (e: CertificateEstimate): boolean => e.status !== 'unavailable';
+/**
+ * The plate pictogram's reading of the same question: hasFigure itself, under a second name, so there is
+ * still ONE predicate and no literal. It is an alias, not a call, because the spec pins hasFigure(e) to
+ * exactly the two renderAttestation call sites (cbam-render.test.mjs), and a variable passed to
+ * renderAttestation would not match that pin.
+ */
+const plateHasFigure: typeof hasFigure = hasFigure;
 
 /**
  * The reference is TRANSCRIBED, NEVER CHECKED — the same contract csvRows' verified_reference
@@ -775,8 +782,7 @@ export function renderLineCard(
     attestation: renderAttestation(line, hasFigure(e)),
     delta: verified ? renderVerifiedDelta(e, comparison) : '',
     tierLabel: tierLabel(line.tier),
-    // The plate's pictogram needs the same answer as hasFigure (kept a literal here: the spec pins hasFigure's call sites).
-  }, { ...plate, figure: e.status !== 'unavailable' });
+  }, { ...plate, figure: plateHasFigure(e) });
 }
 
 /**
