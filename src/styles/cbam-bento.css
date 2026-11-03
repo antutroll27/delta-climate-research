@@ -5,7 +5,7 @@
 
 /* Tile tokens. Every text/background pair below is held to WCAG AA in both themes by
    tests/unit/cbam-bento-contrast.test.mjs, which parses these blocks: plain hex only. */
-.cbx{--seg-3:#4A4D49;--hero-bz:#A87A28;--hero-muted:#BFC1BD;--hero-well:#2A2C2A;--hero-bronze:#E0B766;--hero-cyan:#6FCAD6;--fill-bz:#A87A28;--fill-bz-ink:#141614;--fill-cy:#0B6E7C;--fill-cy-ink:#FFFFFF;--deck-1:#E3D3B1;--deck-ink-1:#141614;--deck-2:#B88A3A;--deck-ink-2:#141614}
+.cbx{--seg-3:#4A4D49;--hero-bz:#A87A28;--hero-muted:#BFC1BD;--hero-well:#2A2C2A;--hero-bronze:#E0B766;--hero-cyan:#6FCAD6;--fill-bz:#A87A28;--fill-bz-ink:#141614;--fill-cy:#0B6E7C;--fill-cy-ink:#FFFFFF;--fill-cy-k:#071A1D;--deck-1:#E3D3B1;--deck-ink-1:#141614;--deck-2:#B88A3A;--deck-ink-2:#141614}
 @media (prefers-color-scheme:dark){.cbx:not([data-theme="light"]){--seg-3:#7C8C8B;--hero-muted:#4A4D49;--hero-well:#DADFDA;--hero-bronze:#6E4E14;--hero-cyan:#095E6A;--fill-bz:#CFA24A;--fill-bz-ink:#141614;--fill-cy:#6FCAD6;--fill-cy-ink:#071A1D;--deck-1:#3A3524;--deck-ink-1:#F1F3F0;--deck-2:#B88A3A;--deck-ink-2:#141614}}
 .cbx[data-theme="dark"]{--seg-3:#7C8C8B;--hero-muted:#4A4D49;--hero-well:#DADFDA;--hero-bronze:#6E4E14;--hero-cyan:#095E6A;--fill-bz:#CFA24A;--fill-bz-ink:#141614;--fill-cy:#6FCAD6;--fill-cy-ink:#071A1D;--deck-1:#3A3524;--deck-ink-1:#F1F3F0;--deck-2:#B88A3A;--deck-ink-2:#141614}
 
@@ -208,7 +208,6 @@
 }
 
 /* legacy Estimate markup, kept for its pins, restyled so the light theme stays legible */
-.cbx [data-view="estimate"] .cb-banner{margin:12px 4px 0;max-width:96ch;border-radius:18px;padding:14px 18px;background:var(--bronze-bg);color:var(--bronze-t);font-family:var(--sans);font-size:13px;line-height:1.6}
 .cbx [data-view="estimate"] .cb-datenote{margin:4px 0 0;color:var(--ink-2)}
 .cbx .b-results .cb-source{margin:10px 4px 0;font-family:var(--sans);font-size:11.5px;color:var(--ink-3)}
 
@@ -469,7 +468,6 @@
 .cbx .b-fps .b-fp{width:112px;padding:12px;gap:4px}
 .cbx .b-fps figcaption b{display:block;font-size:14px}
 .cbx .b-fps figcaption span{font-size:12px;color:var(--ink-3)}
-.cbx .b-frame-full{font-size:18px;line-height:1.5;letter-spacing:-.005em;margin-top:auto}
 .cbx .b-np{display:flex;flex-direction:column;gap:14px;margin-top:14px}
 .cbx .b-npi{display:flex;gap:14px}
 .cbx .b-npi b{font-size:15px}
@@ -479,8 +477,8 @@
 .cbx .b-key{display:flex;flex-direction:column;gap:6px;margin-top:auto}
 .cbx .b-k{border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;font-size:12.5px}
 .cbx .b-k b{font-size:15px}
-.cbx .b-k-bz{background:var(--bronze-f);color:#141614}
-.cbx .b-k-cy{background:var(--cyan-f);color:#071a1d}
+.cbx .b-k-bz{background:var(--bronze-f);color:var(--fill-bz-ink)}
+.cbx .b-k-cy{background:var(--cyan-f);color:var(--fill-cy-k)}
 .cbx .b-k-ink{background:var(--ink);color:var(--on-ink)}
 .cbx .b-fp-sm{width:96px;padding:10px;gap:3px;margin-top:12px}
 .cbx .b-srcs ol.src{list-style:none;margin:10px 0 0;padding:0;columns:2;column-gap:28px}

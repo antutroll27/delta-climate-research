@@ -158,8 +158,6 @@ const ATTESTATION_SENTENCE_WITH_EXCLUSION =
  * changes on purpose, update these in the SAME commit — do not loosen the assertions to make a
  * red test green.
  */
-const EYEBROW_71 =
-  '<p class="cb-eyebrow">Provisional · defaults or your verified figures · in-browser</p>';
 // D1 (founder, 2026-11-03): the one-line summary that stands on Estimate where the banner used to be.
 const BANNER_SUM_71 =
   '<p class="cb-frame-sum">A labelled what-if, not a declaration. '
