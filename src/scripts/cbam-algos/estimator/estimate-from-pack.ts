@@ -778,7 +778,7 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
           // because 26011200 carries 84 of them and reaches this branch priced.
           tier = 'verified-direct+default-indirect'
           // Same gate, one question further: WHOSE default stood in. The tier says a substitution
-          // happened; this says the substituted value is a world average rather than the origin's
+          // happened; this says the substituted value is the residual default rather than the origin's
           // own, which is the part an importer cannot see in the number.
           residualIndirectDefault = fallback.residualOrigin
         }
@@ -811,7 +811,7 @@ export function estimateFromPack(pack: EstimatorPack, input: EstimatorInput): Ce
   }
 
   // Which basis the figure rests on — the origin's own published default, or the Commission's
-  // world-average residual bucket. The user is told either way (see RESIDUAL_BASIS_NOTE).
+  // "Other Countries and Territories" residual bucket. The user is told either way (see RESIDUAL_BASIS_NOTE).
   const originBasis = direct.factor.originCountry === OTHER_ORIGIN ? 'residual' as const : 'country' as const
   const safeBase = baseInput(pack, input, mass.toFixed(), date.day, originBasis)
   const markedUp = new Decimal(direct.factor.cell.baseIntensity)

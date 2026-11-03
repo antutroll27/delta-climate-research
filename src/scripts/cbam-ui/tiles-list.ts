@@ -83,7 +83,7 @@ export const sectorList = (sectors: readonly string[]): string => {
 
 /**
  * The per-year card's own tag text — for BOTH branches of the union, including the year that has
- * no published rule at all. Reused by #cbStatus's multi-line announcement (renderAll, initCbam)
+ * no threshold row in this tool's pack. Reused by #cbStatus's multi-line announcement (renderAll, initCbam)
  * for the same reason totalsTag is: with the results panel's aria-live turned off in multi-line
  * mode, the announcement is the only thing a screen-reader user hears — and a year's verdict can
  * flip from "indeterminate" to "below threshold" as a DIRECT result of the user ticking their own
@@ -91,13 +91,13 @@ export const sectorList = (sectors: readonly string[]): string => {
  * is what keeps the spoken verdict from ever disagreeing with the card's own.
  *
  * Takes the FULL `YearThreshold` union, not just its `ruleFound: true` member: the announcement
- * must say something for a year with no published rule too — a sighted user gets an explicit "No
- * published rule" card for it, and silently skipping that year in the announcement would be the
+ * must say something for a year with no threshold row too — a sighted user gets an explicit "Year
+ * not covered" card for it, and silently skipping that year in the announcement would be the
  * same "sighted users only" gap this whole reuse pattern exists to close, just a milder one
  * (omission, not misstatement).
  */
 export const yearVerdictTag = (y: YearThreshold): string => {
-  if (!y.ruleFound) return 'No published rule';
+  if (!y.ruleFound) return 'Year not covered';
   return y.state === 'above_threshold' ? 'Above threshold' : y.state === 'below_threshold' ? 'Below threshold' : 'Indeterminate';
 };
 
@@ -129,9 +129,15 @@ export const totalsTag = (anyPending: boolean) => (anyPending ? 'What-if · CSCF
 
 type FoundYear = Extract<YearThreshold, { ruleFound: true }>;
 
-/** The no-rule sentence, already escaped. One spelling for the draft card and the List tile. */
+/**
+ * The uncovered-year sentence, already escaped. One spelling for the draft card and the List tile.
+ *
+ * It says what the TOOL carries, not what the law publishes. Reg (EU) 2023/956 Art 2a sets 50 t
+ * per calendar year with no end date, so "no threshold has been published" is false for every
+ * year; the pack's threshold table is simply finite, and only a year past its last row lands here.
+ */
 export const noRuleSentence = (calendarYear: number): string =>
-  `No de minimis threshold has been published for ${esc(String(calendarYear))}. We show no verdict rather than assume one.`;
+  `This tool does not carry the de minimis threshold for ${esc(String(calendarYear))}, so it shows no verdict rather than assume one.`;
 
 /**
  * The verdict sentence for a year with a published rule — the text inside its <p class="cb-sub">.

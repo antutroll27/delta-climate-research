@@ -50,10 +50,12 @@ test('yearTile: one eligible line is singular', () => {
   assert.match(yearTile(found({ eligibleLineCount: 1 })), /Eligible mass · 1 line</);
 });
 
-test('yearTile: a no-rule year draws no ruler, no mass and no 50', () => {
-  const html = yearTile({ calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0 });
-  assert.match(html, /<span class="cb-tag pending">No published rule<\/span>/);
-  assert.match(html, /<h2 class="b-t-ti">Annual de minimis, 2027\.<\/h2>/, 'the year is in the heading of a no-rule tile too');
+test('yearTile: a year past the table draws no ruler, no mass and no 50', () => {
+  // 2031, not 2027: the pack carries a 50 t row for 2026-2030 (Art 2a has no end date), so 2027 is
+  // an ordinary verdict tile. Only a year with no row lands on this arm, and the tag says so.
+  const html = yearTile({ calendarYear: 2031, ruleFound: false, attested: false, eligibleLineCount: 0 });
+  assert.match(html, /<span class="cb-tag pending">Year not covered<\/span>/);
+  assert.match(html, /<h2 class="b-t-ti">Annual de minimis, 2031\.<\/h2>/, 'the year is in the heading of a no-rule tile too');
   // (class="…" anchored: the hook cb-thresh contains the substring b-thr.)
   assert.doesNotMatch(html, /class="b-thr"|class="b-mid/);
   assert.doesNotMatch(html, /50/);

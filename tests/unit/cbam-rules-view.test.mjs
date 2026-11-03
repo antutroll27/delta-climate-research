@@ -134,6 +134,18 @@ test('renderNotYetPublished: every pending CSCF year and price row, from the pac
   assert.doesNotMatch(html, /quarterly/i);
 });
 
+test('renderNotYetPublished: the de minimis threshold is not listed — it is published for every year', () => {
+  // C1. Reg (EU) 2023/956 Art 2a and Annex VII (inserted by Reg (EU) 2025/2083) fix 50 t per
+  // calendar year with no end date, and the pack carries a row for 2026-2030. A threshold the
+  // law has already published must never appear under "what the law still owes".
+  assert.ok(pack.thresholds.length >= 3 && pack.thresholds.every((t) => t.thresholdT === '50'), 'sanity: the shipped pack carries the threshold for several years');
+  const html = renderNotYetPublished(pack);
+  assert.doesNotMatch(html, /threshold|de minimis|Annex VII/i);
+  for (const year of [2027, 2028]) {
+    assert.ok(pack.thresholds.some((t) => t.calendarYear === year), `sanity: ${year} has a threshold row`);
+  }
+});
+
 test('renderNotYetPublished: nothing pending, nothing claimed', () => {
   assert.match(renderNotYetPublished({ cscf: [], prices: [] }), /Nothing the rule pack depends on is unpublished\./);
 });
