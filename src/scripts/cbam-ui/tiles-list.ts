@@ -25,6 +25,15 @@ import { ILL, gaugeIll, insertIll, platePict } from './illustrations.ts';
 export const AMENDED_BY_2025_2083 = 'as amended by Reg (EU) 2025/2083';
 
 /**
+ * A threshold card's citation line: the pack's locator, plus the amending act ONLY when the locator does
+ * not already name it (audit N-03). The shipped locator is "Regulation (EU) 2025/2083 Article 1 and Annex II
+ * (new CBAM Annex VII)" and used to be followed by "· as amended by Reg (EU) 2025/2083" — the act amending
+ * itself. One helper for the three cards that print it. PLAIN TEXT out of the locator, escaped here.
+ */
+export const thresholdCitation = (sourceLocator: string): string =>
+  sourceLocator.includes('2025/2083') ? esc(sourceLocator) : `${esc(sourceLocator)} · ${AMENDED_BY_2025_2083}`;
+
+/**
  * How a threshold sector KEY is said on either threshold card — and, where a card names several,
  * in the order it says them. An ordered list rather than a map, because it settles both questions
  * at once and they are both load-bearing.
@@ -227,7 +236,7 @@ export function yearTile(y: YearThreshold): string {
       <div class="b-mid num">${exactNum(y.knownEligibleMassT)}<span class="b-u">t</span></div>${ruler}
       <p class="cb-sub">${yearSentence(y)}</p>
       ${attestControl(y)}
-      <p class="cb-prov">${esc(y.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
+      <p class="cb-prov">${thresholdCitation(y.sourceLocator)}</p>
     </section>`;
   // Plan 05, P5-3: drawn only where the verdict is "above". F-10: the needle and the threshold tick are placed from
   // the same ruler the bar uses, so 50.0001 t and 5,000 t no longer draw one fixed needle; no ruler, no gauge.

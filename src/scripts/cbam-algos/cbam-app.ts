@@ -49,7 +49,7 @@ import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
 import { csvTileBody, docTileBody, fingerprintsBody } from '../cbam-ui/tiles-export.ts';
 import { renderNotYetPublished, renderRulePack, renderSources } from '../cbam-ui/tiles-rules.ts';
 import {
-  AMENDED_BY_2025_2083, SECTOR_PROSE, attestControl, noRuleSentence, refusedLineNote, sectorList, totalsTag, yearSentence,
+  SECTOR_PROSE, attestControl, noRuleSentence, refusedLineNote, sectorList, thresholdCitation, totalsTag, yearSentence,
   yearVerdictTag, linePlate, listView, refusedLinePlate, shareOfTotal, thresholdErrorTile, totalTile, yearTile,
   type LinePlateContext,
 } from '../cbam-ui/tiles-list.ts';
@@ -216,7 +216,7 @@ export function renderThreshold(
            calendar year. This is one line, not your annual total, so it cannot show you are under the
            threshold. Add all your other CBAM imports for ${esc(String(t.calendarYear))} —
            ${esc(sectorList(includedSectors))} — before relying on the exemption.`}</p>
-      <p class="cb-prov">${esc(t.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
+      <p class="cb-prov">${thresholdCitation(t.sourceLocator)}</p>
     </section>`;
 }
 
@@ -262,7 +262,7 @@ export function renderYearThreshold(y: YearThreshold): string {
       </div>
       <p class="cb-sub">${yearSentence(y)}</p>
       ${attestControl(y)}
-      <p class="cb-prov">${esc(y.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
+      <p class="cb-prov">${thresholdCitation(y.sourceLocator)}</p>
     </section>`;
 }
 
