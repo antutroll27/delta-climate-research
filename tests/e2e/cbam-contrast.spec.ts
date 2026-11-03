@@ -26,6 +26,23 @@ async function go(page: Page, view: string): Promise<void> {
   await expect(page.locator(`[data-view="${view}"]`)).toBeVisible();
 }
 
+/** sRGB channels (0-255) of a computed colour: rgb()/rgba(), or the color(srgb r g b) form color-mix() resolves to. */
+function channels(css: string): [number, number, number] {
+  const srgb = /^color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/.exec(css);
+  if (srgb) return [Number(srgb[1]) * 255, Number(srgb[2]) * 255, Number(srgb[3]) * 255];
+  const m = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(css);
+  if (!m) throw new Error(`unreadable colour: ${css}`);
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+function luminance([r, g, b]: [number, number, number]): number {
+  const lin = (v: number): number => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+function ratio(a: string, b: string): number {
+  const [hi, lo] = [luminance(channels(a)), luminance(channels(b))].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
 test.describe('CBAM contrast', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -36,6 +53,45 @@ test.describe('CBAM contrast', () => {
       await expect(page.locator('#cbx')).not.toHaveAttribute('data-theme', /.*/);
       const bg = await page.locator('#cbx').evaluate((el) => getComputedStyle(el).backgroundColor);
       expect(bg).toBe(scheme === 'light' ? 'rgb(239, 236, 230)' : 'rgb(3, 20, 22)');
+    });
+
+    // Estimate, verified tier, attested: the attestation sentence sits in the inverted hero. A generic
+    // `.b-t .cb-attested{color:var(--ink)}` once painted it the hero's own background (1:1, invisible).
+    test(`the attestation sentence on the verified Estimate hero is legible (${scheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto(URL);
+      await page.fill('#cbCn', '72061000');
+      await page.dispatchEvent('#cbCn', 'change');
+      await page.fill('#cbDate', '2026-03-15');
+      await expect(page.locator('#cbCountry option[value="IN"]')).toBeAttached();
+      await page.selectOption('#cbCountry', 'IN');
+      await expect(page.locator('#cbRoute option[value="(C)"]')).toBeAttached();
+      await page.selectOption('#cbRoute', '(C)');
+      await page.fill('#cbMass', '100');
+      await page.selectOption('#cbTier', 'actual-verified');
+      await page.fill('#cbSeeDirect', '2.31');
+      await page.check('#cbAttest');
+      const att = page.locator('[data-view="estimate"] #cbOut .cb-attested');
+      await expect(att).toBeVisible();
+      const [fg, bg] = await att.evaluate((el) => {
+        const tile = el.closest('.b-t') as HTMLElement;
+        return [getComputedStyle(el).color, getComputedStyle(tile).backgroundColor];
+      });
+      expect(fg).not.toBe(bg);
+      expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);
+      const r = await new AxeBuilder({ page }).include('[data-view="estimate"]').withRules(['color-contrast']).analyze();
+      expect(r.violations.map((x) => x.nodes.map((n) => n.target.join(' ')).join(', '))).toEqual([]);
+    });
+
+    // Nothing added: every view's idle tiles (the Export document placeholder was 1.25:1 in dark).
+    test(`every view meets AA colour contrast, idle (${scheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto(URL);
+      for (const v of VIEWS) {
+        await go(page, v);
+        const r = await new AxeBuilder({ page }).include(`[data-view="${v}"]`).include('.cbx-rail').withRules(['color-contrast']).analyze();
+        expect(r.violations.map((x) => `${v}: ${x.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+      }
     });
 
     test(`every view meets AA colour contrast, populated (${scheme})`, async ({ page }) => {

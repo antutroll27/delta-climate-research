@@ -50,6 +50,7 @@
 /* hero: the inverted tile */
 .cbx .b-hero{background:var(--ink);color:var(--on-ink);container-type:inline-size;--ink-3:var(--hero-muted);--well:var(--hero-well);--bronze-t:var(--hero-bronze);--bronze-bg:var(--hero-well);--cyan-t:var(--hero-cyan);--cyan-bg:var(--hero-well)}
 .cbx .b-hero .b-tag{color:var(--on-ink)}
+.cbx .b-hero .b-lead2{color:var(--ink-3)}
 .cbx .b-hero .chip.ink{background:var(--on-ink);color:var(--ink)}
 .cbx .b-hero .b-mega{font-size:min(150px,16cqi);font-weight:400;letter-spacing:-.06em;line-height:.9;margin:auto 0 6px;font-variant-numeric:tabular-nums}
 .cbx .b-hero .cb-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--hero-well);font-size:12.5px;color:var(--hero-muted)}
@@ -501,35 +502,38 @@
 .cbx :is(#cbExportCsv,#cbExportDoc){margin-bottom:14px}
 
 /* The honesty hooks inside tiles. Their markup is pinned by tests/unit/cbam-render.test.mjs, so
-   they are styled here and never renamed. Status tags are ink: colour is provenance only (spec §3). */
-.cbx .b-t .cb-tag{display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:99px;background:var(--well);color:inherit;font-size:12px;font-weight:600;white-space:nowrap}
-.cbx .b-t .cb-tag.unavail{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor}
-.cbx .b-t .cb-fig{margin:auto 0 0}
-.cbx .b-t .cb-n{font-size:64px;font-weight:400;letter-spacing:-.05em;line-height:1}
-.cbx .b-hero .cb-n{font-size:clamp(72px,7vw,120px);letter-spacing:-.06em;line-height:.9}
-.cbx .b-t .cb-u{font-size:12.5px;color:var(--ink-3);margin-top:4px}
-.cbx .b-t .cb-cost{display:inline-flex;align-self:flex-start;align-items:center;height:26px;margin-top:10px;padding:0 11px;border-radius:99px;background:var(--well);font-size:12px;font-weight:600}
-.cbx .b-t .cb-sub{margin:10px 0 0;font-size:13px;line-height:1.5;color:var(--ink-2)}
-.cbx .b-hero .cb-sub{color:var(--ink-3)}
-.cbx .b-t .cb-warn{font-weight:600}
-.cbx .b-t .cb-prov{margin:auto 0 0;padding-top:10px;font-size:11px;line-height:1.5;color:var(--ink-3)}
-.cbx .b-t .cb-attest{display:flex;gap:10px;align-items:flex-start;margin-top:12px;font-size:13px;font-weight:600}
-.cbx .b-t .cb-attest input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--ink)}
-.cbx .b-pass .cb-card{margin-top:12px;padding:0;border:0;background:transparent;box-shadow:none}
-.cbx .b-pass .cb-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
-.cbx .b-pass .cb-card-label{margin:0;font-size:12px;font-weight:600;color:var(--ink-3)}
-.cbx .b-t .cb-water,.cbx .b-t .cb-stamp{margin-top:10px}
-.cbx .b-t:not(.b-hero) .cb-row{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
-.cbx .b-t:not(.b-hero) .cb-row span{color:var(--ink-2)}
-.cbx .b-t:not(.b-hero) .cb-row b{font-weight:700;text-align:right;overflow-wrap:anywhere}
-.cbx .b-t .cb-stamp-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
-.cbx .b-t .cb-notes{margin:8px 0 0;padding-left:18px;font-size:12px;line-height:1.5;color:var(--ink-2)}
-.cbx .b-t .cb-reason{margin:8px 0 0;font-size:14px;font-weight:600}
-.cbx .b-t .cb-sel{display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:12px;color:var(--ink-2)}
-.cbx .b-t .cb-sel code{overflow-wrap:anywhere}
-.cbx .b-t .cb-delta{margin-top:10px;padding:12px 14px;border-radius:14px;background:var(--well)}
-.cbx .b-t .cb-delta-h{font-size:12px;font-weight:600;color:var(--ink-3)}
-.cbx .b-t .cb-attested{color:var(--ink)}
+   they are styled here and never renamed. Status tags are ink: colour is provenance only (spec §3).
+   SCOPED to the three Phase 4 views, with :where() so no specificity is added: Estimate draws its own
+   hero/tiles from the rules above, and these generic rules once leaked into it (a hero attestation
+   sentence painted the hero's own background, refused reasons shrank from 18px to 14px). */
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-tag{display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:99px;background:var(--well);color:inherit;font-size:12px;font-weight:600;white-space:nowrap}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-tag.unavail{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-fig{margin:auto 0 0}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-n{font-size:64px;font-weight:400;letter-spacing:-.05em;line-height:1}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-hero .cb-n{font-size:clamp(72px,7vw,120px);letter-spacing:-.06em;line-height:.9}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-u{font-size:12.5px;color:var(--ink-3);margin-top:4px}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-cost{display:inline-flex;align-self:flex-start;align-items:center;height:26px;margin-top:10px;padding:0 11px;border-radius:99px;background:var(--well);font-size:12px;font-weight:600}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-sub{margin:10px 0 0;font-size:13px;line-height:1.5;color:var(--ink-2)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-hero .cb-sub{color:var(--ink-3)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-warn{font-weight:600}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-prov{margin:auto 0 0;padding-top:10px;font-size:11px;line-height:1.5;color:var(--ink-3)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-attest{display:flex;gap:10px;align-items:flex-start;margin-top:12px;font-size:13px;font-weight:600}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-attest input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--ink)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-pass .cb-card{margin-top:12px;padding:0;border:0;background:transparent;box-shadow:none}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-pass .cb-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-pass .cb-card-label{margin:0;font-size:12px;font-weight:600;color:var(--ink-3)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-water,.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-stamp{margin-top:10px}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t:not(.b-hero) .cb-row{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t:not(.b-hero) .cb-row span{color:var(--ink-2)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t:not(.b-hero) .cb-row b{font-weight:700;text-align:right;overflow-wrap:anywhere}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-stamp-h{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-notes{margin:8px 0 0;padding-left:18px;font-size:12px;line-height:1.5;color:var(--ink-2)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-reason{margin:8px 0 0;font-size:14px;font-weight:600}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-sel{display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:12px;color:var(--ink-2)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-sel code{overflow-wrap:anywhere}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-delta{margin-top:10px;padding:12px 14px;border-radius:14px;background:var(--well)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-delta-h{font-size:12px;font-weight:600;color:var(--ink-3)}
+.cbx :where([data-view="list"],[data-view="export"],[data-view="rules"]) .b-t .cb-attested{color:var(--ink)}
 
 @media (max-width:1100px){
   .cbx .b-c3{grid-template-columns:1fr 1fr}
