@@ -54,7 +54,7 @@ import {
   type LinePlateContext,
 } from '../cbam-ui/tiles-list.ts';
 import {
-  esc, eur, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
+  esc, eur, exactNum, inputRefusal, num, originBasisLabel, renderPriceRow, snapshotLabel, tierLabel,
 } from '../cbam-ui/format.ts';
 // cbam-render.test.mjs imports renderPriceRow from this module; the format module owns it now.
 export { renderPriceRow };
@@ -193,6 +193,8 @@ export function renderThreshold(
   includedSectors: readonly string[] = SECTOR_PROSE.map(([key]) => key),
 ): string {
   const above = t.state === 'above_threshold';
+  // Masses are printed with exactNum, not num (audit N-02): num rounds to 3 dp through a float, so 50.0001 t
+  // read "50 t" beside "Above threshold". Same on the per-year card and the print document's verdict list/table.
   // 'pending' (amber), not 'ok' (green): an unresolved verdict is not good news. This line can
   // only ever land here or on 'above_threshold' (see the doc above), so there is no 'ok' tone to
   // reach from this function at all — reserved for renderYearThreshold's genuine below_threshold.
@@ -203,7 +205,7 @@ export function renderThreshold(
         <span class="cb-tag ${above ? 'unavail' : 'pending'}">${above ? 'Above threshold' : 'Indeterminate'}</span>
       </div>
       <div class="cb-water">
-        <div class="cb-row"><span>This line</span><b>${num(t.knownEligibleMassT)} t</b></div>
+        <div class="cb-row"><span>This line</span><b>${exactNum(t.knownEligibleMassT)} t</b></div>
         <div class="cb-row"><span>Threshold · ${esc(String(t.calendarYear))}</span><b>${num(t.thresholdT)} t</b></div>
         <div class="cb-row"><span>Sector</span><b>${esc(sectorList([t.sector]))}</b></div>
       </div>
@@ -255,7 +257,7 @@ export function renderYearThreshold(y: YearThreshold): string {
         <span class="cb-tag ${tone}">${esc(tag)}</span>
       </div>
       <div class="cb-water">
-        <div class="cb-row"><span>Eligible mass · ${y.eligibleLineCount} line${y.eligibleLineCount === 1 ? '' : 's'}</span><b>${num(y.knownEligibleMassT)} t</b></div>
+        <div class="cb-row"><span>Eligible mass · ${y.eligibleLineCount} line${y.eligibleLineCount === 1 ? '' : 's'}</span><b>${exactNum(y.knownEligibleMassT)} t</b></div>
         <div class="cb-row"><span>Threshold</span><b>${num(y.thresholdT)} t</b></div>
       </div>
       <p class="cb-sub">${yearSentence(y)}</p>
@@ -978,7 +980,7 @@ export function buildPrintDocument(input: {
       // estimate that never came back, and a verified line that threw is still a verified claim.
       return `<tr>
         <td>${esc(l.cn)}</td><td>${esc(l.country)}</td><td>${esc(l.route)}</td>
-        <td>${num(l.massT)}</td><td>${esc(l.date)}</td>
+        <td>${exactNum(l.massT)}</td><td>${esc(l.date)}</td>
         <td class="cbp-loc">${tierCell(l)}</td>
         <td>no estimate (error)</td>
         <td>—</td>
@@ -991,7 +993,7 @@ export function buildPrintDocument(input: {
     const bm = 'terms' in e ? e.terms.benchmarks[0] : null;
     return `<tr>
       <td>${esc(l.cn)}</td><td>${esc(l.country)}</td><td>${esc(l.route)}</td>
-      <td>${num(l.massT)}</td><td>${esc(l.date)}</td>
+      <td>${exactNum(l.massT)}</td><td>${esc(l.date)}</td>
       <td class="cbp-loc">${tierCell(l)}</td>
       <td>${certs === null ? 'no estimate' : `${num(certs)}${pending ? ' (what-if)' : ''}`}</td>
       <td>${costEur ? eur(costEur) : '—'}</td>
@@ -1000,7 +1002,7 @@ export function buildPrintDocument(input: {
   }).join('');
 
   const verdicts = yearCards.map((y) => y.ruleFound
-    ? `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> at ${num(y.knownEligibleMassT)} t of ${num(y.thresholdT)} t — completeness box ${y.attested ? 'TICKED by the user' : 'not ticked'}.</li>`
+    ? `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> at ${exactNum(y.knownEligibleMassT)} t of ${num(y.thresholdT)} t — completeness box ${y.attested ? 'TICKED by the user' : 'not ticked'}.</li>`
     : `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> — this tool does not carry that year's de minimis threshold; no verdict.</li>`).join('');
 
   /**
