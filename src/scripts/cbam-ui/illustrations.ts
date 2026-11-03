@@ -108,6 +108,17 @@ export function goodIll(sector: ImportSector | null): string {
 }
 
 /**
+ * The pictogram on a Shipment list line plate (founder, 3 Nov): the same three drawings and the same
+ * sector map as the Good step, in flow at the reference's `.b-pass .b-pict` size. A sector with no
+ * approved drawing (fertilisers, hydrogen, electricity, an unclassified code) gets none (P5-4).
+ */
+const PLATE: Partial<Record<ImportSector, PictName>> = { iron_and_steel: 'tube', cement: 'bag', aluminium: 'ingot' };
+export function platePict(sector: ImportSector | null): string {
+  const n = sector ? PLATE[sector] : undefined;
+  return n ? pict(n) : '';
+}
+
+/**
  * Inserts `svgStr` as the first child of the first element whose class list contains `hostClass`
  * as a whole word. Pure, for the tile renderers: `insertIll(html, ILL.box, 'b-t')`.
  */

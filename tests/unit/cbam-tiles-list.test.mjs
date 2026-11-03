@@ -6,6 +6,8 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { estimateFromPack } from '../../src/scripts/cbam-algos/estimator/estimate-from-pack.ts';
+import { renderLineCard } from '../../src/scripts/cbam-algos/cbam-app.ts';
 import {
   linePlate, listView, refusedLinePlate, rulerScale, shareOfTotal, thresholdErrorTile, totalTile, yearTile,
 } from '../../src/scripts/cbam-ui/tiles-list.ts';
@@ -180,4 +182,43 @@ test('P5-3 - the gauge is drawn on an above-threshold year and on no other verdi
     ['no rule', found({ ruleFound: false })],
   ]) assert.doesNotMatch(yearTile(y), /data-ill=/, name);
   assert.doesNotMatch(thresholdErrorTile('x'), /data-ill=/);
+});
+
+// ---- founder 2026-11-03: the sector pictogram on a line plate ----
+const pictOf = (cn, ctx = { figure: true }) => linePlate({ ...LINE, cn }, 0, PARTS, ctx).match(/<svg class="b-pict" data-ill="([a-z]+)"/)?.[1] ?? null;
+
+test('linePlate: the sector pictogram follows the CN — steel a tube, cement a bag, aluminium an ingot', () => {
+  assert.equal(pictOf('73063077'), 'tube');
+  assert.equal(pictOf('25232900'), 'bag');
+  assert.equal(pictOf('76011010'), 'ingot');
+});
+
+test('linePlate: fertilisers and hydrogen have no approved drawing, so no pictogram (P5-4)', () => {
+  assert.equal(pictOf('31021000'), null);
+  assert.equal(pictOf('28041000'), null);
+  assert.equal(pictOf('99999999'), null, 'an unclassified code draws nothing either');
+});
+
+test('linePlate: no figure, no pictogram — and a bare plate (no context) draws none', () => {
+  assert.equal(pictOf('73063077', { figure: false }), null);
+  assert.equal(pictOf('73063077', {}), null);
+  assert.doesNotMatch(refusedLinePlate({ ...LINE, cn: '73063077' }, 0, 'no published default'), /<svg/);
+});
+
+test('linePlate: the pictogram is aria-hidden, sits between the head and the name, and carries no bronze or cyan', () => {
+  const html = linePlate(LINE, 0, PARTS, { figure: true, goodName: 'Tube' });
+  const svgHtml = html.match(/<svg class="b-pict"[^>]*>.*?<\/svg>/s)?.[0] ?? '';
+  assert.match(svgHtml, /aria-hidden="true"/);
+  assert.doesNotMatch(svgHtml, /bronze|cyan|#[0-9a-f]{3,6}/i);
+  assert.ok(html.indexOf('</div>') < html.indexOf('<svg') && html.indexOf('<svg') < html.indexOf('b-pass-name'));
+});
+
+test('renderLineCard: a priced steel line wears the tube; an unavailable line (no figure) wears nothing', () => {
+  const est = (l) => estimateFromPack(pack, { cn: l.cn, country: l.country, route: l.route, massT: l.massT, date: l.date });
+  const priced = { ...LINE, cn: '73063077' };
+  const refused = { ...LINE, id: 'R', cn: '72061000', country: 'IN', route: '(D)' };
+  assert.equal(est(priced).status === 'unavailable', false);
+  assert.equal(est(refused).status, 'unavailable');
+  assert.match(renderLineCard(priced, est(priced), 0, undefined, {}), /<svg class="b-pict" data-ill="tube"/);
+  assert.doesNotMatch(renderLineCard(refused, est(refused), 1, undefined, {}), /b-pict/);
 });

@@ -72,6 +72,8 @@
 .cbx .b-pict-sm{width:46%;max-width:150px;margin:6px 0 10px}
 .cbx .b-pict-xs{width:64px;flex:none;margin:0}
 .cbx .b-frame .b-pict-sm{width:90px;margin:14px auto}
+/* The sector pictogram on a Shipment list plate (reference: .b-pass .b-pict). */
+.cbx .b-pass .b-pict{width:58%;max-width:170px;margin:8px auto 4px}
 
 /* ===== Entry animation (spec §8.3, approved 2 Nov). Replayed on every view entry by views.ts
    through motion.ts: the class goes off, a reflow, the class back on. Transform and opacity only. ===== */

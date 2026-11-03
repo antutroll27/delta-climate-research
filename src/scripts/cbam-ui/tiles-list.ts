@@ -14,7 +14,8 @@
 import Decimal from 'decimal.js';
 import type { Line, Totals, YearThreshold } from '../cbam-lines.ts';
 import { esc, eur, num } from './format.ts';
-import { ILL, insertIll } from './illustrations.ts';
+import { sectorForCn } from '../cbam-algos/cbam/sector.ts';
+import { ILL, insertIll, platePict } from './illustrations.ts';
 
 /**
  * The 50 t de minimis figure itself lives in the consolidated Art 2(3); this is the amending act
@@ -306,7 +307,11 @@ export function shareOfTotal(part: string, total: string): string | null {
 /** The strings cbam-app.ts computes for a line (see renderLineCard): carried into the plate verbatim. */
 export interface LinePlateParts { result: string; attestation: string; delta: string; tierLabel: string }
 /** What the List knows about a line beyond its estimate. All optional: a bare plate is still honest. */
-export interface LinePlateContext { goodName?: string; sharePct?: string | null; exempt?: boolean }
+export interface LinePlateContext {
+  goodName?: string; sharePct?: string | null; exempt?: boolean;
+  /** The engine produced a figure for this line. The sector pictogram is drawn only then, like every illustration. */
+  figure?: boolean;
+}
 
 /**
  * The tier chip. Colour marks provenance only (spec §3): bronze for the Commission's default
@@ -329,8 +334,9 @@ function tierChip(tier: Line['tier'], label: string): string {
   }
 }
 
-const lineHead = (line: Line, index: number, chips: string, goodName: string | undefined, summary: string) => `
+const lineHead = (line: Line, index: number, chips: string, goodName: string | undefined, summary: string, pic = '') => `
       <div class="b-t-h"><h2 class="b-t-ti">Line ${index + 1}.</h2><span class="b-chips">${chips}</span></div>
+      ${pic}
       ${goodName ? `<p class="b-pass-name" title="${esc(goodName)}">${esc(goodName)}</p>` : ''}
       <p class="b-t-sub num cb-line-sum">${summary}</p>`;
 
@@ -346,7 +352,8 @@ export function linePlate(line: Line, index: number, parts: LinePlateParts, ctx:
       : '';
   return `
     <article class="b-t b-pass cb-line" data-line="${esc(line.id)}">${lineHead(line, index, tierChip(line.tier, parts.tierLabel), ctx.goodName,
-      `${esc(line.cn)} · ${esc(line.country)} · ${esc(line.route)} · ${num(line.massT)} t · ${esc(line.date)}`)}
+      `${esc(line.cn)} · ${esc(line.country)} · ${esc(line.route)} · ${num(line.massT)} t · ${esc(line.date)}`,
+      ctx.figure ? platePict(sectorForCn(line.cn.trim())) : '')}
       ${share}
       ${parts.result}
       ${parts.attestation}

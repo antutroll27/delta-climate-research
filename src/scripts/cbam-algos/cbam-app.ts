@@ -775,7 +775,8 @@ export function renderLineCard(
     attestation: renderAttestation(line, hasFigure(e)),
     delta: verified ? renderVerifiedDelta(e, comparison) : '',
     tierLabel: tierLabel(line.tier),
-  }, plate);
+    // The plate's pictogram needs the same answer as hasFigure (kept a literal here: the spec pins hasFigure's call sites).
+  }, { ...plate, figure: e.status !== 'unavailable' });
 }
 
 /**

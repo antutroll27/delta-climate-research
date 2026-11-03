@@ -9,19 +9,20 @@ const EXPECT: ReadonlyArray<readonly [ViewName, string, string]> = [
   ['estimate', 'mass', 'Net mass. In tonnes.'], ['estimate', 'fac', 'Chargeable.'], ['estimate', 'vou', 'Chargeable.'],
   ['why', 'steps', 'Mark-up share.'], ['why', 'scale', 'Charged.'],
   ['list', 'box', 'Total.'], ['list', 'gauge', 'Annual de minimis, 2026.'],
+  ['list', 'bag', 'Line 1.'],   // the sector pictogram on the line plate (founder 3 Nov); priceLine prices cement
   ['rules', 'shield', 'Framing.'],
 ];
 
 /** Every illustration in the visible view, as "view|name|its tile's title". */
 const present = (page: Page, v: ViewName) => page.evaluate((name) =>
-  Array.from(document.querySelectorAll<SVGSVGElement>(`[data-view="${name}"] svg.b-ill, [data-view="${name}"] svg[data-ill="shield"]`))
+  Array.from(document.querySelectorAll<SVGSVGElement>(`[data-view="${name}"] svg.b-ill, [data-view="${name}"] svg[data-ill="shield"], [data-view="${name}"] .b-pass svg.b-pict`))
     .map((s) => `${name}|${s.dataset.ill}|${s.closest('.b-t')?.querySelector('.b-t-ti')?.textContent?.trim() ?? '(no tile)'}`), v);
 
 /** Each drawn shape of each illustration against every word and control in its tile. */
 const overlaps = (page: Page, v: ViewName) => page.evaluate((name) => {
   const out: string[] = [];
   const hit = (a: DOMRect, b: DOMRect) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
-  for (const svg of Array.from(document.querySelectorAll<SVGSVGElement>(`[data-view="${name}"] svg.b-ill`))) {
+  for (const svg of Array.from(document.querySelectorAll<SVGSVGElement>(`[data-view="${name}"] svg.b-ill, [data-view="${name}"] .b-pass svg.b-pict`))) {
     const tile = svg.closest('.b-t');
     if (!tile) { out.push(`${svg.dataset.ill}: not inside a tile`); continue; }
     const shapes = Array.from(svg.children).map((c) => c.getBoundingClientRect()).filter((r) => r.width > 0 || r.height > 0);
