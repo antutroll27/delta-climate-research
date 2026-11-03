@@ -32,8 +32,17 @@ test.describe('CBAM shell', () => {
   test('empty views say what to do', async ({ page }) => {
     await page.goto(`${URL}#three-years`);
     await expect(page.locator('[data-view="three-years"] .cbx-empty')).toBeVisible();
+    await expect(page.locator('[data-view="three-years"] .cbx-empty')).toContainText('Price a line first.');
+    await expect(page.locator('[data-view="three-years"] .cbx-empty')).toContainText('The three-year view appears once a line is priced on Estimate.');
+    await page.goto(`${URL}#why`);
+    await expect(page.locator('[data-view="why"] .cbx-empty')).toContainText('The cause split and the working appear once a line is priced on Estimate.');
     await page.goto(`${URL}#list`);
     await expect(page.locator('[data-view="list"] .cbx-empty')).toBeVisible();
+    await expect(page.locator('[data-view="list"] .cbx-empty')).toContainText('No lines yet.');
+    await expect(page.locator('[data-view="list"] .cbx-empty')).toContainText('Price a line on Estimate, then add it to the list.');
+    // The empty-state button is the sans pill, not the old mono-uppercase cb-btn.
+    const goto = page.locator('[data-view="list"] .cbx-empty button[data-goto="estimate"]');
+    await expect(goto).toHaveCSS('text-transform', 'none');
   });
 
   test('the title card follows the draft', async ({ page }) => {

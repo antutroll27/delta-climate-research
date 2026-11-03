@@ -570,3 +570,21 @@
 /* The status strip sits on var(--ink), so its text is var(--on-ink) in both themes. The page's scoped
    .cb-note rule paints it cyan, which is 1.69:1 on the light ink of the dark theme (axe, phase 4). */
 .cbx #cbStatus.cbx-status{color:var(--on-ink);font-family:var(--sans);letter-spacing:0}
+
+/* Empty state (spec screens/8): one full-width tile, a ghost deck of the three years on the left, the ask on the
+   right. From preview/bento.css lines 180-188, scoped under .cbx. The wrapper keeps .cbx-empty so the hide rule in
+   cbam-app.css (:is(#cbOutlook,#cbGraphs,#cbList):not(:empty)+.cbx-empty) still removes it once a line exists. */
+.cbx .b-empty{flex-direction:row;align-items:center;gap:40px;min-height:380px}
+.cbx .b-edeck{flex:none;width:300px;display:flex;flex-direction:column}
+.cbx .b-edeck div{display:flex;justify-content:space-between;padding:16px 18px;border-radius:18px;box-shadow:inset 0 0 0 2px var(--line);margin-top:-8px;background:var(--card)}
+.cbx .b-edeck div:first-child{margin-top:0}
+.cbx .b-edeck div+div{margin-left:12px;margin-right:12px}
+.cbx .b-edeck div+div+div{margin-left:24px;margin-right:24px}
+.cbx .b-edeck b{font-size:28px;font-weight:400;color:var(--ink-3)}
+.cbx .b-empty .b-mid{font-size:48px;margin:0}
+.cbx .b-empty .cb-btn.b-add.b-add-ink{width:auto;height:46px;margin-top:18px;padding:0 26px;display:inline-flex;align-items:center}
+@media (max-width:640px){
+  .cbx .b-empty{flex-direction:column;align-items:flex-start;gap:24px;min-height:0}
+  .cbx .b-edeck{width:220px;max-width:100%}
+  .cbx .b-empty .b-mid{font-size:32px}
+}
