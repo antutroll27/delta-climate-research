@@ -1,24 +1,7 @@
 // The rail shell (spec §4) and the one behaviour change (spec §6.3): the draft always previews.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-const URL = '/cbam/cbam-calculator/';
-
-async function view(page: Page, name: string): Promise<void> {
-  await page.locator(`.cbx-rail [data-goto="${name}"]`).click();
-  await expect(page.locator(`[data-view="${name}"]`)).toBeVisible();
-}
-
-async function priceLine(page: Page): Promise<void> {
-  await page.fill('#cbCn', '2523100090');
-  await page.dispatchEvent('#cbCn', 'change');
-  await page.fill('#cbDate', '2026-03-15');
-  await expect(page.locator('#cbCountry option[value="DZ"]')).toBeAttached();
-  await page.selectOption('#cbCountry', 'DZ');
-  await expect(page.locator('#cbRoute option[value="(A)"]')).toBeAttached();
-  await page.selectOption('#cbRoute', '(A)');
-  await page.fill('#cbMass', '100');
-  await expect(page.locator('#cbOut .cb-cost')).toBeVisible();
-}
+import { CBAM_URL as URL, priceLine, view } from './cbam-helpers';
 
 test.describe('CBAM shell', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
