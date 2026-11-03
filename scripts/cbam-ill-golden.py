@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import sys
+from typing import Any
 
 GEN = sys.argv[1]
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tests', 'unit', 'fixtures', 'cbam-ill-golden.json')
@@ -16,7 +17,7 @@ raw = open(GEN, 'rb').read()
 src = raw.decode('utf-8')
 
 
-def cut(a, b):
+def cut(a: str, b: str) -> str:
     i = src.index(a)
     j = src.index(b, i)
     return src[i:j]
@@ -25,7 +26,7 @@ def cut(a, b):
 code = (cut('# ---------- pictograms', 'def dots10')
         + cut('# ================= ILLUSTRATIONS', 'def ins(')
         + cut('def inp_ill(vb, body)', "step = lambda n: f'<span class=\"b-step num\" aria-hidden=\"true\">{n}</span>' + INP[n]"))
-ns = {}
+ns: dict[str, Any] = {}
 exec(code, ns)
 gold = {k: ns[k] for k in ('TUBE', 'BAG', 'INGOT', 'SHEET', 'PAPER', 'SHIELD',
                            'ILL_FAC', 'ILL_VOU', 'ILL_STEPS', 'ILL_SCALE', 'ILL_BOX', 'ILL_GAUGE')}
