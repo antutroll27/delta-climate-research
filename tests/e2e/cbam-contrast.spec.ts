@@ -116,4 +116,65 @@ test.describe('CBAM contrast', () => {
       }
     });
   }
+  // Colour law (spec §3, Rules colour key): colour marks where a figure came from, never a verdict. Every verdict tag
+  // reachable on Estimate and the rail's line-count badge are neutral ink: none may be the bronze, amber or cyan value.
+  const VERDICTS = [
+    ['Indeterminate', '2523100090', 'DZ', '(A)', '30', '2026-03-15'],
+    ['No published rule', '2523100090', 'DZ', '(A)', '30', '2027-03-15'],
+    ['Above threshold', '73063077', 'IN', '(C)', '100', '2026-03-15'],
+  ] as const;
+  for (const scheme of ['light', 'dark'] as const) {
+    const hues = (page: Page) => page.evaluate(() => {
+      const mk = (prop: 'color' | 'backgroundColor', v: string): string => {
+        const el = document.createElement('i');
+        el.style.cssText = `color:${v}`;
+        document.querySelector('#cbx')!.appendChild(el);
+        const out = getComputedStyle(el).color;
+        el.remove();
+        return out;
+      };
+      return ['var(--color-bronze)', 'var(--bronze-t)', 'var(--bronze-bg)', 'var(--color-cyan)', 'var(--cyan-t)', 'var(--cyan-bg)', '#e5a34d']
+        .map((v) => mk('color', v));
+    });
+    for (const [verdict, cn, country, route, mass, date] of VERDICTS) {
+      test(`Estimate verdict tag "${verdict}" is not bronze, amber or cyan (${scheme})`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme: scheme });
+        await page.goto(URL);
+        await page.fill('#cbCn', cn);
+        await page.dispatchEvent('#cbCn', 'change');
+        await page.fill('#cbDate', date);
+        await expect(page.locator(`#cbCountry option[value="${country}"]`)).toBeAttached();
+        await page.selectOption('#cbCountry', country);
+        await expect(page.locator(`#cbRoute option[value="${route}"]`)).toBeAttached();
+        await page.selectOption('#cbRoute', route);
+        await page.fill('#cbMass', mass);
+        const tag = page.locator('[data-view="estimate"] #cbOut .b-legacy .cb-tag');
+        await expect(tag).toHaveText(verdict);
+        const { color, bg } = await tag.evaluate((el) => ({ color: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor }));
+        for (const bad of await hues(page)) {
+          expect(color).not.toBe(bad);
+          expect(bg).not.toBe(bad);
+        }
+        // a tint of a hue (the legacy 15% colour-mix) is not neutral either: the fill is the tile well or nothing
+        expect(bg).toMatch(/^rgba\(0, 0, 0, 0\)$|^(?!color\(srgb)/);
+      });
+    }
+
+    test(`the rail line-count badge is ink, legible, and not bronze, amber or cyan (${scheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto(URL);
+      await addLine(page, '2523100090', 'DZ', '(A)', '30');
+      const badge = page.locator('.cbx-rail [data-list-badge]');
+      await expect(badge).toBeVisible();
+      const { color, bg } = await badge.evaluate((el) => ({ color: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor }));
+      for (const bad of await hues(page)) {
+        expect(color).not.toBe(bad);
+        expect(bg).not.toBe(bad);
+      }
+      // the fill is the translucent tile well, so axe (which composites it over the rail) judges legibility
+      const r = await new AxeBuilder({ page }).include('.cbx-rail [data-list-badge]').withRules(['color-contrast']).analyze();
+      expect(r.violations).toEqual([]);
+      expect(r.passes.length + r.incomplete.length).toBeGreaterThan(0);
+    });
+  }
 });

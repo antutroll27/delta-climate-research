@@ -56,7 +56,7 @@
 .cbx-nav svg{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .cbx-nav:hover{color:var(--ink);background:var(--well)}
 .cbx-nav[aria-current="page"]{background:var(--ink);color:var(--on-ink)}
-.cbx-badge{margin-left:auto;min-width:20px;height:20px;border-radius:10px;background:var(--bronze-bg);color:var(--bronze-t);font-size:12px;font-weight:700;display:grid;place-items:center;padding:0 6px;font-style:normal}
+.cbx-badge{margin-left:auto;min-width:20px;height:20px;border-radius:10px;background:var(--well);color:var(--ink);font-size:12px;font-weight:700;display:grid;place-items:center;padding:0 6px;font-style:normal}
 .cbx-nav[aria-current="page"] .cbx-badge{background:var(--on-ink);color:var(--ink)}
 .cbx-collapse{margin-top:auto;border-top:1px solid var(--line);border-radius:0 0 14px 14px}
 .cbx[data-rail="collapsed"] .cbx-lbl,.cbx[data-rail="collapsed"] .cbx-badge{opacity:0;pointer-events:none}
