@@ -1,0 +1,58 @@
+/* src/styles/cbam-ill.css. Illustrations (spec §8.1–8.2) and the entry animation (spec §8.3),
+   ported from the approved reference's preview/bento.css. Positions are its final cascade,
+   resolved. Motion: transform and opacity only (the 60 fps rule), replayed by views.ts. */
+
+/* Icon tones (spec §4.3): one ink, told apart by alpha. Illustrations never use bronze or cyan. */
+.cbx{
+  --ic-a:var(--ink-2);
+  --ic-b:color-mix(in oklab,var(--ink-2) 45%,transparent);
+  --ic-c:color-mix(in oklab,var(--ink-2) 72%,transparent);
+  --ic-d:color-mix(in oklab,var(--ink-2) 45%,transparent);
+  --ic-n:color-mix(in oklab,var(--ink-2) 30%,transparent);
+  --b-io:cubic-bezier(.65,0,.35,1);
+}
+/* On the inverted tile the ink is the plate's opposite; knockouts take the plate's colour. Set on the drawing
+   itself, not the tile: a tile-wide --card would recolour the tile's other users of it (.b-thr em). */
+.cbx .b-hero :is(.b-ill,.b-pict){--card:var(--ink);--ic-a:var(--on-ink);--ic-c:color-mix(in oklab,var(--on-ink) 72%,transparent);--ic-b:color-mix(in oklab,var(--on-ink) 45%,transparent);--ic-d:var(--ic-b);--ic-n:color-mix(in oklab,var(--on-ink) 28%,transparent)}
+/* On the Chargeable fill (spec §4.3): the tones are the fill's own ink; the knockouts are holes showing the
+   fill. Only where the fill is behind the drawing: the low-share and phone layouts put the text on the plate,
+   so there the drawing keeps the plate's tones. Bronze, cyan or ink is the tier's colour, the drawing is not. */
+@media (min-width:641px){
+  .cbx .b-fill:not(.b-fill-low) .b-fl-in .b-ill{--ic-a:var(--fl-k);--ic-c:color-mix(in oklab,var(--fl-k) 72%,transparent);--ic-b:color-mix(in oklab,var(--fl-k) 42%,transparent);--ic-n:color-mix(in oklab,var(--fl-k) 28%,transparent)}
+  .cbx .b-fill-bronze:not(.b-fill-low) .b-fl-in .b-ill{--card:var(--fill-bz);--fl-k:var(--fill-bz-ink)}
+  .cbx .b-fill-cyan:not(.b-fill-low) .b-fl-in .b-ill{--card:var(--fill-cy);--fl-k:var(--fill-cy-ink)}
+  .cbx .b-fill-ink:not(.b-fill-low) .b-fl-in .b-ill{--card:var(--ink);--fl-k:var(--on-ink)}
+}
+
+/* Medium-large illustrations: absolute, behind every word. The :where() rules carry zero
+   specificity, so any position phases 2-4 gave a tile child still wins. */
+:where(.cbx .b-t,.cbx .b-fl-in,.cbx .b-fl-rest){position:relative}
+:where(.cbx .b-t,.cbx .b-fl-in,.cbx .b-fl-rest)>:where(:not(.b-ill)){position:relative;z-index:1}
+.cbx .b-ill{position:absolute;pointer-events:none;z-index:0;height:auto}
+.cbx .b-ill-fac{right:22px;top:22px;width:180px}
+.cbx .b-ill-vou{right:20px;top:84px;width:64px}
+.cbx .b-ill-steps{right:28px;top:38px;width:200px}
+.cbx .b-ill-scale{right:30px;top:74px;width:170px}
+.cbx .b-ill-box{right:30px;bottom:96px;width:130px}
+.cbx .b-ill-gauge{right:30px;top:64px;width:180px}
+/* Input-step illustrations: top right; the title row makes room. */
+.cbx .b-ill-inp{top:14px;right:18px;width:84px}
+.cbx .b-ill-inp-sq{top:14px;width:44px}
+.cbx .b-ill-inp-mass{top:16px;width:64px}
+.cbx .b-inp>.b-t-ti{padding-right:96px}
+
+@media (max-width:899px){
+  .cbx .b-ill-steps,.cbx .b-ill-box{width:120px}
+  /* P5-7. On a 390 px tile the gauge's needle crossed the "50 t threshold" label (reference
+     README) and the scale sat on the Charged numeral (screen 3-why-phone-dark). Both go in flow
+     under the tile header, right-aligned, so they cannot cover a word. */
+  .cbx .b-t>.b-t-h{order:-1}
+  .cbx .b-ill-gauge,.cbx .b-ill-scale{position:static;align-self:flex-end;width:132px;margin:6px 0 4px}
+}
+
+/* Pictograms in flow (the reference's .b-pict). Only the Framing shield is placed in this phase; the xs/sm
+   sizes are the reference's modifiers. */
+.cbx .b-pict{width:82%;max-width:240px;margin:10px auto 0;display:block}
+.cbx .b-pict-sm{width:46%;max-width:150px;margin:6px 0 10px}
+.cbx .b-pict-xs{width:64px;flex:none;margin:0}
+.cbx .b-frame .b-pict-sm{width:90px;margin:14px auto}

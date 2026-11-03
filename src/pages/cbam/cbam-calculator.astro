@@ -32,8 +32,10 @@
 import Base from '../../layouts/Base.astro';
 import '../../styles/cbam-app.css';
 import '../../styles/cbam-bento.css';
+import '../../styles/cbam-ill.css';
 import { renderSectorChips } from '../../scripts/cbam-ui/good-sheet.ts';
 import { renderTitleCard } from '../../scripts/cbam-ui/title-card.ts';
+import { INPUT_ILL, pict } from '../../scripts/cbam-ui/illustrations.ts';
 ---
 
 <Base
@@ -92,6 +94,7 @@ import { renderTitleCard } from '../../scripts/cbam-ui/title-card.ts';
             </section>
 
             <section class="b-t b-inp" aria-labelledby="cbStep2">
+              <Fragment set:html={INPUT_ILL.origin} />
               <span class="b-step" aria-hidden="true">2</span>
               <h3 class="b-t-ti" id="cbStep2">Origin &amp; route.</h3>
               <label class="b-lab" for="cbCountry">Country of origin</label>
@@ -117,6 +120,7 @@ import { renderTitleCard } from '../../scripts/cbam-ui/title-card.ts';
             </section>
 
             <section class="b-t b-inp">
+              <Fragment set:html={INPUT_ILL.date} />
               <span class="b-step" aria-hidden="true">3</span>
               <label class="b-t-ti" for="cbDate">Import date.</label>
               <div class="b-field"><input id="cbDate" type="date" value="2026-03-15" /></div>
@@ -127,6 +131,7 @@ import { renderTitleCard } from '../../scripts/cbam-ui/title-card.ts';
             </section>
 
             <section class="b-t b-inp">
+              <Fragment set:html={INPUT_ILL.mass} />
               <span class="b-step" aria-hidden="true">4</span>
               <label class="b-t-ti" for="cbMass">Net mass.<span class="cb-sr"> In tonnes.</span></label>
               <div class="b-field b-field-big">
@@ -264,6 +269,7 @@ import { renderTitleCard } from '../../scripts/cbam-ui/title-card.ts';
         <div class="b-bento b-rules">
           <section class="b-t b-s2 b-r2 b-hero b-frame" aria-labelledby="cbRulesFramingH">
             <div class="b-t-h"><div><h2 id="cbRulesFramingH" class="b-t-ti">Framing.</h2><p class="b-t-sub">Applies to every figure on Estimate, Three years, Why, Shipment list and Export.</p></div></div>
+            <Fragment set:html={pict('shield', 'sm')} />
             <!-- MOVED here from Estimate by D1 (founder, 2026-11-03): the banner is unchanged, word for word, and
                  exists once (spec §6.2). The "Provisional" eyebrow that sat above it is dropped (D1). -->
         <!-- NON-NEGOTIABLE §7.1 — ships with the calculator, always, in markup. -->
@@ -366,6 +372,7 @@ import { renderTitleCard } from '../../scripts/cbam-ui/title-card.ts';
 <script>
   import { initCbam } from '../../scripts/cbam-algos/cbam-app.ts';
   import { mountViews } from '../../scripts/cbam-ui/views.ts';
+  import { mountIllustrations } from '../../scripts/cbam-ui/illustrations.ts';
   // Mount on load and on soft nav (ClientRouter), matching the heat map's pattern. Both guard
   // against the double call themselves (astro:page-load also fires on first paint).
   const boot = () => {
@@ -377,6 +384,7 @@ import { renderTitleCard } from '../../scripts/cbam-ui/title-card.ts';
     if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
     else delete root.dataset.theme;
     mountViews(root);
+    mountIllustrations(root);
     initCbam();
   };
   boot();
