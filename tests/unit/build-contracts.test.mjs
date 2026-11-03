@@ -196,6 +196,8 @@ async function createPublicationFixture(t, robotsByRoute = {}) {
   const indexableUrls = contracts
     .filter((contract) => contract.indexable)
     .map((contract) => `${siteUrl}${contract.route}`)
+    // the proxied Elektron app: listed by astro.config.mjs customPages, no HTML in dist
+    .concat(`${siteUrl}/deltaElektron/app`)
     .sort();
   await write(
     join(dist, 'sitemap-index.xml'),

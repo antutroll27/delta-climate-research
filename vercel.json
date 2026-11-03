@@ -110,15 +110,6 @@
           "value": "application/vnd.oai.openapi+json;version=3.1"
         }
       ]
-    },
-    {
-      "source": "/deltaElektron/(.*)",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
     }
   ],
   "functions": {

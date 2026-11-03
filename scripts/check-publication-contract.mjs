@@ -495,9 +495,13 @@ for (const contract of routeContracts) {
   });
 }
 
+// Apps proxied in by vercel.json rewrites: they are listed in the sitemap (astro.config.mjs customPages)
+// but build no HTML here, so they are held to sitemap membership only.
+const proxiedAppUrls = ['https://deltaclimate.earth/deltaElektron/app'];
 const expectedSitemap = routeContracts
   .filter((contract) => contract.expectedIndexable)
   .map((contract) => canonicalUrlForRoute(contract.route))
+  .concat(proxiedAppUrls)
   .sort(compare);
 const expectedSitemapSet = new Set(expectedSitemap);
 
