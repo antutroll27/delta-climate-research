@@ -37,8 +37,9 @@ test('rulerScale: an unreadable or impossible input draws no ruler rather than a
 test('yearTile: a tile shell around the pinned honesty markup, with the hooks the e2e suite reads', () => {
   const html = yearTile(found({}));
   assert.match(html, /^\s*<section class="b-t b-s2 cb-thresh">/, 'the e2e hook cb-thresh stays on the tile');
-  assert.match(html, /<h2 class="b-t-ti">Annual de minimis\.<\/h2>/);
-  assert.match(html, /<p class="b-t-sub">Eligible mass, 2026 · 3 lines<\/p>/, 'the line count the old row carried survives');
+  // The year is in the heading, so a heading list tells the years' tiles apart (L6).
+  assert.match(html, /<h2 class="b-t-ti">Annual de minimis, 2026\.<\/h2>/);
+  assert.match(html, /<p class="b-t-sub">Eligible mass · 3 lines<\/p>/, 'the line count the old row carried survives');
   assert.match(html, /<div class="b-mid num">260<span class="b-u">t<\/span><\/div>/);
   assert.match(html, /<div class="b-thr" aria-hidden="true"><b style="width:86\.7%"><\/b><em style="left:16\.7%"><\/em><\/div>/);
   assert.match(html, /<p class="b-t-foot num"><span>0<\/span><span>50 t threshold<\/span><span>300 t<\/span><\/p>/);
@@ -46,12 +47,13 @@ test('yearTile: a tile shell around the pinned honesty markup, with the hooks th
 });
 
 test('yearTile: one eligible line is singular', () => {
-  assert.match(yearTile(found({ eligibleLineCount: 1 })), /Eligible mass, 2026 · 1 line</);
+  assert.match(yearTile(found({ eligibleLineCount: 1 })), /Eligible mass · 1 line</);
 });
 
 test('yearTile: a no-rule year draws no ruler, no mass and no 50', () => {
   const html = yearTile({ calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0 });
   assert.match(html, /<span class="cb-tag pending">No published rule<\/span>/);
+  assert.match(html, /<h2 class="b-t-ti">Annual de minimis, 2027\.<\/h2>/, 'the year is in the heading of a no-rule tile too');
   // (class="…" anchored: the hook cb-thresh contains the substring b-thr.)
   assert.doesNotMatch(html, /class="b-thr"|class="b-mid/);
   assert.doesNotMatch(html, /50/);
@@ -143,4 +145,9 @@ test('thresholdErrorTile: the error, escaped, in a tile', () => {
 test('listView: Total then the years in one row, the lines in a three-column row', () => {
   assert.equal(listView({ total: 'T', years: 'Y', plates: 'P' }),
     '<div class="b-bento b-list">TY</div><div class="b-bento b-c3">P</div>');
+});
+
+test('linePlate: a tier outside the three known ones draws no chip and no raw text', () => {
+  const html = linePlate({ ...LINE, tier: '<b>x</b>' }, 0, PARTS);
+  assert.doesNotMatch(html, /<b>x<\/b>|class="chip/, 'never the unescaped value, never a chip');
 });

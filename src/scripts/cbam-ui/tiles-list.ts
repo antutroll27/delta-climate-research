@@ -199,7 +199,7 @@ export function yearTile(y: YearThreshold): string {
   const year = esc(String(y.calendarYear));
   if (!y.ruleFound) return `
     <section class="b-t b-s2 cb-thresh">
-      <div class="b-t-h"><div><h2 class="b-t-ti">Annual de minimis.</h2><p class="b-t-sub">${year}</p></div>
+      <div class="b-t-h"><div><h2 class="b-t-ti">Annual de minimis, ${year}.</h2></div>
         <span class="cb-tag pending">${esc(yearVerdictTag(y))}</span></div>
       <p class="cb-sub">${noRuleSentence(y.calendarYear)}</p>
     </section>`;
@@ -214,7 +214,7 @@ export function yearTile(y: YearThreshold): string {
       <p class="b-t-foot num"><span>0</span><span>${num(y.thresholdT)} t threshold</span><span>${num(r.maxT)} t</span></p>` : '';
   return `
     <section class="b-t b-s2 cb-thresh">
-      <div class="b-t-h"><div><h2 class="b-t-ti">Annual de minimis.</h2><p class="b-t-sub">Eligible mass, ${year} · ${n} line${n === 1 ? '' : 's'}</p></div>
+      <div class="b-t-h"><div><h2 class="b-t-ti">Annual de minimis, ${year}.</h2><p class="b-t-sub">Eligible mass · ${n} line${n === 1 ? '' : 's'}</p></div>
         <span class="cb-tag ${tone}">${esc(yearVerdictTag(y))}</span></div>
       <div class="b-mid num">${num(y.knownEligibleMassT)}<span class="b-u">t</span></div>${ruler}
       <p class="cb-sub">${yearSentence(y)}</p>
@@ -316,10 +316,11 @@ function tierChip(tier: Line['tier'], label: string): string {
     case 'actual-verified': return chip('cyan', label);
     case 'verified-direct+default-indirect': return chip('cyan', 'Verified direct') + chip('bronze', 'Commission indirect');
     default: {
+      // A tier this build does not know draws no chip: the raw value is never echoed into the markup.
+      // (The unit suite also builds lines with no `tier` at all, which predate the field.)
       const _exhaustive: never = tier;
-      // `?? ''`: the unit suite builds many lines with no `tier` at all (they predate the field).
-      // Such a line gets no chip rather than the text "undefined" or a crash in esc().
-      return _exhaustive ?? '';
+      void _exhaustive;
+      return '';
     }
   }
 }

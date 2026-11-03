@@ -2066,7 +2066,12 @@ test.describe('rail views, phase 4 — List, Export, Rules', () => {
     await view(page, 'list');
     await expect(page.locator('#cbList .cb-total h2')).toHaveText('Total.');
     await expect(page.locator('#cbList .cb-total')).toContainText('2 lines');
-    await expect(page.locator('#cbList .cb-thresh h2')).toHaveText('Annual de minimis.');
+    // The year is in the heading, so a screen-reader heading list tells two years' tiles apart.
+    await expect(page.locator('#cbList .cb-thresh h2')).toHaveText('Annual de minimis, 2026.');
+    // Both Total actions are the reference's 46 px pills (the shared .btn is 30 px).
+    for (const sel of ['#cbList .cb-total .b-add', '#cbList .cb-total .b-ghost']) {
+      expect((await page.locator(sel).boundingBox())?.height).toBe(46);
+    }
     await expect(page.locator('#cbList .cb-line')).toHaveCount(2);
     const shares = await page.locator('#cbList .b-share-row .num').allTextContents();
     expect(shares).toHaveLength(2);

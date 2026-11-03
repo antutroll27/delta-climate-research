@@ -1,6 +1,7 @@
 // The rail's "Line being priced" card (spec §4.1), and the phone top bar's one-line summary.
 // The server renders renderTitleCard(null) into the page, so the empty state has ONE spelling.
 import { formatPackDate } from '../cbam-outlook.ts';
+import { esc } from './format.ts';
 
 export interface TitleLine {
   cn: string;
@@ -25,8 +26,6 @@ const day = (iso: string): string => {
 };
 const originText = (l: TitleLine) => (l.originCode === 'OTHER' ? l.origin : `${l.origin} (${l.originCode})`);
 const routeText = (route: string) => (route === 'default' ? 'default route' : `route ${route}`);
-
-const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export function renderTitleCard(l: TitleLine | null): string {
   if (!l) {
