@@ -464,6 +464,7 @@
 .cbx .b-csv th,.cbx .b-csv td{padding:8px 12px;text-align:left}
 .cbx .b-csv th{color:var(--ink-3);font-weight:600}
 .cbx .b-csv td{border-top:1px solid var(--line)}
+.cbx .b-csv td:first-child{max-width:11ch;overflow:hidden;text-overflow:ellipsis}
 .cbx .b-fps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}
 .cbx .b-fps figure{margin:0;display:flex;gap:14px;align-items:center}
 .cbx .b-fps .b-fp{width:112px;padding:12px;gap:4px}

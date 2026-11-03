@@ -50,7 +50,7 @@ test('csvTileBody: a CSCF-pending row carries its what-if marker, a refused row 
   assert.ok(bodyRows[0].includes(`<td>${rows[0].certificates}</td>`) && rows[0].certificates !== '');
   assert.ok(bodyRows[1].includes('<td>unavailable</td>'), 'the refused row says why its figure cells are blank');
   assert.ok(bodyRows[1].includes('<td></td><td></td>'), 'and its certificates and cost are blank, not zero');
-  assert.match(html, /<th scope="col">cscf_status<\/th><th scope="col">status<\/th>/);
+  assert.match(html, /<th scope="col">cscf_status<\/th><th scope="col">status<\/th><th scope="col">certificates<\/th>/);
 });
 
 test('csvTileBody: one line is singular and says nothing about rows it did not cut', () => {

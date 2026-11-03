@@ -7,13 +7,13 @@ import { esc } from './format.ts';
 import { isRealDigest, renderFingerprint } from './fingerprint.ts';
 
 /**
- * The CSV columns the preview shows, by their real header names (csvRows in cbam-lines.ts), in the
- * file's own order. The last two are what make the figures honest to read: cscf_status says
- * "pending (what-if)" beside a certificate count that assumes a CSCF the Commission has not
- * published, and status says "unavailable" beside the blank cells of a refused line (cscf_status
- * is blank there, so neither column alone covers both).
+ * The CSV columns the preview shows, by their real header names (csvRows in cbam-lines.ts). The tile
+ * is half a screen wide and its table scrolls sideways, so the two qualifiers sit BEFORE the figures
+ * they qualify: a reader who has not scrolled still sees "pending (what-if)" (cscf_status, blank on a
+ * refused line) or "unavailable" (status) before the certificate and cost cells. The file keeps its
+ * own order; only this preview reorders.
  */
-export const PREVIEW_COLUMNS = ['line_id', 'cn_code', 'origin', 'mass_t', 'certificates', 'cost_eur', 'cscf_status', 'status'] as const;
+export const PREVIEW_COLUMNS = ['line_id', 'cn_code', 'origin', 'mass_t', 'cscf_status', 'status', 'certificates', 'cost_eur'] as const;
 const PREVIEW_ROWS = 6;
 
 /**
