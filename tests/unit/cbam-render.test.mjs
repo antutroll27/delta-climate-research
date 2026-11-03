@@ -380,6 +380,51 @@ test('a year past the pack\'s last threshold row gets a card on the PREVIEW too,
   assert.deepEqual(pick(tile), pick(html), 'the List tile and the draft card say the same thing about 2031');
 });
 
+test('the "Year not covered" tag is the same neutral pill as every other Estimate verdict tag', () => {
+  // Unreachable from the form (no route runs past 2030), so the e2e colour law in cbam-contrast.spec.ts
+  // cannot see it. Colour marks where a figure came from, never a verdict (spec §3): bronze, cyan and
+  // amber are not allowed on a verdict tag. The legacy sheet maps tone -> hue (ok cyan, pending bronze,
+  // unavail amber) through --c; the .b-legacy wrapper the Estimate tile puts the card in repaints the tag
+  // from ink/well tokens and never reads --c. This pins each link of that chain.
+  const read = (p) => readFileSync(fileURLToPath(new URL(`../../${p}`, import.meta.url)), 'utf8');
+  const bento = read('src/styles/cbam-bento.css');
+  const astro = read('src/pages/cbam/cbam-calculator.astro');
+  const rule = (css, selector) => {
+    const m = new RegExp(`(?:^|\\n)\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css);
+    assert.ok(m, `${selector} { … } must exist`);
+    return m[1];
+  };
+
+  // 1. The markup: 'pending' is the tone the Indeterminate tag already carries, so one CSS answer covers both.
+  const notCovered = draft('2523100090', '30', '2031-03-15');
+  const indeterminate = draft('2523100090', '30', '2027-03-15');
+  const tagOf = (h) => h.match(/<span class="(cb-tag [^"]+)">([^<]+)<\/span>/);
+  assert.deepEqual(tagOf(notCovered)?.slice(1), ['cb-tag pending', 'Year not covered']);
+  assert.equal(tagOf(indeterminate)?.[1], tagOf(notCovered)?.[1],
+    'Year not covered and Indeterminate share a tone class, so they share a colour');
+  const tones = new Set([...notCovered.matchAll(/class="cb-tag (\w+)"/g)].map((m) => m[1]));
+  assert.deepEqual([...tones], ['pending']);
+
+  // 2. The legacy tone rules set --c and nothing else, so a tone class cannot colour the tag by itself.
+  for (const tone of ['ok', 'pending', 'unavail']) {
+    const body = rule(astro, `.cb-out .cb-tag.${tone}`).trim();
+    assert.match(body, /^--c:\s*[^;]+;?$/, `.cb-out .cb-tag.${tone} must set --c only`);
+  }
+
+  // 3. The .b-legacy rule paints colour and fill from neutral tokens and never from --c ...
+  const neutral = rule(bento, '.cbx .b-legacy .cb-tag');
+  assert.match(neutral, /(^|;)color:var\(--ink-2\)/, 'the pill text is --ink-2');
+  assert.match(neutral, /(^|;)background:var\(--well\)/, 'the pill fill is the tile well');
+  assert.doesNotMatch(neutral, /var\(--c\)|color-mix|bronze|cyan|e5a34d/i, 'the neutral rule must not read a hue');
+  assert.match(neutral, /--c:var\(--ink-3\)/, 'and it resets --c to ink for anything that still reads it');
+  assert.match(rule(bento, '.cbx .b-legacy .cb-tag::before'), /display:none/, 'the hue-carrying dot is hidden');
+
+  // 4. ... and it is at least as specific as the legacy `.cb-out .cb-tag` rule it overrides (3 classes vs 2), and
+  // no .b-legacy rule re-tones `pending` or `ok` (only `unavail`, to ink: an outlined ring).
+  assert.doesNotMatch(bento, /\.b-legacy \.cb-tag\.(pending|ok)\b/, 'no .b-legacy rule may re-tone pending or ok');
+  assert.match(rule(bento, '.cbx .b-legacy .cb-tag.unavail'), /color:var\(--ink\)/);
+});
+
 test('2027 and 2028 get the same 50 t verdict card as 2026 — the threshold has no end date', () => {
   // C1. Reg (EU) 2023/956 Art 2a(1) and Annex VII point 1 (inserted by Reg (EU) 2025/2083): 50 t
   // "in a given calendar year", no end date. The page used to answer 2027 and 2028 with "No

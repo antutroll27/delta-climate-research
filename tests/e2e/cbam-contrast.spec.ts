@@ -120,7 +120,9 @@ test.describe('CBAM contrast', () => {
   // reachable on Estimate and the rail's line-count badge are neutral ink: none may be the bronze, amber or cyan value.
   const VERDICTS = [
     ['Indeterminate', '2523100090', 'DZ', '(A)', '30', '2026-03-15'],
-    ['No published rule', '2523100090', 'DZ', '(A)', '30', '2027-03-15'],
+    // C1: the 50 t threshold has no end date, so 2027 is an ordinary verdict, not "No published rule". ("Year not
+    // covered", the arm for 2031+, is unreachable from the form; its colour is pinned in tests/unit/cbam-render.test.mjs.)
+    ['Indeterminate', '2523100090', 'DZ', '(A)', '30', '2027-03-15'],
     ['Above threshold', '73063077', 'IN', '(C)', '100', '2026-03-15'],
   ] as const;
   for (const scheme of ['light', 'dark'] as const) {
@@ -137,7 +139,7 @@ test.describe('CBAM contrast', () => {
         .map((v) => mk('color', v));
     });
     for (const [verdict, cn, country, route, mass, date] of VERDICTS) {
-      test(`Estimate verdict tag "${verdict}" is not bronze, amber or cyan (${scheme})`, async ({ page }) => {
+      test(`Estimate verdict tag "${verdict}" for ${date} is not bronze, amber or cyan (${scheme})`, async ({ page }) => {
         await page.emulateMedia({ colorScheme: scheme });
         await page.goto(URL);
         await page.fill('#cbCn', cn);
