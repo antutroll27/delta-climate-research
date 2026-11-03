@@ -10,7 +10,6 @@ const EXPECT: ReadonlyArray<readonly [ViewName, string, string]> = [
   ['why', 'steps', 'Mark-up share.'], ['why', 'scale', 'Charged.'],
   ['list', 'box', 'Total.'], ['list', 'gauge', 'Annual de minimis, 2026.'],
   ['list', 'bag', 'Line 1.'],   // the sector pictogram on the line plate (founder 3 Nov); priceLine prices cement
-  ['rules', 'shield', 'Framing.'],
 ];
 
 /** Every illustration in the visible view, as "view|name|its tile's title". */
@@ -43,6 +42,15 @@ const overlaps = (page: Page, v: ViewName) => page.evaluate((name) => {
   }
   return out;
 }, v);
+
+// Audit F-11 (founder, 2026-11-03): no shield beside "not validated by the EU CBAM Registry" - it can read as a seal.
+test('the Rules Framing tile carries no illustration', async ({ page }) => {
+  await page.goto(CBAM_URL);
+  await view(page, 'rules');
+  await expect(page.locator('[data-view="rules"] .b-frame')).toBeVisible();
+  await expect(page.locator('[data-view="rules"] svg')).toHaveCount(0);
+  await expect(page.locator('[data-view="rules"] [data-ill="shield"], [data-view="rules"] .b-pict')).toHaveCount(0);
+});
 
 for (const [w, h] of [[1440, 900], [1280, 800], [1024, 768], [390, 844]] as const) {
   test(`illustrations sit on their tiles and never overlap a word at ${w} px`, async ({ page }) => {
