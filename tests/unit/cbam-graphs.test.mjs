@@ -287,6 +287,23 @@ test('every Why tile: a full-stop or question title, a sentence, a plot, "Show a
   assert.doesNotMatch(text(html), /\babove\b/, 'the views are separate: nothing points "above"');
 });
 
+test('P5-M1: the mark-up staircase is drawn only beside a mark-up that is applied and changes', () => {
+  const steps = (m) => (renderWhy(m, STATE(), WIDTHS, phaseModel(pack, m)).match(/data-ill="steps"/g) ?? []).length;
+  assert.equal(steps(TUBE), 1, 'an ordinary default line: the staircase');
+  // A verified line has a split with mark-up "0": "none is applied" must not sit beside a rising staircase.
+  for (const v of ['2.0', '3.0', '5.0']) {
+    const verified = modelOf(line({ verified: { directTco2ePerT: v } }));
+    assert.equal(verified.usesDefault, false);
+    assert.equal(verified.split.markup, '0', v);
+    assert.equal(steps(verified), 0, `verified direct ${v}: no staircase`);
+  }
+  // A default line whose mark-up is the same in every year: it explains none of the rise.
+  const flat = synthetic(['100', '110', '120'], { split: { rise: '20', markup: '0', factor: '20', benchmark: '0', markupSharePct: '0.000000' } });
+  assert.equal(steps(flat), 0, 'a mark-up that does not change: no staircase');
+  // A withheld split already drew none.
+  assert.equal(steps(modelOf(line({ verified: { directTco2ePerT: '1.0' } }))), 0);
+});
+
 test('the cost rows: the shipment\'s own published cost, the visitor\'s price only when typed, on one euro scale', () => {
   // Nothing typed: the one published cost that is this shipment's (2026 Q1) and nothing else.
   const empty = plotCost(TUBE, 420, []).svg;

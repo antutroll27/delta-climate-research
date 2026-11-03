@@ -212,7 +212,9 @@ export function renderWhy(model: GraphsModel | GraphsRefusal, state: GraphsState
   });
 
   // Plan 05, P5-2: a drawing only beside a figure. No split means "The counts in Three years stand." and a dash.
-  const share = m.split ? insertIll(shareTile, ILL.steps, 'b-t') : shareTile;
+  // The staircase is the mark-up rising: drawn only where a mark-up is applied AND changes. A verified line
+  // (none applied) or a default line whose mark-up is flat shares a split of "0" and must not wear it.
+  const share = m.split && m.usesDefault && !new D(m.split.markup).isZero() ? insertIll(shareTile, ILL.steps, 'b-t') : shareTile;
   const charged = insertIll(chargedTile, ILL.scale, 'b-t');
 
   const markup = tile('markup', {
