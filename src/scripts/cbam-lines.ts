@@ -274,7 +274,7 @@ export type YearThreshold =
       attested: boolean;
       eligibleLineCount: number;
       // No linesInYear and no includedSectors on this arm, deliberately. It reports that the
-      // Commission has published no row for the year, so it makes no de minimis claim at all —
+      // pack carries no row for the year, so it makes no de minimis claim at all —
       // there is nothing for a denominator or a list of tested sectors to qualify, and carrying
       // either would imply a test that never ran. There is also no rule to read them FROM.
     };
@@ -287,7 +287,7 @@ export type YearThreshold =
  * as 60 t "above" — a liability that does not exist.
  *
  * A year with no published threshold row returns ruleFound: false rather than a
- * fabricated default. The Commission has published 2026 only, as of this pack.
+ * fabricated default. The pack carries a row for each year 2026-2030; a later year has none.
  *
  * `completeness` comes from the caller's attestation set — 'complete' only when
  * the user has explicitly ticked "these are all my {year} imports". The tool

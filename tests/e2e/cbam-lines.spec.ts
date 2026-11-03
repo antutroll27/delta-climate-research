@@ -272,15 +272,23 @@ test.describe('multi-line CBAM estimate — add, remove, attest, totals', () => 
     await expect(status).toHaveText('');
   });
 
-  test('a year with no published threshold rule is named in the announcement, not just the card', async ({ page }) => {
+  test('a 2027 line gets the 50 t verdict, named in the announcement as well as the card', async ({ page }) => {
+    // WHAT THIS USED TO ASSERT, and why it changed. It pinned "No published rule" for a 2027 line,
+    // which was the C1 defect: Reg (EU) 2023/956 Art 2a and Annex VII set 50 t per calendar year
+    // with no end date, and the pack once carried a 2026 row alone. The pack now carries 2026-2030,
+    // so 2027 gets an ordinary verdict card. (The "Year not covered" arm is unreachable from the
+    // form: a year past 2030 has no routes, so no line can be added. It is pinned in unit tests.)
     await page.goto('/cbam/cbam-calculator/');
     await addLine(page, { date: '2027-03-15' });
     await view(page, 'list');
-    await expect(page.locator('#cbList .cb-thresh')).toContainText('No published rule');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('Indeterminate');
+    await expect(page.locator('#cbList .cb-thresh')).toContainText('2027');
+    await expect(page.locator('#cbList .cb-thresh')).not.toContainText(/No published rule|Year not covered|has been published/);
     // #cbStatus is the only channel a screen-reader user has once the panel's own aria-live is
     // off — a year silently missing from this sentence is a gap, not just a milder one.
     await expect(page.locator('#cbStatus')).toContainText('2027');
-    await expect(page.locator('#cbStatus')).toContainText(/no published rule/i);
+    await expect(page.locator('#cbStatus')).toContainText(/2027 indeterminate/i);
+    await expect(page.locator('#cbStatus')).not.toContainText(/no published rule/i);
   });
 
   test('remove-focus lands on the button that slid into the removed line\'s index', async ({ page }) => {
@@ -598,7 +606,7 @@ test.describe('multi-line CBAM estimate — the net-mass gate', () => {
 });
 
 test.describe('multi-line CBAM estimate — the single-line threshold statement', () => {
-  test('the PREVIEW names a year with no published threshold rule, and still says nothing for hydrogen', async ({ page }) => {
+  test('the PREVIEW shows the 50 t verdict in 2027 and 2028 as in 2026, and still says nothing for hydrogen', async ({ page }) => {
     // THE ONE GATE ON run()'s THRESHOLD SLOT. renderDraftThreshold is a pure function and
     // cbam-render.test.mjs enumerates all four of resolveThreshold's nulls against it directly —
     // but nothing in that suite can see whether run() still CALLS it. Revert this line to the
@@ -617,17 +625,22 @@ test.describe('multi-line CBAM estimate — the single-line threshold statement'
     await setLine(page, GOOD_LINE);
     await expect(page.locator('.cb-thresh')).toContainText('Indeterminate');
 
-    // 2027: the pack publishes one threshold row (2026), so this year resolves to null and the
-    // card used to vanish with nothing in its place.
+    // 2027: the 50 t threshold has no end date (Art 2a, Annex VII) and the pack carries a row for
+    // it. This step used to assert "No published rule" here, because the pack held 2026 alone and
+    // the card for 2027 used to vanish with nothing in its place; that was the C1 defect.
     await page.fill('#cbDate', '2027-03-15');
-    await expect(page.locator('.cb-thresh')).toContainText('No published rule');
-    await expect(page.locator('.cb-thresh')).toContainText('2027');
+    await expect(page.locator('.cb-thresh')).toContainText('Indeterminate');
+    await expect(page.locator('.cb-thresh')).toContainText('Threshold · 2027');
+    await expect(page.locator('.cb-thresh')).toContainText('50 t');
+    await expect(page.locator('.cb-thresh')).not.toContainText(/No published rule|Year not covered|has been published/);
     // ADDED TO the estimate, never instead of it. (The estimate here used to be a price refusal
     // volunteering that the good and its benchmark were fine. With pending price rows for 2027
-    // it is a certificate count with no cost, and the no-rule card matters more, not less: a
-    // count is now on screen with nothing else to say the de minimis verdict is missing.)
+    // it is a certificate count with no cost, and the verdict card sits beside it.)
     await expect(page.locator('#cbOut')).toContainText('Certificate price · imports in 2027-Q1');
     await expect(page.locator('#cbOut .cb-fig')).toBeVisible();
+    await page.fill('#cbDate', '2028-11-30');
+    await expect(page.locator('.cb-thresh')).toContainText('Threshold · 2028');
+    await expect(page.locator('.cb-thresh')).toContainText('50 t');
 
     // THE BOUNDARY, and the reason this fix is not simply "always show a card". Hydrogen is
     // outside the 50 t exemption (Reg (EU) 2025/2083), so an "indeterminate" card would imply an
@@ -1291,7 +1304,7 @@ test.describe('multi-line CBAM estimate — accessibility', () => {
     // in-scope lines here (20 t + 25 t) are kept under the 50 t threshold on purpose, to reach
     // the below-threshold, checkbox-bearing card rather than accidentally tipping it above.
     await addLine(page, { mass: '20', date: '2026-03-15' }); // indeterminate, 2026
-    await addLine(page, { mass: '25', date: '2027-03-15' }); // no published rule, 2027
+    await addLine(page, { mass: '25', date: '2027-03-15' }); // indeterminate, 2027
     await addLine(page, { ...REFUSED_LINE, mass: '25' }); // refused, still counted, 2026
     await view(page, 'list');
     await expect(page.locator('.cb-line')).toHaveCount(3);

@@ -257,7 +257,7 @@ test('review 5 — the residual-basis note is open on the tiles, outside the fol
   assert.equal(e.stamp.originBasis, 'residual', 'premise');
   const html = tiles(e);
   const note = 'The Commission does not publish a default for this good from this country of origin, so this figure '
-    + 'uses its &quot;Other Countries and Territories&quot; residual default — a world-average value, not your country&#39;s own.';
+    + 'uses its &quot;Other Countries and Territories&quot; residual default — set from the highest-emitting exporting countries, not your country&#39;s own value.';
   assert.ok(html.includes(note), 'premise: the note is printed');
   const folded = /<details[\s\S]*?<\/details>/.exec(html)[0];
   assert.ok(!folded.includes('residual default'), 'not inside the fold');

@@ -221,7 +221,16 @@ test.describe('CBAM Estimate view', () => {
     await page.dispatchEvent('#cbDate', 'change');
     await expect(page.locator('#cbDatePeriod')).toContainText('Certificate price · imports in 2027-Q1: none published');
     await expect(page.locator('#cbDateNote')).toHaveText('');
+    // WHAT THIS USED TO ASSERT, and why it changed. It asserted an EMPTY ruler on a 2027 date, the
+    // C1 defect: the pack carried a 2026 threshold row alone. Reg (EU) 2023/956 Art 2a and Annex VII
+    // set 50 t per calendar year with no end date, and the pack now carries 2026-2030.
+    await expect(page.locator('#cbMassRuler')).toContainText('50 t de minimis · 2027');
+    // A year past the pack's table still draws no ruler, rather than carrying 2026's figure over.
+    await page.fill('#cbDate', '2031-03-15');
+    await page.dispatchEvent('#cbDate', 'change');
     await expect(page.locator('#cbMassRuler')).toBeEmpty();
+    await page.fill('#cbDate', '2026-03-15');
+    await page.dispatchEvent('#cbDate', 'change');
     await pick(page, '28041000', 'DZ');
     await expect(page.locator('#cbMassRuler')).toBeEmpty();
   });

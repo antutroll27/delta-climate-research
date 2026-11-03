@@ -77,7 +77,7 @@ const PACK_URL = '/cbam/estimator-pack.json';
 const PACK_INTEGRITY: PackIntegrity = {
   schemaVersion: 1,
   algorithm: 'sha256',
-  packSha256: 'cc1d817bf5c86ed78f383b1bee245200f3ae1bba1184997c678ba9e6ef62100e',
+  packSha256: 'dc9cf4a7ae58f1f3f8e87e138fded3cee8c1ffd31cbd05b58255058da9548ba6',
   generatedAt: '2026-08-18T00:00:00.000Z',
 };
 
@@ -256,20 +256,19 @@ export function renderYearThreshold(y: YearThreshold): string {
 
 /**
  * The threshold statement for the ONE line the form currently describes: the verdict card, the
- * "no published rule" card, or deliberate silence.
+ * "year not covered" card, or deliberate silence.
  *
  * `resolveThreshold` answers `null` for FOUR different reasons and says which for none of them,
  * so the preview rendered `t ? renderThreshold(t) : ''` and dropped the card with nothing at all
  * in its place. Enumerated against the shipped pack, as the form can actually reach them:
  *
- *   1. NO THRESHOLD ROW FOR THE YEAR. The pack publishes exactly one row (2026), so EVERY other
- *      year lands here, and 2027/2028 are ordinary dates a user types. Worse, the estimate that
- *      renders beside it refuses on the certificate PRICE and reassures in so many words that
- *      "the good and its benchmark are present" — so the only thing on screen that could have
- *      explained the missing de minimis verdict says instead that nothing is wrong with the
- *      good. THIS is the case the user is owed an explanation for, and it gets the SAME card the
- *      multi-line panel already shows for such a year (renderYearThreshold's `ruleFound: false`
- *      arm) rather than a second phrasing here that could drift away from it.
+ *   1. NO THRESHOLD ROW FOR THE YEAR. The pack carries a 50 t row for each year 2026-2030
+ *      (Reg (EU) 2023/956 Art 2a and Annex VII have no end date), so only a year past its last
+ *      row lands here. It once held 2026 alone, so 2027/2028 — ordinary dates a user types —
+ *      landed here and were told, falsely, that no threshold had been published. A year that
+ *      does land here is owed an explanation, and it gets the SAME card the multi-line panel
+ *      already shows for such a year (renderYearThreshold's `ruleFound: false` arm) rather than a
+ *      second phrasing here that could drift away from it.
  *   2. THE SECTOR IS OUTSIDE THE YEAR'S ROW — hydrogen (28041000, priceable from 93 origins in
  *      this pack), and electricity, which this pack does not classify at all. Reg (EU) 2025/2083
  *      leaves both out of the 50 t exemption, so an "indeterminate" card would imply an
@@ -283,7 +282,7 @@ export function renderYearThreshold(y: YearThreshold): string {
  *      predicate (nonNegativeDecimal) well above this call and never reaches the threshold.
  *
  * THE YEAR IS TESTED FIRST, exactly as resolveThreshold tests it first, so a hydrogen line dated
- * 2027 says "no rule published for 2027" on this surface and on the multi-line one alike — the
+ * 2031 says "year not covered" on this surface and on the multi-line one alike — the
  * two cards agree about the year rather than each answering a different question about it.
  */
 export function renderDraftThreshold(
@@ -987,7 +986,7 @@ export function buildPrintDocument(input: {
 
   const verdicts = yearCards.map((y) => y.ruleFound
     ? `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> at ${num(y.knownEligibleMassT)} t of ${num(y.thresholdT)} t — completeness box ${y.attested ? 'TICKED by the user' : 'not ticked'}.</li>`
-    : `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> — no de minimis threshold published; no verdict.</li>`).join('');
+    : `<li>${esc(String(y.calendarYear))}: <b>${esc(yearVerdictTag(y))}</b> — this tool does not carry that year's de minimis threshold; no verdict.</li>`).join('');
 
   /**
    * §2 HAS TO BRANCH ON `pricedLines`, THE WAY THE SCREEN'S OWN TOTALS CARD ALREADY DOES.
@@ -2110,7 +2109,7 @@ export function initCbam(): void {
       // THROUGH renderDraftThreshold, NOT resolveThreshold DIRECTLY. That function returns null
       // for four unrelated reasons and this line used to render every one of them as the empty
       // string, so a year with no published threshold row lost its card silently — while the
-      // multi-line panel showed an explicit "No published rule" card for the same year. See
+      // multi-line panel showed an explicit "Year not covered" card for the same year. See
       // renderDraftThreshold for the enumeration and for which of the four are still, correctly,
       // silent.
       const t = renderDraftThreshold(pack, { cn: cn!.value, massT: mass!.value.trim(), date: date!.value });
@@ -2662,7 +2661,7 @@ export function initCbam(): void {
     // announcement does not say what the tick actually DID to the year's verdict, and nothing
     // else in aria-live="off" mode would. yearVerdictTag() reuses the exact tag text the card
     // itself shows, for the same anti-drift reason as the other two — every year, NOT filtered to
-    // `ruleFound`: a year with no published rule gets an explicit "No published rule" card for
+    // `ruleFound`: a year with no threshold row gets an explicit "Year not covered" card for
     // sighted users, and silently dropping it here would be the same gap, just a milder one
     // (omission rather than misstatement).
     const yearVerdicts = years

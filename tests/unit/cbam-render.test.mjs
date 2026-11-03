@@ -345,21 +345,28 @@ test('hydrogen and electricity are outside the exemption, so no card is shown', 
 const draft = (cn, massT, date = '2026-03-15') =>
   renderDraftThreshold(pack, { cn, massT, date });
 
-test('a year with no published threshold row gets a card on the PREVIEW too, not silence', () => {
-  // The defect. The pack publishes one threshold row (2026), so 2027 — an ordinary date to type
-  // — resolves to null, and the preview dropped the card with nothing in its place. The estimate
-  // beside it refuses on the certificate price and volunteers that "the good and its benchmark
-  // are present", so the one sentence on screen that could have explained the missing de minimis
-  // verdict instead says nothing is wrong with the good.
-  const html = draft('2523100090', '30', '2027-03-15');
-  assert.match(html, /No published rule/, 'the year must be reported, not dropped');
-  assert.match(html, /2027/, 'and the card must name WHICH year has no rule');
+test('a year past the pack\'s last threshold row gets a card on the PREVIEW too, not silence', () => {
+  // The defect. A year with no threshold row resolves to null, and the preview dropped the card
+  // with nothing in its place. The estimate beside it refuses and volunteers that "the good and
+  // its benchmark are present", so the one sentence on screen that could have explained the
+  // missing de minimis verdict instead says nothing is wrong with the good.
+  //
+  // THE YEAR IS 2031, NOT 2027. This test used 2027 while the pack carried a 2026 row alone; the
+  // 50 t threshold has no end date (Reg (EU) 2023/956 Art 2a, Annex VII) and the pack now carries
+  // 2026-2030, so 2027 gets a real verdict (pinned in the test below) and only a year past the
+  // table lands here. The wording says what the TOOL carries, never that none is "published".
+  const html = draft('2523100090', '30', '2031-03-15');
+  assert.match(html, /Year not covered/, 'the year must be reported, not dropped');
+  assert.match(html, /2031/, 'and the card must name WHICH year has no rule');
+  assert.match(html, /This tool does not carry the de minimis threshold for 2031/);
+  assert.doesNotMatch(html, /has been published|No published rule/,
+    'the law publishes the threshold for every year; this tool\'s table is what ends');
 
   // SAID BY THE MULTI-LINE CARD'S OWN RENDERER, not by a second phrasing that could drift from
   // it: both panels can describe the same year, and they used to disagree by one showing a card
   // and the other showing nothing at all.
   assert.equal(html, renderYearThreshold({
-    calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0,
+    calendarYear: 2031, ruleFound: false, attested: false, eligibleLineCount: 0,
   }), 'the preview must render the same no-rule card the per-year panel renders');
 
   // Rail phase 4: the List draws the same year as a tile. The tile's shell differs; its verdict
@@ -368,9 +375,31 @@ test('a year with no published threshold row gets a card on the PREVIEW too, not
     h.match(/<span class="cb-tag [^"]+">[^<]+<\/span>/)?.[0],
     h.match(/<p class="cb-sub">[^<]+<\/p>/)?.[0],
   ];
-  const tile = yearTile({ calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0 });
+  const tile = yearTile({ calendarYear: 2031, ruleFound: false, attested: false, eligibleLineCount: 0 });
   assert.ok(pick(html).every(Boolean), 'sanity: the draft card has a tag and a sentence');
-  assert.deepEqual(pick(tile), pick(html), 'the List tile and the draft card say the same thing about 2027');
+  assert.deepEqual(pick(tile), pick(html), 'the List tile and the draft card say the same thing about 2031');
+});
+
+test('2027 and 2028 get the same 50 t verdict card as 2026 — the threshold has no end date', () => {
+  // C1. Reg (EU) 2023/956 Art 2a(1) and Annex VII point 1 (inserted by Reg (EU) 2025/2083): 50 t
+  // "in a given calendar year", no end date. The page used to answer 2027 and 2028 with "No
+  // de minimis threshold has been published", which is false.
+  for (const year of [2026, 2027, 2028]) {
+    const html = draft('2523100090', '30', `${year}-03-15`);
+    assert.match(html, /Indeterminate/, `${year}: one line cannot prove an annual exemption`);
+    assert.match(html, new RegExp(`Threshold · ${year}`), `${year}: the card names its year`);
+    assert.match(html, /<b>50 t<\/b>/, `${year}: the threshold is 50 t`);
+    assert.match(html, /Regulation \(EU\) 2025\/2083 Article 1 and Annex II \(new CBAM Annex VII\)/,
+      `${year}: cited to Annex VII`);
+    assert.doesNotMatch(html, /has been published|Year not covered|No published rule/, String(year));
+    // Everything but the year is the 2026 card, byte for byte.
+    assert.equal(html.replaceAll(String(year), 'YYYY'),
+      draft('2523100090', '30', '2026-03-15').replaceAll('2026', 'YYYY'), `${year} card differs from 2026's`);
+  }
+  // Hydrogen stays outside the exemption in every year (Art 2a(4)): silence, not a card.
+  for (const year of [2026, 2027, 2028]) {
+    assert.equal(draft('28041000', '10', `${year}-03-15`), '', `${year}: hydrogen must stay silent`);
+  }
 });
 
 test('the other three nulls stay silent — an absent card is the right answer for them', () => {
@@ -830,7 +859,7 @@ test('NON-NEGOTIABLE 4 — nothing claims a filing or registry validation', () =
 test('the residual sheet answers for unlisted ORIGINS, never for a good a listed sheet omits', () => {
   // THE OVER-CLAIM THIS SITE SHIPPED FOR A DAY. The vendored engine's origin loop could not tell
   // a cell the Commission printed a dash in from a row that is not there at all, so both fell
-  // through to the "Other Countries and Territories" world average. Algeria publishes aluminium
+  // through to the "Other Countries and Territories" residual default. Algeria publishes aluminium
   // 76041010 on route (L) only; the residual sheet also prices (K), and the calculator offered
   // (K) under Algeria's name and billed it — 210.8425 certificates, EUR 15,889.09 on a 100 t
   // line, from a figure the Commission never stated for Algeria.
@@ -852,7 +881,7 @@ test('the residual sheet answers for unlisted ORIGINS, never for a good a listed
 
   // PREMISE, or this pins nothing. Algeria has a sheet of its own; that sheet carries exactly one
   // direct 2026 row for this good and it is (L); and the residual bucket DOES publish (K) — so
-  // there is a world average sitting there for a fallthrough to find.
+  // there is a residual default sitting there for a fallthrough to find.
   assert.ok(pack.publishedOriginSheets.includes('DZ'),
     'premise: Algeria is an origin the Commission lists, not one the residual row answers for');
   const dzRows = pack.defaultValues.filter((r) => r.originCountry === 'DZ'
@@ -872,7 +901,7 @@ test('the residual sheet answers for unlisted ORIGINS, never for a good a listed
   assert.equal(unlisted.scenario.certificates, '210.8425');
   assert.equal(unlisted.scenario.costEur, '15889.09');
 
-  // The world average AS THE CARD PRINTS IT — hand-transcribed from the rendered figures, not
+  // The residual default AS THE CARD PRINTS IT — hand-transcribed from the rendered figures, not
   // derived from the estimate, so the check below is looking for what a reader would actually see.
   // Asserting they are all present HERE is what proves the detector can detect: a forbidden-string
   // list that matched nothing anywhere would pass Algeria's card for the wrong reason.
@@ -888,7 +917,7 @@ test('the residual sheet answers for unlisted ORIGINS, never for a good a listed
 
   // THE RULE, ON THE HISTORICAL CASE: no figure of any kind for Algeria on (K), and above all not
   // that one. The last assertion is the one that fails if the leak ever returns — it looks for the
-  // world average's own numbers in the rendered card, whatever route the renderer took to get
+  // the residual default's own numbers in the rendered card, whatever route the renderer took to get
   // there, rather than trusting a status field to describe what the user is shown.
   const refused = run('76041010', 'DZ', '(K)', '100');
   assert.equal(refused.status, 'unavailable');
@@ -899,7 +928,7 @@ test('the residual sheet answers for unlisted ORIGINS, never for a good a listed
   assert.doesNotMatch(card, /class="cb-fig"/, 'a refusal must render no figure block');
   for (const figure of worldAverage) {
     assert.ok(!card.includes(figure),
-      `the residual world average must not reach a listed origin's card — found ${figure}`);
+      `the residual default must not reach a listed origin's card — found ${figure}`);
   }
 
   // THE OTHER HALF: Algeria's OWN route still prices, from Algeria's own sheet.
@@ -948,7 +977,7 @@ test('the residual sheet answers for unlisted ORIGINS, never for a good a listed
       swept += 1;
       assert.equal(run(cn, origin, route, '100').status, 'unavailable',
         `${origin} publishes a sheet and that sheet has no row for ${cn}/${route}, `
-        + 'so the residual world average must not answer under its name');
+        + 'so the residual default must not answer under its name');
     }
   }
   assert.ok(swept > 50000, `the sweep must have something to sweep, got ${swept}`);
@@ -1019,9 +1048,13 @@ test('the renderer handles every status the engine can return', () => {
 const SECTORS_2026 = pack.thresholds.find((t) => t.calendarYear === 2026).includedSectors;
 
 test('renderYearThreshold: a year without a rule refuses to invent one', () => eachYearRenderer((render) => {
-  const html = render({ calendarYear: 2027, ruleFound: false, attested: false, eligibleLineCount: 0 });
-  assert.match(html, /no.*threshold.*published.*2027/i);
-  assert.doesNotMatch(html, /50/, 'must not show the 2026 figure for 2027');
+  // 2031, a year past the pack's table (2026-2030). The old regex, /no.*threshold.*published.*2027/,
+  // pinned the C1 defect: the law publishes 50 t for every year (Art 2a, no end date), so the
+  // sentence now says what the TOOL carries and never that the Commission published nothing.
+  const html = render({ calendarYear: 2031, ruleFound: false, attested: false, eligibleLineCount: 0 });
+  assert.match(html, /does not carry the de minimis threshold for 2031/i);
+  assert.doesNotMatch(html, /has been published|No published rule/i);
+  assert.doesNotMatch(html, /50/, 'must not show the 2026 figure for 2031');
 }));
 
 test('renderYearThreshold: below-attested says so and names its basis', () => eachYearRenderer((render) => {
@@ -2002,8 +2035,8 @@ const REFUSED_MIXED_NOTE =
  */
 const RESIDUAL_INDIRECT_NOTE =
   'The electricity default substituted on this line is the Commission\'s "Other Countries and '
-  + 'Territories" residual — a world-average value, not your country\'s own. Your direct figure '
-  + 'is unaffected: it is your own attested claim.';
+  + 'Territories" residual — set from the highest-emitting exporting countries, not your '
+  + 'country\'s own value. Your direct figure is unaffected: it is your own attested claim.';
 
 /**
  * The mixed line's delta, computed rather than guessed, and pinned because it is the arithmetic
@@ -2655,7 +2688,7 @@ test('the residual-indirect note reaches the card, and only where the fallback w
   assert.equal(e.stamp.tier, 'verified-direct+default-indirect', 'sanity: and it is mixed');
   assert.ok(e.stamp.notes.includes(RESIDUAL_INDIRECT_NOTE),
     'the engine states, in the pinned words, that the substituted electricity default is the '
-    + 'world-average bucket rather than the origin\'s own');
+    + 'residual bucket rather than the origin\'s own');
 
   // ESCAPED, because renderStamp escapes every note — the apostrophes and quotes in this
   // sentence are exactly the characters that would prove it reached the DOM raw.
@@ -2675,11 +2708,11 @@ test('the residual-indirect note reaches the card, and only where the fallback w
     'DZ is listed for cement, so nothing residual was substituted and the note must not fire');
   assert.ok(!listedHtml.includes(escaped), 'nor reach the card');
   // ...and the DEFAULTS-path note must never appear on a mixed line, which is the failure this
-  // note exists to avoid: it says "this figure" rests on a world average, and on a mixed line the
+  // note exists to avoid: it says "this figure" rests on the residual default, and on a mixed line the
   // direct figure is the importer's own audited number.
   assert.doesNotMatch(html, /this figure uses its/,
     'RESIDUAL_BASIS_NOTE must not fire on a mixed line — it would call an audited figure a '
-    + 'world average');
+    + 'residual default');
   assert.match(html, /Origin basis<\/span><b>—<\/b>/,
     'and the stamp row stays neutral, because the verified path rests on no default basis');
 });
@@ -2715,10 +2748,10 @@ test('a REFUSED mixed line drops the residual-indirect note — no figure, no pr
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   assert.ok(!html.includes(escaped), 'nor may it reach the card');
-  // Not merely reworded into a survivor: nothing on this card may call anything a world average,
+  // Not merely reworded into a survivor: nothing on this card may carry the residual disclosure,
   // since there is no figure for such a claim to attach to. Catches both residual sentences.
-  assert.doesNotMatch(html, /world-average/,
-    'no note on a card showing no figure may describe that figure as a world average');
+  assert.doesNotMatch(html, /Other Countries and Territories/,
+    'no note on a card showing no figure may describe where that figure came from');
 
   // The card is genuinely a refusal — no waterfall, no certificates row — which is the whole
   // premise. If a figure appeared here the note would be owed, not suppressed.
@@ -3773,7 +3806,7 @@ test('tiles — the residual sheet answers for unlisted ORIGINS, never for a goo
   assert.doesNotMatch(refusedTiles, FIG, 'a refusal must render no figure block');
   for (const figure of worldAverage) {
     assert.ok(!refusedTiles.includes(figure),
-      `the residual world average must not reach a listed origin's tiles — found ${figure}`);
+      `the residual default must not reach a listed origin's tiles — found ${figure}`);
   }
   // The deck sits inside #cbOut too, so it is held to the same rule.
   const deck = renderDeck(outlook(pack, { cn: '76041010', country: 'DZ', route: '(K)', massT: '100',

@@ -108,9 +108,10 @@ const fp = new Map([['L1', 'a'.repeat(64)], ['L2', 'b'.repeat(64)], ['L3', 'c'.r
 
 test('per-year, not per-estimate: a 2027 line cannot push 2026 over the threshold', () => {
   // THE regression test for the per-year decision. A per-estimate model sums
-  // 30 + 30 = 60 t and reports above_threshold — inventing a liability. The pack
-  // publishes a threshold row for 2026 only, so 2027 gets ruleFound: false
-  // rather than a fabricated 50 t default.
+  // 30 + 30 = 60 t and reports above_threshold — inventing a liability. Each year is judged on
+  // its own against its own row. Reg (EU) 2023/956 Art 2a / Annex VII set 50 t per calendar year
+  // with no end date, and the pack carries a row for each year 2026-2030; it once carried 2026
+  // alone, so 2027 got ruleFound: false and the page said no threshold had been published.
   const lines = [
     line({ id: 'L1', massT: '30', date: '2026-03-15' }),
     line({ id: 'L2', massT: '30', date: '2027-03-15' }),
@@ -120,7 +121,18 @@ test('per-year, not per-estimate: a 2027 line cannot push 2026 over the threshol
   const y27 = cards.find((c) => c.calendarYear === 2027);
   assert.equal(y26.ruleFound, true);
   assert.equal(y26.state, 'below_threshold', '30 t attested-complete is below 50 t');
-  assert.equal(y27.ruleFound, false, 'no threshold rule is published for 2027');
+  assert.equal(y27.ruleFound, true, 'the 50 t threshold applies in 2027 too (Art 2a, no end date)');
+  assert.equal(y27.state, 'below_threshold', '30 t attested-complete in 2027 is below 50 t');
+  assert.equal(y27.thresholdT, '50');
+});
+
+test('a year past the last threshold row still returns ruleFound: false, never a fabricated default', () => {
+  // The pack's table is finite (2026-2030). A later year has no row, and the tool says so rather
+  // than assuming the 50 t carries over — a delegated act (Art 2a(3)) could have moved it.
+  const cards = thresholdByYear([line({ massT: '30', date: '2031-03-15' })], fp, new Set([2031]), pack);
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0].calendarYear, 2031);
+  assert.equal(cards[0].ruleFound, false);
 });
 
 test('above threshold is a fact — the attestation cannot gate it', () => {
@@ -496,25 +508,27 @@ test('the refusal is scoped to the verdict it can actually corrupt', () => {
   // ACROSS YEARS: the threshold is annual (see this function's doc), so a 2027 mass nobody can
   // read says nothing about 2026 — 2026's card must still render. Deliberately NARROWER than
   // the missing-fingerprint throw, which discards every year: that one is a caller bug worth
-  // stopping the whole render for, this is line data. The shipped pack publishes a 2026 row
-  // only, so a 2027 row is simulated (the widerPack idiom above) to put a rule-bearing year on
-  // BOTH sides of the refusal — otherwise 2027 would return before ever reaching the gate.
+  // stopping the whole render for, this is line data. The shipped pack now carries a row for
+  // 2027 as well as 2026, which puts a rule-bearing year on BOTH sides of the refusal. (It once
+  // held 2026 alone, so a 2027 row had to be simulated, or 2027 would return before the gate.)
   const spanningLines = [
     line({ id: 'L1', massT: '60', date: '2026-03-15' }),
     line({ id: 'L2', massT: '-100', date: '2027-03-15' }),
   ];
-  const twoYearPack = { ...pack, thresholds: [...pack.thresholds,
-    { ...pack.thresholds.find((t) => t.calendarYear === 2026), id: 'threshold-2027', calendarYear: 2027 }] };
-  const spanning = thresholdByYear(spanningLines, fp, new Set([2026, 2027]), twoYearPack);
+  const spanning = thresholdByYear(spanningLines, fp, new Set([2026, 2027]), pack);
   assert.deepEqual(spanning.map((c) => c.calendarYear), [2026], '2027 refuses; 2026 is unharmed');
   assert.equal(spanning[0].state, 'above_threshold');
 
-  // On the SHIPPED pack, 2027 has no rule at all and returns before the gate — pinned because
-  // that ordering is load-bearing, not incidental. A ruleFound: false card states no mass and
-  // no verdict ("the Commission has published no 2027 row"), so there is nothing in it for an
-  // unreadable mass to corrupt; withholding it would refuse a true statement.
-  const shipped = thresholdByYear(spanningLines, fp, new Set([2026, 2027]), pack);
-  assert.deepEqual(shipped.map((c) => c.calendarYear), [2026, 2027]);
+  // A year past the pack's last row (2031) has no rule at all and returns before the gate — pinned
+  // because that ordering is load-bearing, not incidental. A ruleFound: false card states no mass
+  // and no verdict ("the pack carries no 2031 row"), so there is nothing in it for an unreadable
+  // mass to corrupt; withholding it would refuse a true statement.
+  const uncovered = [
+    line({ id: 'L1', massT: '60', date: '2026-03-15' }),
+    line({ id: 'L2', massT: '-100', date: '2031-03-15' }),
+  ];
+  const shipped = thresholdByYear(uncovered, fp, new Set([2026, 2031]), pack);
+  assert.deepEqual(shipped.map((c) => c.calendarYear), [2026, 2031]);
   assert.equal(shipped[1].ruleFound, false, 'a no-rule card carries no mass claim to corrupt');
 
   // ACROSS SECTORS: the gate runs AFTER the includedSectors filter, so a mass that could never
@@ -878,7 +892,7 @@ test('the floor clamp: free allocation exceeding direct emissions never drives c
   // every route routesFor publishes, 100 t, direct_and_indirect), 105 of them with a non-zero
   // indirect component. It read 190 of 77,704 (126 with indirect) while the engine let a listed
   // origin's missing row fall through to the residual sheet — three quarters of that space was
-  // the world average answering under a country's name, and both the space and the clamping
+  // the residual default answering under a country's name, and both the space and the clamping
   // population shrank with it. THIS line is not one of them: Angola publishes its own figures for
   // this good (direct 0.220, indirect 0.040), so the worked example below is untouched.
   // cn 2507008080 (calcined clay) / AO / route 'default' is one — direct

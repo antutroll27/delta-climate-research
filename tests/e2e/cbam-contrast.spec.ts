@@ -98,7 +98,7 @@ test.describe('CBAM contrast', () => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(URL);
       // Tile states on the List: 2026 (attested → below threshold, the cb-tag ok tone) and 2027
-      // (no published rule; a line with certificates and no published price).
+      // (indeterminate, the cb-tag pending tone; a line with certificates and no published price).
       await addLine(page, '2523100090', 'DZ', '(A)', '30');
       await addLine(page, '2523100090', 'DZ', '(A)', '30', '2027-03-15');
       await go(page, 'list');
