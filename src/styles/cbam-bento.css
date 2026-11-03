@@ -200,6 +200,22 @@
 .cbx .b-out>.b-hero{min-height:400px}
 .cbx .b-out>.b-fill{min-height:232px}
 .cbx .b-legacy{min-width:0}
+/* The de minimis card on Estimate is the legacy plate (renderDraftThreshold), kept on purpose and restyled here as a
+   bento tile: the card surface of .b-t, sans type, no mono caps, and ONE neutral pill for every verdict (colour law,
+   spec §3: bronze = the Commission default and the mark-up only, so INDETERMINATE and "above" are ink, never bronze,
+   cyan or amber). Scoped to .b-legacy so nothing else on the page can pick it up. */
+.cbx .b-legacy .cb-card{background:var(--card);color:var(--ink);border-radius:26px;padding:20px 20px 18px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0}
+.cbx .b-legacy .cb-card+.cb-card{margin-top:12px}
+.cbx .b-legacy .cb-card-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px 12px}
+.cbx .b-legacy .cb-card-label{margin:0;font-family:var(--sans);font-size:15px;font-weight:600;letter-spacing:-.01em;text-transform:none;color:var(--ink)}
+.cbx .b-legacy .cb-tag{--c:var(--ink-3);display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:99px;background:var(--well);color:var(--ink-2);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;white-space:nowrap}
+.cbx .b-legacy .cb-tag::before{display:none}
+.cbx .b-legacy .cb-tag.unavail{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor;color:var(--ink)}
+.cbx .b-legacy .cb-water{margin-top:10px;display:flex;flex-direction:column;gap:0}
+.cbx .b-legacy .cb-row{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px solid var(--line);font-family:var(--sans);font-size:12.5px;letter-spacing:0;text-transform:none;color:var(--ink-2)}
+.cbx .b-legacy .cb-row b{font-weight:700;text-align:right;overflow-wrap:anywhere;color:var(--ink)}
+.cbx .b-legacy .cb-sub{margin:10px 0 0;max-width:none;font-size:13px;line-height:1.5;color:var(--ink-2)}
+.cbx .b-legacy .cb-prov{margin:0;padding-top:10px;font-family:var(--sans);font-size:11.5px;line-height:1.5;letter-spacing:0;text-transform:none;color:var(--ink-3)}
 @media (max-width:640px){
   .cbx .b-out{grid-template-columns:minmax(0,1fr)}
   .cbx .b-out>:is(.b-yrs,.b-prov){grid-column:1/-1}
@@ -551,4 +567,4 @@
 
 /* The status strip sits on var(--ink), so its text is var(--on-ink) in both themes. The page's scoped
    .cb-note rule paints it cyan, which is 1.69:1 on the light ink of the dark theme (axe, phase 4). */
-.cbx #cbStatus.cbx-status{color:var(--on-ink)}
+.cbx #cbStatus.cbx-status{color:var(--on-ink);font-family:var(--sans);letter-spacing:0}

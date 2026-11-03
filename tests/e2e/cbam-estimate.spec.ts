@@ -253,4 +253,66 @@ test.describe('CBAM Estimate view', () => {
       expect(r.violations).toEqual([]);
     });
   }
+  // Colour law (spec §3, §4.3): bronze marks the Commission default and the mark-up only, cyan is brand/action.
+  // The de minimis card on Estimate is the legacy plate (renderDraftThreshold) restyled as a bento tile: sans, not
+  // Noplato mono caps, and a neutral pill for every verdict. #cbStatus is the same page's mono note, set in sans.
+  for (const theme of ['dark', 'light'] as const) {
+    for (const [verdict, mass, date] of [['Indeterminate', '40', '2026-03-15'], ['Above threshold', '100', '2026-03-15'],
+      ['No published rule', '40', '2027-03-15']] as const) {
+      test(`the de minimis card on Estimate is a bento tile with a neutral pill: ${verdict} (${theme})`, async ({ page }) => {
+        await page.goto(`${URL}?theme=${theme}`);
+        await pick(page, '73063077', 'IN', date);
+        await page.locator('#cbRouteSeg [data-value="(C)"]').click();
+        await page.fill('#cbMass', mass);
+        const tag = page.locator('#cbOut .b-legacy .cb-tag');
+        if (verdict === 'No published rule') await expect(tag).toBeVisible();   // the year has no row: the same card, its own tag
+        else { await expect(tag).toHaveText(verdict); await expect(page.locator('#cbOut .cb-n')).toBeVisible(); }
+        const probe = await page.evaluate(() => {
+          const mk = (css: string): string => {
+            const el = document.createElement('i');
+            el.style.cssText = css;
+            document.querySelector('#cbx')!.appendChild(el);
+            const v = getComputedStyle(el);
+            const out = css.startsWith('color') ? v.color : v.backgroundColor;
+            el.remove();
+            return out;
+          };
+          return {
+            bronze: mk('color:var(--color-bronze)'), cyan: mk('color:var(--color-cyan)'), amber: mk('color:#e5a34d'),
+            well: mk('background:var(--well)'),
+          };
+        });
+        const read = (sel: string) => page.locator(sel).first().evaluate((el) => {
+          const v = getComputedStyle(el);
+          return { font: v.fontFamily, upper: v.textTransform, color: v.color, bg: v.backgroundColor };
+        });
+        const t = await read('#cbOut .b-legacy .cb-tag');
+        const label = await read('#cbOut .b-legacy .cb-card-label');
+        const prov = verdict === 'No published rule' ? t : await read('#cbOut .b-legacy .cb-prov');   // the no-rule card carries no citation
+        for (const x of [t, label, prov]) {
+          expect(x.font).not.toContain('Noplato');
+          expect(x.upper).toBe('none');
+        }
+        for (const bad of [probe.bronze, probe.cyan, probe.amber]) {
+          expect(t.color).not.toBe(bad);
+          expect(t.bg).not.toBe(bad);
+          expect(prov.color).not.toBe(bad);
+        }
+        // The pill's fill is the tile well, or nothing (the outlined "Above threshold" ring) - never a tint of a hue.
+        expect([probe.well, 'rgba(0, 0, 0, 0)']).toContain(t.bg);
+        const card = await read('#cbOut .b-legacy .cb-card');
+        expect(card.bg).not.toBe('rgba(0, 0, 0, 0)');
+      });
+    }
+
+    test(`#cbStatus is set in the sans, not Noplato mono (${theme})`, async ({ page }) => {
+      await page.goto(`${URL}?theme=${theme}`);
+      const f = await page.locator('#cbStatus').evaluate((el) => {
+        const v = getComputedStyle(el);
+        return { font: v.fontFamily, ls: v.letterSpacing };
+      });
+      expect(f.font).not.toContain('Noplato');
+      expect(['normal', '0px']).toContain(f.ls);
+    });
+  }
 });
