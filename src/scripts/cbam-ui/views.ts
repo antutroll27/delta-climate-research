@@ -1,6 +1,8 @@
 // The calculator's six views (spec §4.2): which one the hash names, and showing it.
 // One route; the view lives in the hash so a link can open a view and reload keeps it.
 
+import { replay, watchStagger } from './motion.ts';
+
 export const VIEWS = ['estimate', 'three-years', 'why', 'list', 'export', 'rules'] as const;
 export type View = (typeof VIEWS)[number];
 
@@ -25,6 +27,9 @@ export function mountViews(root: HTMLElement): void {
 
   const show = (view: View, focus: boolean, writeHash = true): void => {
     root.querySelectorAll<HTMLElement>('[data-view]').forEach((s) => { s.hidden = s.dataset.view !== view; });
+    // Spec §8.3: the entry animation replays on every view entry, the first paint included.
+    const entered = root.querySelector<HTMLElement>(`[data-view="${view}"]`);
+    if (entered) replay(entered);
     root.querySelectorAll<HTMLElement>('[data-goto]').forEach((b) => {
       if (b.dataset.goto === view && b.closest('.cbx-rail, .cbx-tabs, .cbx-more')) b.setAttribute('aria-current', 'page');
       else b.removeAttribute('aria-current');
@@ -55,5 +60,7 @@ export function mountViews(root: HTMLElement): void {
     try { localStorage.setItem(RAIL_KEY, collapsed ? 'collapsed' : 'open'); } catch { /* private mode */ }
   }, { signal: ac.signal });
 
+  const main = root.querySelector<HTMLElement>('.cbx-main');
+  if (main) ac.signal.addEventListener('abort', watchStagger(main), { once: true });
   show(viewFromHash(location.hash), false, false);
 }

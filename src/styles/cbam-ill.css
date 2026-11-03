@@ -56,3 +56,22 @@
 .cbx .b-pict-sm{width:46%;max-width:150px;margin:6px 0 10px}
 .cbx .b-pict-xs{width:64px;flex:none;margin:0}
 .cbx .b-frame .b-pict-sm{width:90px;margin:14px auto}
+
+/* ===== Entry animation (spec §8.3, approved 2 Nov). Replayed on every view entry by views.ts
+   through motion.ts: the class goes off, a reflow, the class back on. Transform and opacity only. ===== */
+@keyframes bRise{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes bGrowX{from{transform:scaleX(0)}to{transform:none}}
+@keyframes bGrowY{from{transform:scaleY(0)}to{transform:none}}
+@keyframes bPop{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:none}}
+@keyframes bNeedle{from{transform:rotate(-130deg)}to{transform:none}}
+/* Bars that carry text slide or lift and never scale, so their numbers are never squashed. */
+@keyframes bSlide{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
+@keyframes bLift{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:none}}
+.cbx .b-anim :is(.b-ill,.b-pict,.b-sg)>*{transform-box:fill-box;transform-origin:center;animation:bRise .9s var(--b-io) both;animation-delay:calc(120ms + var(--i,0) * 70ms)}
+.cbx .b-anim :is(.b-stackbar b,.b-share b,.b-thr b,.b-qtr i.on){transform-origin:left center;animation:bGrowX 1.1s var(--b-io) both;animation-delay:calc(200ms + var(--i,0) * 90ms)}
+.cbx .b-anim .b-ph b{transform-origin:center bottom;animation:bGrowY 1.1s var(--b-io) both;animation-delay:calc(200ms + var(--i,0) * 80ms)}
+.cbx .b-anim :is(.b-waffle i,.b-fp i,.b-d10 i,.b-strip i){animation:bPop .6s var(--b-io) both;animation-delay:calc(150ms + var(--i,0) * 9ms)}
+.cbx .b-anim .b-ill-gauge .b-needle{transform-box:view-box;transform-origin:80px 90px;animation:bNeedle 1.4s var(--b-io) both;animation-delay:350ms}
+.cbx .b-anim .b-sp{animation:bSlide 1s var(--b-io) both;animation-delay:calc(200ms + var(--i,0) * 120ms)}
+.cbx .b-anim .b-mc-bar{animation:bLift 1s var(--b-io) both;animation-delay:calc(200ms + var(--i,0) * 110ms)}
+@media (prefers-reduced-motion:reduce){.cbx .b-anim *{animation:none!important}}
