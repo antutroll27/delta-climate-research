@@ -171,7 +171,8 @@ export default defineConfig({
   integrations: [
     // Omit <lastmod> until routes have content-owned modification dates. A
     // deploy timestamp would falsely mark every page as newly updated.
-    sitemap({ filter: sitemapFilter }),
+    // Delta Elektron is a separate app proxied under /deltaElektron/app (vercel.json rewrites); list its home here.
+    sitemap({ filter: sitemapFilter, customPages: ['https://deltaclimate.earth/deltaElektron/app'] }),
     react(),
   ],
   vite: {
