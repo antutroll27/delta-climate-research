@@ -31,24 +31,40 @@
 .cbx .b-ill{position:absolute;pointer-events:none;z-index:0;height:auto}
 .cbx .b-ill-fac{right:22px;top:22px;width:180px}
 .cbx .b-ill-vou{right:20px;top:84px;width:64px}
+/* The free-allocation half stacks its tags first, and they wrap to a different number of rows with the data
+   (measured: 1 to 3), so a drawing placed by pixels lands on them. It takes its place in the column instead, as
+   a ticket stub between the tags and the title (rule 3 of plan 05, Task 7). */
+.cbx .b-fl-rest>.b-tags{order:-2}
+.cbx .b-fl-rest>.b-ill-vou{position:static;order:-1;align-self:flex-end;width:56px;margin:8px 0 0}
 .cbx .b-ill-steps{right:28px;top:38px;width:200px}
-.cbx .b-ill-scale{right:30px;top:74px;width:170px}
+/* Anchored to the foot, beside the waffle: the sentence above it is 2 to 4 lines, so a top offset hit it. */
+.cbx .b-ill-scale{right:30px;top:auto;bottom:104px;width:170px}
 .cbx .b-ill-box{right:30px;bottom:96px;width:130px}
-.cbx .b-ill-gauge{right:30px;top:64px;width:180px}
+.cbx .b-ill-gauge{right:30px;top:40px;width:180px}
 /* Input-step illustrations: top right; the title row makes room. */
 .cbx .b-ill-inp{top:14px;right:18px;width:84px}
 .cbx .b-ill-inp-sq{top:14px;width:44px}
 .cbx .b-ill-inp-mass{top:16px;width:64px}
-.cbx .b-inp>.b-t-ti{padding-right:96px}
+.cbx .b-inp>.b-t-ti{margin-bottom:22px;padding-right:96px}
+.cbx .b-inputs .b-inp:last-of-type>.b-t-ti{margin-bottom:8px}
 
 @media (max-width:899px){
   .cbx .b-ill-steps,.cbx .b-ill-box{width:120px}
-  /* P5-7. On a 390 px tile the gauge's needle crossed the "50 t threshold" label (reference
-     README) and the scale sat on the Charged numeral (screen 3-why-phone-dark). Both go in flow
-     under the tile header, right-aligned, so they cannot cover a word. */
-  .cbx .b-t>.b-t-h{order:-1}
-  .cbx .b-ill-gauge,.cbx .b-ill-scale{position:static;align-self:flex-end;width:132px;margin:6px 0 4px}
 }
+/* P5-7, widened by measurement (plan 05 Task 7, rule 3). On a 390 px tile the gauge's needle crossed the "50 t
+   threshold" label (reference README) and the scale sat on the Charged numeral (screen 3-why-phone-dark). At
+   1024 px the tiles are as narrow (about 350 px) and the same drawings met the ruler, the waffle and the Total
+   numeral. Below 1100 px (where the Estimate grid and the bento also change columns) all three go in flow
+   under the tile header, right-aligned, so they cannot cover a word. */
+@media (max-width:1099px){
+  .cbx .b-t>.b-t-h{order:-1}
+  .cbx :is(.b-ill-gauge,.b-ill-scale,.b-ill-box){position:static;align-self:flex-end;width:132px;margin:6px 0 4px}
+  /* The Total numeral's line box is taller than its glyphs (150 px type, 0.9 line height): leave it the room. */
+  .cbx .b-ill-box{margin-bottom:22px}
+}
+
+/* Parked polish (2 Nov): a refused Why view is one sentence, not a 232 px plate with ~190 px of nothing in it. */
+.cbx .b-bento:has(>.b-t>.cg-none){grid-auto-rows:auto}
 
 /* Pictograms in flow (the reference's .b-pict). Only the Framing shield is placed in this phase; the xs/sm
    sizes are the reference's modifiers. */
