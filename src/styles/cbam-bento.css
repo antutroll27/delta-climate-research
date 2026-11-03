@@ -509,6 +509,8 @@
 .cbx .b-srcs .src a{color:var(--ink-2);overflow-wrap:anywhere}
 .cbx .b-t .cb-foot{margin:10px 0 0;max-width:72ch;font:400 14px/1.5 var(--sans);color:var(--ink-2)}
 .cbx .b-frame .cb-banner{margin:14px 0 0;padding:0;max-width:none;border-radius:0;background:none;font:400 15px/1.55 var(--sans);color:inherit}
+/* The Framing tile holds its text and nothing else (the shield is gone, audit F-11): size to the content rather than stretch across both rows. */
+.cbx .b-frame{align-self:start}
 .cbx .cb-frame-sum{margin:0 4px 16px;font-size:14px;color:var(--ink-2)}
 .cbx .cb-frame-link{border:0;background:none;padding:0;font:inherit;font-weight:600;color:var(--ink);text-decoration:underline;cursor:pointer}
 /* #cbCsv / #cbDoc keep the page's own .cb-btn class (their listeners and tests read the id), so the tile look
