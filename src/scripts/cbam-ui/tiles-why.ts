@@ -243,7 +243,7 @@ export function renderWhy(model: GraphsModel | GraphsRefusal, state: GraphsState
   const costTile = tile('cost', {
     span: 4, title: 'What would it cost at my own price?', whatIf: m.whatIf, sentence: cost.title, plot: cost.plot,
     extra: `<div class="cg-second"><label for="cgSecond">A second price, to see a range</label>
-        <input id="cgSecond" type="number" min="0" step="any" inputmode="decimal" autocomplete="off" aria-describedby="cgSecondNote" value="${esc(state.secondText)}"${secondUsable(state) ? '' : ' disabled'} />
+        <input id="cgSecond" type="text" inputmode="decimal" autocomplete="off" aria-describedby="cgSecondNote" value="${esc(state.secondText)}"${secondUsable(state) ? '' : ' disabled'} />
         <span id="cgSecondNote" data-cg="second-note">${secondNote(state)}</span></div>
       <div class="cg-legend">
         <span><svg width="12" height="12" aria-hidden="true"><rect x="4.5" y="1" width="3" height="10" fill="var(--cg-ink)"/></svg>Published price for this import's date</span>

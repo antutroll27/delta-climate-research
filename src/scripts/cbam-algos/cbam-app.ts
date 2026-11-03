@@ -58,7 +58,7 @@ import {
 } from '../cbam-ui/format.ts';
 // cbam-render.test.mjs imports renderPriceRow from this module; the format module owns it now.
 export { renderPriceRow };
-import { outlook, parseAssumedPrice, type Outlook } from '../cbam-outlook.ts';
+import { COMMA_HINT, outlook, parseAssumedPrice, type Outlook } from '../cbam-outlook.ts';
 import { renderYears, yearsPriceSlots } from '../cbam-ui/tiles-years.ts';
 import type { GraphsMount } from '../cbam-graphs-dom.ts';
 
@@ -1305,7 +1305,7 @@ export function decimalProblem(text: string): DecimalProblem | null {
   return t.split('.')[0]!.replace(/^0+/, '').length > 12 ? 'too-large' : null;
 }
 
-export const COMMA_HINT = 'Use a decimal point and no thousands separators: 0.85, not 0,85, and 1000, not 1,000.';
+export { COMMA_HINT };
 
 /** The mass field's refusal, shared by the preview and the Add path so the two say one thing. */
 export function massRefusal(text: string): string | null {

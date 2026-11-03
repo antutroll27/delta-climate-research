@@ -157,7 +157,7 @@ export function renderYears(view: Outlook, priceText = '', workingOpen = false):
       <h3 class="b-t-ti" id="cbOlPriceT">Your own price.</h3>
       <label class="b-t-sub" for="cbOlPrice">Your own price assumption, € per certificate</label>
       <div class="b-pricebox"><span aria-hidden="true">€</span>
-        <input id="cbOlPrice" class="cb-ol-px num" type="number" min="0" step="any" inputmode="decimal"
+        <input id="cbOlPrice" class="cb-ol-px num" type="text" inputmode="decimal"
           placeholder="e.g. 80" autocomplete="off" aria-describedby="cbOlPriceNote" value="${esc(priceText)}" />
         <em aria-hidden="true">per certificate</em></div>
       <p class="b-t-foot" id="cbOlPriceNote" data-ol="pricenote">${renderOutlookPriceNote(view, priceText)}</p>
