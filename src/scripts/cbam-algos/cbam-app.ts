@@ -49,7 +49,7 @@ import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
 import { csvTileBody, docTileBody, fingerprintsBody } from '../cbam-ui/tiles-export.ts';
 import { renderNotYetPublished, renderRulePack, renderSources } from '../cbam-ui/tiles-rules.ts';
 import {
-  AMENDED_BY_2025_2083, attestControl, noRuleSentence, refusedLineNote, sectorList, totalsTag, yearSentence,
+  AMENDED_BY_2025_2083, SECTOR_PROSE, attestControl, noRuleSentence, refusedLineNote, sectorList, totalsTag, yearSentence,
   yearVerdictTag, linePlate, listView, refusedLinePlate, shareOfTotal, thresholdErrorTile, totalTile, yearTile,
   type LinePlateContext,
 } from '../cbam-ui/tiles-list.ts';
@@ -162,7 +162,14 @@ function renderStamp(e: CertificateEstimate): string {
  * 2023/956 Art 2(3) as amended by Reg (EU) 2025/2083, 50 t per importer per
  * calendar year across cement, iron & steel, aluminium and fertilisers.
  *
- * WHY THIS CARD EXISTS AT ALL. Below the threshold an importer owes nothing, and
+ * THE 50 t IS ONE TEST ACROSS EVERY IN-SCOPE SECTOR (audit F-06). Art 2a(1), as inserted by Reg (EU)
+ * 2025/2083: the threshold "shall apply to the total net mass of goods under all CN codes aggregated per
+ * importer and per calendar year"; Art 2a(4) leaves out electricity and hydrogen. So the indeterminate
+ * sentence asks for ALL the importer's other CBAM goods, not "your other <this sector>" — that
+ * understated the aggregation. The sectors named come from the year's threshold row (`includedSectors`,
+ * handed in by renderDraftThreshold); ThresholdView carries only this line's own sector.
+ *
+ * WHY THIS CARD EXISTS AT ALL. Below the threshold an importer is exempt for the year, and
  * without it the tool quoted a four-figure cost to someone who may be exempt —
  * an error in the most expensive direction, on a page whose argument is that it
  * says what it cannot compute.
@@ -181,7 +188,10 @@ function renderStamp(e: CertificateEstimate): string {
  * two of the four shipped keys. Sharing the table is also what carries the unknown-key convention
  * here: a sector this file has no prose for prints raw, rather than as a name nobody chose.
  */
-export function renderThreshold(t: ThresholdView): string {
+export function renderThreshold(
+  t: ThresholdView,
+  includedSectors: readonly string[] = SECTOR_PROSE.map(([key]) => key),
+): string {
   const above = t.state === 'above_threshold';
   // 'pending' (amber), not 'ok' (green): an unresolved verdict is not good news. This line can
   // only ever land here or on 'above_threshold' (see the doc above), so there is no 'ok' tone to
@@ -199,11 +209,11 @@ export function renderThreshold(t: ThresholdView): string {
       </div>
       <p class="cb-sub">${above
         ? `This line alone exceeds the ${num(t.thresholdT)}&nbsp;t annual threshold, so the exemption
-           does not apply and the exposure below stands.`
-        : `Below ${num(t.thresholdT)}&nbsp;t an importer owes nothing for the year. This is ONE line,
-           not your annual total, so it cannot show you are under the threshold — only that this
-           line by itself does not cross it. Add your other ${esc(sectorList([t.sector]))}
-           imports for ${esc(String(t.calendarYear))} before relying on the exemption.`}</p>
+           does not apply to your ${esc(String(t.calendarYear))} imports.`
+        : `The exemption covers an importer whose CBAM goods total ${num(t.thresholdT)}&nbsp;t or less in a
+           calendar year. This is one line, not your annual total, so it cannot show you are under the
+           threshold. Add all your other CBAM imports for ${esc(String(t.calendarYear))} —
+           ${esc(sectorList(includedSectors))} — before relying on the exemption.`}</p>
       <p class="cb-prov">${esc(t.sourceLocator)} · ${AMENDED_BY_2025_2083}</p>
     </section>`;
 }
@@ -290,7 +300,12 @@ export function renderDraftThreshold(
   input: { cn: string; massT: string; date: string },
 ): string {
   const t = resolveThreshold(pack, input);
-  if (t) return renderThreshold(t);
+  if (t) {
+    // The row's own sector list, so the indeterminate sentence names every sector Art 2a(1) aggregates
+    // (resolveThreshold's ThresholdView carries only the one sector this line belongs to).
+    const row = pack.thresholds.find((r) => r.calendarYear === t.calendarYear);
+    return row ? renderThreshold(t, row.includedSectors) : renderThreshold(t);
+  }
   // The SAME year resolveThreshold derives, off the same string and by the same expression, so
   // the two can never disagree about which year has no published row. run()'s completeness gate
   // has already refused an empty date by the time this runs; the guard is what keeps the

@@ -243,7 +243,7 @@ test('a line under 50 t is INDETERMINATE, never exempt', () => {
   assert.match(html, /annual total/i, 'it must say why one line cannot settle it');
 });
 
-test('a line over 50 t is ABOVE the threshold, and says the exposure stands', () => {
+test('a line over 50 t is ABOVE the threshold, and says the exemption does not apply', () => {
   const t = thresh('2523100090', '100');
   assert.equal(t.state, 'above_threshold');
   assert.match(renderThreshold(t), /exceeds/i);
@@ -3978,7 +3978,7 @@ test('tiles — the preview\'s de minimis card: carried byte for byte, first, an
     const html = tiles(e, { threshold: card });
     assert.ok(html.includes(card), 'the card, byte for byte');
     assert.ok(html.indexOf(card) < html.indexOf('cb-res'),
-      'first: its own copy says "the exposure below stands"');
+      'first: the card sits above the figures it qualifies');
   }
   for (const silent of [draft('28041000', '10'), draft('99999999', '10'), draft('2523100090', 'abc')]) {
     assert.equal(silent, '', 'premise: the three nulls stay silent');
