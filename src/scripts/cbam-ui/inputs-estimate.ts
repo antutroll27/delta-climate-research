@@ -114,7 +114,7 @@ export function renderMassRuler(t: ThresholdView | null): string {
     return '';
   }
   return `<div class="b-thr" style="--fill:${fill}%"><b></b><em></em></div>`
-    + `<p class="b-help b-thr-l2"><span>0</span><span>${num(t.thresholdT)} t de minimis · ${t.calendarYear}</span><span>above</span></p>`;
+    + `<p class="b-help b-thr-l2"><span>0</span><span>${num(t.thresholdT)} t a year, all goods combined</span><span>above</span></p>`;
 }
 
 /** The quarter strip and the price row for the date's quarter, as the engine will look it up. */

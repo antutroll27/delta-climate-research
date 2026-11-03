@@ -62,7 +62,7 @@ test('the mass ruler: 0 to twice the threshold, the line\'s mass as the fill, no
   assert.equal(t.thresholdT, '50', 'premise');
   const html = renderMassRuler(t);
   assert.ok(html.startsWith('<div class="b-thr" style="--fill:30.0%"><b></b><em></em></div>'));
-  assert.ok(html.includes('<span>50 t de minimis · 2026</span>'));
+  assert.ok(html.includes('<span>50 t a year, all goods combined</span>'));
   assert.match(renderMassRuler(resolveThreshold(pack, { cn: '2523100090', massT: '400', date: '2026-03-15' })), /--fill:100\.0%/);
   assert.equal(renderMassRuler(null), '');
   assert.equal(renderMassRuler(resolveThreshold(pack, { cn: '28041000', massT: '10', date: '2026-03-15' })), '', 'hydrogen');
