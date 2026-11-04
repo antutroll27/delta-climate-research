@@ -36,7 +36,7 @@ dates), but no record of what changed and when. The rename is honest only if the
 |---|---|---|---|
 | 2026-11-03 | correction | The 50 t exemption is now described as it is in law: all CBAM goods an importer brings in during a calendar year count towards one 50 t, not each good separately. | Reg (EU) 2023/956 Art 2a(1); PR #72 |
 | 2026-11-03 | correction | Imports dated 2027 and 2028 are now tested against the 50 t exemption. The calculator had treated it as a 2026-only rule; the law sets no end date. | CBM 56a9ed7 (C1); Art 2a(1), Annex VII |
-| 2026-11-03 | correction | The fallback default value for origins without their own figure is now described correctly: it is set from the ten exporting countries with the highest emission intensities, not a world average. | CBM 56a9ed7 (C3); Annex IV point 4.1 of IR 2025/2621 |
+| 2026-11-03 | correction | The fallback default value for origins without their own figure is now described correctly: it is set from the ten exporting countries with the highest emission intensities, not a world average. | CBM 56a9ed7 (C3); Annex IV point 4.1 of Reg (EU) 2023/956 as replaced by Reg (EU) 2025/2083 |
 | 2026-11-03 | correction | The certificate price is now described as quarterly for 2026 and weekly from 2027. | CBM 56a9ed7; IR (EU) 2025/2548 Arts 5 and 8 |
 | 2026-10-14 | data | Imports dated 2027 and 2028 now count certificates. No price is published for those years yet, so no euro figure is shown. | PR #57 (merged 13 Oct UTC, live 14 Oct IST) |
 | 2026-07-31 | law | Implementing Regulation (EU) 2026/1740 corrects the default values in Implementing Regulation (EU) 2025/2621, applying from 1 January 2026. | OJ 31.7.2026 (cbamguide; in force 3.8.2026 per IACBAM). One secondary source says 30 July. |

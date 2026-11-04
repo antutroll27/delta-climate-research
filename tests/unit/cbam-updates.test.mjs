@@ -83,3 +83,24 @@ test('the Updates tile sits directly after Framing and has its own container', (
   assert.ok(framing > 0 && upd > framing && notYet > upd, `${framing} ${upd} ${notYet}`);
   assert.ok(page.includes('id="cbUpdates"'));
 });
+
+const many = (n) => Array.from({ length: n }, (_, i) => ({
+  date: `2026-01-${String(i + 1).padStart(2, '0')}`, kind: 'law', text: `Row number ${i + 1}.`,
+}));
+
+test('renderUpdates: 12 rows show the newest 4, the other 8 sit in a closed details, nothing is lost', () => {
+  const html = renderUpdates(many(12), [], pack.sources);
+  const firstOl = html.slice(0, html.indexOf('</ol>'));
+  assert.equal((firstOl.match(/<li/g) ?? []).length, 4);
+  assert.ok(html.indexOf('Row number 12.') < html.indexOf('<details'), 'newest are outside the details');
+  assert.ok(html.includes('<details class="b-upd-more"><summary>Show 8 earlier updates</summary>'));
+  assert.ok(!/<details[^>]* open/.test(html), 'closed by default');
+  for (let i = 1; i <= 12; i++) assert.ok(html.includes(`Row number ${i}.`), `row ${i}`);
+  assert.equal((html.match(/<li/g) ?? []).length, 12);
+});
+
+test('renderUpdates: 4 rows have no details; 5 rows say "update" in the singular', () => {
+  assert.ok(!renderUpdates(many(4), [], pack.sources).includes('<details'));
+  assert.ok(!renderUpdates([], [], pack.sources).includes('<details'));
+  assert.ok(renderUpdates(many(5), [], pack.sources).includes('Show 1 earlier update</summary>'));
+});

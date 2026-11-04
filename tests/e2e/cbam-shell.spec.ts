@@ -124,5 +124,8 @@ test.describe('CBAM shell', () => {
     const rows = page.locator('[data-view="rules"] #cbUpdates li');
     expect(await rows.count()).toBeGreaterThan(0);
     await expect(page.locator('[data-view="rules"] #cbUpdates')).toContainText('Regulation (EU) 2025/2083');
+    // The older rows sit in a closed native <details>; opening it by its summary reveals them.
+    await page.locator('[data-view="rules"] #cbUpdates .b-upd-more summary').click();
+    await expect(page.locator('[data-view="rules"] #cbUpdates li', { hasText: 'Regulation (EU) 2025/2083' }).first()).toBeVisible();
   });
 });

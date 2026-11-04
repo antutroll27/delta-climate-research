@@ -815,7 +815,7 @@ test('NON-NEGOTIABLE 1 — the banner names both tiers, and concedes everything 
   // expect a quarterly price for those years, and may not forecast one.
   assert.ok(prose.includes('From 2027 it is set weekly: none published as at'),
     'the banner must say the price is weekly from 2027 and that none is published, with a date');
-  // D1 (founder, 2026-11-03, relayed by Opus): the banner moved to Rules & sources, AFTER Estimate's
+  // D1 (founder, 2026-11-03, relayed by Opus): the banner moved to Legislation & updates (formerly Rules & sources), AFTER Estimate's
   // cb-grid, so the old slice from the first 'cb-banner' to the first 'cb-grid' would be an empty
   // string and pass on nothing. The slice is anchored to the banner element itself and closed by its
   // own </div>, and the Estimate summary line is checked too. Both must state, never forecast.

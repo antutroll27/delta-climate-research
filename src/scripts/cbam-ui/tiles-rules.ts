@@ -1,5 +1,5 @@
 // src/scripts/cbam-ui/tiles-rules.ts
-// The pack-dependent half of Rules & sources (spec §5.6, §7): the rule pack's identity, what the
+// The pack-dependent half of Legislation & updates (formerly Rules & sources) (spec §5.6, §7): the rule pack's identity, what the
 // law still owes, and the sources. Everything here is READ from the pack — a date or a count typed
 // into markup goes stale the day the pack is regenerated.
 import type { EstimatorPack } from '../cbam-algos/estimator/estimate-from-pack.ts';
@@ -104,10 +104,14 @@ export function renderSources(sources: EstimatorPack['sources']): string {
 
 const KIND_LABEL: Record<UpdateEntry['kind'], string> = { law: 'Law', data: 'Data', correction: 'Correction' };
 
+/** Rows shown before the native "Show N earlier updates" disclosure. */
+const UPDATES_SHOWN = 4;
+
 /** The Updates tile: hand-kept law and corrections, plus one Data row per PUBLISHED pack price
  *  (dated by its publication, linked to its source). Newest first; a date tie keeps file order,
  *  hand-kept rows before derived ones. Only https sources are linked. A published price with no
- *  publication date has no honest place in a dated list, so it is skipped. */
+ *  publication date has no honest place in a dated list, so it is skipped. Rows past the newest
+ *  UPDATES_SHOWN sit in a closed <details> after the list. */
 export function renderUpdates(
   entries: readonly UpdateEntry[],
   prices: EstimatorPack['prices'],
@@ -133,5 +137,10 @@ export function renderUpdates(
       return `<li><div class="row"><span class="num">${esc(formatPackDate(e.date))}</span>`
         + `<span class="chip">${KIND_LABEL[e.kind]}</span></div><p>${esc(e.text)}${link}</p></li>`;
     });
-  return `<ol class="b-upd">${rows.join('')}</ol>`;
+  const recent = rows.slice(0, UPDATES_SHOWN);
+  const earlier = rows.slice(UPDATES_SHOWN);
+  const more = earlier.length === 0 ? ''
+    : `<details class="b-upd-more"><summary>Show ${earlier.length} earlier update${earlier.length === 1 ? '' : 's'}</summary>`
+      + `<ol class="b-upd">${earlier.join('')}</ol></details>`;
+  return `<ol class="b-upd">${recent.join('')}</ol>${more}`;
 }
