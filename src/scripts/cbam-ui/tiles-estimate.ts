@@ -5,7 +5,12 @@
 // render and assert. Every tile renders every state its model can return (spec §6.1).
 //
 // HOOKS (spec §6.4). The e2e suite reads .cb-fig, .cb-n, .cb-cost, .cb-res, .cb-tag inside #cbOut.
-// They sit on the hero ALONE, beside the b- classes, so `#cbOut .cb-n` stays one element. The deck
+// They sit on the hero ALONE, beside the b- classes, so `#cbOut .cb-n` stays one element. They are
+// SEMANTIC: .cb-n always marks the certificate count and .cb-cost always the euro cost, wherever each
+// sits. THE HERO'S RULE: with a cost the title is "Certificate cost." and the euro is the big number
+// (.b-mega.b-mega-eur.cb-fig > .cb-cost), the count a chip under it (.b-tag > .cb-n) beside the
+// status tag; with no cost (2027/28, no published price) the count stays the big number and there is
+// no euro. A refusal renders no figure block at all. The deck
 // carries no cb-ol-* class: cbam-lines.spec.ts reads .cb-ol-n and .cb-ol-yr page-wide.
 //
 // WHAT IS HANDED IN, NOT BUILT HERE: the de minimis card (renderDraftThreshold) and the
@@ -61,7 +66,10 @@ function statusTag(e: CertificateEstimate, hook = 'cb-tag'): string {
 function hero(e: CertificateEstimate, importDate: string, attestation: string): string {
   // Colour is provenance only: a refusal has no Commission figure to mark, so its chip is neutral ink.
   const tone = e.status === 'unavailable' ? 'ink' : tierTone(e.stamp.tier);
-  const head = '<div class="b-t-h"><div><h3 class="b-t-ti">Certificates.</h3>'
+  // With a cost the euro amount is the headline; without one (a 2027/28 import has no published
+  // price) the certificate count stays the headline, exactly as it always was.
+  const costed = e.status !== 'unavailable' && Boolean(figureOf(e).costEur);
+  const head = `<div class="b-t-h"><div><h3 class="b-t-ti">${costed ? 'Certificate cost.' : 'Certificates.'}</h3>`
     + `<p class="b-t-sub">Import of ${esc(formatPackDate(importDate))}</p></div>`
     + `<span class="chip ${tone}"><i></i>${esc(tierLabel(e.stamp.tier))}</span></div>`;
   if (e.status === 'unavailable') {
@@ -98,10 +106,18 @@ function hero(e: CertificateEstimate, importDate: string, attestation: string): 
       return _exhaustive;
     }
   }
-  return `<section class="b-t b-hero b-s2 cb-res">${head}`
-    + `<div class="b-mega cb-fig"><span class="cb-n">${num(f.certificates)}</span></div>`
-    + '<p class="b-t-sub cb-u">certificates</p>'
-    + `<div class="b-tags">${f.costEur ? `<span class="b-tag cb-cost">${eur(f.costEur)}</span>` : ''}${statusTag(e)}</div>`
+  const count = num(f.certificates);
+  const euro = f.costEur ? eur(f.costEur) : '';
+  const figure = f.costEur
+    // The euro is the big number: .cb-cost marks it, and the count rides beneath as a chip whose number
+    // is the one .cb-n (so `#cbOut .cb-n` is still the certificate count, still one element). The inner
+    // span is deliberate: .b-tag is a flex box, which drops the space between a number and its word.
+    ? `<div class="b-mega b-mega-eur${euro.length > 13 ? ' b-mega-long' : ''} cb-fig">`
+      + `<span class="cb-cost">${euro}</span></div>`
+      + `<div class="b-tags"><span class="b-tag"><span><span class="cb-n">${count}</span> certificates</span></span>${statusTag(e)}</div>`
+    : `<div class="b-mega cb-fig"><span class="cb-n">${count}</span></div>`
+      + `<p class="b-t-sub cb-u">certificates</p><div class="b-tags">${statusTag(e)}</div>`;
+  return `<section class="b-t b-hero b-s2 cb-res">${head}${figure}`
     + `${renderPriceRow(e)}${note}${attestation}</section>`;
 }
 

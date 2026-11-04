@@ -29,8 +29,10 @@ test('chargeable share: net over total embedded, one decimal, and the rest is it
 
 test('the tiles for a priced default line: hero, bar, direct embedded, factor, provenance', () => {
   const html = tiles(est());
-  assert.ok(html.includes('<div class="b-mega cb-fig"><span class="cb-n">329.828</span></div>'));
-  assert.ok(html.includes('<span class="b-tag cb-cost">€24,855.80</span>'));
+  // The headline is the euro cost (the certificate count moved into the chip beneath it). The
+  // hooks stay semantic: .cb-cost marks the euro, .cb-n marks the count, wherever each sits.
+  assert.ok(html.includes('<div class="b-mega b-mega-eur cb-fig"><span class="cb-cost">€24,855.80</span></div>'));
+  assert.ok(html.includes('<span class="b-tag"><span><span class="cb-n">329.828</span> certificates</span></span>'));
   assert.equal((html.match(/\bcb-n\b/g) ?? []).length, 1, '#cbOut .cb-n must stay one element');
   assert.equal((html.match(/\bcb-cost\b/g) ?? []).length, 1);
   assert.equal((html.match(/\bcb-fig\b/g) ?? []).length, 1);
@@ -47,6 +49,42 @@ test('the tiles for a priced default line: hero, bar, direct embedded, factor, p
   assert.match(html, /Import of 15 Mar 2026/);
   assert.match(html, /<div data-deck><\/div>/, 'the deck slot is painted by paintOutlook');
   assert.doesNotMatch(html, /cb-ol-/, 'the deck must not collide with the strip\'s e2e hooks');
+});
+
+/** The hero section alone, so a figure elsewhere on the page cannot satisfy an assertion about it. */
+const heroOf = (html) => /<section class="b-t b-hero[^"]*"[\s\S]*?<\/section>/.exec(html)[0];
+
+test('hero with a cost: the title is the cost, the euro is the big figure, the count is a chip', () => {
+  const hero = heroOf(tiles(est()));
+  assert.match(hero, /<h3 class="b-t-ti">Certificate cost\.<\/h3>/);
+  const mega = /<div class="b-mega[^"]*">([\s\S]*?)<\/div>/.exec(hero)[1];
+  assert.ok(mega.includes('€24,855.80'), 'the mega block holds the eur() string, cents and all');
+  assert.doesNotMatch(mega, /cb-n/, 'the count is not the big number any more');
+  const tags = /<div class="b-tags">([\s\S]*?)<\/div>/.exec(hero)[1];
+  assert.match(tags, /^<span class="b-tag"><span><span class="cb-n">329\.828<\/span> certificates<\/span><\/span>/,
+    'the count chip comes first, directly under the figure');
+  assert.match(tags, /<span class="b-tag cb-tag pending">What-if · CSCF for 2026 unpublished<\/span>$/,
+    'then the what-if status tag, unchanged, in the same b-tags row as the figure\'s chips');
+  assert.match(hero, /<p class="b-t-sub cb-warn">Not a final figure\./, 'the what-if note is untouched');
+  assert.doesNotMatch(hero, /class="b-t-sub cb-u"/, 'the loose "certificates" caption is gone');
+  assert.doesNotMatch(hero, /liability/i);
+  assert.ok(hero.indexOf('b-mega') < hero.indexOf('b-tags'), 'figure block, then its chips');
+});
+
+test('hero with a cost: a 7-figure euro amount is carried whole, with its separators', () => {
+  const hero = heroOf(tiles(est({ massT: '20000' })));
+  assert.match(hero, /<span class="cb-cost">€\d{1,3}(,\d{3}){2}\.\d{2}<\/span>/, 'millions, with cents');
+});
+
+test('hero with no cost: the title and the count as the big number are exactly as before', () => {
+  const e = est({ date: '2027-03-15' });
+  assert.equal(e.scenario.costEur, null, 'premise: a 2027 import has no published price');
+  const hero = heroOf(tiles(e, { importDate: '2027-03-15' }));
+  assert.match(hero, /<h3 class="b-t-ti">Certificates\.<\/h3>/);
+  assert.match(hero, /<div class="b-mega cb-fig"><span class="cb-n">[\d.,]+<\/span><\/div>/);
+  assert.match(hero, /<p class="b-t-sub cb-u">certificates<\/p>/);
+  assert.doesNotMatch(hero, /cb-cost|€|b-mega-eur/);
+  assert.doesNotMatch(hero, /liability/i);
 });
 
 test('the engine floor is stated where it applied, and a low share draws the bar as a strip', () => {

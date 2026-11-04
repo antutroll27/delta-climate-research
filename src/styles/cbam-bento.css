@@ -53,6 +53,11 @@
 .cbx .b-hero .b-lead2{color:var(--ink-3)}
 .cbx .b-hero .chip.ink{background:var(--on-ink);color:var(--ink)}
 .cbx .b-hero .b-mega{font-size:min(150px,16cqi);font-weight:400;letter-spacing:-.06em;line-height:.9;margin:auto 0 6px;font-variant-numeric:tabular-nums}
+/* A euro headline is 10-13 glyphs, not the 3-6 of a certificate count, so it is sized from the tile's own
+   width instead: "€1,234,567.89" measures about 5.3 em, so 6.4 leaves headroom, and the longer
+   modifier covers a nine-figure bill. One line, never clipped, never an ellipsis. Colour is untouched. */
+.cbx .b-hero .b-mega-eur{font-size:min(150px,calc(100cqi / 6.4));white-space:nowrap}
+.cbx .b-hero .b-mega-eur.b-mega-long{font-size:min(150px,calc(100cqi / 7.6))}
 .cbx .b-hero .cb-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--hero-well);font-size:12.5px;color:var(--hero-muted)}
 .cbx .b-hero .cb-row b{color:var(--on-ink);font-weight:600}
 .cbx .b-hero :is(.cb-warn,.cb-attested){margin-top:10px;max-width:72ch;font-size:12.5px;line-height:1.5;color:var(--hero-muted)}
