@@ -53,6 +53,11 @@
 .cbx .b-hero .b-lead2{color:var(--ink-3)}
 .cbx .b-hero .chip.ink{background:var(--on-ink);color:var(--ink)}
 .cbx .b-hero .b-mega{font-size:min(150px,16cqi);font-weight:400;letter-spacing:-.06em;line-height:.9;margin:auto 0 6px;font-variant-numeric:tabular-nums}
+/* A euro headline is 10-13 glyphs, not the 3-6 of a certificate count, so it is sized from the tile's own
+   width instead: "€1,234,567.89" measures about 5.3 em, so 6.4 leaves headroom, and the longer
+   modifier covers a nine-figure bill. One line, never clipped, never an ellipsis. Colour is untouched. */
+.cbx .b-hero .b-mega-eur{font-size:min(150px,calc(100cqi / 6.4));white-space:nowrap}
+.cbx .b-hero .b-mega-eur.b-mega-long{font-size:min(150px,calc(100cqi / 7.6))}
 .cbx .b-hero .cb-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--hero-well);font-size:12.5px;color:var(--hero-muted)}
 .cbx .b-hero .cb-row b{color:var(--on-ink);font-weight:600}
 .cbx .b-hero :is(.cb-warn,.cb-attested){margin-top:10px;max-width:72ch;font-size:12.5px;line-height:1.5;color:var(--hero-muted)}
@@ -452,7 +457,7 @@
 }
 /* ── end Why it changes */
 
-/* ── Phase 4: Shipment list, Export, Rules & sources (spec §5.4–5.6) ───────────────────────────
+/* ── Phase 4: Shipment list, Export, Legislation & updates (formerly Rules & sources) (spec §5.4–5.6) ───────────────────────────
    Ported from the preview's bento.css (source order kept), scoped under .cbx. */
 /* phase-4 fill: shared primitives phase 2 did not carry (btn, foot), verbatim from the preview; b-lead/b-lead2 are above */
 .cbx .btn{border:0;height:30px;padding:0 14px;border-radius:99px;background:var(--well);font:inherit;font-size:12px;font-weight:600;color:var(--ink-2);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
@@ -588,3 +593,13 @@
   .cbx .b-edeck{width:220px;max-width:100%}
   .cbx .b-empty .b-mid{font-size:32px}
 }
+
+/* Updates tile (2026-11-04): a dated list, newest first. Chips reuse the Sources .chip look. */
+.cbx .b-upd{list-style:none;margin:16px 0 0;padding:0;display:flex;flex-direction:column;gap:12px}
+.cbx .b-upd li{padding-top:12px;border-top:1px solid var(--line)}
+.cbx .b-upd li:first-child{padding-top:0;border-top:0}
+.cbx .b-upd .row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;color:var(--ink-3)}
+.cbx .b-upd p{margin:6px 0 0;font-size:13px;line-height:1.5;color:var(--ink-2)}
+.cbx .b-upd a{color:var(--ink);text-decoration:underline;text-underline-offset:2px}
+.cbx .b-upd-more>summary{margin-top:12px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer}
+.cbx .b-upd-more>.b-upd{margin-top:12px}

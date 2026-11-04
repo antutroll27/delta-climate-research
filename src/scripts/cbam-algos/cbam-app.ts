@@ -47,7 +47,8 @@ import {
 } from '../cbam-ui/inputs-estimate.ts';
 import { mountGoodSheet } from '../cbam-ui/good-sheet.ts';
 import { csvTileBody, docTileBody, fingerprintsBody } from '../cbam-ui/tiles-export.ts';
-import { renderNotYetPublished, renderRulePack, renderSources } from '../cbam-ui/tiles-rules.ts';
+import { renderNotYetPublished, renderRulePack, renderSources, renderUpdates } from '../cbam-ui/tiles-rules.ts';
+import { UPDATES } from '../cbam-ui/updates.ts';
 import {
   SECTOR_PROSE, attestControl, noRuleSentence, refusedLineNote, sectorList, thresholdCitation, totalsTag, yearSentence,
   yearVerdictTag, linePlate, listView, refusedLinePlate, shareOfTotal, thresholdErrorTile, totalTile, yearTile,
@@ -1639,6 +1640,10 @@ export function initCbam(): void {
   // The static "add a line" copy, kept to restore when the list empties.
   const exportIdle = [exportCsvEl, exportDocEl].map((el) => el?.innerHTML ?? '');
   const notYetEl = $('cbNotYet'), rulePackEl = $('cbRulePack'), sourcesEl = $('cbSources');
+  // The Updates tile: the hand-kept law and corrections need no pack, so they show at once; the
+  // pack's published prices join them when it loads (below).
+  const updatesEl = $('cbUpdates');
+  if (updatesEl) updatesEl.innerHTML = renderUpdates(UPDATES, [], []);
   // Phase 2 (spec §5.1): the Estimate input column's new controls. All optional, so a stripped
   // page still runs; the hidden #cbRoute and #cbTier stay the source of truth either way.
   const routeSeg = $('cbRouteSeg'), routeVo = $('cbRouteVo'), tierCards = $('cbTierCards');
@@ -1760,10 +1765,11 @@ export function initCbam(): void {
     }
     pack = loaded.pack;
     snapshot = hash;
-    // Rules & sources (spec §5.6, §7): its pack-dependent tiles fill once, here, from the pack.
+    // Legislation & updates (formerly Rules & sources; spec §5.6, §7, and 2026-11-04): its pack-dependent tiles fill once, here, from the pack.
     if (notYetEl) notYetEl.innerHTML = renderNotYetPublished(pack);
     if (rulePackEl) rulePackEl.innerHTML = renderRulePack(pack, snapshot);
     if (sourcesEl) sourcesEl.innerHTML = renderSources(pack.sources);
+    if (updatesEl) updatesEl.innerHTML = renderUpdates(UPDATES, pack.prices, pack.sources);
     // 572 goods; the datalist is the whole corpus, filtered natively by the browser. Five of
     // them are 10-digit TARIC codes, and an 8-digit CN is a PREFIX of its TARIC — so a user
     // typing the code off their customs paperwork still surfaces the published one here.
