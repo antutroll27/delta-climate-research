@@ -113,4 +113,16 @@ test.describe('CBAM shell', () => {
     await page.locator('.cbx-more [data-goto="rules"]').click();
     await expect(page.locator('[data-view="rules"]')).toBeVisible();
   });
+
+  test('Legislation & updates: the new name everywhere, the Updates tile, #rules still works', async ({ page }) => {
+    await page.goto(URL);
+    await view(page, 'rules');
+    expect(new globalThis.URL(page.url()).hash).toBe('#rules');
+    await expect(page.locator('#cbxH-rules')).toContainText('Legislation & updates.');
+    await expect(page.locator('.cbx-rail')).toContainText('Legislation & updates');
+    await expect(page.locator('body')).not.toContainText('Rules & sources');
+    const rows = page.locator('[data-view="rules"] #cbUpdates li');
+    expect(await rows.count()).toBeGreaterThan(0);
+    await expect(page.locator('[data-view="rules"] #cbUpdates')).toContainText('Regulation (EU) 2025/2083');
+  });
 });
