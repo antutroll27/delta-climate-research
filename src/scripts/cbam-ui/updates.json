@@ -1,0 +1,11 @@
+[
+  { "date": "2026-11-03", "kind": "correction", "text": "The 50 t exemption is now described as it is in law: all CBAM goods an importer brings in during a calendar year count towards one 50 t, not each good separately.", "source": "https://data.europa.eu/eli/reg/2025/2083/oj" },
+  { "date": "2026-11-03", "kind": "correction", "text": "Imports dated 2027 and 2028 are now tested against the 50 t exemption. The calculator had treated it as a 2026-only rule; the law sets no end date.", "source": "https://data.europa.eu/eli/reg/2025/2083/oj" },
+  { "date": "2026-11-03", "kind": "correction", "text": "The fallback default value for origins without their own figure is now described correctly: it is set from the ten exporting countries with the highest emission intensities, not a world average.", "source": "https://data.europa.eu/eli/reg_impl/2025/2621/oj" },
+  { "date": "2026-11-03", "kind": "correction", "text": "The certificate price is now described as quarterly for 2026 and weekly from 2027." },
+  { "date": "2026-10-14", "kind": "data", "text": "Imports dated 2027 and 2028 now count certificates. No price is published for those years yet, so no euro figure is shown." },
+  { "date": "2026-07-31", "kind": "law", "text": "Implementing Regulation (EU) 2026/1740 corrects the default values in Implementing Regulation (EU) 2025/2621, applying from 1 January 2026.", "source": "https://data.europa.eu/eli/reg_impl/2026/1740/oj" },
+  { "date": "2025-12-31", "kind": "law", "text": "Implementing Regulation (EU) 2025/2621 sets the default emission values for the definitive period.", "source": "https://data.europa.eu/eli/reg_impl/2025/2621/oj" },
+  { "date": "2025-12-22", "kind": "law", "text": "Implementing Regulation (EU) 2025/2620 sets the benchmarks used to deduct free allocation from certificates.", "source": "https://data.europa.eu/eli/reg_impl/2025/2620/oj" },
+  { "date": "2025-10-17", "kind": "law", "text": "Regulation (EU) 2025/2083 simplifies CBAM: an annual 50 t exemption per importer, and certificate sales from 1 February 2027.", "source": "https://data.europa.eu/eli/reg/2025/2083/oj" }
+]
