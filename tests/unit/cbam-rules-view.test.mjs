@@ -1,4 +1,4 @@
-// tests/unit/cbam-rules-view.test.mjs — the Rules & sources view (spec §5.6) and the D4 count.
+// tests/unit/cbam-rules-view.test.mjs — the Legislation & updates view (formerly Rules & sources; spec §5.6) and the D4 count.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';

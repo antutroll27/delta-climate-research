@@ -56,7 +56,7 @@ import { INPUT_ILL } from '../../scripts/cbam-ui/illustrations.ts';
       <button type="button" class="cbx-nav" data-goto="why"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 15 8 10l3 2.5 5-7M12.5 5.5H16V9"/></svg><span class="cbx-lbl">Why it changes</span></button>
       <button type="button" class="cbx-nav" data-goto="list"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5h9M7 10h9M7 15h9M3.5 5h.5M3.5 10h.5M3.5 15h.5"/></svg><span class="cbx-lbl">Shipment list</span><em class="cbx-badge" data-list-badge hidden></em></button>
       <button type="button" class="cbx-nav" data-goto="export"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5v9M6.5 9.5 10 13l3.5-3.5M4 16.5h12"/></svg><span class="cbx-lbl">Export</span></button>
-      <button type="button" class="cbx-nav" data-goto="rules"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3.5h7l3 3V16a.5.5 0 0 1-.5.5h-9.5a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .5-.5ZM7.5 9.5h5M7.5 12.5h5M7.5 6.5h2.5"/></svg><span class="cbx-lbl">Rules &amp; sources</span></button>
+      <button type="button" class="cbx-nav" data-goto="rules"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3.5h7l3 3V16a.5.5 0 0 1-.5.5h-9.5a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .5-.5ZM7.5 9.5h5M7.5 12.5h5M7.5 6.5h2.5"/></svg><span class="cbx-lbl">Legislation &amp; updates</span></button>
       <button type="button" class="cbx-nav cbx-collapse" data-collapse aria-expanded="true"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12 5 7 10l5 5"/></svg><span class="cbx-lbl">Collapse menu</span></button>
     </nav>
 
@@ -68,7 +68,7 @@ import { INPUT_ILL } from '../../scripts/cbam-ui/illustrations.ts';
     <main id="main" tabindex="-1" class="cbx-main">
       <section data-view="estimate" aria-labelledby="cbxH-estimate">
         <h1 id="cbxH-estimate" class="cbx-h1" tabindex="-1">Estimate.</h1>
-        <!-- D1 (founder, 2026-11-03, via Opus): the §7.1 banner lives in full on Rules & sources; this line
+        <!-- D1 (founder, 2026-11-03, via Opus): the §7.1 banner lives in full on Legislation & updates (formerly Rules & sources); this line
              points to it. Extra markup, not a replacement (spec §6.2). Pinned in cbam-render.test.mjs. -->
         <p class="cb-frame-sum">A labelled what-if, not a declaration. <button type="button" class="cb-frame-link" data-goto="rules">Read the full framing</button></p>
         <div class="cb-grid b-est">
@@ -265,7 +265,7 @@ import { INPUT_ILL } from '../../scripts/cbam-ui/illustrations.ts';
       </section>
 
       <section data-view="rules" aria-labelledby="cbxH-rules" hidden>
-        <h1 id="cbxH-rules" class="cbx-h1" tabindex="-1">Rules &amp; sources. <span>What this rests on.</span></h1>
+        <h1 id="cbxH-rules" class="cbx-h1" tabindex="-1">Legislation &amp; updates. <span>What this rests on, and what changed.</span></h1>
         <div class="b-bento b-rules">
           <section class="b-t b-s2 b-r2 b-hero b-frame" aria-labelledby="cbRulesFramingH">
             <div class="b-t-h"><div><h2 id="cbRulesFramingH" class="b-t-ti">Framing.</h2><p class="b-t-sub">Applies to every figure on Estimate, Three years, Why, Shipment list and Export.</p></div></div>
@@ -291,6 +291,10 @@ import { INPUT_ILL } from '../../scripts/cbam-ui/illustrations.ts';
         is a labelled what-if. This is not a filing, not validated by the EU CBAM Registry, and
         not a statement of monetary liability.
       </div>
+          </section>
+          <section class="b-t b-s2 b-upd-t" aria-labelledby="cbRulesUpdH">
+            <div class="b-t-h"><div><h2 id="cbRulesUpdH" class="b-t-ti">Updates.</h2><p class="b-t-sub">Newest first. The law, the data, and our own corrections.</p></div></div>
+            <div id="cbUpdates"></div>
           </section>
           <section class="b-t b-s2" aria-labelledby="cbRulesNotYetH">
             <div class="b-t-h"><div><h2 id="cbRulesNotYetH" class="b-t-ti">Not yet published.</h2><p class="b-t-sub">What the law still owes, as the rule pack records it.</p></div></div>
@@ -361,7 +365,7 @@ import { INPUT_ILL } from '../../scripts/cbam-ui/illustrations.ts';
         <summary><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="4.5" cy="10" r="1.2"/><circle cx="10" cy="10" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/></svg><span>More</span></summary>
         <div>
           <button type="button" data-goto="export">Export</button>
-          <button type="button" data-goto="rules">Rules &amp; sources</button>
+          <button type="button" data-goto="rules">Legislation &amp; updates</button>
         </div>
       </details>
     </nav>

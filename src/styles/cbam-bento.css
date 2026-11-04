@@ -588,3 +588,11 @@
   .cbx .b-edeck{width:220px;max-width:100%}
   .cbx .b-empty .b-mid{font-size:32px}
 }
+
+/* Updates tile (2026-11-04): a dated list, newest first. Chips reuse the Sources .chip look. */
+.cbx .b-upd{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:12px}
+.cbx .b-upd li{padding-top:12px;border-top:1px solid var(--line)}
+.cbx .b-upd li:first-child{padding-top:0;border-top:0}
+.cbx .b-upd .row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;color:var(--ink-3)}
+.cbx .b-upd p{margin:6px 0 0;font-size:13px;line-height:1.5;color:var(--ink-2)}
+.cbx .b-upd a{color:var(--ink);text-underline-offset:2px}

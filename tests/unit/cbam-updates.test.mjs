@@ -66,3 +66,20 @@ test('renderUpdates: before the pack loads, the hand-kept entries still show', (
   const html = renderUpdates(UPDATES, [], []);
   for (const e of UPDATES) assert.ok(html.includes(e.text.replace(/&/g, '&amp;')), e.text);
 });
+
+const page = read('../../src/pages/cbam/cbam-calculator.astro').replace(/\s+/g, ' ');
+
+test('the view is named "Legislation & updates" in rail, phone menu and heading; the old name is gone', () => {
+  assert.ok(!page.includes('Rules &amp; sources'), 'old visible name');
+  assert.equal(page.split('Legislation &amp; updates').length - 1, 3, 'rail + phone menu + h1');
+  assert.ok(page.includes('Legislation &amp; updates. <span>What this rests on, and what changed.</span>'));
+  assert.ok(page.includes('data-goto="rules"'), 'hash and internal key unchanged');
+});
+
+test('the Updates tile sits directly after Framing and has its own container', () => {
+  const framing = page.indexOf('id="cbRulesFramingH"');
+  const upd = page.indexOf('id="cbRulesUpdH"');
+  const notYet = page.indexOf('id="cbRulesNotYetH"');
+  assert.ok(framing > 0 && upd > framing && notYet > upd, `${framing} ${upd} ${notYet}`);
+  assert.ok(page.includes('id="cbUpdates"'));
+});
