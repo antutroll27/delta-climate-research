@@ -5,6 +5,7 @@
 import type { EstimatorPack } from '../cbam-algos/estimator/estimate-from-pack.ts';
 import { formatPackDate } from '../cbam-outlook.ts';
 import { esc } from './format.ts';
+import type { UpdateEntry } from './updates.ts';
 import { isRealDigest, renderFingerprint } from './fingerprint.ts';
 
 const kv = (k: string, v: string) => `<div><dt>${esc(k)}</dt><dd class="num">${esc(v)}</dd></div>`;
@@ -99,4 +100,38 @@ export function renderSources(sources: EstimatorPack['sources']): string {
     + sources.map((s) => `<li><div class="row"><b>${esc(s.title)}</b><span class="chip">${esc(s.legalStatus)}</span></div>`
       + `<p class="foot">${esc(s.locator)}</p><p class="foot">Retrieved ${esc(formatPackDate(s.retrievedAt))}${link(s.url)}</p></li>`).join('')
     + '</ol>';
+}
+
+const KIND_LABEL: Record<UpdateEntry['kind'], string> = { law: 'Law', data: 'Data', correction: 'Correction' };
+
+/** The Updates tile: hand-kept law and corrections, plus one Data row per PUBLISHED pack price
+ *  (dated by its publication, linked to its source). Newest first; a date tie keeps file order,
+ *  hand-kept rows before derived ones. Only https sources are linked. A published price with no
+ *  publication date has no honest place in a dated list, so it is skipped. */
+export function renderUpdates(
+  entries: readonly UpdateEntry[],
+  prices: EstimatorPack['prices'],
+  sources: EstimatorPack['sources'],
+): string {
+  const url = new Map(sources.map((s) => [s.id, s.url]));
+  const derived: UpdateEntry[] = [];
+  for (const p of prices) {
+    if (p.status !== 'published' || p.publicationDate === null) continue;
+    derived.push({
+      date: p.publicationDate.slice(0, 10),
+      kind: 'data',
+      text: `Certificate price for ${p.quarter} published: €${p.priceEur}.`,
+      source: url.get(p.sourceId)?.replace(/^http:\/\//i, 'https://'),
+    });
+  }
+  const rows = [...entries, ...derived]
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => b.e.date.localeCompare(a.e.date) || a.i - b.i)
+    .map(({ e }) => {
+      const link = e.source && /^https:\/\//i.test(e.source)
+        ? ` <a href="${esc(e.source)}" rel="noopener">Source</a>` : '';
+      return `<li><div class="row"><span class="num">${esc(formatPackDate(e.date))}</span>`
+        + `<span class="chip">${KIND_LABEL[e.kind]}</span></div><p>${esc(e.text)}${link}</p></li>`;
+    });
+  return `<ol class="b-upd">${rows.join('')}</ol>`;
 }

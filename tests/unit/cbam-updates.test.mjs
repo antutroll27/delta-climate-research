@@ -25,3 +25,44 @@ test('updates.json: every entry is dated, kinded, one sentence, and links only o
 test('updates.json: certificate prices are never hand-kept (they come from the pack)', () => {
   for (const e of UPDATES) assert.doesNotMatch(e.text, /€\s?\d/, e.text);
 });
+
+import { renderUpdates } from '../../src/scripts/cbam-ui/tiles-rules.ts';
+
+const published = pack.prices.filter((p) => p.status === 'published');
+
+test('renderUpdates: every published pack price becomes exactly one Data row, dated by its publication', () => {
+  const html = renderUpdates([], pack.prices, pack.sources);
+  for (const p of published) {
+    const line = `Certificate price for ${p.quarter} published: €${p.priceEur}.`;
+    assert.equal(html.split(line).length - 1, 1, line);
+  }
+  assert.equal((html.match(/<li/g) ?? []).length, published.length);
+});
+
+test('renderUpdates: newest first; same date keeps file order, hand-kept before derived', () => {
+  const entries = [
+    { date: '2026-10-05', kind: 'law', text: 'A.' },
+    { date: '2026-12-01', kind: 'correction', text: 'B.' },
+    { date: '2026-10-05', kind: 'correction', text: 'C.' },
+  ];
+  const html = renderUpdates(entries, published.filter((p) => p.quarter === '2026-Q3'), pack.sources);
+  const order = ['B.', 'A.', 'C.', 'Certificate price for 2026-Q3'].map((s) => html.indexOf(s));
+  assert.ok(order.every((i) => i >= 0), JSON.stringify(order));
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
+});
+
+test('renderUpdates: kind chips are Law / Data / Correction; text and links escaped; only https linked', () => {
+  const html = renderUpdates([
+    { date: '2026-01-01', kind: 'law', text: 'x <b>y</b>.', source: 'https://example.org/a?b=1&c=2' },
+    { date: '2026-01-02', kind: 'correction', text: 'z.', source: 'javascript:alert(1)' },
+  ], [], pack.sources);
+  assert.match(html, />Law</); assert.match(html, />Correction</);
+  assert.ok(html.includes('x &lt;b&gt;y&lt;/b&gt;.'));
+  assert.ok(html.includes('href="https://example.org/a?b=1&amp;c=2"'));
+  assert.ok(!html.includes('javascript:'));
+});
+
+test('renderUpdates: before the pack loads, the hand-kept entries still show', () => {
+  const html = renderUpdates(UPDATES, [], []);
+  for (const e of UPDATES) assert.ok(html.includes(e.text.replace(/&/g, '&amp;')), e.text);
+});
