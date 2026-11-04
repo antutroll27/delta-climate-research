@@ -235,6 +235,49 @@ test.describe('CBAM Estimate view', () => {
     await expect(page.locator('#cbMassRuler')).toBeEmpty();
   });
 
+  test('hero: a priced 2026 line headlines the euro with the count in a chip; a 2027 line headlines the count and no euro', async ({ page }) => {
+    await page.goto(URL);
+    await pick(page, '73063077', 'IN');
+    await page.locator('#cbRouteSeg [data-value="(C)"]').click();
+    await page.fill('#cbMass', '100');
+    const hero = page.locator('#cbOut .b-hero');
+    await expect(hero.locator('.b-t-ti')).toHaveText('Certificate cost.');
+    await expect(hero.locator('.b-mega.cb-fig .cb-cost')).toHaveText('€24,855.80');
+    await expect(hero.locator('.b-mega .cb-n')).toHaveCount(0);
+    await expect(hero.locator('.b-tags .b-tag:has(.cb-n)')).toHaveText('329.828 certificates');
+    // innerText is what is RENDERED: .b-tag is a flex box, which silently drops a bare space (the chip once read "329.828certificates").
+    expect(await hero.locator('.b-tags .b-tag:has(.cb-n)').evaluate((el) => (el as HTMLElement).innerText)).toBe('329.828 certificates');
+    await expect(hero.locator('.b-tags .cb-tag')).toBeVisible();   // the what-if / status tag stays in the figure's block
+    await expect(page.locator('#cbOut .cb-n')).toHaveCount(1);
+    await expect(hero).not.toContainText(/liability/i);
+
+    // The euro is one glyph run of 10-13 characters: it must fit the tile on one line, at every width.
+    for (const [w, h] of [[1440, 900], [1024, 768], [375, 812]] as const) {
+      await page.setViewportSize({ width: w, height: h });
+      const m = await hero.locator('.cb-cost').evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        const tile = el.closest('.b-hero')!.getBoundingClientRect();
+        const cs = getComputedStyle(el.parentElement!);
+        return { right: box.right, tileRight: tile.right, h: box.height, fs: parseFloat(cs.fontSize),
+          over: el.parentElement!.scrollWidth - el.parentElement!.clientWidth, ell: cs.textOverflow };
+      });
+      expect(m.right, `${w}px: inside the tile`).toBeLessThanOrEqual(m.tileRight);
+      expect(m.over, `${w}px: no overflow`).toBeLessThanOrEqual(0);
+      expect(m.h, `${w}px: one line`).toBeLessThan(m.fs * 1.3);
+      expect(m.ell).not.toBe('ellipsis');
+    }
+
+    // 2027 has no published price: certificates stay the big number, and no euro appears in the tile.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.fill('#cbDate', '2027-03-15');
+    await page.dispatchEvent('#cbDate', 'change');
+    await expect(hero.locator('.b-t-ti')).toHaveText('Certificates.');
+    await expect(hero.locator('.b-mega.cb-fig .cb-n')).toBeVisible();
+    await expect(hero.locator('.cb-cost')).toHaveCount(0);
+    await expect(hero).not.toContainText('€');
+    await expect(hero).not.toContainText(/liability/i);
+  });
+
   test('phone: the inputs stack above the tiles, with no sideways scroll', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(URL);
