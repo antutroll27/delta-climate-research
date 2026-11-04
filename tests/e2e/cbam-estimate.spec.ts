@@ -254,13 +254,16 @@ test.describe('CBAM Estimate view', () => {
     // The euro is one glyph run of 10-13 characters: it must fit the tile on one line, at every width.
     for (const [w, h] of [[1440, 900], [1024, 768], [375, 812]] as const) {
       await page.setViewportSize({ width: w, height: h });
-      const m = await hero.locator('.cb-cost').evaluate((el) => {
+      const measure = () => hero.locator('.cb-cost').evaluate((el) => {
         const box = el.getBoundingClientRect();
         const tile = el.closest('.b-hero')!.getBoundingClientRect();
         const cs = getComputedStyle(el.parentElement!);
         return { right: box.right, tileRight: tile.right, h: box.height, fs: parseFloat(cs.fontSize),
           over: el.parentElement!.scrollWidth - el.parentElement!.clientWidth, ell: cs.textOverflow };
       });
+      // setViewportSize returns before the relayout settles: wait until the element has a box and a real font size.
+      await expect.poll(async () => { const r = await measure(); return r.h > 0 && Number.isFinite(r.fs); }, { message: `${w}px: layout settled` }).toBe(true);
+      const m = await measure();
       expect(m.right, `${w}px: inside the tile`).toBeLessThanOrEqual(m.tileRight);
       expect(m.over, `${w}px: no overflow`).toBeLessThanOrEqual(0);
       expect(m.h, `${w}px: one line`).toBeLessThan(m.fs * 1.3);

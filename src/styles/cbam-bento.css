@@ -600,6 +600,6 @@
 .cbx .b-upd li:first-child{padding-top:0;border-top:0}
 .cbx .b-upd .row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;color:var(--ink-3)}
 .cbx .b-upd p{margin:6px 0 0;font-size:13px;line-height:1.5;color:var(--ink-2)}
-.cbx .b-upd a{color:var(--ink);text-underline-offset:2px}
+.cbx .b-upd a{color:var(--ink);text-decoration:underline;text-underline-offset:2px}
 .cbx .b-upd-more>summary{margin-top:12px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer}
 .cbx .b-upd-more>.b-upd{margin-top:12px}
