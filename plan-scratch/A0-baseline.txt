@@ -1,0 +1,16 @@
+A0 baseline, untouched origin/main f0eeaa5, worktree /Volumes/OBOSLab/worktrees/city-amsterdam (branch feat/city-amsterdam)
+Run 2026-11-06 04:02-04:12 IST under taskpolicy -b, sequential. Raw logs: plan-scratch/baseline-<script>.log
+
+Environment: python 3.12.8; numpy 2.4.6 scipy 1.15.1 shapely 2.1.2 rasterio 1.5.0 pyproj 3.8.0 duckdb 1.5.5 mypy 2.3.0 (all
+match scripts/requirements*.txt; pip install was NOT needed - already satisfied). npm install: added 469 packages in 3m.
+Import check: python3 -c "import pyproj, rasterio, duckdb, shapely" -> ok.
+Disk: /Volumes/OBOSLab 33 GiB free at start (rule: >= 15 GiB).
+
+npm run check       : exit 0  (astro check, 552 files: 0 errors, 0 warnings, 42 hints)           ~1m09s
+npm run typecheck   : exit 0  (mypy strict: Success, no issues found in 97 source files)          ~1m24s
+npm run test:py     : exit 0                                                                       ~50s
+npm run test:unit   : exit 1  tests 1911, pass 1882, fail 29, cancelled 0, skipped 0               ~7m
+  ALL 29 failures need dist/ (no 'npm run build' has been run in this fresh worktree): 'run npm run build first',
+  'No build output', STAC/NGSI-LD/conformance/v2-contract/weight-report tests that read dist/ or /api/*.
+  They are pre-existing for a checkout without a build, not regressions. Reported, not fixed.
+  To re-baseline them: npm run build, then re-run (done at gate time, not in this chunk unless noted in STATUS.md).
