@@ -149,6 +149,6 @@ beside the standard as an orientation mark and says that; it never says a place 
 
 ## 3. What is not done, and why
 
-- **No "US AQI (computed)" line on either card.** Amsterdam: ND licence. Tokyo: allowed by PDL 1.0 with an edit statement, but a NowCast needs 12 hours of PM2.5 files (12 fetches of 256 KB), the plan called it optional, and Kasumigaseki has no PM2.5; left for a decision.
+- **No "US AQI (computed)" line on either card.** Amsterdam: not required by the licence (see 1.3), but the standard follows the regulator. Tokyo: allowed by PDL 1.0 with an edit statement, but a NowCast needs 12 hours of PM2.5 files (12 fetches of 256 KB), the plan called it optional, and Kasumigaseki has no PM2.5; left for a decision.
 - **No daily or 8-hour windows for Tokyo.** They would need the day's hourly files (up to 22 × 256 KB per refresh). The latest hour against the standard's mark, with the basis stated, is what is shown.
 - **The cards do not show yet.** Neither city is drawable; `isAirCity` is true for them only when the registry says `drawable`, and the API answers 404 until then.
