@@ -1,1 +1,0 @@
-Overture 2026-10-21.0 buildings with bbox fully inside the box: 22185  (with height 19099, with num_floors 2956)
