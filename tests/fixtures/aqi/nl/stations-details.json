@@ -1,0 +1,2732 @@
+{
+"NL01484": {
+"components": [
+"C6H6",
+"C7H8",
+"SO2"
+],
+"description": {
+"EN": "Rotterdam-Geulhaven",
+"NL": "Rotterdam-Geulhaven"
+},
+"geometry": {
+"coordinates": [
+4.3125,
+51.889
+],
+"type": "point"
+},
+"location": "Rotterdam-Geulhaven",
+"municipality": "Rotterdam",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Industrial",
+"url": "",
+"year_start": ""
+},
+"NL01485": {
+"components": [
+"C6H6",
+"C7H8",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"SO2",
+"PM25"
+],
+"description": {
+"EN": "Rotterdam-Hoogvliet",
+"NL": "Rotterdam-Hoogvliet"
+},
+"geometry": {
+"coordinates": [
+4.35524,
+51.86742
+],
+"type": "point"
+},
+"location": "Rotterdam-Hoogvliet",
+"municipality": "Rotterdam",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL01487": {
+"components": [
+"PM25",
+"NO",
+"FN",
+"PM10",
+"BCWB",
+"NO2"
+],
+"description": {
+"EN": "Rotterdam-Pleinweg",
+"NL": "Rotterdam-Pleinweg"
+},
+"geometry": {
+"coordinates": [
+4.48066,
+51.89113
+],
+"type": "point"
+},
+"location": "Rotterdam-Pleinweg",
+"municipality": "Rotterdam",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL01488": {
+"components": [
+"PM25",
+"NO",
+"FN",
+"PM10",
+"BCWB",
+"NO2"
+],
+"description": {
+"EN": "Rotterdam-Zwartewaalstraat",
+"NL": "Rotterdam-Zwartewaalstraat"
+},
+"geometry": {
+"coordinates": [
+4.48759,
+51.89361
+],
+"type": "point"
+},
+"location": "Rotterdam-Zwartewaalstraat",
+"municipality": "Rotterdam",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL01489": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"NO2"
+],
+"description": {
+"EN": "Ridderkerk-A16",
+"NL": "Ridderkerk-A16"
+},
+"geometry": {
+"coordinates": [
+4.58007,
+51.86942
+],
+"type": "point"
+},
+"location": "Ridderkerk-A16",
+"municipality": "Ridderkerk",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL01491": {
+"components": [
+"PM25",
+"NO",
+"FN",
+"PM10",
+"BCWB",
+"NO2"
+],
+"description": {
+"EN": "Overschie-A13",
+"NL": "Overschie-A13"
+},
+"geometry": {
+"coordinates": [
+4.4307,
+51.93858
+],
+"type": "point"
+},
+"location": "Overschie-A13",
+"municipality": "Rotterdam",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL01493": {
+"components": [
+"FN",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"BCWB"
+],
+"description": {
+"EN": "Rotterdam-Statenweg",
+"NL": "Rotterdam-Statenweg"
+},
+"geometry": {
+"coordinates": [
+4.46136,
+51.92711
+],
+"type": "point"
+},
+"location": "Rotterdam-Statenweg",
+"municipality": "Rotterdam",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL01494": {
+"components": [
+"C6H6",
+"C7H8",
+"FN",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"PS",
+"BCWB"
+],
+"description": {
+"EN": "Schiedam-A.Arienstraat",
+"NL": "Schiedam-A.Arienstraat"
+},
+"geometry": {
+"coordinates": [
+4.40139,
+51.92139
+],
+"type": "point"
+},
+"location": "Schiedam-A.Arienstraat",
+"municipality": "Schiedam",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL01495": {
+"components": [
+"C6H6",
+"C7H8",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"SO2"
+],
+"description": {
+"EN": "Maassluis-Kwartellaan",
+"NL": "Maassluis-Kwartellaan"
+},
+"geometry": {
+"coordinates": [
+4.22799,
+51.93207
+],
+"type": "point"
+},
+"location": "Maassluis-Kwartellaan",
+"municipality": "Maassluis",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL01496": {
+"components": [
+"C6H6",
+"C7H8",
+"FN",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"SO2",
+"BCWB"
+],
+"description": {
+"EN": "Rotterdam Hoek van Holland",
+"NL": "Rotterdam Hoek van Holland"
+},
+"geometry": {
+"coordinates": [
+4.121944,
+51.977802999084986
+],
+"type": "point"
+},
+"location": "Rotterdam-HvHolland",
+"municipality": "Rotterdam",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Other",
+"url": "",
+"year_start": ""
+},
+"NL01497": {
+"components": [
+"PM25",
+"NO",
+"LKI",
+"PM10",
+"NO2"
+],
+"description": {
+"EN": "Measuring site Maasvlakte",
+"NL": "Rotterdam - Maasvlakte"
+},
+"geometry": {
+"coordinates": [
+3.99972,
+51.933517
+],
+"type": "point"
+},
+"location": "Rotterdam-Maasvlakte",
+"municipality": "Rotterdam",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Regional",
+"url": null,
+"year_start": "2020"
+},
+"NL01912": {
+"components": [
+"NO2",
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Ridderkerk-Voorweg",
+"NL": "Ridderkerk-Voorweg"
+},
+"geometry": {
+"coordinates": [
+4.563812,
+51.861729
+],
+"type": "point"
+},
+"location": "Ridderkerk-Voorweg",
+"municipality": "Ridderkerk",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": "2018"
+},
+"NL01913": {
+"components": [
+"NO2",
+"NO",
+"PM10",
+"PM25",
+"FN",
+"BCWB",
+"PS"
+],
+"description": {
+"EN": "Sluiskil",
+"NL": "Sluiskil"
+},
+"geometry": {
+"coordinates": [
+3.83859,
+51.27938
+],
+"type": "point"
+},
+"location": "Sluiskil-Stroodorpestraat",
+"municipality": "Terneuzen",
+"organisation": "DCMR (Rijnmond)",
+"province": null,
+"type": "Industrial",
+"url": null,
+"year_start": "2020"
+},
+"NL10107": {
+"components": [
+"NO",
+"NO2",
+"O3"
+],
+"description": {
+"EN": "Posterholt-Vlodropperweg",
+"NL": "Posterholt-Vlodropperweg"
+},
+"geometry": {
+"coordinates": [
+6.042399,
+51.11919
+],
+"type": "point"
+},
+"location": "Posterholt-Vlodropperweg",
+"municipality": "Roerdalen",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10131": {
+"components": [
+"FN",
+"NH3",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"BCWB"
+],
+"description": {
+"EN": "Vredepeel-Vredeweg",
+"NL": "Vredepeel-Vredeweg"
+},
+"geometry": {
+"coordinates": [
+5.85307,
+51.54052
+],
+"type": "point"
+},
+"location": "Vredepeel-Vredeweg",
+"municipality": "Venray",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10133": {
+"components": [
+"SO2",
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Wijnandsrade-Opfergeltstraat",
+"NL": "Wijnandsrade-Opfergeltstraat"
+},
+"geometry": {
+"coordinates": [
+5.881748,
+50.90228
+],
+"type": "point"
+},
+"location": "Wijnandsrade-Opfergeltstraat",
+"municipality": "Beekdaelen",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10136": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"NO2"
+],
+"description": {
+"EN": "Heerlen-Looierstraat",
+"NL": "Heerlen-Looierstraat"
+},
+"geometry": {
+"coordinates": [
+5.970496,
+50.88796
+],
+"type": "point"
+},
+"location": "Heerlen-Looierstraat",
+"municipality": "Heerlen",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL10138": {
+"components": [
+"FN",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"BCWB"
+],
+"description": {
+"EN": "Heerlen-Jamboreepad",
+"NL": "Heerlen-Jamboreepad"
+},
+"geometry": {
+"coordinates": [
+5.986853,
+50.90032
+],
+"type": "point"
+},
+"location": "Heerlen-Jamboreepad",
+"municipality": "Heerlen",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL10230": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Biest Houtakker-Biestsestraat",
+"NL": "Biest Houtakker-Biestsestraat"
+},
+"geometry": {
+"coordinates": [
+5.14845,
+51.51844
+],
+"type": "point"
+},
+"location": "Biest Houtakker-Biestsestraat",
+"municipality": "Hilvarenbeek",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10235": {
+"components": [
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Huijbergen-Vennekenstraat",
+"NL": "Huijbergen-Vennekenstraat"
+},
+"geometry": {
+"coordinates": [
+4.359835,
+51.43444
+],
+"type": "point"
+},
+"location": "Huijbergen-Vennekenstraat",
+"municipality": "Woensdrecht",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10236": {
+"components": [
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Eindhoven-Genovevalaan",
+"NL": "Eindhoven-Genovevalaan"
+},
+"geometry": {
+"coordinates": [
+5.47235,
+51.46866
+],
+"type": "point"
+},
+"location": "Eindhoven-Genovevalaan",
+"municipality": "Eindhoven",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL10237": {
+"components": [
+"NO",
+"FN",
+"PM10",
+"BCWB",
+"NO2"
+],
+"description": {
+"EN": "Eindhoven-Noordbrabantlaan",
+"NL": "Eindhoven-Noordbrabantlaan"
+},
+"geometry": {
+"coordinates": [
+5.444833,
+51.44416
+],
+"type": "point"
+},
+"location": "Eindhoven-Noordbrabantlaan",
+"municipality": "Eindhoven",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL10240": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"NO2"
+],
+"description": {
+"EN": "Breda-Tilburgseweg",
+"NL": "Breda-Tilburgseweg"
+},
+"geometry": {
+"coordinates": [
+4.824944,
+51.59353
+],
+"type": "point"
+},
+"location": "Breda-Tilburgseweg",
+"municipality": "Breda",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL10241": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Breda-Bastenakenstraat",
+"NL": "Breda-Bastenakenstraat"
+},
+"geometry": {
+"coordinates": [
+4.781016,
+51.60308
+],
+"type": "point"
+},
+"location": "Breda-Bastenakenstraat",
+"municipality": "Breda",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL10246": {
+"components": [
+"NO",
+"NO2",
+"PM10"
+],
+"description": {
+"EN": "Fijnaart-Zwingelspaansedijk",
+"NL": "Fijnaart-Zwingelspaansedijk"
+},
+"geometry": {
+"coordinates": [
+4.515271,
+51.653729
+],
+"type": "point"
+},
+"location": "Fijnaart-Zwingelspaansedijk",
+"municipality": "Moerdijk",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10247": {
+"components": [
+"FN",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"BCWB"
+],
+"description": {
+"EN": "Veldhoven-Europalaan",
+"NL": "Veldhoven-Europalaan"
+},
+"geometry": {
+"coordinates": [
+5.393328,
+51.407365
+],
+"type": "point"
+},
+"location": "Veldhoven-Europalaan",
+"municipality": "Veldhoven",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL10248": {
+"components": [
+"PM25",
+"NO",
+"NH3",
+"LKI",
+"PM10",
+"NO2"
+],
+"description": {
+"EN": "Nistelrode",
+"NL": "Nistelrode-Gagelstraat"
+},
+"geometry": {
+"coordinates": [
+5.5433281,
+51.69818779
+],
+"type": "point"
+},
+"location": "Nistelrode-Gagelstraat",
+"municipality": "Bernheze",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": null,
+"year_start": "2022"
+},
+"NL10301": {
+"components": [
+"NO",
+"NO2",
+"O3"
+],
+"description": {
+"EN": "Zierikzee-Lange Slikweg",
+"NL": "Zierikzee-Lange Slikweg"
+},
+"geometry": {
+"coordinates": [
+3.916623,
+51.634706
+],
+"type": "point"
+},
+"location": "Zierikzee-Lange Slikweg",
+"municipality": "Schouwen-Duiveland",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10318": {
+"components": [
+"SO2",
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Philippine-Stelleweg",
+"NL": "Philippine-Stelleweg"
+},
+"geometry": {
+"coordinates": [
+3.749484,
+51.294498
+],
+"type": "point"
+},
+"location": "Philippine-Stelleweg",
+"municipality": "Terneuzen",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10320": {
+"components": [
+"NH3",
+"LKI"
+],
+"description": {
+"EN": "nieuw station",
+"NL": "Burgh-Haamstede"
+},
+"geometry": {
+"coordinates": [
+3.7145,
+51.70644
+],
+"type": "point"
+},
+"location": "Burgh-Haamstede",
+"municipality": "Schouwen-Duiveland",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": null,
+"year_start": "2023"
+},
+"NL10404": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Den Haag-Rebecquestraat",
+"NL": "Den Haag-Rebecquestraat"
+},
+"geometry": {
+"coordinates": [
+4.289185,
+52.077148
+],
+"type": "point"
+},
+"location": "Den Haag-Rebecquestraat",
+"municipality": "'s-Gravenhage",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL10418": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Rotterdam-Schiedamsevest",
+"NL": "Rotterdam-Schiedamsevest"
+},
+"geometry": {
+"coordinates": [
+4.479923,
+51.914233
+],
+"type": "point"
+},
+"location": "Rotterdam-Schiedamsevest",
+"municipality": "Rotterdam",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL10437": {
+"components": [
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Westmaas-Groeneweg",
+"NL": "Westmaas-Groeneweg"
+},
+"geometry": {
+"coordinates": [
+4.450529,
+51.786579
+],
+"type": "point"
+},
+"location": "Westmaas-Groeneweg",
+"municipality": "Hoeksche Waard",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10442": {
+"components": [
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Dordrecht-Bamendaweg",
+"NL": "Dordrecht-Bamendaweg"
+},
+"geometry": {
+"coordinates": [
+4.708239,
+51.800658
+],
+"type": "point"
+},
+"location": "Dordrecht-Bamendaweg",
+"municipality": "Dordrecht",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL10444": {
+"components": [
+"FN",
+"NH3",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"SO2",
+"BCWB"
+],
+"description": {
+"EN": "De Zilk-Vogelaarsdreef",
+"NL": "De Zilk-Vogelaarsdreef"
+},
+"geometry": {
+"coordinates": [
+4.510817,
+52.296556
+],
+"type": "point"
+},
+"location": "De Zilk-Vogelaarsdreef",
+"municipality": "Noordwijk",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10445": {
+"components": [
+"NO",
+"NO2",
+"PM10"
+],
+"description": {
+"EN": "Den Haag-Amsterdamse Veerkade",
+"NL": "Den Haag-Amsterdamse Veerkade"
+},
+"geometry": {
+"coordinates": [
+4.315872,
+52.075071
+],
+"type": "point"
+},
+"location": "Den Haag-Amsterdamse Veerkade",
+"municipality": "'s-Gravenhage",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL10446": {
+"components": [
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Den Haag-Bleriotlaan",
+"NL": "Den Haag-Bleriotlaan"
+},
+"geometry": {
+"coordinates": [
+4.359376,
+52.039023
+],
+"type": "point"
+},
+"location": "Den Haag-Bleriotlaan",
+"municipality": "'s-Gravenhage",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL10449": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Vlaardingen-Riouwlaan",
+"NL": "Vlaardingen-Riouwlaan"
+},
+"geometry": {
+"coordinates": [
+4.329431,
+51.914883
+],
+"type": "point"
+},
+"location": "Vlaardingen-Riouwlaan",
+"municipality": "Vlaardingen",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": "2019"
+},
+"NL10450": {
+"components": [
+"NO2",
+"NO",
+"PM10",
+"NOx",
+"O3",
+"PM2.5",
+"PM25"
+],
+"description": {
+"EN": "Nieuw RIVM station",
+"NL": "Den Haag - Neherkade"
+},
+"geometry": {
+"coordinates": [
+4.318551,
+52.062537
+],
+"type": "point"
+},
+"location": "Den Haag-Neherkade",
+"municipality": "'s-Gravenhage",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": null,
+"year_start": "2022"
+},
+"NL10451": {
+"components": [
+"SO2",
+"NO2",
+"PM10",
+"FN",
+"NO",
+"PM25",
+"O3",
+"BCwb"
+],
+"description": {
+"EN": "Rotterdam-Blankenburgstraat",
+"NL": "Rotterdam-Blankenburgstraat"
+},
+"geometry": {
+"coordinates": [
+4.487916666666667,
+51.8933611
+],
+"type": "point"
+},
+"location": "Rotterdam-Blankenburgstraat",
+"municipality": "Rotterdam",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": null,
+"year_start": "2026"
+},
+"NL10538": {
+"components": [
+"PM25",
+"NO",
+"NH3",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Wieringerwerf-Medemblikkerweg",
+"NL": "Wieringerwerf-Medemblikkerweg"
+},
+"geometry": {
+"coordinates": [
+5.048975,
+52.80342
+],
+"type": "point"
+},
+"location": "Wieringerwerf-Medemblikkerweg",
+"municipality": "Hollands Kroon",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10552": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Haarlem-Freddie Oversteegenstraat ",
+"NL": "Haarlem-Freddie Oversteegenstraat "
+},
+"geometry": {
+"coordinates": [
+4.651789,
+52.37029
+],
+"type": "point"
+},
+"location": "Haarlem-Freddie Oversteegenstraat ",
+"municipality": "Haarlem",
+"organisation": "RIVM",
+"province": null,
+"type": "Other",
+"url": null,
+"year_start": ""
+},
+"NL10617": {
+"components": [
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Biddinghuizen-Kuilweg",
+"NL": "Biddinghuizen-Kuilweg"
+},
+"geometry": {
+"coordinates": [
+5.59338,
+52.423214
+],
+"type": "point"
+},
+"location": "Biddinghuizen-Kuilweg",
+"municipality": "Dronten",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10633": {
+"components": [
+"FN",
+"NH3",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"BCWB"
+],
+"description": {
+"EN": "Zegveld-Oude Meije",
+"NL": "Zegveld-Oude Meije"
+},
+"geometry": {
+"coordinates": [
+4.83819,
+52.13795
+],
+"type": "point"
+},
+"location": "Zegveld-Oude Meije",
+"municipality": "Woerden",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10636": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"NO2"
+],
+"description": {
+"EN": "Utrecht-Kardinaal de Jongweg",
+"NL": "Utrecht-Kardinaal de Jongweg"
+},
+"geometry": {
+"coordinates": [
+5.124464,
+52.105031
+],
+"type": "point"
+},
+"location": "Utrecht-Kardinaal de Jongweg",
+"municipality": "Utrecht",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL10639": {
+"components": [
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Utrecht-Constant Erzeijstraat",
+"NL": "Utrecht-Constant Erzeijstraat"
+},
+"geometry": {
+"coordinates": [
+5.120507,
+52.067748
+],
+"type": "point"
+},
+"location": "Utrecht-Constant Erzeijstraat",
+"municipality": "Utrecht",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": "1987"
+},
+"NL10641": {
+"components": [
+"FN",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"BCWB"
+],
+"description": {
+"EN": "Breukelen-A2",
+"NL": "Breukelen-A2"
+},
+"geometry": {
+"coordinates": [
+4.987444,
+52.20153
+],
+"type": "point"
+},
+"location": "Breukelen-A2",
+"municipality": "Stichtse Vecht",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL10643": {
+"components": [
+"PM25",
+"NO",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Utrecht-Griftpark",
+"NL": "Utrecht-Griftpark"
+},
+"geometry": {
+"coordinates": [
+5.128183,
+52.101308
+],
+"type": "point"
+},
+"location": "Utrecht-Griftpark",
+"municipality": "Utrecht",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL10644": {
+"components": [
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"SO2",
+"FN",
+"BCWB",
+"Hg",
+"PS"
+],
+"description": {
+"EN": "Cabauw-Wielsekade",
+"NL": "Cabauw-Wielsekade"
+},
+"geometry": {
+"coordinates": [
+4.923301,
+51.974489
+],
+"type": "point"
+},
+"location": "Cabauw-Wielsekade",
+"municipality": "Lopik",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL10722": {
+"components": [
+"SO2",
+"NO",
+"PM10",
+"O3",
+"PS",
+"NO2"
+],
+"description": {
+"EN": "Eibergen-Lintveldseweg",
+"NL": "Eibergen-Lintveldseweg"
+},
+"geometry": {
+"coordinates": [
+6.605367,
+52.091801
+],
+"type": "point"
+},
+"location": "Eibergen-Lintveldseweg",
+"municipality": "Berkelland",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10741": {
+"components": [
+"CO",
+"FN",
+"NO",
+"NO2",
+"PM10",
+"PM25",
+"BCWB"
+],
+"description": {
+"EN": "Nijmegen-Graafseweg",
+"NL": "Nijmegen-Graafseweg"
+},
+"geometry": {
+"coordinates": [
+5.857777,
+51.841372
+],
+"type": "point"
+},
+"location": "Nijmegen-Graafseweg",
+"municipality": "Nijmegen",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL10742": {
+"components": [
+"PM25",
+"NO",
+"FN",
+"O3",
+"BCWB",
+"NO2"
+],
+"description": {
+"EN": "Nijmegen-Ruyterstraat",
+"NL": "Nijmegen-Ruyterstraat"
+},
+"geometry": {
+"coordinates": [
+5.856938,
+51.838221
+],
+"type": "point"
+},
+"location": "Nijmegen-Ruyterstraat",
+"municipality": "Nijmegen",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL10807": {
+"components": [
+"NO",
+"FN",
+"PM10",
+"O3",
+"BCWB",
+"NO2"
+],
+"description": {
+"EN": "Hellendoorn-Luttenbergerweg",
+"NL": "Hellendoorn-Luttenbergerweg"
+},
+"geometry": {
+"coordinates": [
+6.402919,
+52.38833
+],
+"type": "point"
+},
+"location": "Hellendoorn-Luttenbergerweg",
+"municipality": "Hellendoorn",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10818": {
+"components": [
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Barsbeek-De Veenen",
+"NL": "Barsbeek-De Veenen"
+},
+"geometry": {
+"coordinates": [
+6.017571,
+52.654144
+],
+"type": "point"
+},
+"location": "Barsbeek-De Veenen",
+"municipality": "Steenwijkerland",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10821": {
+"components": [
+"PM25",
+"NO",
+"FN",
+"BCWB",
+"NO2"
+],
+"description": {
+"EN": "Enschede-Winkelshorst",
+"NL": "Enschede-Winkelshorst"
+},
+"geometry": {
+"coordinates": [
+6.919494,
+52.234504
+],
+"type": "point"
+},
+"location": "Enschede-Winkelshorst",
+"municipality": "Enschede",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL10918": {
+"components": [
+"NO",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Balk-Trophornsterweg",
+"NL": "Balk-Trophornsterweg"
+},
+"geometry": {
+"coordinates": [
+5.573491,
+52.916915
+],
+"type": "point"
+},
+"location": "Balk-Trophornsterweg",
+"municipality": "De Friese Meren",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10929": {
+"components": [
+"FN",
+"NH3",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"BCWB"
+],
+"description": {
+"EN": "Valthermond-Noorderdiep",
+"NL": "Valthermond-Noorderdiep"
+},
+"geometry": {
+"coordinates": [
+6.932432,
+52.875725
+],
+"type": "point"
+},
+"location": "Valthermond-Noorderdiep",
+"municipality": "Borger-Odoorn",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10934": {
+"components": [
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"SO2",
+"NH3",
+"UFP",
+"PS"
+],
+"description": {
+"EN": "Kollumerwaard-Hooge Zuidwal",
+"NL": "Kollumerwaard-Hooge Zuidwal"
+},
+"geometry": {
+"coordinates": [
+6.276815,
+53.330425
+],
+"type": "point"
+},
+"location": "Kollumerwaard-Hooge Zuidwal",
+"municipality": "Noardeast-Fryslân",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL10937": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"NO2"
+],
+"description": {
+"EN": "Groningen-Europaweg",
+"NL": "Groningen-Europaweg"
+},
+"geometry": {
+"coordinates": [
+6.578901,
+53.217796
+],
+"type": "point"
+},
+"location": "Groningen-Europaweg",
+"municipality": "Groningen",
+"organisation": "RIVM",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL10938": {
+"components": [
+"PM25",
+"NO",
+"FN",
+"O3",
+"BCWB",
+"NO2"
+],
+"description": {
+"EN": "Groningen-Nijensteinheerd",
+"NL": "Groningen-Nijensteinheerd"
+},
+"geometry": {
+"coordinates": [
+6.608937,
+53.246535
+],
+"type": "point"
+},
+"location": "Groningen-Nijensteinheerd",
+"municipality": "Groningen",
+"organisation": "RIVM",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": ""
+},
+"NL49002": {
+"components": [
+"NO",
+"NO2"
+],
+"description": {
+"EN": "Amsterdam-Haarlemmerweg",
+"NL": "Amsterdam-Haarlemmerweg"
+},
+"geometry": {
+"coordinates": [
+4.87575,
+52.385422
+],
+"type": "point"
+},
+"location": "Amsterdam-Haarlemmerweg",
+"municipality": "Amsterdam",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": "1998"
+},
+"NL49003": {
+"components": [
+"FN",
+"NO",
+"NO2",
+"O3",
+"BCWB",
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Amsterdam-Nieuwendammerdijk",
+"NL": "Amsterdam-Nieuwendammerdijk"
+},
+"geometry": {
+"coordinates": [
+4.943822,
+52.389314
+],
+"type": "point"
+},
+"location": "Amsterdam-Nieuwendammerdijk",
+"municipality": "Amsterdam",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": "1998"
+},
+"NL49007": {
+"components": [
+"PM25",
+"NO",
+"CO",
+"FN",
+"PM10",
+"NO2"
+],
+"description": {
+"EN": "Amsterdam-Einsteinweg",
+"NL": "Amsterdam-Einsteinweg"
+},
+"geometry": {
+"coordinates": [
+4.845233,
+52.381331
+],
+"type": "point"
+},
+"location": "Amsterdam-Einsteinweg",
+"municipality": "Amsterdam",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": "1998"
+},
+"NL49012": {
+"components": [
+"CO",
+"FN",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"BCWB"
+],
+"description": {
+"EN": "Amsterdam-Van Diemenstraat",
+"NL": "Amsterdam-Van Diemenstraat"
+},
+"geometry": {
+"coordinates": [
+4.887811,
+52.389983
+],
+"type": "point"
+},
+"location": "Amsterdam-Van Diemenstraat",
+"municipality": "Amsterdam",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": "1998"
+},
+"NL49014": {
+"components": [
+"CO",
+"FN",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"BCWB"
+],
+"description": {
+"EN": "Amsterdam-Vondelpark",
+"NL": "Amsterdam-Vondelpark"
+},
+"geometry": {
+"coordinates": [
+4.866208,
+52.359714
+],
+"type": "point"
+},
+"location": "Amsterdam-Vondelpark",
+"municipality": "Amsterdam",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": "1998"
+},
+"NL49016": {
+"components": [
+"PM10",
+"PM25",
+"SO2"
+],
+"description": {
+"EN": "Amsterdam-Westerpark",
+"NL": "Amsterdam-Westerpark"
+},
+"geometry": {
+"coordinates": [
+4.870157,
+52.393972
+],
+"type": "point"
+},
+"location": "Amsterdam-Westerpark",
+"municipality": "Amsterdam",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": "1998"
+},
+"NL49017": {
+"components": [
+"C6H6",
+"C7H8",
+"C8H10",
+"FN",
+"NO",
+"NO2",
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Amsterdam-Stadhouderskade",
+"NL": "Amsterdam-Stadhouderskade"
+},
+"geometry": {
+"coordinates": [
+4.8997,
+52.358039
+],
+"type": "point"
+},
+"location": "Amsterdam-Stadhouderskade",
+"municipality": "Amsterdam",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": ""
+},
+"NL49019": {
+"components": [
+"NO",
+"NO2"
+],
+"description": {
+"EN": "Amsterdam-Oude Schans",
+"NL": "Amsterdam-Oude Schans"
+},
+"geometry": {
+"coordinates": [
+4.9044,
+52.372056
+],
+"type": "point"
+},
+"location": "Amsterdam-Oude Schans",
+"municipality": "Amsterdam",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": "2007"
+},
+"NL49020": {
+"components": [
+"NO",
+"FN",
+"PM10",
+"BCWB",
+"NO2"
+],
+"description": {
+"EN": "Amsterdam-Jan van Galenstraat",
+"NL": "Amsterdam-Jan van Galenstraat"
+},
+"geometry": {
+"coordinates": [
+4.860319,
+52.374786
+],
+"type": "point"
+},
+"location": "Amsterdam-Jan van Galenstraat",
+"municipality": "Amsterdam",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": "2007"
+},
+"NL49021": {
+"components": [
+"NO",
+"NO2"
+],
+"description": {
+"EN": "Amsterdam -Kantershof",
+"NL": "Amsterdam -Kantershof"
+},
+"geometry": {
+"coordinates": [
+4.988397,
+52.320692
+],
+"type": "point"
+},
+"location": "Amsterdam -Kantershof",
+"municipality": "Amsterdam",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": "2007"
+},
+"NL49022": {
+"components": [
+"NO",
+"NO2"
+],
+"description": {
+"EN": "Amsterdam-Ookmeer",
+"NL": "Amsterdam-Ookmeer"
+},
+"geometry": {
+"coordinates": [
+4.793344,
+52.366811
+],
+"type": "point"
+},
+"location": "Amsterdam-Ookmeer",
+"municipality": "Amsterdam",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": "2007"
+},
+"NL49546": {
+"components": [
+"C6H6",
+"C7H8",
+"C8H10",
+"NO",
+"PM10",
+"NO2"
+],
+"description": {
+"EN": "Zaanstad-Hemkade",
+"NL": "Zaanstad-Hemkade"
+},
+"geometry": {
+"coordinates": [
+4.83206,
+52.42023
+],
+"type": "point"
+},
+"location": "Zaanstad-Hemkade",
+"municipality": "Zaanstad",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Industrial",
+"url": "",
+"year_start": "2009"
+},
+"NL49551": {
+"components": [
+"CO",
+"FN",
+"H2S",
+"NO",
+"NO2",
+"PM10",
+"PM25",
+"SO2"
+],
+"description": {
+"EN": "IJmuiden-Kanaalstraat",
+"NL": "IJmuiden-Kanaalstraat"
+},
+"geometry": {
+"coordinates": [
+4.6018419999999995,
+52.463039
+],
+"type": "point"
+},
+"location": "IJmuiden-Kanaalstraat",
+"municipality": "Velsen",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Industrial",
+"url": "",
+"year_start": "1998"
+},
+"NL49553": {
+"components": [
+"CO",
+"FN",
+"H2S",
+"NO",
+"NO2",
+"PM10",
+"PM25",
+"SO2"
+],
+"description": {
+"EN": "Wijk aan Zee-De Banjaert",
+"NL": "Wijk aan Zee-De Banjaert"
+},
+"geometry": {
+"coordinates": [
+4.601986,
+52.493992
+],
+"type": "point"
+},
+"location": "Wijk aan Zee-De Banjaert",
+"municipality": "Velsen",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Industrial",
+"url": "",
+"year_start": "1998"
+},
+"NL49556": {
+"components": [
+"PM25",
+"FN",
+"PM10",
+"BCWB"
+],
+"description": {
+"EN": "De Rijp-Oostdijkje",
+"NL": "De Rijp-Oostdijkje"
+},
+"geometry": {
+"coordinates": [
+4.8617,
+52.56359
+],
+"type": "point"
+},
+"location": "De Rijp-Oostdijkje",
+"municipality": "Alkmaar",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL49557": {
+"components": [
+"C6H6",
+"C7H8",
+"C8H10",
+"PM25",
+"PM10",
+"C10H8"
+],
+"description": {
+"EN": "Wijk aan Zee-Bosweg",
+"NL": "Wijk aan Zee-Bosweg"
+},
+"geometry": {
+"coordinates": [
+4.599313,
+52.490052
+],
+"type": "point"
+},
+"location": "Wijk aan Zee-Bosweg",
+"municipality": "Beverwijk",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Industrial",
+"url": null,
+"year_start": "2020"
+},
+"NL49561": {
+"components": [
+"PM25",
+"NO",
+"CO",
+"PM10",
+"NO2"
+],
+"description": {
+"EN": "Badhoevedorp-Sloterweg",
+"NL": "Badhoevedorp-Sloterweg"
+},
+"geometry": {
+"coordinates": [
+4.774006,
+52.334003
+],
+"type": "point"
+},
+"location": "Badhoevedorp-Sloterweg",
+"municipality": "Haarlemmermeer",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Other",
+"url": "",
+"year_start": "1998"
+},
+"NL49564": {
+"components": [
+"NO",
+"NO2",
+"PM10"
+],
+"description": {
+"EN": "Hoofddorp-Hoofdweg",
+"NL": "Hoofddorp-Hoofdweg"
+},
+"geometry": {
+"coordinates": [
+4.71507132053375,
+52.3274501787129
+],
+"type": "point"
+},
+"location": "Hoofddorp-Hoofdweg",
+"municipality": "Haarlemmermeer",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Other",
+"url": "",
+"year_start": "1998"
+},
+"NL49565": {
+"components": [
+"NO",
+"NO2",
+"PM10"
+],
+"description": {
+"EN": "Oude Meer-Aalsmeerderdijk",
+"NL": "Oude Meer-Aalsmeerderdijk"
+},
+"geometry": {
+"coordinates": [
+4.77082,
+52.28013
+],
+"type": "point"
+},
+"location": "Oude Meer-Aalsmeerderdijk",
+"municipality": "Haarlemmermeer",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": "2010"
+},
+"NL49570": {
+"components": [
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Beverwijk-Creutzberglaan",
+"NL": "Beverwijk-Creutzberglaan"
+},
+"geometry": {
+"coordinates": [
+4.640531,
+52.489303
+],
+"type": "point"
+},
+"location": "Beverwijk-Creutzberglaan",
+"municipality": "Velsen",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Other",
+"url": "",
+"year_start": "2007"
+},
+"NL49572": {
+"components": [
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Velsen-Staalstraat",
+"NL": "Velsen-Staalstraat"
+},
+"geometry": {
+"coordinates": [
+4.6288,
+52.4744
+],
+"type": "point"
+},
+"location": "Velsen-Staalstraat",
+"municipality": "Velsen",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Industrial",
+"url": "",
+"year_start": "2011"
+},
+"NL49573": {
+"components": [
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Velsen-Reyndersweg",
+"NL": "Velsen-Reyndersweg"
+},
+"geometry": {
+"coordinates": [
+4.579343,
+52.478871
+],
+"type": "point"
+},
+"location": "Velsen-Reyndersweg",
+"municipality": "Velsen",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Industrial",
+"url": "",
+"year_start": "2011"
+},
+"NL49680": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"O3",
+"PS",
+"NO2"
+],
+"description": {
+"EN": "Almere-Boomgaardweg",
+"NL": "Almere-Boomgaardweg"
+},
+"geometry": {
+"coordinates": [
+5.239257,
+52.373572
+],
+"type": "point"
+},
+"location": "Almere-Boomgaardweg",
+"municipality": "Almere",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Municipal",
+"url": null,
+"year_start": "2024"
+},
+"NL49701": {
+"components": [
+"PM25",
+"NO",
+"FN",
+"PM10",
+"PS",
+"BCWB",
+"NO2"
+],
+"description": {
+"EN": "Zaandam-Wagenschotpad",
+"NL": "Zaandam-Wagenschotpad"
+},
+"geometry": {
+"coordinates": [
+4.816706,
+52.448011
+],
+"type": "point"
+},
+"location": "Zaandam-Wagenschotpad",
+"municipality": "Zaanstad",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": "2006"
+},
+"NL49703": {
+"components": [
+"C6H6",
+"C7H8",
+"C8H10",
+"NO",
+"NO2",
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Spaarnwoude-Machineweg",
+"NL": "Spaarnwoude-Machineweg"
+},
+"geometry": {
+"coordinates": [
+4.728581,
+52.398437
+],
+"type": "point"
+},
+"location": "Spaarnwoude-Machineweg",
+"municipality": "Haarlemmermeer",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
+"NL49704": {
+"components": [
+"C6H6",
+"C7H8",
+"C8H10",
+"NO",
+"NO2",
+"PM10",
+"PM25",
+"SO2"
+],
+"description": {
+"EN": "Zaanstad-Hoogtij",
+"NL": "Zaanstad-Hoogtij"
+},
+"geometry": {
+"coordinates": [
+4.773,
+52.428
+],
+"type": "point"
+},
+"location": "Zaanstad-Hoogtij",
+"municipality": "Zaanstad",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Industrial",
+"url": "",
+"year_start": "2009"
+},
+"NL49980": {
+"components": [
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "New station",
+"NL": "Nieuw station"
+},
+"geometry": {
+"coordinates": [
+7.038925,
+53.290343
+],
+"type": "point"
+},
+"location": "Baamsum - Oude Ae",
+"municipality": "Delfzijl",
+"organisation": "GGD Amsterdam",
+"province": null,
+"type": "Regional",
+"url": null,
+"year_start": "2025"
+},
+"NL50002": {
+"components": [
+"NO",
+"NO2",
+"O3"
+],
+"description": {
+"EN": "Geleen-Vouershof ",
+"NL": "Geleen-Vouershof "
+},
+"geometry": {
+"coordinates": [
+5.81071,
+50.96309
+],
+"type": "point"
+},
+"location": "Geleen-Vouershof ",
+"municipality": "Sittard-Geleen",
+"organisation": "ODZL (Limburg)",
+"province": null,
+"type": "Industrial",
+"url": "",
+"year_start": "1986"
+},
+"NL50003": {
+"components": [
+"PM25",
+"NO",
+"PM10",
+"O3",
+"PS",
+"NO2"
+],
+"description": {
+"EN": "Geleen-Asterstraat",
+"NL": "Geleen-Asterstraat"
+},
+"geometry": {
+"coordinates": [
+5.82224,
+50.98445
+],
+"type": "point"
+},
+"location": "Geleen-Asterstraat",
+"municipality": "Sittard-Geleen",
+"organisation": "ODZL (Limburg)",
+"province": null,
+"type": "Industrial",
+"url": "",
+"year_start": "1986"
+},
+"NL50007": {
+"components": [
+"PM25",
+"FN",
+"PM10",
+"O3",
+"BCWB"
+],
+"description": {
+"EN": "Maastricht-Hoge_Fronten",
+"NL": "Maastricht-Hoge_Fronten"
+},
+"geometry": {
+"coordinates": [
+5.6758,
+50.85205
+],
+"type": "point"
+},
+"location": "Maastricht-Hoge_Fronten",
+"municipality": "Maastricht",
+"organisation": "ODZL (Limburg)",
+"province": null,
+"type": "Municipal",
+"url": "",
+"year_start": "2013"
+},
+"NL50010": {
+"components": [
+"FN",
+"NO",
+"NO2",
+"O3",
+"PM10",
+"PM25",
+"PS",
+"BCWB"
+],
+"description": {
+"EN": "Maastricht-A2-Philipsweg",
+"NL": "Maastricht-A2-Philipsweg"
+},
+"geometry": {
+"coordinates": [
+5.718977489396707,
+50.841053234998604
+],
+"type": "point"
+},
+"location": "Maastricht-A2-Philipsweg",
+"municipality": "Maastricht",
+"organisation": "ODZL (Limburg)",
+"province": null,
+"type": "Traffic",
+"url": "",
+"year_start": "2020"
+},
+"NL50011": {
+"components": [
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "naam",
+"NL": "naam"
+},
+"geometry": {
+"coordinates": [
+5.771363,
+51.303331
+],
+"type": "point"
+},
+"location": "Nederweert-Kuilstraat",
+"municipality": "Nederweert",
+"organisation": "ODZL (Limburg)",
+"province": null,
+"type": "Other",
+"url": null,
+"year_start": "2024"
+},
+"NL50012": {
+"components": [
+"PM25",
+"FN",
+"PM10",
+"BCWB"
+],
+"description": {
+"EN": "Eijsden-Trichterweg",
+"NL": "Eijsden-Trichterweg"
+},
+"geometry": {
+"coordinates": [
+5.703113,
+50.78366
+],
+"type": "point"
+},
+"location": "Eijsden-Trichterweg",
+"municipality": "Eijsden-Margraten",
+"organisation": "ODZL (Limburg)",
+"province": null,
+"type": "Other",
+"url": null,
+"year_start": "2024"
+},
+"NL50013": {
+"components": [
+"PS"
+],
+"description": {
+"EN": "Meerssen- Beekerweg",
+"NL": "Meerssen- Beekerweg"
+},
+"geometry": {
+"coordinates": [
+5.773652,
+50.905079
+],
+"type": "point"
+},
+"location": "Meerssen- Beekerweg",
+"municipality": "Meerssen",
+"organisation": "ODZL (Limburg)",
+"province": null,
+"type": "Other",
+"url": null,
+"year_start": "2024"
+},
+"NL53004": {
+"components": [
+"C6H6",
+"C7H8",
+"C8H10",
+"FN",
+"NO",
+"NO2",
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Moerdijk-Julianastraat",
+"NL": "Moerdijk-Julianastraat"
+},
+"geometry": {
+"coordinates": [
+4.623713,
+51.699409
+],
+"type": "point"
+},
+"location": "Moerdijk-Julianastraat",
+"municipality": "Moerdijk",
+"organisation": "OMWB (Midden en West Brabant)",
+"province": null,
+"type": "Other",
+"url": "",
+"year_start": ""
+},
+"NL53015": {
+"components": [
+"PM25",
+"C6H6",
+"C7H8",
+"C8H10",
+"NO",
+"NO2",
+"PM10"
+],
+"description": {
+"EN": "Klundert-Kerkweg",
+"NL": "Klundert-Kerkweg"
+},
+"geometry": {
+"coordinates": [
+4.541659,
+51.6689355
+],
+"type": "point"
+},
+"location": "Klundert-Kerkweg",
+"municipality": "Moerdijk",
+"organisation": "OMWB (Midden en West Brabant)",
+"province": null,
+"type": "Other",
+"url": "",
+"year_start": ""
+},
+"NL53016": {
+"components": [
+"C6H6",
+"C7H8",
+"C8H10",
+"NO",
+"NO2",
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Zevenbergen-Galgenweg",
+"NL": "Zevenbergen-Galgenweg"
+},
+"geometry": {
+"coordinates": [
+4.594882,
+51.653205
+],
+"type": "point"
+},
+"location": "Zevenbergen-Galgenweg",
+"municipality": "Moerdijk",
+"organisation": "OMWB (Midden en West Brabant)",
+"province": null,
+"type": "Other",
+"url": "",
+"year_start": ""
+},
+"NL53020": {
+"components": [
+"C6H6",
+"C7H8",
+"C8H10",
+"NO",
+"NO2",
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Strijensas Buitendijk",
+"NL": "Strijensas Buitendijk"
+},
+"geometry": {
+"coordinates": [
+4.583248,
+51.713396
+],
+"type": "point"
+},
+"location": "Strijensas Buitendijk",
+"municipality": "Moerdijk",
+"organisation": "OMWB (Midden en West Brabant)",
+"province": null,
+"type": "Other",
+"url": "",
+"year_start": "2016"
+},
+"NL54004": {
+"components": [
+"PM25",
+"NO",
+"FN",
+"PM10",
+"BCWB",
+"NO2"
+],
+"description": {
+"EN": "Arnhem Velperbroek",
+"NL": "Arnhem Velperbroek"
+},
+"geometry": {
+"coordinates": [
+5.969485,
+51.978328
+],
+"type": "point"
+},
+"location": "Arnhem Velperbroek",
+"municipality": "Arnhem",
+"organisation": "ODGM (Groene Metropool)",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": "2010"
+},
+"NL54010": {
+"components": [
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Arnhem GelreDome",
+"NL": "Arnhem GelreDome"
+},
+"geometry": {
+"coordinates": [
+5.897657,
+51.962296
+],
+"type": "point"
+},
+"location": "Arnhem GelreDome",
+"municipality": "Arnhem",
+"organisation": "ODGM (Groene Metropool)",
+"province": null,
+"type": "Other",
+"url": "",
+"year_start": "2016"
+}
+}

@@ -56,6 +56,8 @@ export interface LocalCredit {
   licence: string;
   /** Where the licence/terms were read. */
   terms_url: string;
+  /** The standing caveat printed with the credit: provisional/unvalidated data, and that the source does not endorse this page. */
+  note: string;
 }
 
 interface Common {

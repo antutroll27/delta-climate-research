@@ -47,6 +47,7 @@ export const SORAMAME_CREDIT: LocalCredit = {
   edit: '「環境省大気汚染物質広域監視システム（そらまめくん）」（環境省）（https://soramame.env.go.jp/）をもとにDelta Climate Research作成（国設局の測定値を選んで表示）',
   licence: '公共データ利用規約（第1.0版）PDL 1.0（CC BY 4.0 互換）。国設局のデータのみ。',
   terms_url: 'https://www.env.go.jp/mail.html',
+  note: '速報値であり、確定値ではありません。環境省が作成した情報ではありません。 Provisional values, which may be revised; not a Ministry of the Environment publication.',
 };
 
 export class SoramameFormatError extends Error {

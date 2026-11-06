@@ -1,0 +1,14 @@
+{
+ "retrieved": "2026-11-06",
+ "note": "Fragments of luchtmeetnet.nl's own script chunks: the function that classes an LKI value, and the legend table. No prose page states the class edges.",
+ "chunk_classify": {
+  "url": "https://www.luchtmeetnet.nl/_next/static/chunks/e45e244f3b233f630b7bf801b67b085df929ad47.88db230ed3702bf9bd8d.js",
+  "sha256": "9d748442c77790ead3c40d78dd887d6fbbebb8962809c438d1fb984bcc7a8963",
+  "fragment": "0 0 L 0 7\",stroke:e,\"stroke-width\":1}}][t]};t.a=function(e){return 0===e?o.enabledNewGraphMarkers?\"\".concat(r.a.legend.gray):\"\".concat(r.a.gray):e>0&&e<4?o.enabledNewGraphMarkers?{pattern:i(o.enabledNewGraphMarkers?\"\".concat(r.a.legend.blue):\"\".concat(r.a.blueLight),1)}:\"\".concat(r.a.blueLight):e>=4&&e<7?o.enabledNewGraphMarkers?{pattern:i(o.enabledNewGraphMarkers?\"\".concat(r.a.legend.yellow):\"\".concat(r.a.yellow),2)}:\"\".concat(r.a.yellow):e>=7&&e<9?o.enabledNewGraphMarkers?{pattern:i(o.enabledNewGraphMarkers?\"\".concat(r.a.legend.red):\"\".concat(r.a.orange),4)}:\"\".concat(r.a.orange):e>=9&&e<11?o.enabledNewGraphMarkers?{pattern:i(o.enabledNewGraphMarkers?\"\".concat(r.a.legend.darkRed):\"\".concat(r.a.red),0)}:\"\".concat(r.a.red):o.enabledNewGraphMarkers?{pattern:i(o.enabledNewGraphMarkers?\"\".concat(r.a.legend.purple):\"\".concat(r.a.purple),3)}:\"\".concat(r.a.purple)}},"
+ },
+ "chunk_legend": {
+  "url": "https://www.luchtmeetnet.nl/_next/static/chunks/590aabf6f40e1abd68a1419cc90d2463eb35cd1d.20a83cfb9d6dcfa99c5f.js",
+  "sha256": "b1e197ce4c4682f800c67bb1b9ab6a50d4877280a18775aed8b4a9d5ab3ff2f9",
+  "fragment": "XYcE:function(e,n,t){\"use strict\";var r=t(\"UXj3\"),o=t(\"JVo8\");n.a=[{color:r.enabledNewGraphMarkers?\"\".concat(o.a.legend.blue):\"\".concat(o.a.blueLight),string:\"good\",index:\"1\",styleClass:\"1\"},{color:r.enabledNewGraphMarkers?\"\".concat(o.a.legend.yellow):\"\".concat(o.a.yellow),string:\"moderate\",index:\"2\",styleClass:\"2\"},{color:r.enabledNewGraphMarkers?\"\".concat(o.a.legend.red):\"\".concat(o.a.orange),string:\"insufficient\",index:\"3\",styleClass:\"4\"},{color:r.enabledNewGraphMarkers?\"\".concat(o.a.legend.darkRed):\"\".concat(o.a.red),string:\"bad\",index:\"4\",styleClass:\"0\"},{color:r.enabledNewGraphMarkers?\"\".concat(o.a.legend.purple):\"\".concat(o.a.purple),string:\"verybad\",index:\"5\",styleClass:\"3\"},{color:r.enabledNewGraphMarkers?\"\".concat(o.a.legend.gray):\"\".concat(o.a.gray),string:\"nodata\",index:\"-\",styleClass:\"\"}]},"
+ }
+}
