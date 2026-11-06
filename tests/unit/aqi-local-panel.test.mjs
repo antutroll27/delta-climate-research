@@ -225,3 +225,11 @@ test('F4: a Tokyo placeholder hour says it could not be read right now, never "n
   const old = judge(jpLive, new Date(Date.parse(jpLive.observed_at) + 3 * 3_600_000 + 1));
   assert.ok(text(localCardHtml(old, 'Marunouchi', new Date(Date.parse(jpLive.observed_at) + 3 * 3_600_000 + 1))).includes('no longer current'), 'a genuinely old hour still says so');
 });
+
+/* F6 (audit): Luchtmeetnet's tie rule, "Als alle stoffen hetzelfde indexgetal hebben dan wordt de totale index één punt hoger". */
+test('F6: the LKI explainer and the station-rule comment carry the tie rule', () => {
+  const t = text(localCardHtml(nlLive, 'Canal Ring', NL_NOW));
+  assert.ok(t.includes('the highest number is the index; if all the substances have the same number, the index is one point higher'), t.slice(0, 200));
+  assert.match(read('src/lib/aqi/nl-stations.ts'), /same\s+index\s+number[\s\S]{0,120}one\s+point/i);
+  assert.match(read('src/lib/aqi/nl-stations.ts'), /not strictly/i);
+});

@@ -1,9 +1,12 @@
 /**
  * THE LUCHTMEETNET STATIONS NEAREST THE CANAL RING, and the rule that picks the ones the LKI card may use.
  *
- * THE RULE. The LKI is "the substance with the highest index number decides" over NO2, PM10, PM2.5 and O3
- * (luchtmeetnet.nl, "Luchtkwaliteitsindex (LKI)"). A station that does not measure all four would publish an LKI
- * from fewer substances, which can only be as high or lower than the full one. So a station serves the card only
+ * THE RULE. The LKI is "the substance with the highest index number decides" over NO2, PM10, PM2.5 and O3, and
+ * "Als alle stoffen hetzelfde indexgetal hebben dan wordt de totale index één punt hoger" (if all substances have the
+ * same index number the total goes up one point) (luchtmeetnet.nl, "Luchtkwaliteitsindex (LKI)"). A station that does
+ * not measure all four would publish an LKI from fewer substances: normally as high or lower than the full one, though
+ * not strictly always, because of the tie rule (a station whose few substances all tie gets the extra point, and one
+ * with a fourth, lower substance would not). Its LKI is a different quantity, not a lower bound. So a station serves the card only
  * if its published component list (`/open_api/stations/{id}` → `components`) holds all four. Measured on
  * 2026-11-06 over all 100 stations Luchtmeetnet lists whose detail was read, within 20 km of the canal ring:
  *   NL49014 Amsterdam-Vondelpark        1,362 m  Municipal  NO2 PM10 PM25 O3 (+CO FN NO BCWB)   SERVES (first)

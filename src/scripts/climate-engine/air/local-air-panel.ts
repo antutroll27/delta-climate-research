@@ -78,7 +78,7 @@ const bandColour = (b: unknown): string => (has(LKI_COLOUR, b) ? LKI_COLOUR[b as
 const bandWord = (b: unknown): string => (has(LKI_LABEL, b) ? `${LKI_LABEL[b as LkiBand].nl} <span style="font-weight:400;opacity:.8">· ${LKI_LABEL[b as LkiBand].en}</span>` : '—');
 
 const LKI_NOTE = 'The LKI (luchtkwaliteitsindex) is the Dutch national air-quality index, published by Luchtmeetnet. Each of nitrogen dioxide, '
-  + 'PM10, PM2.5 and ozone is turned into a number from 1 (little pollution) to 11 (much); the highest number is the index, and it is sorted into five classes. '
+  + 'PM10, PM2.5 and ozone is turned into a number from 1 (little pollution) to 11 (much); the highest number is the index; if all the substances have the same number, the index is one point higher. It is sorted into five classes. '
   + 'Other indices, such as the US AQI or the European index, use other scales and other substances, so their numbers are not interchangeable with this one. '
   + 'This card shows the Dutch regulator\'s own figure, as published, for the nearest monitor that measures all four substances.';
 
