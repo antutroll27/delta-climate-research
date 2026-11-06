@@ -42,8 +42,10 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import urllib.parse
-from typing import Any, TypeAlias
+from dataclasses import dataclass
+from typing import Any, Final, Literal, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
@@ -74,6 +76,15 @@ CMR = "https://cmr.earthdata.nasa.gov/search/granules.umm_json"
 # each one gives different shapes and they cannot be combined. Reprojecting both
 # onto one grid fixes that and handles the ~9.8 km overlap.
 TARGET_RES = 70.0                  # native ECOSTRESS L2T resolution
+
+#: The `nodata` to pass `align()` for a `_water.tif` band. The mask is 0 = land,
+#: 1 = water, so 0 is a VALID value and must never double as the fill/nodata
+#: value: GDAL 3.12 / rasterio 1.5.2 then treats every 0 as missing and the whole
+#: grid reads as water (rasterio 1.5.0, the pinned version, only happened to
+#: work). 255 is outside the mask's range, and every consumer tests `== 1` /
+#: `!= 1`, so cells outside the granule footprint (filled with 255) behave
+#: exactly as the old fill of 0 did.
+WATER_NODATA: Final[int] = 255
 
 #: A study area wider than this is not a city and UTM is the wrong projection for
 #: it: a single zone's transverse Mercator is only honest a few degrees from its
@@ -232,7 +243,7 @@ def band_url(granule: Granule, suffix: str) -> str | None:
 
 
 __all__ = ["BBOX", "CACHE", "CMR", "TARGET_CRS", "TARGET_RES", "TOKEN_PATH",
-           "Acquisition", "Bbox", "Granule", "align", "band_url", "cmr_search",
+           "Acquisition", "Bbox", "Granule", "WATER_NODATA", "align", "band_url", "cmr_search",
            "fetch", "read_window", "target_crs", "target_grid", "token",
            "transform_bounds", "utm_zone"]
 
@@ -286,6 +297,63 @@ def read_window(path: str, nodata: float = np.nan, dtype: str = "float32",
             rasterio.crs.CRS.from_string(target_crs(bbox)))
 
 
+@dataclass(frozen=True)
+class _SyntheticMask:
+    """A tiny EPSG:4326 0/1 band: `west` over the western half, `east` over the eastern.
+
+    `footprint` is (west, south, east, north) in degrees; a source that stops short
+    of the target bbox leaves target cells with no source data at all.
+    """
+    footprint: Bbox
+    west: Literal[0, 1]
+    east: Literal[0, 1]
+    size: int = 40
+
+
+def _write_synthetic_mask(m: _SyntheticMask, path: str) -> None:
+    arr = np.zeros((m.size, m.size), dtype=np.uint8)
+    arr[:, : m.size // 2] = m.west
+    arr[:, m.size // 2:] = m.east
+    w, s, e, n = m.footprint
+    with rasterio.open(path, "w", driver="GTiff", height=m.size, width=m.size, count=1,
+                       dtype="uint8", crs="EPSG:4326",
+                       transform=from_origin(w, n, (e - w) / m.size, (n - s) / m.size)) as dst:
+        dst.write(arr, 1)       # no nodata tag: 0 is a real, valid "land"
+
+
+def _check_water_mask_nodata() -> None:
+    """REGRESSION: a water mask's 0 ("land") must survive `align` as 0, not as nodata.
+
+    `_water.tif` is 0/1. Aligned with nodata=0 it is correct on rasterio 1.5.0 (the
+    pin) and wrong on 1.5.2 / GDAL 3.12.2, where every cell reads as water. Aligned
+    with WATER_NODATA the three facts below hold on both.
+    """
+    bbox: Bbox = (88.360, 22.550, 88.370, 22.560)           # ~1 km, ~16 x 16 cells
+    covers: Bbox = (88.355, 22.545, 88.375, 22.565)         # source wider than the bbox
+    with tempfile.TemporaryDirectory() as td:
+        split = os.path.join(td, "split.tif")
+        _write_synthetic_mask(_SyntheticMask(covers, west=0, east=1), split)
+        a = align(split, WATER_NODATA, "uint16", bbox=bbox)
+        q = a.shape[1] // 4                                  # stay clear of the seam
+        assert (a[:, :q] == 0).all(), "land (0) was read as nodata/water"
+        assert (a[:, -q:] == 1).all(), "water (1) was lost"
+        assert not (a == WATER_NODATA).any(), "fill leaked into cells the source covers"
+
+        # All-land source: nothing may be flagged water, whatever the GDAL version.
+        land = os.path.join(td, "land.tif")
+        _write_synthetic_mask(_SyntheticMask(covers, west=0, east=0), land)
+        assert not (align(land, WATER_NODATA, "uint16", bbox=bbox) == 1).any(), \
+            "an all-land mask came back with water in it"
+
+        # A source covering only the western half: the uncovered east is filled with
+        # WATER_NODATA, which the consumers' `== 1` / `!= 1` tests treat as not-water.
+        half = os.path.join(td, "half.tif")
+        _write_synthetic_mask(_SyntheticMask((88.355, 22.545, 88.365, 22.565), west=0, east=0), half)
+        h = align(half, WATER_NODATA, "uint16", bbox=bbox)
+        assert (h[:, :q] == 0).all() and (h[:, -q:] == WATER_NODATA).all(), "footprint fill wrong"
+        assert not (h == 1).any(), "fill must never read as water"
+
+
 def _self_check() -> None:
     """ponytail: one runnable check — the grid must be square, north-up, and sized."""
     tf, w, h = target_grid()
@@ -326,6 +394,7 @@ def _self_check() -> None:
     assert band_url({"RelatedUrls": [{"URL": "https://x/y_LST.tif"}]}, "_LST.tif")
     assert band_url({}, "_LST.tif") is None, "a granule with no bands must yield None"
     assert fetch(None, "tok") is None, "a missing band URL must not be fetched"
+    _check_water_mask_nodata()
     print("  _ecostress self-check OK")
 
 

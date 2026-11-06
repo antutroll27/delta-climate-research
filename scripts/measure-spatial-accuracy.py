@@ -89,8 +89,8 @@ import _physics  # noqa: E402
 import _types  # noqa: E402
 import _water  # noqa: E402
 import _wardmask  # noqa: E402
-from _ecostress import (align, band_url, cmr_search, fetch, target_crs,  # noqa: E402
-                        target_grid, token)
+from _ecostress import (WATER_NODATA, align, band_url, cmr_search, fetch,  # noqa: E402
+                        target_crs, target_grid, token)
 from _sentinel import grid_for  # noqa: E402
 
 def surface_grid(ward_id: str) -> int:
@@ -408,7 +408,7 @@ def measured_field(ward: _types.Ward, date: str, phase: str, tok: str
                     good &= align(pc, 255, "uint16", bbox=bbox) != 1
                 pw = fetch(band_url(g, "_water.tif"), tok)
                 if pw:
-                    good &= align(pw, 0, "uint16", bbox=bbox) != 1
+                    good &= align(pw, WATER_NODATA, "uint16", bbox=bbox) != 1
 
                 cel = np.where(good, a - 273.15, np.nan).astype(np.float32)
                 # first valid pixel wins, matching the SUHII compositor

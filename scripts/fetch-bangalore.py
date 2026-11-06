@@ -8,6 +8,14 @@ different servers: what is inside this 2.8 km box?
     python3 scripts/fetch-bangalore.py --layer terrain
     python3 scripts/fetch-bangalore.py --layer all --ward indiranagar
 
+PINNED OVERTURE RELEASE IS GONE. `_bangalore.OVERTURE_RELEASE` = 2026-07-22.0 has been
+deleted from Overture's bucket (checked 2026-11-06: only 2026-09-23.0, 2026-09-23.1 and
+2026-10-21.0 are listed). The buildings step below therefore cannot re-fetch; it works only
+while the git-ignored cache data/bangalore/raw/overture-buildings.parquet exists, so keep
+that file. Moving to the next available release, 2026-10-21.0, changes footprints and GERS
+ids and needs a deliberate re-slice and height re-join -- see docs/evidence/data-sources.md.
+Nothing here has been changed to do it.
+
 ONE S3 SCAN, NOT THREE. Overture's building parquet is global and a bbox filter
 still costs a full scan of the partition -- measured at 300 s for a single ward.
 The three wards span 18.7 km of longitude between them, so the whole set is
@@ -1660,7 +1668,7 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
     #: granule missing any one of them cannot be trusted unmasked, so it is
     #: dropped whole rather than merged in with a silently disabled filter.
     mask_bands = (("_QC.tif", 0xFFFF, "uint16"), ("_cloud.tif", 255, "uint16"),
-                  ("_water.tif", 0, "uint16"))
+                  ("_water.tif", eco.WATER_NODATA, "uint16"))
 
     def process(grans: list[dict[str, Any]]) -> tuple[str, Any, Any]:
         """One acquisition's granules -> ("complete" | "incomplete", cel, view).
