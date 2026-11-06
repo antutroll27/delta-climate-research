@@ -149,29 +149,6 @@ test.describe('@v2 boot', () => {
     });
     expect(loaded).toEqual({ w300: 1, w400: 1, w500: 1, letter: 0 });
   });
-  /* ── S5.2 ── */
-  test('@v2 Dubai (no artefacts): no instrument, the not-yet card centred, a working scope select, data sections disabled', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await openV2(page, '/heat-map/ae/dubai/al-quoz/');
-    await expect(page.locator('#mlmap')).toHaveCount(0);
-    const card = page.locator('.notyet');
-    await expect(card).toContainText('Open a validated area');
-    await expect(card.locator('h1')).toHaveText('Al Quoz');
-    await expect(card).toContainText('Nothing here would be a reading, so nothing is drawn.');
-    const box = await card.boundingBox(), side = await page.locator('#v2Side').boundingBox();
-    expect(box!.x, 'clear of the side panel').toBeGreaterThanOrEqual(side!.x + side!.width);
-    const free = (side!.x + side!.width + 1440) / 2;
-    expect(Math.abs(box!.x + box!.width / 2 - free), 'centred in the free ground').toBeLessThan(60);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(1440);
-    for (const s of ['heat', 'air', 'solar', 'weather', 'scenarios']) await expect(page.locator(`.nav-item[data-section="${s}"]`)).toBeDisabled();
-    await expect(page.locator('.nav-item[data-section="methods"]')).toBeEnabled();
-    await expect(page.locator('#scope-area-trigger')).toBeVisible();
-    /* A-S5 audit F4: no map here, so the panel must not say "Every result is the live map's own" */
-    await expect(page.locator('[data-side-pane="explore"]')).not.toContainText('live map');
-    /* nothing looks like it is loading */
-    await expect(page.locator('#loadchip, #simBackend, #v2SunCard')).toHaveCount(0);
-  });
-
   test('@v2 Scenarios: v1\'s statement, the live result beside it, and a withdrawn score with no number', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openV2(page);

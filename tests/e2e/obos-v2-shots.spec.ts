@@ -21,7 +21,7 @@ async function prime(page: Page, theme: string): Promise<void> {
   await page.addInitScript((t) => { try { localStorage.setItem('obos:v2:theme', t); localStorage.setItem('obos:v2:cards', 'plates'); sessionStorage.setItem('obos:entry-note-seen', '1'); sessionStorage.setItem('obos:rotate-nudge-dismissed', '1'); } catch { /* none */ } }, theme);
 }
 /** a fixed number per screen, so the same screen has the same prefix at every size */
-const NUM: Record<string, string> = { 'overview-closed': '01', overview: '02', heat: '03', air: '04', solar: '05', weather: '06', scenarios: '07', methods: '08', drawer: '09', building: '10', 'ward-switch': '11', 'al-quoz': '20', compare: '21', 'compare-drawer': '22', brief: '23' };
+const NUM: Record<string, string> = { 'overview-closed': '01', overview: '02', heat: '03', air: '04', solar: '05', weather: '06', scenarios: '07', methods: '08', drawer: '09', building: '10', 'ward-switch': '11', compare: '21', 'compare-drawer': '22', brief: '23' };
 const shot = async (page: Page, name: string, tag: string): Promise<void> => { await page.waitForTimeout(1200); await page.screenshot({ path: join(DIR, `${NUM[name] ?? '99'}-${name}-${tag}.png`) }); };
 async function section(page: Page, id: string): Promise<void> {
   await page.locator('[data-v2-menu]').click();
@@ -68,14 +68,12 @@ for (const theme of THEMES) for (const size of SIZES) {
       }
     });
 
-    test(`no artefacts, Compare and the paired brief · ${theme}-plates · ${size.n}`, async ({ page }) => {
+    test(`Compare and the paired brief · ${theme}-plates · ${size.n}`, async ({ page }) => {
       test.setTimeout(300_000);
       mkdirSync(DIR, { recursive: true });
       test.skip(size.n !== '390x844', 'the three off-map screens are shot once, at 390x844');
       await prime(page, theme);
       const tag = `${theme}-plates-${size.n}`;
-      await openV2(page, '/heat-map/ae/dubai/al-quoz/');
-      await shot(page, 'al-quoz', tag);
       await page.goto('/heat-map/compare/');
       await expect(page.locator('[data-role="status"]')).not.toHaveText('Preparing the paired model.', { timeout: 90_000 });
       await shot(page, 'compare', tag);

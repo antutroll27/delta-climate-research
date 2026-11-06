@@ -298,9 +298,9 @@ const routeContracts = [
   // sitemap, so there is nothing to hold it to.
   //
   // Kolkata's three ship measured artefacts and carry their caveats on the page.
-  // Dubai's three ship none and render a stated confidence tier instead, so they are
-  // noindex — thin near-duplicates competing with the pages that have readings
-  // behind them would be the worse outcome for both.
+  // Dubai has no page at all: the founder took it off the site (2026-09-05,
+  // re-confirmed 2026-11-06), so it is absent here on purpose and
+  // tests/unit/no-public-dubai.test.mjs fails if a route for it comes back.
   //
   // WRITTEN OUT rather than read from scope/registry.ts, because this script is
   // plain node with no TypeScript loader — the same reason `papers` and `projects`
@@ -312,20 +312,15 @@ const routeContracts = [
   routeContract('/heat-map/in/kolkata/ballygunge/', 'heat-map-tool', true),
   routeContract('/heat-map/in/kolkata/baruipur/', 'heat-map-tool', true),
   routeContract('/heat-map/in/kolkata/barrackpore/', 'heat-map-tool', true),
-  /* BENGALURU DRAWS AND DOES NOT PUBLISH, so `false` like Dubai's three — but for
-     a different reason worth stating. Dubai is registered so it can be NAMED and
-     ships nothing at all. Bengaluru ships every artefact the INSTRUMENT needs and
-     none the CATALOGUE needs: no provenance record, no STAC item, no tileset, no
-     pv screen. Indexing it would put three pages in front of a searcher with no
-     catalogue record behind them. They flip to `true` in the same commit that
+  /* BENGALURU DRAWS AND DOES NOT PUBLISH, so `false`. It ships every artefact the
+     INSTRUMENT needs and none the CATALOGUE needs: no provenance record, no STAC
+     item, no tileset, no pv screen. Indexing it would put three pages in front of
+     a searcher with no catalogue record behind them. They flip to `true` in the same commit that
      lands those artefacts — this list is hand-maintained precisely so that a new
      area cannot slip into search without someone deciding it should. */
   routeContract('/heat-map/in/bengaluru/indiranagar/', 'heat-map-tool', false),
   routeContract('/heat-map/in/bengaluru/mg-road/', 'heat-map-tool', false),
   routeContract('/heat-map/in/bengaluru/whitefield/', 'heat-map-tool', false),
-  routeContract('/heat-map/ae/dubai/creek/', 'heat-map-tool', false),
-  routeContract('/heat-map/ae/dubai/al-quoz/', 'heat-map-tool', false),
-  routeContract('/heat-map/ae/dubai/south/', 'heat-map-tool', false),
   routeContract('/heat-map/compare/', 'heat-map-tool', false),
   routeContract('/heat-map/brief/', 'heat-map-tool', false),
   // The three standards documents. Indexable and permanent: they are the public

@@ -502,6 +502,35 @@ export function isDrawable(country: string, city: string, area: string): boolean
   return entry.drawable;
 }
 
+/**
+ * THE PUBLIC GATE. The areas that get a page, a sitemap entry, a switcher option
+ * and a link anywhere on the site. Everything that PUBLISHES an area reads this;
+ * `AREA_KEYS` is the full registry and stays the right list for code that must be
+ * able to NAME an area without publishing it (the scope resolver, the tests, the
+ * Dubai entries the scope code relies on).
+ *
+ * DERIVED FROM `drawable`, not from a new flag. A second list ("public countries")
+ * would be one more thing free to drift from the registry, and `drawable` already
+ * says the right thing: "can the instrument open this area". An area it cannot
+ * open has nothing to show but a placeholder naming the city and its tier, and
+ * the founder's decision (2026-09-05, re-confirmed 2026-11-06) is that Dubai has
+ * no public surface at all. Dubai is the only non-drawable area, so the gate
+ * excludes exactly it, and Bengaluru (drawable, not published to the catalogue)
+ * is untouched. NOT `shipsData`: that would also drop Bengaluru's three pages.
+ *
+ * To put a not-yet-drawable city on the site as a placeholder again, this is the
+ * one line to change.
+ */
+export const PUBLIC_AREA_KEYS: readonly AreaKey[] = AREA_KEYS.filter((key) => {
+  const { country, city, area } = splitKey(key);
+  return isDrawable(country, city, area);
+});
+
+/** Membership in `PUBLIC_AREA_KEYS`, for untrusted input (a URL path segment). */
+export function isPublicArea(value: unknown): value is AreaKey {
+  return isAreaKey(value) && PUBLIC_AREA_KEYS.includes(value);
+}
+
 export function shippingAreaIds(): readonly string[] {
   const ids: string[] = [];
   for (const entry of Object.values(COUNTRIES)) {

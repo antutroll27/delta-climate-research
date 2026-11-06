@@ -256,28 +256,6 @@ test.describe('@v2 phone 390x844', () => {
     expect(await phoneIssues(page)).toEqual([]);
   });
 
-  test('@v2 no artefacts (Al Quoz): one centred card, "Open a validated area", the menu reachable, no sheet; nothing overlaps', async ({ page }) => {
-    await seenNote(page);
-    await openV2(page, '/heat-map/ae/dubai/al-quoz/');
-    const card = page.locator('.notyet');
-    await expect(card).toBeVisible();
-    await expect(card.locator('a')).toHaveText('Open a validated area →');
-    await expect(page.locator('#v2Sheet')).toHaveCount(0);
-    const b = await card.boundingBox();
-    expect(b!.x).toBeGreaterThanOrEqual(0);
-    expect(b!.x + b!.width).toBeLessThanOrEqual(390.5);
-    await expect(page.locator('.st-attrib .attrib')).toBeVisible();
-    expect(await occludedBy(page, '.st-attrib .attrib')).toBeNull();
-    expect(await phoneIssues(page)).toEqual([]);
-    await menu(page).click();
-    await expect(page.locator('#v2Drawer [data-side-pane="explore"]'), 'the Location selects are the way off this page').toBeVisible();
-    await expect(page.locator('#v2Drawer [data-side-pane="explore"] .field-trigger').first()).toBeVisible();
-    await expect(page.locator('#v2Drawer .nav-item[data-section="overview"]')).toBeEnabled();
-    await expect(page.locator('#v2Drawer .nav-item[data-section="heat"]')).toBeDisabled();
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#v2Drawer')).toBeHidden();
-  });
-
   test('@v2 Compare and the paired brief on a phone: the rail is the drawer, the caveats are on the page, nothing scrolls sideways', async ({ page }) => {
     await seenNote(page);
     await page.goto('/heat-map/compare/');

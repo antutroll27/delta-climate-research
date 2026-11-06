@@ -61,21 +61,6 @@ test.describe('@v2 states', () => {
     await expect(page.locator('#airStatus')).toContainText('could not be loaded just now');
   });
 
-  test('@v2 empty: no artefacts says so (Open a validated area), the Air pane names the uncovered city, and the menu offers only what exists', async ({ page }) => {
-    await openV2(page, '/heat-map/ae/dubai/al-quoz/');
-    const card = page.locator('.notyet');
-    await expect(card).toBeVisible();
-    await expect(card.locator('a')).toHaveText('Open a validated area →');
-    await expect(card.locator('a')).toHaveAttribute('href', /\/heat-map\/in\/kolkata\/ballygunge\/$/);
-    /* FINAL audit F10: UNREACHABLE BY DESIGN (spec §4.10). Air is disabled on a no-data area (the loop below), so a reader never sees this note: it is in the DOM, and this asserts exactly that (attached),
-       not visibility the page does not offer. The sentence is still checked, as markup. */
-    await expect(page.locator('#airPane')).toBeAttached();
-    await expect(page.locator('#airPane')).toContainText('Air quality covers Kolkata and Bengaluru; this city is not yet covered.');
-    for (const s of ['heat', 'air', 'solar', 'weather', 'scenarios']) await expect(page.locator(`.nav-item[data-section="${s}"]`)).toBeDisabled();
-    for (const s of ['overview', 'methods']) await expect(page.locator(`.nav-item[data-section="${s}"]`)).toBeEnabled();
-    await expect(page.locator('#mlmap')).toHaveCount(0);
-  });
-
   test('@v2 loading: the engine line and the em-dashes show until the instrument answers; the home page\'s hologram loader is not v2\'s to show', async ({ page }) => {
     await page.goto(BALLY, { waitUntil: 'commit' });
     await expect(page.locator('main.obos-v2')).toHaveCount(1);
