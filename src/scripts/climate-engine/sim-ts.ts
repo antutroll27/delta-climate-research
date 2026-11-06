@@ -48,7 +48,10 @@ export class TsHeatSim implements HeatSim {
   }
 
   /** Per-cell source term of the relaxation, independent of dt and of temperature:
-   *  S(1-albedo)sun - L veg + Q built + store + kRad tSky + h wind tAir. Rebuilt only when the params or layers change. */
+   *  S(1-albedo)sun - L veg + Q built + store + kRad tSky + h wind tAir. Rebuilt only on reset() or setParams():
+   *  the layers are READ AT reset(), so editing layer arrays in place mid-run is not seen (no caller does; pass new
+   *  layers through reset()). The summation order differs from stepGeneral, so results are bit-identical on every
+   *  shipped area (layers quantised to 1/255 or 1/100) and at most one float32 step apart on continuous-valued layers. */
   private source = new Float64Array(0);
   private sourceFor: SimParams | null = null;
   private anyWater = false;
@@ -122,6 +125,13 @@ export class TsHeatSim implements HeatSim {
           const temperature = this.field[index];
           const laplacian = this.field[y * n + west] + this.field[y * n + east]
             + this.field[north * n + x] + this.field[south * n + x] - 4 * temperature;
+          /* NO PER-CELL VENTILATION FACTOR (removed 2026-10-05). The convective term
+             was multiplied by `max(0.15, 1 − 0.55·built + 0.65·water)`, which no fit
+             had ever seen: it ran the displayed ward mean +0.2 to +1.1 K warm of the
+             calibrated equation the bands describe, and measured against ECOSTRESS it
+             made within-ward skill WORSE, not better (r 0.267 → 0.261, paired 95 % CI
+             of the loss [0.004, 0.009], all three wards). The convective term is now
+             the calibrated `h·wind`. docs/evidence/known-limitations.md §18. */
           const ventilation = p.wind;
           const delta = p.D * laplacian
             + p.S * (1 - layers.albedo[index]) * p.sun
@@ -129,6 +139,7 @@ export class TsHeatSim implements HeatSim {
             - p.L * layers.veg[index]
             - p.h * ventilation * (temperature - p.tAir)
             + p.Q * layers.built[index]
+            // nocturnal storage release; zero by day (see SimParams.store)
             + p.store;
           const next = temperature + safeDt * delta;
           this.scratch[index] = Math.max(0, Math.min(80, next * (1 - layers.water[index] * 0.35)
