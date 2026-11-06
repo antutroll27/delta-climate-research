@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { handle } from './api/air-quality.ts';
 import { IST_CLOCK, fixedClock } from './src/lib/aqi/clock.ts';
-import { istHourKey, istHours, window24, window8 } from './src/lib/aqi/hours.ts';
+import { istHourKey, istHours } from './src/lib/aqi/hours.ts';
 import { istStamp } from './src/lib/aqi/cpcb-feed.ts';
 import { archivePath } from './src/lib/aqi/relay-store.ts';
 import { buildPayload } from './src/lib/aqi/build.ts';
