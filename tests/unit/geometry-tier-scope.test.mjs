@@ -62,7 +62,8 @@ test('a geometry-tier city gets the not-validated line and never a band', () => 
   assert.equal(claim.kind, 'none');
   assert.equal(claim.line, NOT_VALIDATED_LINE);
   assert.ok(!/±/.test(claim.line + claim.detail));
-  assert.deepEqual(heatAccuracyClaim(resolve(KOL).tier), { kind: 'band' });
+  /* #77: a band claim now carries its figures (`figures`, `footLine`); the gate is the KIND. */
+  assert.equal(heatAccuracyClaim(resolve(KOL).tier).kind, 'band');
 });
 
 test('a one-area city has no "other area": Compare\'s fallback is null, not a self-pair', () => {
