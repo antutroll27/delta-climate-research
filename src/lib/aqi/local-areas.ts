@@ -33,6 +33,9 @@ export const LOCAL_AIR_AREAS: Readonly<Record<string, LocalAirArea>> = {
  */
 export const LOCAL_LIVE_MS: Readonly<Record<LocalStandard, number>> = { 'nl-lki': 2 * 3_600_000, 'jp-eqs': 3 * 3_600_000 };
 
+/** The clock each standard's card tells its times on (the zone of every area using it); the painters read it here, not as a literal in the engine tree. */
+export const LOCAL_STANDARD_TZ: Readonly<Record<LocalStandard, string>> = { 'nl-lki': 'Europe/Amsterdam', 'jp-eqs': 'Asia/Tokyo' };
+
 export function isLocalAirArea(key: string): boolean {
   return Object.hasOwn(LOCAL_AIR_AREAS, key);
 }

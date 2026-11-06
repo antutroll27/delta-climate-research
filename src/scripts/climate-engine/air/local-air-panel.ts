@@ -17,7 +17,7 @@
  */
 import { JP_BASIS_NOTE, JP_POLLUTANTS, JP_STANDARDS } from '../../../lib/aqi/jp-standards.ts';
 import { LKI_COLOUR, LKI_KEY, LKI_LABEL } from '../../../lib/aqi/lki.ts';
-import { localAirArea, LOCAL_LIVE_MS } from '../../../lib/aqi/local-areas.ts';
+import { localAirArea, LOCAL_LIVE_MS, LOCAL_STANDARD_TZ } from '../../../lib/aqi/local-areas.ts';
 import type { JpReading, LkiBand, LocalAirPayload, LocalStation, NlReading } from '../../../lib/aqi/local-types.ts';
 import { isLocalAirPayload } from '../../../lib/aqi/local-valid.ts';
 import type { AirIo, AirPaint } from './air-panel.ts';
@@ -36,10 +36,10 @@ export function localTime(iso: string, standard: LocalAirPayload['standard'], wi
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return '—';
   if (standard === 'jp-eqs') {
-    const f = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tokyo', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms));
+    const f = new Intl.DateTimeFormat('en-GB', { timeZone: LOCAL_STANDARD_TZ[standard], day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms));
     return (withDate ? f.replace(',', '') : f.split(', ')[1] ?? f) + ' JST';
   }
-  const opts: Intl.DateTimeFormatOptions = { timeZone: 'Europe/Amsterdam', hour: '2-digit', minute: '2-digit', hour12: false, timeZoneName: 'short' };
+  const opts: Intl.DateTimeFormatOptions = { timeZone: LOCAL_STANDARD_TZ[standard], hour: '2-digit', minute: '2-digit', hour12: false, timeZoneName: 'short' };
   return new Intl.DateTimeFormat('en-GB', withDate ? { ...opts, day: 'numeric', month: 'short' } : opts).format(new Date(ms)).replace(',', '');
 }
 

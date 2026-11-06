@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { isAirCity } from '../../src/lib/aqi/stations.ts';
-import { localAirCityReady } from '../../src/lib/aqi/local-areas.ts';
+import { localAirCityReady, LOCAL_AIR_AREAS, LOCAL_STANDARD_TZ } from '../../src/lib/aqi/local-areas.ts';
 import { lkiUrl, measurementsUrl, readAmsterdam } from '../../src/lib/aqi/luchtmeetnet.ts';
 import { METADATA_URL, readTokyo, SORAMAME_BASE } from '../../src/lib/aqi/soramame.ts';
 import { loadAir } from '../../src/scripts/climate-engine/air/air-panel.ts';
@@ -175,4 +175,8 @@ test('THE CARD FOLLOWS THE MAP: isAirCity for a local city is exactly "drawable"
   assert.equal(isAirCity('in/kolkata/ballygunge'), true);
   assert.equal(isAirCity('in/bengaluru/indiranagar'), true);
   assert.equal(isAirCity('ae/dubai/creek'), false);
+});
+
+test('the zone each standard\'s card tells time in is the zone every area using it declares', () => {
+  for (const a of Object.values(LOCAL_AIR_AREAS)) assert.equal(LOCAL_STANDARD_TZ[a.standard], a.tz);
 });
