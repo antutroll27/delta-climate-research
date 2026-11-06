@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ACCURACY, TRANSITION_HOURS, TRANSITION_RMSE_K, SEASONAL_CAVEATS, SEASONAL_WARDS, seasonalCaveatLine } from '../../src/scripts/climate-engine/accuracy.ts';
 import { checkedRows, caveatRows, transitionChip } from '../../src/scripts/climate-engine/v2/method-copy.ts';
+import { heatAccuracyClaim } from '../../src/scripts/climate-engine/scope/accuracy-claim.ts';
 
 test('every figure in "How this was checked" is the accuracy.ts export', () => {
   const rows = checkedRows();
@@ -39,13 +40,13 @@ test('F7: season rows only for a ward the seasonal measurement covers', () => {
   assert.equal(caveatRows('mg-road').length, 1, 'only the dawn row remains');
   assert.equal(caveatRows().filter((r) => r.k === 'Season').length, SEASONAL_CAVEATS.length, 'no area given: all rows (the Data & methods page)');
   const heat = readFileSync('src/components/ClimateEngine/v2/HeatCards.astro', 'utf8');
-  assert.ok(heat.includes('caveatRows(scope.area.id)'), 'HeatCards must pass the area id');
+  assert.ok(heat.includes('figures.limits(scope.area.id)'), 'HeatCards must pass the area id');
 });
 
-/* The transition chip is the app's own sentence (heat-map-app.ts applyConfidence). If the app's wording moves, this copy must follow. */
+/* The transition chip is the app's own sentence (applyConfidence prints figures.chip, scope/accuracy-claim.ts). If its wording moves, this copy must follow. */
 test('the chip text equals what applyConfidence prints, word for word', () => {
-  const app = readFileSync('src/scripts/climate-engine/heat-map-app.ts', 'utf8');
-  assert.ok(app.includes('`Outside validation · ${fig(`~±${TRANSITION_RMSE_K.toFixed(1)} °C`)} at this hour${seasonChip}`'), 'the app\'s transition chip changed');
+  const printed = heatAccuracyClaim('validated').figures.chip('night', true, '').html.replace(/<\/?b>/g, '');
+  assert.equal(printed, transitionChip());
 });
 
 /* H23: the file types no figure. Digits may appear only as formatting (toFixed(1), padStart(2), a minutes factor of 60). */

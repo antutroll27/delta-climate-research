@@ -3,7 +3,6 @@
 // #histo and #rampSc live once, in the temperature card; this card holds the class key and the limits of what the colours mean.
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 import Sym from './Sym.astro';
-import { checkedRows, caveatRows } from '../../../scripts/climate-engine/v2/method-copy.ts';
 import { heatAccuracyClaim } from '../../../scripts/climate-engine/scope/accuracy-claim.ts';
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
@@ -15,14 +14,14 @@ const claim = heatAccuracyClaim(scope.tier);
   <div class="classes"><span><i class="hk h1"></i>Comfortable</span><span><i class="hk h2"></i>Warm</span><span><i class="hk h3"></i>Hot</span><span><i class="hk h4"></i>Severe</span><span><i class="hk h5"></i>Extreme</span></div>
   <p class="foot">Building colour: continuous ramp, or snapped to the 5 legend classes</p>
   <p class="foot pattern-note" id="patternNote"></p>
-  <p class="foot">{claim.kind === 'band' ? 'Satellite-checked surface temperature, not air temperature.' : 'Modelled surface temperature, not air temperature.'}</p>
+  <p class="foot">{claim.footLine}</p>
 </article>
 <article class="card" data-v2-card="method" data-sections="heat">
   {claim.kind === 'band' ? (<Fragment>
   <details class="disc"><summary>How this was checked <span class="chev" aria-hidden="true">›</span></summary>
-    <div class="body"><ul class="method">{checkedRows().map((r) => <li><span class="micro">{r.k}</span><span class="foot">{r.v}</span></li>)}</ul></div></details>
+    <div class="body"><ul class="method">{claim.figures.howChecked().map((r) => <li><span class="micro">{r.k}</span><span class="foot">{r.v}</span></li>)}</ul></div></details>
   <details class="disc"><summary>Caveats OBOS adds when they apply <span class="chev" aria-hidden="true">›</span></summary>
-    <div class="body"><ul class="method">{caveatRows(scope.area.id).map((r) => <li><span class="micro">{r.k}</span><span class="foot">{r.v}</span></li>)}</ul></div></details>
+    <div class="body"><ul class="method">{claim.figures.limits(scope.area.id).map((r) => <li><span class="micro">{r.k}</span><span class="foot">{r.v}</span></li>)}</ul></div></details>
   </Fragment>) : (
   <details class="disc"><summary>How this was checked <span class="chev" aria-hidden="true">›</span></summary>
     <div class="body"><p class="foot">{claim.detail}</p></div></details>)}

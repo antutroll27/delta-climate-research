@@ -24,7 +24,8 @@
 import type { Ward } from '../../data/wards.ts';
 import { wardFeature } from './geojson.ts';
 import { LICENCE_BLOCK } from './odbl.ts';
-import { wardRecord } from './ward-record.ts';
+import { wardRecord, type WardRecord } from './ward-record.ts';
+import { surfaceBandFacts } from '../climate-engine/scope/accuracy-claim.ts';
 
 export const CORE_CONTEXT = 'https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.7.jsonld';
 export const LOCAL_CONTEXT = '/api/ngsi-ld/context.jsonld';
@@ -64,9 +65,15 @@ const prop = (value: unknown, unitCode?: string, observedAt?: string) => ({
 });
 
 export function wardEntity(w: Ward, opts: { readonly inline?: boolean } = {}) {
-  const r = wardRecord(w);
+  return entityFromRecord(w, wardRecord(w), opts);
+}
+
+/** The entity for an already-built record. Split out so the tier gate can be exercised
+ *  without a second published city. */
+export function entityFromRecord(w: Ward, r: WardRecord, opts: { readonly inline?: boolean } = {}) {
   const f = wardFeature(w);
   const b = r.boundary;
+  const band = surfaceBandFacts(r.confidence);
   return {
     // Req: `id` is a URI. The URN form is the NGSI-LD convention.
     id: `urn:ngsi-ld:UrbanClimateWard:${w.id}`,
@@ -100,9 +107,12 @@ export function wardEntity(w: Ward, opts: { readonly inline?: boolean } = {}) {
     // the building-derived data is ODbL, so the licence travels with it (for a ward with
     // a boundary, the polygon in `location` is the exception — see `boundaryLicence`)
     dataLicence: prop(LICENCE_BLOCK.notice),
-    surfaceTemperatureBand: prop(r.confidence.night.bandK, 'KEL'),
-    surfaceTemperatureTier: prop(r.confidence.night.tier),
-    validationSampleSize: prop(r.confidence.night.n),
+    /* Present only where the city has a measurement; a city without one states nothing here. */
+    ...(band === null ? {} : {
+      surfaceTemperatureBand: prop(band.band, 'KEL'),
+      surfaceTemperatureTier: prop(band.tier),
+      validationSampleSize: prop(band.sampleSize),
+    }),
     '@context': opts.inline ? CONTEXT_DOCUMENT['@context'] : LOCAL_CONTEXT,
   };
 }

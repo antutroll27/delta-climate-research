@@ -5,7 +5,6 @@
 // The receipts button and panel are v1's: the app fills #srcPanel from {ward}-layers.json (or "Provenance manifest unavailable.").
 import Sym from './Sym.astro';
 import { allWardRecords, LICENCES } from '../../../scripts/standards/ward-record.ts';
-import { ACCURACY, SPATIAL, HEIGHTS, PEAK_EVIDENCE_BASIS, HEIGHTS_EVIDENCE_BASIS } from '../../../scripts/climate-engine/accuracy.ts';
 import { areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
 import { resolve, type ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 import { heatAccuracyClaim } from '../../../scripts/climate-engine/scope/accuracy-claim.ts';
@@ -55,10 +54,10 @@ const shareAlike = sibs.find((s) => s.rec?.boundary)?.rec?.boundary?.shareAlike 
   <span class="micro">How sure</span>
   <ul class="method">
     <li><span class="micro">Measured</span><span class="foot">{first.quantity.measured}. Not: {first.quantity.isNot.map((x, i) => <Fragment>{i > 0 && ', '}<s>{x}</s></Fragment>)}. {first.quantity.note}</span></li>
-    <li><span class="micro">Night</span><span class="foot">calibrated · ±{ACCURACY.night.bandK.toFixed(1)} °C · n = {ACCURACY.night.n} · model error {ACCURACY.night.modelRmseK} K · ceiling {ACCURACY.night.ceilingRmseK} K</span></li>
-    <li><span class="micro">13:00 peak</span><span class="foot">indicative · ±{ACCURACY.peak.bandK.toFixed(1)} °C · n = {ACCURACY.peak.n}. {PEAK_EVIDENCE_BASIS}</span></li>
-    <li><span class="micro">Pattern</span><span class="foot">r {SPATIAL.rModel.toFixed(2)} block by block, below a vegetation map's r {SPATIAL.rVegOnly.toFixed(2)} · n = {SPATIAL.n}. {SPATIAL.note}</span></li>
-    <li><span class="micro">Heights</span><span class="foot">{HEIGHTS.nBuildings} of {HEIGHTS.minBuildings} buildings needed · {HEIGHTS.verdict}. {HEIGHTS_EVIDENCE_BASIS}</span></li>
+    <li><span class="micro">Night</span><span class="foot">{claim.figures.ledger.night}</span></li>
+    <li><span class="micro">13:00 peak</span><span class="foot">{claim.figures.ledger.peak}</span></li>
+    <li><span class="micro">Pattern</span><span class="foot">r {claim.figures.ledger.patternR} block by block, below a vegetation map's r {claim.figures.ledger.patternVegR} · n = {claim.figures.ledger.patternN}. {claim.figures.ledger.patternNote}</span></li>
+    <li><span class="micro">Heights</span><span class="foot">{claim.figures.ledger.heights}</span></li>
   </ul>
 </article>)}
 {claim.kind === 'none' && (
