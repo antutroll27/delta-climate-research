@@ -72,8 +72,10 @@ test('a one-area city has no "other area": Compare\'s fallback is null, not a se
   assert.notEqual(nextDistinctArea(KOL), null);
 });
 
-test('every city in CITIES has a credits row and a map-credit row, and no other city does', async () => {
+test('every REGISTERED city (Dubai included) has a credits row and a map-credit row, and every drawable CITIES entry is among them', async () => {
   const { CITY_CREDITS, CITY_MAP_CREDIT, CITY_CREDIT_NOTE } = await import('../../src/data/city-credits.ts');
-  const ids = Object.keys(CITIES).sort();
-  for (const table of [CITY_CREDITS, CITY_MAP_CREDIT, CITY_CREDIT_NOTE]) assert.deepEqual(Object.keys(table).sort(), ids);
+  const { AREA_KEYS, splitKey } = await import('../../src/scripts/climate-engine/scope/registry.ts');
+  const registered = [...new Set(AREA_KEYS.map((k) => splitKey(k).city))].sort();
+  for (const table of [CITY_CREDITS, CITY_MAP_CREDIT, CITY_CREDIT_NOTE]) assert.deepEqual(Object.keys(table).sort(), registered);
+  for (const id of Object.keys(CITIES)) assert.ok(registered.includes(id), `${id} is in CITIES but not registered`);
 });
