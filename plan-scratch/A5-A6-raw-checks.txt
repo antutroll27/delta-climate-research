@@ -1,0 +1,7 @@
+G6-style: AHN DTM nodata mask (>=50% of a 2 m cell) vs 3D BAG footprints rasterised at 2 m
+  mask share 0.554, footprint share 0.372
+  Jaccard north-up 0.647   mirrored 0.285   ratio 2.27
+  share of footprint cells with DTM nodata: north-up 0.978  mirrored 0.552
+G5-style: Spearman rho between 3D BAG h and AHN4 nDSM p70 inside the 2 m bbox window of each footprint (DSM minus filled DTM)
+  north-up rho 0.917 (n=21261)   mirrored rho 0.036 (n=20759)
+  nDSM p70 minus h: median -0.39 m, p5 -2.46, p95 1.70  (AHN4 2020-22 vs mostly AHN5 2023; bbox windows overstate)

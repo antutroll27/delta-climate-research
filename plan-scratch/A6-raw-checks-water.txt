@@ -1,0 +1,4 @@
+DSM-nodata share 0.108; in blobs >= 400 m2: 0.090 (187 blobs)
+DTM at the bank (<= 3 m from DSM-nodata blobs): n=97956, median 0.59 m NAP, p10 -0.45, p90 1.71
+DTM > 30 m from water: n=2669436, median 0.55, p5 -1.44, p95 1.89
+DTM pixels < -1.5 m NAP: 215106; of them within 3 m of a water blob: 8075 (0.04)
