@@ -121,12 +121,12 @@ test.describe('observed weather', () => {
     await expect(page.locator('#liveSrc')).toHaveText('Air now · HAL airport (4 km)', { timeout: 60_000 });
     await expect(page.locator('#liveT')).toHaveText('28');
     await expect(page.locator('#wxLine')).toContainText('Partly cloudy at HAL airport (4 km) at 11:30 IST');
-    // SCT012 through Kasten & Czeplak is not the calibrated physics: no band may be printed over it
-    await expect(page.locator('#conf')).toHaveText('Outside validation · station cloud');
+    // Bengaluru is tier `geometry`: the bands were measured over Kolkata wards, so neither the station-cloud
+    // scene nor the calibrated 13:00 scenario may print one; the tier line subsumes the weather chip
+    await expect(page.locator('#conf')).toHaveText('Heat accuracy not yet validated for this city');
     await expect(page.locator('#lst .band')).toHaveCount(0);
-    // ...and the 13:00 scenario runs the calibrated physics, so its band comes back
     await page.locator('#segPhase button[data-p="peak"]').click();
-    await expect(page.locator('#conf')).not.toContainText('Outside validation', { timeout: 30_000 });
-    await expect(page.locator('#lst .band')).toHaveCount(1);
+    await expect(page.locator('#conf')).toHaveText('Heat accuracy not yet validated for this city', { timeout: 30_000 });
+    await expect(page.locator('#lst .band')).toHaveCount(0);
   });
 });
