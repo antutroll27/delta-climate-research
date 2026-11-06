@@ -76,6 +76,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import _bangalore as blr  # noqa: E402
+import _city  # noqa: E402
 import _types  # noqa: E402
 import _wardmask  # noqa: E402
 
@@ -132,6 +133,10 @@ def surface_wards() -> dict[str, _types.Ward]:
                 f"{w.id}: ward size {w.size_m} m is not a whole number of metres, so it "
                 f"has no exact 10 m grid — refusing to truncate it into one")
         wards[w.id] = _types.Ward(w.id, _types.LatLon(w.centre.lat, w.centre.lon), int(w.size_m))
+    # Cities after Bengaluru (scripts/_city.py). ADDITIVE: the loops above are untouched, and a
+    # bare run still builds only Kolkata's three (see main), so no committed raster moves.
+    for a in _city.AREAS.values():
+        wards[a.id] = _types.Ward(a.id, _types.LatLon(a.centre.lat, a.centre.lon), a.size_m)
     return wards
 
 

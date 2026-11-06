@@ -2008,7 +2008,7 @@ test('the payback sheet says "quote" only to deny it, and the ward line carries 
   assert.doesNotMatch(app, /Conservative city case/, 'the ward line calls a flattering case conservative');
   /* Since KMC Ward 68 (2026-10-03) the case names the ward and its roofs where a polygon
      exists ("KMC Ward 68 estimate: every roof in the ward …"), and reads as before elsewhere. */
-  assert.match(app, /\$\{wardMask \? `\$\{wardMask\.name\} estimate` : 'Whole-ward estimate'\}: every roof\$\{wardMask \? ' in the ward' : ''\} that can take \$\{MIN_SYSTEM_KW\} kW or more, at its floor capacity, no subsidy, every kWh valued at \$\{fmtRate\(tariff, COSTS\)\} as if all of it is used: \$\{verdict\}/,
+  assert.match(app, /\$\{wardMask \? `\$\{wardMask\.name\} estimate` : 'Whole-ward estimate'\}: every roof\$\{wardMask \? ' in the ward' : ''\} that can take \$\{MIN_SYSTEM_KW\} kW or more, at its floor capacity, no subsidy, every kWh valued at \$\{solarRate\(tariff\)\} as if all of it is used: \$\{verdict\}/,
     'the ward payback line no longer states its case, valuation and tariff');
   assert.match(app, /per kW, today's prices`\s*\+ ` · reference defaults as of/, "the ward line drops \"today's prices\"");
   /* `rows` since Ward 68: the ward's roofs, every roof where there is no polygon. */

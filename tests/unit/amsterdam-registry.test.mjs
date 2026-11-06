@@ -100,11 +100,8 @@ test('Europe/Amsterdam springs forward and falls back at the right UTC instants'
   assert.match(hm('2027-10-31T01:30:00Z'), /^02:30 (CET|GMT\+1)$/);
 });
 
-/* RED BY DESIGN once Task A8 lands: `veg` is a 0 placeholder until the Sentinel-2
-   fractional vegetation cover is measured over the footprint. `todo` keeps the run
-   green today and prints the debt on every run; A8 must replace the value and drop
-   the `todo` option. */
-test('veg is a measured Sentinel-2 FVC, not the A2 placeholder', { todo: 'A8 measures it' }, () => {
-  const veg = wardsOfCity('amsterdam')[0].veg;
-  assert.ok(veg > 0 && veg < 1, `veg is ${veg}`);
+/* `veg` was a 0 placeholder until Task A8 measured the Sentinel-2 fractional vegetation
+   cover (surface-meta.json `fvc_mean`); the equality test lives in amsterdam-artefacts.test.mjs. */
+test('veg is no longer the A2 placeholder', () => {
+  assert.ok(wardsOfCity('amsterdam')[0].veg > 0);
 });

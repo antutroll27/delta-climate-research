@@ -126,12 +126,10 @@ const BENGALURU_WARDS: readonly WardRecord[] = [
 /**
  * AMSTERDAM, third city, geometry tier (docs: research/new-cities/PLAN-amsterdam-tokyo.md §2).
  *
- * TWO VALUES ARE DELIBERATE PLACEHOLDERS, and each is held by a test rather than
- * a comment:
- *   · `veg` is 0 until Task A8 measures the Sentinel-2 fractional vegetation cover
- *     over this footprint (tests/unit/amsterdam-registry.test.mjs carries a `todo`
- *     that goes red-by-design the day A8 lands and this is still 0).
- *   · `swatch` is a neutral stand-in for the founder's visual review (plan A13).
+ * `veg` IS MEASURED (Task A8): 0.295 is the mean fractional vegetation cover of the
+ * exported Sentinel-2 raster (surface-meta.json `fvc_mean` 0.2947, 25 scenes 2021-2025),
+ * and tests/unit/amsterdam-artefacts.test.mjs holds the two equal to three places.
+ * `swatch` is a neutral stand-in for the founder's visual review (plan A13).
  *
  * `body` names the three stadsdelen the 2.8 km square actually covers, MEASURED by
  * intersecting it with the Gemeente Amsterdam gebieden/stadsdelen polygons
@@ -145,7 +143,7 @@ const BENGALURU_WARDS: readonly WardRecord[] = [
 const AMSTERDAM_WARDS: readonly WardRecord[] = [
   { id: 'canal-ring', name: 'Canal <em>Ring</em>', zone: 'Canal Belt · Vondelpark',
     body: 'Gemeente Amsterdam (stadsdelen Centrum, Zuid, West)',
-    lat: 52.3640, lon: 4.8850, veg: 0, footprintM: 2800,
+    lat: 52.3640, lon: 4.8850, veg: 0.295, footprintM: 2800,
     swatch: 'radial-gradient(circle at 40% 40%,#6fcad6,#9fb98a 58%,#093a3e)' },
 ];
 
