@@ -1,0 +1,112 @@
+{
+  "city": "tokyo",
+  "area": "marunouchi",
+  "retrieved": "2026-11-06",
+  "userAgent": "obos-pipeline/1.0 (+https://deltaclimate.earth)",
+  "note": "Air-quality sources only (Phase C, task C4). This file is separate from the Tokyo geometry sources.json (task B-phase, feat/city-tokyo) so the two branches cannot conflict; fold it in when both have landed.",
+  "sources": [
+    {
+      "id": "soramame-national-stations",
+      "role": "live air quality: hourly PM2.5, NO2 and Ox from the Ministry of the Environment's NATIONAL stations (国設局) only",
+      "name": "環境省大気汚染物質広域監視システム（そらまめくん）(AEROS, Soramame-kun)",
+      "retrieved": "2026-11-06",
+      "urls": {
+        "metadata": {
+          "url": "https://soramame.env.go.jp/data/sokutei/noudoAll/metadata.json",
+          "http": 200,
+          "example": "{\"latest\":\"2026/11/06 21:00:00\",\"oldest\":\"2021/01/25 00:00:00\",\"interval\":\"3600\"}"
+        },
+        "hourly": {
+          "url": "https://soramame.env.go.jp/data/sokutei/noudoAll/{YYYY}/{MM}/{DD}/{HH}.csv",
+          "http": 200,
+          "note": "found in the site's own script app.c4669626.js; an hour that does not yet exist is answered with HTTP 200 and the site's 2,593-byte HTML page (tests/fixtures/aqi/jp/noudoAll-2026-11-06-22-placeholder.html)"
+        },
+        "stationMaster": {
+          "url": "https://soramame.env.go.jp/data/map/kyokuNoudo/{YYYY}/{MM}/{DD}/01.csv",
+          "http": 200,
+          "note": "daily file the map draws its points from (metadata at …/kyokuNoudo/metadata.json); columns 緯度,経度,測定局コード,測定局名称,所在地,測定局種別,問い合わせ先,都道府県コード; 1,666 stations; trimmed copy in tests/fixtures/aqi/jp/kyokuNoudo-master-2026-11-06-trimmed.csv"
+        },
+        "apiManual": {
+          "url": "https://soramame.env.go.jp/data/apiManual/2.html",
+          "http": 200,
+          "note": "§2-1 rights, §2-2 attributes and units, §2-3 provisional values"
+        },
+        "jsonApi": {
+          "url": "https://soramame.env.go.jp/soramame/api/data_search",
+          "http": 200,
+          "note": "NOT used: a narrow SKT_CD request answered in 1 s but its newest record was the previous evening (a day behind); the whole-prefecture request timed out at 40 s in the planning research"
+        }
+      },
+      "hourConvention": {
+        "finding": "file …/{DD}/{HH}.csv is the one-hour mean ENDING at HH:00 JST; metadata.latest names the same HH:00",
+        "evidence": [
+          "API manual records number the hours 01 to 24 (first record of a day SKT_TIME 01)",
+          "file 21.csv Last-Modified 22:01 JST, 04.csv 05:01 JST: about an hour after the hour it names closed; 22.csv at 22:28 JST was still the placeholder",
+          "22 files of 2026-11-06 vs JMA AMeDAS Tokyo 44132 10-minute temperature: mean of Tokyo-prefecture TEMP fits the AMeDAS mean of the hour ENDING at HH:00 with spread 0.46 C (21 hours), the hour STARTING at HH:00 with 0.77 C (22 hours)"
+        ]
+      },
+      "licence": "公共データ利用規約（第1.0版）PDL 1.0, compatible with CC BY 4.0, commercial use allowed; applies to NATIONAL stations only",
+      "licenceUrl": "https://www.env.go.jp/mail.html",
+      "licenceBasis": {
+        "apiManual2_1": "本サイト上からAPIで取得するデータの著作権は、環境省、それぞれの地方公共団体及び国立環境研究所が保有します。 / 国設局以外の測定データのご利用については、それぞれの地方公共団体及び国立環境研究所にお問い合わせください。 / 国設局のデータについては、下記リンク先の利用ルールに従ってご利用いただきますようお願いします。http://www.env.go.jp/mail.html",
+        "envGoJpMail": "1.1 出典の記載について: ア 本コンテンツを利用する際は出典を記載してください。 … （出典記載例）出典：環境省ホームページ　（当該ページのURL） / 出典：「○○動向調査」（環境省） （当該ページのURL）　（○年○月○日に利用）。 イ 本コンテンツを編集・加工等して利用する場合は、上記出典とは別に、編集・加工等を行ったこと及びその主体を記載してください。なお、編集・加工した情報を、あたかも国又は府省等…が作成した未加工のままであるかのような態様で公表・利用してはいけません。（記載例）「○○動向調査」（環境省） （当該ページのURL）をもとに○○株式会社作成"
+      },
+      "requiredCredit": "出典：環境省大気汚染物質広域監視システム（そらまめくん）（https://soramame.env.go.jp/）（速報値）",
+      "requiredEditStatement": "「環境省大気汚染物質広域監視システム（そらまめくん）」（環境省）（https://soramame.env.go.jp/）をもとにDelta Climate Research作成（国設局の測定値を選んで表示）",
+      "creditWordingNote": "TOKYO-TERMS.md proposed the edit line '環境省「そらまめくん」をもとにDelta Climate Research作成'. The Ministry's own pattern is '「<title>」（環境省）（<URL>）をもとに<who>作成'; the line above follows that pattern exactly (title in kagi brackets, （環境省）, the URL, then the editor) and still names Delta Climate Research as the editor (PDL 1.0 §1.1). The 速報値 in the credit line follows TOKYO-TERMS.md.",
+      "nationalRule": "a station is national only when 測定局名称 starts with 国設 AND 問い合わせ先 is 環境省. Excluded by the rule although named 国設: 国設箟岳 (宮城県), 国設名古屋大気環境測定所 (愛知県), 国設前橋自動車交通環境測定所 (群馬県); excluded although the contact is 環境省: 筑後小郡 (no 国設). All Tokyo-to and ward stations (問い合わせ先 東京都 / 千代田区 …) are excluded until their owners consent (founder Q6b).",
+      "stationsUsed": [
+        {
+          "id": "13101520",
+          "name": "国設霞が関",
+          "kind": "roadside (自排局)",
+          "lat": 35.669444,
+          "lon": 139.756389,
+          "distance_m": 1529,
+          "reports": "NO2, Ox (no PM2.5)"
+        },
+        {
+          "id": "13104540",
+          "name": "国設新宿",
+          "kind": "roadside (自排局)",
+          "lat": 35.681389,
+          "lon": 139.718611,
+          "distance_m": 3858,
+          "reports": "NO2, Ox, PM2.5"
+        },
+        {
+          "id": "13104010",
+          "name": "国設東京（新宿）",
+          "kind": "general (一般局)",
+          "lat": 35.677778,
+          "lon": 139.716667,
+          "distance_m": 4067,
+          "reports": "NO2, Ox, PM2.5, SO2, CO, SPM, met"
+        },
+        {
+          "id": "14131030",
+          "name": "国設川崎",
+          "kind": "general (一般局)",
+          "lat": 35.515,
+          "lon": 139.712222,
+          "distance_m": 19157,
+          "reports": "NO2, Ox, PM2.5"
+        }
+      ],
+      "centre": {
+        "lat": 35.6826,
+        "lon": 139.7613,
+        "basis": "PLAN-amsterdam-tokyo.md, Phase B area defaults for marunouchi (centre 35.6826, 139.7613); the Tokyo registry entry arrives with task B6"
+      },
+      "standards": {
+        "source": "https://www.env.go.jp/kijun/taiki.html 「大気汚染に係る環境基準」 (read 2026-11-06)",
+        "pm25": "１年平均値が15μg/m3以下であり、かつ、１日平均値が35μg/m3以下であること。(H21.9.9告示)",
+        "no2": "１時間値の１日平均値が0.04ppmから0.06ppmまでのゾーン内又はそれ以下であること。(53. 7.11告示)",
+        "ox": "オゾンとして、８時間値が0.07ppm以下であり、かつ、日最高８時間値の１年平均値が0.04ppm以下であること。（R8.1.30告示）",
+        "oxNote": "Revised by the notice of 2026-01-30: the older rule (hourly value 0.06 ppm or less) is NOT current and is not used."
+      },
+      "provisional": "速報値 (provisional): 'データ検証の結果、後日修正されることがあります' (API manual §2-3). The card says so on every figure.",
+      "openFounderQuestion": "Q6b: consent from Tokyo Metropolitan Government and the ward owners before any non-national station is shown; Q3: the Japan legal read."
+    }
+  ]
+}
