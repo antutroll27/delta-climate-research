@@ -37,6 +37,17 @@ export function scriptIds() {
 /* FLIP: the built page IS the v2 tree (flip plan B.1). The ids v1 carried and a script binds are frozen in tests/unit/fixtures/obos-v1-bound-ids.json (taken from the rc6 v1 build, so this
    test no longer needs v1 on the site, and v1's source can be deleted in PR 2). */
 const V1_BOUND = JSON.parse(readFileSync('tests/unit/fixtures/obos-v1-bound-ids.json', 'utf8'));
+/* Ids Kolkata's tree carries that Amsterdam's page legitimately does not, each with its reason (checked both ways below: an exempt id
+   that appears must be removed from this list, so it cannot hide a regression). */
+const NOT_ON_PAGE = new Map([
+  ['heat-map/nl/amsterdam/canal-ring', new Map([
+    ['big-ballygunge', 'the building-card tab of another city\'s ward: Amsterdam has one area'],
+    ['big-barrackpore', 'the building-card tab of another city\'s ward: Amsterdam has one area'],
+    ['big-baruipur', 'the building-card tab of another city\'s ward: Amsterdam has one area'],
+    ['report-link', 'the ward-record download exists only where area.publishes (shipsData false)'],
+    ['segPath', 'the warming-pathway control exists only where the country adopts a pathway (the Netherlands: pathway null)'],
+  ])],
+]);
 function pageParts(path) {
   const file = `dist/${path}/index.html`;
   assert.ok(existsSync(file), `run npm run build first (${file})`);
@@ -58,7 +69,9 @@ for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-
     assert.deepEqual([...new Set(dup)], [], `duplicate ids in the v2 tree: ${dup.join(', ')}`);
     const v2ids = new Set(v2list);
     const required = v1ids;
-    const missing = required.filter((id) => !v2ids.has(id) && !RETIRED_IN_V2.has(id));
+    const exempt = NOT_ON_PAGE.get(path) ?? new Map();
+    const missing = required.filter((id) => !v2ids.has(id) && !RETIRED_IN_V2.has(id) && !exempt.has(id));
+    for (const id of exempt.keys()) assert.ok(!v2ids.has(id), `${path}: ${id} is exempt but present; drop it from NOT_ON_PAGE`);
     assert.deepEqual(missing, [], `v2 lacks ids the v1 tree carries and a script binds: ${missing.join(', ')}`);
   });
 
