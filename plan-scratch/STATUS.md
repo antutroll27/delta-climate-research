@@ -39,3 +39,6 @@ raw cache ~/.cache/delta-climate/cities/amsterdam/raw = 564 MB (3D BAG 95 MB gz,
 - 18:26 hour 1: step 3 (KNMI) done; steps 4-8 coded: sun floor 40 deg (28 of 30 scenes) -> surface re-run in progress; terrain pit patched (6 post-AHN4 buildings, 14 mesh cells changed, 10 by >0.5 m); species broadleaf (16,710 trees, 0 palms); G4 15 m + G5 note; nits. Remaining: surface result, frame --measure, docs, full gates, build.
 - 18:36 all steps committed (4 commits); gates green pre-build; running the ONE build.
 - 18:45 DONE. build ok (31 pages, Dubai prerendered), test:unit 1967 tests, 1966 pass + 1 stale CITIES-keys guard fixed after (8e561267, re-run green). Not pushed.
+
+# A12 flip (started 19:15, box 4h)
+- 19:15 starting: rebase onto origin/main d69d933a (PR #80).
