@@ -1,0 +1,155 @@
+{
+ "city": "amsterdam",
+ "area": "canal-ring",
+ "measuredAt": "2026-11-06",
+ "inputs": {
+  "canal-ring-buildings.json": "f125785823a29e221a60a55a12827c90ec117e564413bb87925ae444dadff717",
+  "canal-ring-terrain.json": "ab71eac2690758a24162375da4b6944a78f1173a1adc0e0406f4fa12340e5bd1",
+  "canal-ring-context.json": "7be53c81627ac66d70b8d0d8cb6196ad63c220971e9706d70303c30e84c06176"
+ },
+ "guards": [
+  {
+   "id": "G1",
+   "name": "frame parity",
+   "evidence": "_bangalore.to_local (the proven frame)",
+   "statistic": "max abs diff over an 11 x 11 lattice, m",
+   "rule": "< 1e-09 m, and +y is NORTH",
+   "status": "pass",
+   "north": 0.0,
+   "mirrored": null,
+   "detail": {
+    "yOfPointKilometreNorth": 1000.0
+   }
+  },
+  {
+   "id": "G2",
+   "name": "ring self-consistency",
+   "evidence": "each building's own lonlat",
+   "statistic": "max abs diff p vs to_local(lonlat), m",
+   "rule": "north-up < 0.05 m and the mirrored copy is far off",
+   "status": "pass",
+   "north": 0.011003999328181635,
+   "mirrored": 2846.2761759993446,
+   "detail": {
+    "buildings": 21342
+   }
+  },
+  {
+   "id": "G3",
+   "name": "buildings vs water",
+   "evidence": "Overture water polygons (OSM canals; independent of BAG)",
+   "statistic": "share of footprint area overlapping water",
+   "rule": "north-up <= 1% and mirrored >= 5x north-up",
+   "status": "pass",
+   "north": 0.0005242905159005529,
+   "mirrored": 0.10980167069970334,
+   "detail": {
+    "waterPolygons": 213
+   }
+  },
+  {
+   "id": "G4",
+   "name": "landmarks",
+   "evidence": "Wikidata P625 for four landmarks (landmarks.json)",
+   "statistic": "distance to the nearest footprint of plausible area, m",
+   "rule": "north-up <= 60 m for EACH; mirrored >= 100 m for each and a median >= 200 m",
+   "status": "pass",
+   "north": 0.0,
+   "mirrored": 122.7,
+   "detail": {
+    "perLandmark": {
+     "Rijksmuseum": {
+      "northUpM": 0.0,
+      "mirroredM": 796.1,
+      "y": -442.2
+     },
+     "Royal Palace of Amsterdam": {
+      "northUpM": 0.0,
+      "mirroredM": 231.6,
+      "y": 1013.3
+     },
+     "Westerkerk": {
+      "northUpM": 0.0,
+      "mirroredM": 122.7,
+      "y": 1160.7
+     },
+     "Concertgebouw": {
+      "northUpM": 0.0,
+      "mirroredM": 242.8,
+      "y": -850.5
+     }
+    },
+    "mirroredMedianM": 237.2,
+    "retrieved": "2026-11-06"
+   }
+  },
+  {
+   "id": "G5",
+   "name": "heights vs AHN nDSM",
+   "evidence": "AHN4 dsm_05m - dtm_05m (ground under buildings filled from the nearest valid DTM), p70 inside each footprint",
+   "statistic": "Spearman rho between 3D BAG h and nDSM p70",
+   "rule": "north-up >= 0.8 and mirrored <= 0.3",
+   "status": "pass",
+   "north": 0.9806756292757486,
+   "mirrored": 0.02438097588406753,
+   "detail": {
+    "buildingsCompared": 21072,
+    "buildingsComparedMirrored": 20071,
+    "flaggedOver": 5.0,
+    "flagged": 220,
+    "medianAbsDevM": 0.22,
+    "note": "AHN4 (2020-22) vs AHN5-dominated 3D BAG heights: a one-to-three-year gap, so some disagreement is real change"
+   }
+  },
+  {
+   "id": "G6",
+   "name": "terrain registration",
+   "evidence": "the AHN DTM nodata mask (no ground points under buildings or water)",
+   "statistic": "Jaccard of the DTM nodata mask vs rasterised footprints + water at 2 m, inside the square",
+   "rule": "north-up >= 2x mirrored",
+   "status": "pass",
+   "north": 0.8260495933861455,
+   "mirrored": 0.3493023813303185,
+   "detail": {
+    "nodataShare": 0.564
+   }
+  },
+  {
+   "id": "G7",
+   "name": "surface raster",
+   "evidence": "Overture land_use park polygons (Vondelpark and others)",
+   "statistic": "mean vegetation fraction inside parks minus outside, from the exported PNG (row 0 = north)",
+   "rule": "north-up > 0 and >= 2x mirrored",
+   "status": "pass",
+   "north": 0.43791454694525017,
+   "mirrored": 0.005818800199073715,
+   "detail": {
+    "parkCells": 4605,
+    "cells": 78400
+   }
+  },
+  {
+   "id": "G8",
+   "name": "export orientation",
+   "evidence": "data/…-terrain.json (row 0 = SOUTH) vs public/…-terrain.json (row 0 = NORTH)",
+   "statistic": "exact equality after one flip",
+   "rule": "equal; the unflipped compare must differ",
+   "status": "pass",
+   "north": 1.0,
+   "mirrored": 0.0,
+   "detail": {
+    "flippedEqual": true,
+    "unflippedEqual": false
+   }
+  }
+ ],
+ "waterLevel": {
+  "bankDtmPixels": 145338,
+  "bankDtmMedianNapM": 0.65,
+  "bankDtmP10NapM": -0.64,
+  "bankDtmP90NapM": 1.77,
+  "dtmBelowMinus1p5": 215419,
+  "ofWhichWithin3mOfOvertureWater": 20508,
+  "reference": "Amsterdam canals are held near NAP -0.40 m in summer (zomerpeil); that figure is NOT verified here, so this block records what the data say and gates nothing"
+ }
+}
