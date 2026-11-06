@@ -4,3 +4,4 @@
 2026-11-06 19:41 painters + gating committed; Indian A/B digest identical (41473ab7e8c4ff20). next: sources.json, evidence docs, run full gates
 2026-11-06 19:44 sources.json (Amsterdam) + tokyo/air-sources.json + docs/evidence committed; next: final gates (check, typecheck, unit), sanity on repo-wide tests, hourly status
 2026-11-06 20:36 DONE: check 0 errors, typecheck clean, unit 1994/2025 (29 need dist/, 2 load-timing flakes pass alone), obos-scope zone guard fixed. 12 commits on feat/aqi-new-cities, none pushed.
+2026-11-07 01:36 AUDIT FIXES F1-F7 done, one commit each; check 0 errors, typecheck clean, 452/452 aqi+kolkata+scope tests, Indian digest identical
