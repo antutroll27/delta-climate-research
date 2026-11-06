@@ -74,7 +74,7 @@ test('a source that is down is 200 "not reporting", uncached at the CDN and reme
   assert.ok(f.calls.length > before, 'after the back-off the next request asks again');
   /* and the live one that follows is a live one, not the failure */
   const byPrefix = async (url) => { const m = nlMap(); const k = Object.keys(m).find((u) => u.split('&start=')[0] === url.split('&start=')[0]); return k ? { ok: true, status: 200, text: async () => m[k] } : { ok: false, status: 503, text: async () => '' }; };
-  const b = await call('nl/amsterdam/canal-ring', { fetch: byPrefix, now: () => new Date(NL_NOW.getTime() + 61_000), drawable: ready, cache });
+  const b = await call('nl/amsterdam/canal-ring', { fetch: byPrefix, now: () => new Date(NL_NOW.getTime() + 125_000), drawable: ready, cache });
   assert.equal(b.body.state, 'live');
 });
 
