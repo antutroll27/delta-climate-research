@@ -23,8 +23,8 @@
 import { ALL_METAR_ICAO } from '../src/data/metar-stations.ts';
 
 export const UPSTREAM = 'https://aviationweather.gov/api/data/metar';
-/* The site's generic address, as api/climate-clock.js uses: a public repo should not carry a person's. */
-const UA = 'delta-climate-research/1.0 (https://deltaclimate.earth; management@deltaclimate.earth)';
+/* A generic identifier (site URL, no mailbox), as api/climate-clock.js uses: no address of any kind goes upstream. */
+const UA = 'delta-climate-research/1.0 (+https://deltaclimate.earth)';
 /** Four hours covers the rain history the model reads: onset, end, an hour's re-warming. */
 const HOURS = 4;
 const SHARED_MAX_AGE = 600;
