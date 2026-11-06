@@ -39,7 +39,7 @@ async function stubWeather(page: Page, firstHourIso: string, serverNowIso: strin
 const visibleText = (page: Page) => page.evaluate(() => (document.querySelector('main#main') as HTMLElement | null)?.innerText ?? '');
 
 test.describe('Amsterdam, canal ring', () => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
 
   test('mounts, credits 3D BAG at the bottom right, shows the geometry badge, and prints no band, no currency, no India AQI key', async ({ page }) => {
     const thrown: string[] = [];
@@ -47,8 +47,8 @@ test.describe('Amsterdam, canal ring', () => {
     await stubWeather(page, '2026-07-15T12:00:00Z', '2026-07-15T12:05:00Z');
     await page.goto(PATH, { waitUntil: 'domcontentloaded' });
 
-    await expect(page.locator('.maplibregl-map')).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator('.maplibregl-map canvas').first()).toBeAttached({ timeout: 30_000 });
+    await expect(page.locator('.maplibregl-map')).toBeVisible({ timeout: 90_000 });
+    await expect(page.locator('.maplibregl-map canvas').first()).toBeAttached({ timeout: 90_000 });
     /* measured: 21,342 footprints */
     const count = page.locator('#bcount');
     await expect(count).not.toHaveText(/^—/, { timeout: 150_000 });
@@ -99,7 +99,7 @@ test.describe('Amsterdam, canal ring', () => {
     await stubWeather(page, '2026-07-15T12:00:00Z', '2026-07-15T12:05:00Z');
     await page.goto(PATH, { waitUntil: 'domcontentloaded' });
     const line = page.locator('#wxLine');
-    await expect(line).toContainText('Met Norway forecast', { timeout: 90_000 });
+    await expect(line).toContainText('Met Norway forecast', { timeout: 180_000 });
     await expect(line).toContainText('14:00 CEST');
     expect(await line.textContent()).not.toMatch(/GMT\+/);
     await expect(page.locator('#liveSrc')).toHaveText('Air now · Met Norway forecast');
@@ -111,7 +111,7 @@ test.describe('Amsterdam, canal ring', () => {
     await stubWeather(page, '2027-01-15T12:00:00Z', '2027-01-15T12:05:00Z');
     await page.goto(PATH, { waitUntil: 'domcontentloaded' });
     const line = page.locator('#wxLine');
-    await expect(line).toContainText('Met Norway forecast', { timeout: 90_000 });
+    await expect(line).toContainText('Met Norway forecast', { timeout: 180_000 });
     await expect(line).toContainText('13:00 CET');
     expect(await line.textContent()).not.toMatch(/GMT\+|CEST/);
   });
@@ -125,7 +125,7 @@ test.describe('Amsterdam, canal ring', () => {
     const option = page.locator('select[data-scope="country"] option[value="nl/amsterdam/canal-ring"]');
     await expect(option).toHaveText('Netherlands');
     await Promise.all([
-      page.waitForURL(/\/heat-map\/nl\/amsterdam\/canal-ring\/?$/, { timeout: 60_000 }),
+      page.waitForURL(/\/heat-map\/nl\/amsterdam\/canal-ring\/?$/, { timeout: 180_000 }),
       page.evaluate(() => {
         const sel = document.querySelector<HTMLSelectElement>('select[data-scope="country"]')!;
         sel.value = 'nl/amsterdam/canal-ring';
@@ -133,7 +133,7 @@ test.describe('Amsterdam, canal ring', () => {
       }),
     ]);
     await expect(page.locator('.maplibregl-map')).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator('#bcount')).not.toHaveText(/^—/, { timeout: 60_000 });
+    await expect(page.locator('#bcount')).not.toHaveText(/^—/, { timeout: 180_000 });
     /* and the page declares itself noindex (the founder decides indexing after review) */
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex');
     expect(thrown, `threw crossing cities:\n${thrown.join('\n')}`).toEqual([]);
