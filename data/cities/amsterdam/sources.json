@@ -3,7 +3,7 @@
   "area": "canal-ring",
   "retrieved": "2026-11-06",
   "userAgent": "obos-pipeline/1.0 (+https://deltaclimate.earth)",
-  "note": "Every URL below was requested on the retrieval date with the HTTP status shown. Nothing here is copied from a plan or memory without being re-requested. Sources for later tasks (Overture, Meta CHM, Sentinel-2) are added by the task that uses them.",
+  "note": "Every URL below was requested on the retrieval date with the HTTP status shown. Nothing here is copied from a plan or memory without being re-requested. Overture, Meta CHM, Sentinel-2, AHN5 and Wikidata were added by Tasks A7-A11 (2026-11-06).",
   "sources": [
     {
       "id": "3dbag-release",
@@ -225,6 +225,115 @@
       },
       "use": "a display string only; no geometry from this source is redistributed",
       "licence": "Gemeente Amsterdam open-geodata terms (reuse and commercial use allowed, attribution not required, per READINESS.md summary; the terms page was re-requested here (HTTP 200) but not re-read)"
+    },
+    {
+      "id": "ahn5-credit",
+      "role": "credit duty for the AHN5-derived share of the 3D BAG heights (Task A11)",
+      "name": "Actueel Hoogtebestand Nederland 5 (AHN5, 2023-2025), Het Waterschapshuis",
+      "licence": "CC BY 4.0",
+      "licenceUrl": "http://creativecommons.org/licenses/by/4.0/deed.nl",
+      "evidence": "NGR records 4995e338-fec7-425e-bb86-eea3875cf114 (AHN5), 9700bf7f-428f-48b9-be21-b3781cb80701 (DTM), bef7439f-833e-4a10-8dc1-c5ad1b5fdd51 (DSM), dateStamp 2025-11-19: 'Naamsvermelding verplicht'; ahn.nl (2023-12-22, 2024-07-02, 2025-10-13) requires the source on derived products. 3D BAG metadata lineage lists AHN5 as CC BY 4.0.",
+      "readme": "/Volumes/OBOSLab/research/new-cities/AHN5-LICENCE.md (read 2026-11-06)",
+      "creditText": "Heights: AHN5, Het Waterschapshuis (CC BY 4.0)",
+      "share": "about 79 % of the buildings take their heights from AHN5 (pointCloudMix in canal-ring-buildings.json)",
+      "used": "credited only: AHN5 data are not downloaded by OBOS; the heights arrive through 3D BAG"
+    },
+    {
+      "id": "ahn4-terrain-credit",
+      "role": "terrain credit (courtesy; Task A11)",
+      "name": "AHN4 (2020-2022) via PDOK WCS",
+      "licence": "CC0 1.0",
+      "licenceUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+      "note": "No credit is required. If the terrain ever moves to AHN5/AHN6 tiles or the Ellipsis Drive services, it needs the AHN5 CC BY 4.0 credit as well."
+    },
+    {
+      "id": "overture-context",
+      "role": "water, green and roads (Task A7)",
+      "name": "Overture Maps Foundation",
+      "release": "2026-10-21.0",
+      "urls": {
+        "release": "s3://overturemaps-us-west-2/release/2026-10-21.0/"
+      },
+      "themes": [
+        "base/water",
+        "base/land_use",
+        "transportation/segment"
+      ],
+      "licence": "ODbL 1.0 (OpenStreetMap contributors)",
+      "retrieved": "2026-11-06",
+      "cache": "~/.cache/delta-climate/cities/amsterdam/raw/overture (clipped parquet, ~13 MB)",
+      "result": {
+        "waterPolygons": 213,
+        "waterLines": 469,
+        "waterLinesCovered": 6,
+        "greenPolygons": 708,
+        "roadSegments": 2252,
+        "majorRoadShare": 0.075
+      }
+    },
+    {
+      "id": "meta-wri-chm-v2",
+      "role": "canopy height and placed trees (Task A8)",
+      "name": "Meta / WRI global canopy height model v2 (dinov3_global_chm_v2_ml3)",
+      "tile": "1202021101",
+      "urls": {
+        "tile": "s3://dataforgood-fb-data/forests/v2/global/dinov3_global_chm_v2_ml3/chm/1202021101.tif"
+      },
+      "licence": "CC BY 4.0",
+      "retrieved": "2026-11-06",
+      "access": "windowed read of the COG; the 100 MB tile is not downloaded",
+      "result": {
+        "candidates": 25668,
+        "droppedInRoads": 3408,
+        "droppedInBuildings": 5550,
+        "kept": 16710,
+        "coverGe3m": 0.279
+      }
+    },
+    {
+      "id": "sentinel-2-surface",
+      "role": "10 m vegetation and albedo raster (Task A8)",
+      "name": "Copernicus Sentinel-2 L2A via Earth Search STAC",
+      "licence": "Copernicus Sentinel data terms",
+      "licenceUrl": "https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice",
+      "years": [
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "level": "measured",
+      "result": {
+        "scenesUsed": 25,
+        "perYear": {
+          "2021": 5,
+          "2022": 4,
+          "2023": 6,
+          "2024": 6,
+          "2025": 4
+        },
+        "scenesPerYearCap": 6,
+        "note": "_sentinel.py picks the lowest-cloud scene per month, at most 6 a year; 25 of 30 possible passed Amsterdam's cloud filter",
+        "fvcMean": 0.2947,
+        "albedoMean": 0.0942,
+        "retrieved": "2026-11-06"
+      }
+    },
+    {
+      "id": "wikidata-landmarks",
+      "role": "guard G4 landmarks (Task A9)",
+      "name": "Wikidata P625",
+      "licence": "CC0",
+      "retrieved": "2026-11-06",
+      "file": "data/cities/amsterdam/landmarks.json",
+      "qids": {
+        "Rijksmuseum": "Q190804",
+        "Royal Palace of Amsterdam": "Q1056152",
+        "Westerkerk": "Q1130722",
+        "Concertgebouw": "Q849957"
+      },
+      "userAgent": "obos-pipeline/1.0 (+https://deltaclimate.earth)"
     }
   ]
 }

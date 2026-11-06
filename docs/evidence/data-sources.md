@@ -759,6 +759,69 @@ and never by ward join.**
 
 ---
 
+## Amsterdam: the third-city stack (2026-11)
+
+Everything below was fetched or queried for the **canal-ring area** (52.3640 N, 4.8850 E, 2,800 m square,
+Cfb), on 2026-11-06, by a generic-User-Agent pipeline. Provenance per source (URL, HTTP status, release,
+retrieval date) is in `data/cities/amsterdam/sources.json`; the readiness audit that chose the sources is
+`/Volumes/OBOSLab/research/new-cities/READINESS.md` (its AHN licence line was wrong and is corrected below);
+the licence reading is `/Volumes/OBOSLab/research/new-cities/AHN5-LICENCE.md`. Nothing here ships: the area
+is registered, not drawable, until the founder reviews it.
+
+### In use
+
+**3D BAG** (TU Delft 3D geoinformation group + 3DGI) · release **v20250903** · **CC BY 4.0** · footprints
+and per-building roof height (LoD1.2, roof 70th percentile minus ground level, NAP) · **role:** the footprints
+and the heights, replacing Overture + Google Open Buildings 2.5D · 21,342 footprints, 0 fills, h p50 14.90 m,
+p95 18.74 m, max 41.96 m (46 tiles, 95 MB) · credit and placement duties in `regulatory-and-licensing.md`.
+
+**AHN (Actueel Hoogtebestand Nederland), PDOK WCS** · 0.5 m DTM and DSM, **AHN4 (2020-22)** as served · **CC0 1.0**
+· **role:** the terrain mesh (96 x 96 over 2,800 m, NAP −4.52…+3.53 m, render-only, "not used by the
+simulation") and the independent nDSM for guards G5/G6. *Not AHN5:* the service abstract says the current
+AHN is version 4, and AHN5 changed the gridding method, so `dtm_05m`/`dsm_05m` are AHN4. AHN5 is what ~79 % of
+the 3D BAG heights come from (CC BY 4.0), so a G5 comparison spans a one-to-three-year gap.
+
+**Overture Maps `base/water`, `base/land_use`, `transportation/segment`, release 2026-10-21.0** · **ODbL 1.0** ·
+OSM-derived · **role:** water, green ground and roads (213 water polygons, 469 water centrelines of which 6
+covered, 708 green polygons, 2,252 carriageway segments, 7.5 % at the major width against Kolkata's 2.5-9.0 %
+and Bengaluru's 3.7-13.7 %). The clipped parquet is cached on OBOSLab (releases leave the bucket within about
+three months; Bengaluru's has already gone).
+
+**Meta/WRI Canopy Height Model v2** (`dinov3_global_chm_v2_ml3`, tile `1202021101`) · **CC BY 4.0** · windowed
+COG read, never downloaded whole · **role:** canopy height and the placed trees (25,668 candidates, 3,408 dropped
+in drawn carriageways, 5,550 in footprints, **16,710 kept**; cover ≥ 3 m at ~1 m: 27.9 %). Kolkata's placement
+rule verbatim.
+
+**Copernicus Sentinel-2 L2A** (Earth Search STAC) · Copernicus open terms · **role:** the 10 m vegetation and
+albedo raster, `level: "measured"` (there is no DC-URS scalar to pin to).
+
+**KNMI Schiphol (240) climate normals 1991-2020** · site default CC0, credit "bron: KNMI", and a statement that
+KNMI is not involved in derivative work · **role:** the fallback air temperature (`airNormals`).
+
+**Beck et al. (2023) Köppen-Geiger 1 km** · CC BY 4.0 · Cfb at the centre and both corners.
+
+**Wikidata P625** · CC0 · four landmark coordinates for guard G4 (`landmarks.json`, retrieved 2026-11-06).
+
+### Ruled out (with the reason)
+
+- **Google Open Buildings 2.5D Temporal** — the catalogue covers Africa, South and South-East Asia and Latin
+  America; no Europe. 3D BAG replaces it.
+- **Copernicus GLO-30 for terrain** — a surface model (rooftops and canopy), not a ground model; AHN has a real DTM.
+- **Amsterdam municipal tree inventory** — its terms carry a pass-on clause (state that the original is free from
+  the municipality and flow the same terms down). Not used at geometry tier; canopy comes from the CHM.
+- **Open-Meteo** — the free tier is non-commercial.
+- **AHN5 for terrain** — CC BY 4.0 rather than CC0, and its tiles are served by other endpoints; the PDOK WCS stays
+  on AHN4 so the terrain stays CC0.
+
+### Findings that change how the data are read
+
+- **The −4.52 m NAP mesh cell** (row 19, col 49, ~830 m south of centre, 52.3565 N 4.8856 E) is real AHN4 ground
+  level, not a registration error: 446 of its 536 pixels below −4 m lie inside 2025 BAG footprints 25-28 m tall, with
+  DSM = DTM = −5.96 m NAP (open ground, nothing above it). Most likely an excavation that was open when AHN4 was flown
+  and has been built on since. It is a temporal difference between sources; the mesh keeps it.
+- **DTM beside Overture water** — see `data/cities/amsterdam/frame-guard.json` `waterLevel`. The reference canal
+  level (NAP −0.40 m summer) is **not verified here**; the block records what the data say and gates nothing.
+
 ## Free EO backbones the open-data pitch rests on (commercial use OK)
 
 [Copernicus Data Space](https://dataspace.copernicus.eu/) · [MS Planetary
