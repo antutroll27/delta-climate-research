@@ -572,6 +572,15 @@ licence is a portal label only, and its tertiary drains largely do not align wit
 matching Kolkata exactly; fill rates came in at 2.3 / 3.2 / 4.6 %, **better than Kolkata's shipped
 4.0 / 6.5 / 10.8 %**, so Google's Bengaluru coverage is the stronger of the two.
 
+> **Release 2026-07-22.0 is gone from Overture's bucket (checked 2026-11-06).** An unsigned listing of
+> `s3://overturemaps-us-west-2/release/` returns only `2026-09-23.0`, `2026-09-23.1` and `2026-10-21.0`;
+> a prefix listing of `release/2026-07-22.0/` is empty. Bengaluru's buildings (and the context themes
+> below, which share the release) **cannot be re-fetched from the pinned release**. The only copy is the
+> git-ignored local cache `data/bangalore/raw/overture-buildings.parquet`, so keep it. A re-fetch has to
+> go to the next available release, **`2026-10-21.0`** (Ballygunge already moved to `2026-09-23.1` for
+> the same reason). Doing that changes the footprints and GERS ids, so it is a data change that needs
+> its own decision, re-slicing and height re-join; nothing in the repo has been changed to do it.
+
 **Overture Maps context themes, 2026-07-22.0** — `base/water`, `base/land_use`, `transportation/segment`
 · ODbL · **in the Blender scenes 2026-09-10**, clipped to each ward box: water polygons and stream lines,
 green land-use classes only, carriageway road classes only (footways and paths dropped as clutter at
