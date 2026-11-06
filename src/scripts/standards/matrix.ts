@@ -81,12 +81,6 @@ export const MATRIX: readonly MatrixRow[] = [
     ships: 'Governance approach on /standards: open data, published error bars, published null results, no personal data.',
     gap: 'A statement of principle, not an assessed conformance.',
   },
-  {
-    standard: 'UAE Data Governance (Law 26/2015; FDL 45/2021)', region: 'UAE', purpose: 'Privacy and data compliance',
-    posture: 'aligned',
-    ships: 'The prototype processes no personal data: aggregated, ward-level, open geospatial inputs only.',
-    gap: 'Formal legal review before any production deployment.',
-  },
 ];
 
 export const APPROVED_STATEMENT =

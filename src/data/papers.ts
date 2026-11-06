@@ -39,7 +39,7 @@ export const papers: Paper[] = [
     slug: 'embodied-carbon-cbam',
     date: '2026.03',
     cat: 'Materials · CBAM',
-    title: 'Embodied-carbon dossiers for the India–UAE corridor',
+    title: 'Embodied-carbon dossiers for Indian exporters',
     excerpt:
       'EPD generation under ISO 14025 and CBAM emissions data for cement, steel and aluminium exporters.',
     published: false,

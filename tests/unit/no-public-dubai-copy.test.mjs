@@ -12,7 +12,7 @@ import { join, relative } from 'node:path';
  */
 
 const ROOT = new URL('../../', import.meta.url).pathname;
-const BANNED = /dubai|\/ae\/|\bwsf3d\b/i;
+const BANNED = /dubai|\/ae\/|\bwsf3d\b|\buae\b|united arab emirates/i;
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {

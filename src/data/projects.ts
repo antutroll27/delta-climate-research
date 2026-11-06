@@ -51,14 +51,14 @@ export const projects: Project[] = [
     id: '03',
     slug: 'materials-trading',
     title: 'Sustainable Materials Trading',
-    sub: 'UAE–India corridor',
+    sub: 'India–EU corridor',
     tags: 'EPD · CBAM — embodied-carbon dossiers for exporters',
-    coords: '22.47° N 69.07° E → 25.20° N 55.27° E',
+    coords: '22.47° N 69.07° E → 51.92° N 4.48° E',
     window: '2027 · Q1',
     rev: '0.1',
     progress: 0.15,
     blurb:
-      'Embodied-carbon dossiers for exporters on the India–UAE corridor — EPD-grade material passports built for CBAM scrutiny at the border.',
+      'Embodied-carbon dossiers for Indian exporters — EPD-grade material passports built for CBAM scrutiny at the EU border.',
     published: false,
   },
 ];

@@ -1,6 +1,6 @@
 # Delta Climate Research
 
-> Delta Climate Research is a full-stack, interdisciplinary climate studio — climate science, technology, policy, and finance under one roof. It turns decision-grade, standards-aligned measurement into defensible strategy for institutions, municipalities, and corporates, across a broad range of work: from climate-risk and embodied-carbon analytics to heavy compliance and regulatory engagements. Based in Kolkata, India; serving India and the United Arab Emirates.
+> Delta Climate Research is a full-stack, interdisciplinary climate studio — climate science, technology, policy, and finance under one roof. It turns decision-grade, standards-aligned measurement into defensible strategy for institutions, municipalities, and corporates, across a broad range of work: from climate-risk and embodied-carbon analytics to heavy compliance and regulatory engagements. Based in Kolkata, India; serving clients across India and internationally.
 
 Delta sits between raw earth-science data and the institutions that must act on it. The studio brings together experts across climate tech, policy, and finance — pairing geospatial and climate-science rigour with regulatory and market fluency, so its outputs stand up to audit, regulation, and boardroom scrutiny, not just a press release. Engagements span climate-risk analytics, embodied-carbon accounting, and standards-heavy compliance and regulatory work (MRV, EPD, CBAM).
 
@@ -12,7 +12,7 @@ Delta sits between raw earth-science data and the institutions that must act on 
 ## Areas of expertise
 - Urban-heat vulnerability mapping and the Heat Vulnerability Index (HVI), downscaling ECOSTRESS land-surface temperature to ward-level spec.
 - Blue-carbon MRV (measurement, reporting, verification), including soil organic carbon accounting under Verra VM0033 for tidal-wetland and mangrove restoration.
-- Embodied-carbon accounting — Environmental Product Declarations (EPD, ISO 14025) and Carbon Border Adjustment Mechanism (CBAM) emissions data, e.g. for the India–UAE trade corridor.
+- Embodied-carbon accounting — Environmental Product Declarations (EPD, ISO 14025) and Carbon Border Adjustment Mechanism (CBAM) emissions data, e.g. for Indian exporters to the EU.
 - Climate-risk intelligence and geospatial analysis.
 
 ## Team
