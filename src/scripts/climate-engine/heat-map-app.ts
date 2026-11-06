@@ -26,7 +26,7 @@ import * as M from './heat-map-model';
 import { parseMetar, type Metar } from '../../lib/weather/metar.ts';
 import { describeWeather, fallbackAmbient, observedNow, rankStations, type ObservedNow } from '../../lib/weather/observed.ts';
 import { METAR_STATIONS } from '../../data/metar-stations.ts';
-import { ACCURACY, SPATIAL, HEIGHTS, PEAK_CHIP_BASIS, bandLabel, unmeasuredNote, isTransitionHour, TRANSITION_RMSE_K, seasonalCaveat, seasonalCaveatLine, seasonalCaveatDetail } from './accuracy';
+import { unmeasuredNote, isTransitionHour } from './accuracy';
 import { solarElevationFactor, solarDayHours } from './sky';
 import { loadLayerManifest } from './provenance';
 import * as U from './dc-urs';
@@ -69,7 +69,7 @@ import { OPEN_AREA_EVENT, type OpenAreaDetail } from './shell/console-shell.ts';
 import { SELECT_SYNC_EVENT } from './shell/select-field.ts';
 import { isLayerId, type LayerId } from './scope/layers.ts';
 import { resolve, requireCosts } from './scope/resolve.ts';
-import { heatAccuracyClaim } from './scope/accuracy-claim.ts';
+import { heatAccuracyClaim, heightsNote } from './scope/accuracy-claim.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
 import { fmtMoney, fmtRate, currencyMark } from './money.ts';
 import { pvRanges, tierOf } from './solar-ranges.ts';
@@ -742,11 +742,14 @@ export function mountHeatMap(): () => void {
      barely moved. 6 px is the usual slop budget for "tap, not drag" and keeps a
      shaky trackpad from silently swallowing the click. */
   const bcard = el('bcard'), bsel = el('bsel');
-  /* The Height row shows a metre value per building; HEIGHTS.note is the only
+  /* The Height row shows a metre value per building; the height note is the only
      place that says what was actually validated — a DISTRIBUTION along satellite
-     transects, never this building. Set once: setHTML rewrites the row's
+     transects, never this building. Those transects were flown over KOLKATA, so only
+     Kolkata's wards carry the sentence (heightsNote); another city shows no tooltip
+     rather than a check it never had. Set once: setHTML rewrites the row's
      innerHTML on every selection, which leaves the attribute intact. */
-  el('bcH')?.setAttribute('title', HEIGHTS.note);
+  const heightNote = heightsNote(resolve(state.ward).city.id);
+  if (heightNote !== null) el('bcH')?.setAttribute('title', heightNote);
   let downAt: { x: number; y: number; t: number } | null = null;
 
   /* ── first-run hint ──
@@ -3270,7 +3273,6 @@ export function mountHeatMap(): () => void {
    * labelled indicative and carries its measured band.
    */
   function applyConfidence() {
-    const a = ACCURACY[state.phase];
     /* THE ERROR BAR MOVES WITH THE SUN, because the measurement does.
        In "now" mode the reader can land on an hour no published figure covers:
        sunrise to mid-morning scored 7.54 K out-of-sample against a 4.5 K daytime
@@ -3306,26 +3308,28 @@ export function mountHeatMap(): () => void {
       if (noneLst) (noneLst as HTMLElement).title = claim.detail;
       return;
     }
+    /* From here the claim is `band`, and only here are its figures in reach. */
+    const F = claim.figures;
     /* THE SEASON CAN BREAK THE BAND (accuracy.ts SEASONAL_CAVEATS). Read in the
        ward's own calendar month, because every view — Now, 13:00, 22:00 and the
        1-in-100 heatwave — forces the physics with the current month. */
-    const season = seasonalCaveat(areaOf(state.ward), wardMonthHour(now(), WARD_TZ).month, state.phase, transition);
+    const season = F.season(areaOf(state.ward), wardMonthHour(now(), WARD_TZ).month, state.phase, transition);
     const seasonEl = el('seasonNote');
     if (seasonEl) {
-      seasonEl.textContent = season ? seasonalCaveatLine(season) : '';
+      seasonEl.textContent = season ? season.line : '';
       (seasonEl as HTMLElement).hidden = !season;
-      if (season) (seasonEl as HTMLElement).title = seasonalCaveatDetail(season);
+      if (season) (seasonEl as HTMLElement).title = season.detail;
     }
-    const seasonChip = season ? ` · ${season.reader.toLowerCase()} warm` : '';
-    const seasonTip = season ? `${seasonalCaveatDetail(season)}\n\n` : '';
+    const seasonChip = season ? season.chip : '';
+    const seasonTip = season ? season.tip : '';
     const tag = el('conf');
     if (tag) {
       /* innerHTML, not textContent, so the FIGURES can be mono inside sans prose
          — the card's type rule (labels sans, data mono) applied to a string that
          is both. Safe by construction: every interpolated value is a number put
          through toFixed, never user or network text.
-         Sentence case because .conf no longer uppercases in CSS. */
-      const fig = (t: string) => `<b>${t}</b>`;
+         Sentence case because .conf no longer uppercases in CSS. The chip's words live
+         with the figures (scope/accuracy-claim.ts), reachable only on a `band` claim. */
       /* WET SURFACES ARE OUTSIDE EVERY PUBLISHED FIGURE. Each validation scene is a
          clear-sky satellite pass (Landsat, ECOSTRESS); not one was taken in rain, so
          no band describes a rain-relaxed field. Said on the chip, before the band. */
@@ -3349,34 +3353,21 @@ export function mountHeatMap(): () => void {
         if (lstWet) (lstWet as HTMLElement).title = (tag as HTMLElement).title;
         return;
       }
-      tag.innerHTML = transition
-        ? `Outside validation · ${fig(`~±${TRANSITION_RMSE_K.toFixed(1)} °C`)} at this hour${seasonChip}`
-        : a.confidence === 'quantitative'
-          ? `Calibrated · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}${seasonChip}`
-          /* THE PEAK BAND IS THE EARLIER EVIDENCE SET (accuracy.ts PEAK_EVIDENCE_BASIS):
-             measured before Ballygunge became KMC Ward 68, kept because it is the wider,
-             safer band, and said so ON the chip — a tooltip nobody hovers was the only
-             place it was said (pre-ship audit 2026-10-03). */
-          : `Indicative only · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}${state.phase === 'peak' ? ` · ${PEAK_CHIP_BASIS}` : ''}${seasonChip}`;
-      tag.className = `conf ${transition ? 'indicative' : a.confidence}${season ? ' seasonal' : ''}`;
+      const chip = F.chip(state.phase, transition, seasonChip);
+      tag.innerHTML = chip.html;
+      tag.className = `conf ${chip.confidence}${season ? ' seasonal' : ''}`;
+      (tag as HTMLElement).title = F.tooltip(state.phase, transition, seasonTip);
       if (transition) {
-        (tag as HTMLElement).title = seasonTip +
-          'Sunrise to mid-morning is the one window neither published figure '
-          + `covers. Scored out-of-sample it reaches ${TRANSITION_RMSE_K.toFixed(2)} K — the surface is `
-          + 'still releasing stored heat while the sun is already loading it, and a '
-          + 'steady-state model cannot represent a system that far from equilibrium.'
-          + `\n\n${SPATIAL.note}`;
+        /* The sunrise window has no readout tooltip of its own, and returning here used to
+           leave whatever an earlier tick set on #lst — another city's "not yet validated"
+           line, after an in-place switch — standing under a chip that says otherwise. */
+        const lstTransition = el('lst');
+        if (lstTransition) lstTransition.removeAttribute('title');
         return;
       }
-      // Both figures on one tooltip. The phase note covers ward-LEVEL error; the
-      // spatial note covers whether the pattern inside the ward means anything.
-      // A reader who sees only the first will read the hot blocks as measured —
-      // they are not (SPATIAL.rModel 0.22, below a plain vegetation map's 0.24,
-      // and coarsening the comparison does not close that gap at any scale).
-      (tag as HTMLElement).title = `${seasonTip}${a.note}\n\n${SPATIAL.note}`;
     }
     const lstEl = el('lst');
-    if (lstEl) (lstEl as HTMLElement).title = `${seasonTip}${a.note}\n\n${SPATIAL.note}`;
+    if (lstEl) (lstEl as HTMLElement).title = F.tooltip(state.phase, false, seasonTip);
   }
   /* The legend states the limit of what its own colours mean. Written from the
      measured constant so it cannot drift from the number in accuracy.ts — the
@@ -3391,8 +3382,8 @@ export function mountHeatMap(): () => void {
     // The full sentence — and n — is on the tooltip and in SPATIAL.note.
     if (!pn) return;
     if (claim.kind === 'band') {
-      pn.textContent = `Block pattern illustrative · r ${SPATIAL.rModel.toFixed(2)}`;
-      pn.setAttribute('title', SPATIAL.note);
+      pn.textContent = claim.figures.pattern.text;
+      pn.setAttribute('title', claim.figures.pattern.title);
     } else {
       pn.textContent = 'Block pattern illustrative';
       pn.setAttribute('title', claim.detail);
@@ -3473,7 +3464,7 @@ export function mountHeatMap(): () => void {
       const unvalidated = claim.kind !== 'band'
         || (state.sunNow != null && M.outsideValidation(state.live, state.phase === 'peak') !== null);
       lst.innerHTML = `${st.meanC.toFixed(1)}<span class="u">°C</span>`
-        + (unvalidated ? '' : `<span class="band">${bandLabel(state.phase)}</span>`);
+        + (claim.kind === 'band' && !unvalidated ? `<span class="band">${claim.figures.band(state.phase)}</span>` : '');
       (lst as HTMLElement).style.color = lstColor(st.meanC);
     }
     applyConfidence();

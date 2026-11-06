@@ -72,12 +72,14 @@ test('H9/H6: the legend card carries #patternNote, the colour-mode line and the 
   assert.ok(heat.includes('id="patternNote"'));
   const tint = V1.tintTitle;
   assert.ok(heat.includes(tint), 'the colour-mode line is not v1\'s #tintchip title');
-  assert.ok(heat.includes('Satellite-checked surface temperature, not air temperature.'));
+  /* the foot line moved into the claim (scope/accuracy-claim.ts) so a city without a band cannot print it; the card prints claim.footLine */
+  assert.ok(heat.includes('claim.footLine'));
+  assert.ok(readFileSync('src/scripts/climate-engine/scope/accuracy-claim.ts', 'utf8').includes('Satellite-checked surface temperature, not air temperature.'));
 });
 
 test('H23: the method card prints method-copy rows, and "checked", never "validated"', () => {
   const heat = V2('HeatCards.astro');
-  assert.ok(heat.includes('checkedRows()') && heat.includes('caveatRows(scope.area.id)'));
+  assert.ok(heat.includes('figures.howChecked()') && heat.includes('figures.limits(scope.area.id)'));
   assert.ok(heat.includes('How this was checked') && heat.includes('Caveats OBOS adds when they apply'));
   for (const f of ['HeatCards.astro', 'TempCard.astro']) assert.ok(!/validated/i.test(V2(f)), `${f} says "validated"`);
   assert.ok(!/validated/i.test(readFileSync('src/scripts/climate-engine/v2/method-copy.ts', 'utf8')), 'method-copy says "validated"');

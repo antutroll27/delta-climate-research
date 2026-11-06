@@ -40,7 +40,7 @@ export type Ward = WardRecord;
  * to see six wards on the page. A line whose whole purpose is to be deleted
  * should name the work that deletes it.
  */
-const PUBLISHED_CITIES: readonly string[] = ['kolkata'];
+export const PUBLISHED_CITIES: readonly string[] = ['kolkata'];
 
 /** Kept a readonly array, and in registry order, because every consumer maps,
  *  finds or flat-maps over it (getStaticPaths, the STAC catalogue, the OGC

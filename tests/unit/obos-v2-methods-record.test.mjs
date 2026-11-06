@@ -16,9 +16,14 @@ test('Data & methods figures are the ward record\'s own (H23)', () => {
 });
 
 test('H23: every accuracy figure the card prints is read from accuracy.ts, none typed', () => {
+  /* the card prints the claim's ledger (scope/accuracy-claim.ts), which is the only reader of accuracy.ts */
+  for (const k of ['ledger.night', 'ledger.peak', 'ledger.patternR', 'ledger.patternVegR', 'ledger.patternN', 'ledger.patternNote', 'ledger.heights']) {
+    assert.ok(CODE.includes(`claim.figures.${k}`), `MethodsCards does not read ${k}`);
+  }
+  const CLAIM = readFileSync('src/scripts/climate-engine/scope/accuracy-claim.ts', 'utf8');
   for (const k of ['ACCURACY.night.bandK', 'ACCURACY.night.n', 'ACCURACY.night.modelRmseK', 'ACCURACY.night.ceilingRmseK', 'ACCURACY.peak.bandK', 'ACCURACY.peak.n',
     'SPATIAL.rModel', 'SPATIAL.rVegOnly', 'SPATIAL.n', 'HEIGHTS.nBuildings', 'HEIGHTS.minBuildings', 'HEIGHTS.verdict', 'PEAK_EVIDENCE_BASIS', 'HEIGHTS_EVIDENCE_BASIS']) {
-    assert.ok(CODE.includes(k), `MethodsCards does not read ${k}`);
+    assert.ok(CLAIM.includes(k), `the claim's ledger does not read ${k}`);
   }
   /* the values themselves, as the unit-tested exports hold them, never appear as literals in the markup */
   for (const v of [ACCURACY.night.n, ACCURACY.peak.n, SPATIAL.n, HEIGHTS.nBuildings, ACCURACY.night.modelRmseK, ACCURACY.night.ceilingRmseK, ACCURACY.peak.modelRmseK, SPATIAL.rModel, SPATIAL.rVegOnly]) {

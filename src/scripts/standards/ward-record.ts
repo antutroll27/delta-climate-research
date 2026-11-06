@@ -7,7 +7,7 @@
  * imported from the modules that already drive the heat map:
  *
  *   src/data/wards.ts                 ward identity, centre, footprint  (the ONLY ward list)
- *   src/scripts/climate-engine/accuracy.ts   the measured confidence — bandK, n, verdicts
+ *   src/scripts/climate-engine/scope/accuracy-claim.ts   the measured confidence, and only for a `validated` city
  *   public/heat-map/data/{id}-provenance.json   what the footprints actually came from
  *
  * NOTHING in a record is typed here by hand except the licence table, and that
@@ -24,7 +24,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { WARDS, wardLatLon, type Ward } from '../../data/wards.ts';
-import { ACCURACY, HEIGHTS, HEIGHTS_EVIDENCE_BASIS, PEAK_EVIDENCE_BASIS, SPATIAL } from '../climate-engine/accuracy.ts';
+import { CITY_OF } from '../../data/cities.ts';
+import { AREA_KEYS, splitKey } from '../climate-engine/scope/registry.ts';
+import { resolve as resolveScope, type CityTier } from '../climate-engine/scope/resolve.ts';
+import {
+  heatAccuracyClaim, hasHeatBand, type WardConfidence,
+} from '../climate-engine/scope/accuracy-claim.ts';
+
+export { hasHeatBand, type WardConfidence };
 
 /** Mirrors scripts/_types.py:m_per_deg — spherical WGS-84, good to <0.1 % over km. */
 const M_PER_DEG_LON_EQUATOR = 111_320;
@@ -230,14 +237,13 @@ export interface WardRecord {
     /** The polygon, [lon, lat] pairs, closed — CC BY-SA 2.5 India, as its source. */
     readonly polygon: readonly (readonly [number, number])[];
   };
-  readonly confidence: {
-    readonly night: { readonly tier: 'quantitative' | 'indicative'; readonly bandK: number; readonly n: number; readonly modelRmseK: number; readonly ceilingRmseK: number };
-    /** `basis` says which evidence set the peak figures are: NOT the current one. */
-    readonly peak:  { readonly tier: 'quantitative' | 'indicative'; readonly bandK: number; readonly n: number; readonly modelRmseK: number; readonly ceilingRmseK: number; readonly basis: string };
-    readonly spatial: { readonly n: number; readonly rModel: number; readonly rVegOnly: number; readonly note: string };
-    /** `basis`: where the ICESat-2 sweep was run — the earlier 1.4 km box, not Ward 68. */
-    readonly heights: { readonly verdict: string; readonly nBuildings: number; readonly minBuildings: number; readonly basis: string };
-  };
+  /**
+   * The measured accuracy, WHERE THE CITY HAS ONE. Every figure was scored over three
+   * Kolkata wards, so a record carries them only for a `validated` city; any other
+   * gets the not-validated line and the place the bands were measured, and no number
+   * (scope/accuracy-claim.ts). Narrow with `hasHeatBand`.
+   */
+  readonly confidence: WardConfidence;
   readonly provenance: {
     readonly footprints: {
       readonly source: string;
@@ -271,6 +277,29 @@ function licenceFor(dataset: string) {
   const l = LICENCES[dataset];
   if (!l) throw new Error(`ward-record: dataset "${dataset}" has no licence entry — add it to LICENCES before it can ship`);
   return l;
+}
+
+/**
+ * The tier of the city a ward belongs to, from the registry. Undefined for a ward
+ * the registry does not know, which `confidenceFor` treats as having no band.
+ */
+function wardTier(wardId: string): CityTier | undefined {
+  const key = AREA_KEYS.find((k) => {
+    const parts = splitKey(k);
+    return parts.area === wardId && parts.city === CITY_OF[wardId];
+  });
+  return key === undefined ? undefined : resolveScope(key).tier;
+}
+
+/**
+ * The confidence block for a tier. THE RECORD IS NOT KOLKATA-ONLY BY CONSTRUCTION:
+ * it is Kolkata-only while wards.ts publishes only Kolkata. The day Bengaluru joins
+ * that list, its record must say "not validated" and carry no bandK, n or rModel,
+ * rather than serialise Kolkata's under a Bengaluru id.
+ */
+export function confidenceFor(tier: CityTier | undefined): WardConfidence {
+  const claim = heatAccuracyClaim(tier);
+  return claim.kind === 'band' ? claim.figures.record() : { line: claim.line, detail: claim.detail };
 }
 
 export function wardRecord(w: Ward): WardRecord {
@@ -322,12 +351,7 @@ export function wardRecord(w: Ward): WardRecord {
       // temperature" would be as misleading as saying they are the same.
       note: 'Surface temperature can diverge from air temperature by many degrees in daytime sun; at night the two track closely. Comfort additionally depends on humidity, wind and radiant exchange, none of which this model resolves. Do not read these values as what a person feels.',
     },
-    confidence: {
-      night: { tier: ACCURACY.night.confidence, bandK: ACCURACY.night.bandK, n: ACCURACY.night.n, modelRmseK: ACCURACY.night.modelRmseK, ceilingRmseK: ACCURACY.night.ceilingRmseK },
-      peak:  { tier: ACCURACY.peak.confidence,  bandK: ACCURACY.peak.bandK,  n: ACCURACY.peak.n,  modelRmseK: ACCURACY.peak.modelRmseK,  ceilingRmseK: ACCURACY.peak.ceilingRmseK, basis: PEAK_EVIDENCE_BASIS },
-      spatial: { n: SPATIAL.n, rModel: SPATIAL.rModel, rVegOnly: SPATIAL.rVegOnly, note: SPATIAL.note },
-      heights: { verdict: HEIGHTS.verdict, nBuildings: HEIGHTS.nBuildings, minBuildings: HEIGHTS.minBuildings, basis: HEIGHTS_EVIDENCE_BASIS },
-    },
+    confidence: confidenceFor(wardTier(w.id)),
     provenance: {
       footprints: { source: prov.source, count: prov.count, byDataset },
       layers: [

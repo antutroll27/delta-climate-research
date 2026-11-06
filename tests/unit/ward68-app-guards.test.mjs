@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { PEAK_CHIP_BASIS } from '../../src/scripts/climate-engine/accuracy.ts';
+import { heatAccuracyClaim } from '../../src/scripts/climate-engine/scope/accuracy-claim.ts';
 
 const APP = await readFile(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
 const CODE = APP.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
@@ -30,7 +31,11 @@ test('the DataMeet credit is shown wherever the boundary is: scope line, map att
 
 test('the peak chip says on its face that it is the earlier evidence set', () => {
   assert.equal(PEAK_CHIP_BASIS, 'earlier set');
-  assert.match(body('applyConfidence'), /\$\{fig\(`n=\$\{a\.n\}`\)\}\$\{state\.phase === 'peak' \? ` · \$\{PEAK_CHIP_BASIS\}` : ''\}/);
+  /* the chip's words live in the claim (scope/accuracy-claim.ts); the app prints figures.chip(state.phase, ...) */
+  assert.match(body('applyConfidence'), /F\.chip\(state\.phase, transition, seasonChip\)/);
+  const { html } = heatAccuracyClaim('validated').figures.chip('peak', false, '');
+  assert.ok(html.endsWith(` · ${PEAK_CHIP_BASIS}`), 'the peak chip must end with the earlier-set basis');
+  assert.ok(!heatAccuracyClaim('validated').figures.chip('night', false, '').html.includes(PEAK_CHIP_BASIS));
 });
 
 test('the idle orbit and drag inertia never cancel a camera animation; a row click pauses the orbit (solar-pane:129)', () => {
