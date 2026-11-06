@@ -59,7 +59,7 @@ test('once drawable, Tokyo answers 200 with provisional national-station reading
   assert.ok(r.body.readings.every((x) => x.station.owner === '環境省'));
 });
 
-test('a source that is down is 200 "not reporting", uncached at the CDN and not remembered by the function', async () => {
+test('a source that is down is 200 "not reporting", uncached at the CDN and remembered by the function for 60 s only', async () => {
   const cache = newLocalCache();
   const f = replay({});
   const a = await call('nl/amsterdam/canal-ring', { fetch: f.fetch, now: () => NL_NOW, drawable: ready, cache });
@@ -69,10 +69,12 @@ test('a source that is down is 200 "not reporting", uncached at the CDN and not 
   assert.ok(isLocalAirPayload(a.body));
   const before = f.calls.length;
   await call('nl/amsterdam/canal-ring', { fetch: f.fetch, now: () => NL_NOW, drawable: ready, cache });
-  assert.ok(f.calls.length > before, 'the next request asks again');
+  assert.equal(f.calls.length, before, 'inside the 60 s back-off it is not asked again (F5)');
+  await call('nl/amsterdam/canal-ring', { fetch: f.fetch, now: () => new Date(NL_NOW.getTime() + 61_000), drawable: ready, cache });
+  assert.ok(f.calls.length > before, 'after the back-off the next request asks again');
   /* and the live one that follows is a live one, not the failure */
-  const ok = replay(nlMap());
-  const b = await call('nl/amsterdam/canal-ring', { fetch: ok.fetch, now: () => NL_NOW, drawable: ready, cache });
+  const byPrefix = async (url) => { const m = nlMap(); const k = Object.keys(m).find((u) => u.split('&start=')[0] === url.split('&start=')[0]); return k ? { ok: true, status: 200, text: async () => m[k] } : { ok: false, status: 503, text: async () => '' }; };
+  const b = await call('nl/amsterdam/canal-ring', { fetch: byPrefix, now: () => new Date(NL_NOW.getTime() + 61_000), drawable: ready, cache });
   assert.equal(b.body.state, 'live');
 });
 

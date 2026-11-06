@@ -86,3 +86,22 @@ test('Cache-Control can never outlive the live window: max-age + s-maxage + stal
   assert.equal(liveCacheControl(live, at(120)), 'no-store', 'nothing left to hold');
   assert.equal(liveCacheControl(live, at(125)), 'no-store');
 });
+
+/* F5 (audit): Luchtmeetnet allows 100 requests / 5 min; an outage walks five rungs, so a failure answer is held in-process for 60 s. */
+test('F5: a not-reporting answer is held 60 s in the function (CDN still no-store), then the source is asked again', async () => {
+  const cache = newLocalCache();
+  const calls = [];
+  const down = async (url) => { calls.push(url); return { ok: false, status: 503, text: async () => '' }; };
+  const a = await call(at(40), cache, down);
+  assert.deepEqual([a.body.state, a.body.reason], ['not_reporting', 'source_down']);
+  assert.equal(a.headers['Cache-Control'], 'no-store');
+  const n = calls.length;
+  assert.equal(n, 5, 'one LKI request per rung');
+  for (let i = 0; i < 20; i++) await call(new Date(at(40).getTime() + i * 2_900), cache, down); // 20 page views inside 58 s
+  assert.equal(calls.length, n, 'no further request to the source inside the back-off');
+  const b = await call(new Date(at(40).getTime() + 61_000), cache, down);
+  assert.equal(calls.length, 2 * n, 'after 60 s it asks again');
+  assert.equal(b.headers['Cache-Control'], 'no-store');
+  const recovered = await call(new Date(at(40).getTime() + 125_000), cache, fetchOf(calls));
+  assert.equal(recovered.body.state, 'live', 'and a recovered source is live again');
+});
