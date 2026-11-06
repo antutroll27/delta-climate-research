@@ -39,15 +39,25 @@ test('the registry entry says what is known: Cfb, geometry tier, Europe/Amsterda
   assertRegistryLogic();
 });
 
-test('it is not drawable and not published yet (flips in A12, not here)', () => {
+test('it is drawable (A12) but not published: noindex, out of the sitemap, no catalogue record', () => {
   const area = city.areas['canal-ring'];
   assert.equal(area.shipsData, false);
-  assert.equal(area.drawable, false);
-  assert.ok(!RENDERABLE_CITIES.includes('amsterdam'));
-  assert.ok(!RENDERABLE_WARDS.some((w) => w.id === 'canal-ring'));
-  assert.ok(!WARDS.some((w) => w.id === 'canal-ring'));
+  assert.equal(area.drawable, true);
+  assert.ok(RENDERABLE_CITIES.includes('amsterdam'));
+  assert.ok(RENDERABLE_WARDS.some((w) => w.id === 'canal-ring'));
+  assert.ok(!WARDS.some((w) => w.id === 'canal-ring'), 'the CATALOGUE (WARDS) does not list it: it publishes nothing');
   assert.equal(CITIES.amsterdam.since, undefined, '`since` belongs in the release commit only (plan A13)');
   assert.equal(CITIES.amsterdam.showcase, undefined);
+});
+
+test('the area names itself ONCE: the temporary registry name and descriptor are gone', () => {
+  const area = city.areas['canal-ring'];
+  assert.equal('name' in area, false);
+  assert.equal('descriptor' in area, false);
+  const scope = resolve(KEY);
+  assert.equal(scope.area.name, 'Canal Ring');
+  assert.equal(scope.area.hasData, true);
+  assert.equal(scope.area.publishes, false);
 });
 
 test('KNMI Schiphol 1991-2020 normals: twelve months, max above min, hottest in July', () => {

@@ -5,7 +5,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { gzipSync, brotliCompressSync } from 'node:zlib';
 import { join } from 'node:path';
 
-const PAGES = ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road', 'heat-map/compare', 'heat-map/brief'];
+const PAGES = ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road', 'heat-map/nl/amsterdam/canal-ring', 'heat-map/compare', 'heat-map/brief'];
 const built = () => assert.ok(existsSync('dist/_astro'), 'run npm run build first');
 const head = (html) => html.slice(0, html.indexOf('</head>'));
 const sheets = (html) => [...head(html).matchAll(/<link rel="stylesheet" href="(\/_astro\/[^"]+\.css)"/g)].map((m) => m[1]);

@@ -24,6 +24,11 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  */
 
 const WARDS = ['ballygunge', 'barrackpore', 'baruipur'];
+/* CANAL-RING IS DELIBERATELY NOT HERE (plan Task A12), and the reason is measured. The Amsterdam canal ring is dense fabric edge to
+   edge with its green in a few parks and its low-vegetation ground in water, so veg-vs-built correlation barely discriminates the two
+   orientations: -0.117 read correctly, -0.065 read row-major (box 5). A threshold that loose would pass a mirrored raster. Its
+   orientation is pinned by the numeric landmark and pond-fit guards instead (scripts/check-city-frame.py G1-G8,
+   tests/unit/amsterdam-frame-guard.test.mjs), which fail by 100 m or more when mirrored. */
 
 const corr = (a, b) => {
   const ma = a.reduce((s, v) => s + v, 0) / a.length;

@@ -43,11 +43,13 @@ function pageParts(path) {
   const html = readFileSync(file, 'utf8');
   const s = html.indexOf('<main id="main"'); const e = html.indexOf('</main>', s);
   assert.ok(s >= 0 && e > s, `${path}: no <main id="main">`);
-  return { v1ids: V1_BOUND[path], v2: html.slice(s, e) };
+  /* A page the v1 build never had (Amsterdam, plan Task A12) is held to the SAME frozen list as Kolkata's: it is one template, and a
+     script binds the same ids on every city. */
+  return { v1ids: V1_BOUND[path] ?? V1_BOUND['heat-map/in/kolkata/ballygunge'], v2: html.slice(s, e) };
 }
 const idsIn = (s) => [...s.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
 
-for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road']) {
+for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road', 'heat-map/nl/amsterdam/canal-ring']) {
   test(`${path}: every bound id is in the v2 tree exactly once`, () => {
     const { v1ids, v2 } = pageParts(path);
     assert.ok(v1ids.length > 40, 'the frozen v1 id list is present');
@@ -92,7 +94,7 @@ test('the area page renders HeatMapStageV2 as v2 and mounts the v2 shell after t
 /* A1 (parallel tracks): the right column is a frame region, not a Track A card. It exists
    on every area, and the app's re-seated blocks and the building card sit
    inside it, before the .attr marker the app inserts against (app:1212, :1238). */
-for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road']) {
+for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road', 'heat-map/nl/amsterdam/canal-ring']) {
   test(`${path}: A1 the right column is #legend, once`, () => {
     const { v2 } = pageParts(path);
     const col = v2.indexOf(' id="legend"');
