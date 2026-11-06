@@ -147,3 +147,30 @@ function rateFormatterFor(currency: string): Intl.NumberFormat {
 export function fmtRate(amount: number, costs: Costs): string {
   return rateFormatterFor(costs.currency).format(amount);
 }
+
+/**
+ * What replaces a capital figure when the country has adopted no cost basis.
+ * One sentence, the country named, no number and no currency mark: a euro figure
+ * borrowed from India would compute silently and read as an answer.
+ */
+export function noCostBasisLine(countryName: string): string {
+  return `No cost basis for ${countryName} yet`;
+}
+
+/**
+ * `fmtMoney` for a readout that may be in a country without a cost basis.
+ * `costs === null` (or no amount) gives `noCostBasisLine`, never a zero.
+ */
+export function fmtMoneyOrNone(amount: number | null, costs: Costs | null, countryName: string): string {
+  return costs === null || amount === null ? noCostBasisLine(countryName) : fmtMoney(amount, costs);
+}
+
+/**
+ * The plan-score readout line under the Resilience card, as HTML. Pure so a unit
+ * test can render it for Kolkata (rupees) and for a country with no cost basis.
+ */
+export function planScoreLine(
+  points: number, cost: number | null, costs: Costs | null, countryName: string, guidance: string,
+): string {
+  return `${points.toFixed(1)} pts from this plan · ${fmtMoneyOrNone(cost, costs, countryName)}<br>${guidance}`;
+}

@@ -48,7 +48,8 @@ export interface WardScenarioResult {
   scenarioHotAreaPct: MetricValue;
   hotAreaChangePp: MetricValue;
   greenReferenceContrastC: number;
-  capitalCost: number;
+  /** In the area's own currency; null where its country has adopted no cost basis (never a zero). */
+  capitalCost: number | null;
   delivered: DeliveredQuantities;
   /** The boundary EVERY figure on this side is taken over — the mean, the hot area,
    *  the cost and the delivered quantities (ward-plan.ts) — with its area; or null

@@ -10,7 +10,8 @@
  * Pure except `fetchFeed`. No XML library: a strict reader for exactly
  * <Station>, <Pollutant_Index/> and <Air_Quality_Index/>; a station with any
  * value that is not a whole number, "NA" or "" is dropped (never coerced).
- * IST is the fixed +05:30 offset (obos-scope forbids naming a zone).
+ * CPCB's `lastupdate` is IST by the publisher's definition, whatever city reads it: the default `IST_CLOCK` (clock.ts) is
+ * deliberately not a per-city value here.
  *
  * LINEAR BY CONSTRUCTION (audit I2): the body is up to 2 MB of untrusted text, and
  * lazy `[\s\S]*?` searches plus unanchored attribute patterns were O(n²): 22 s on a
@@ -19,6 +20,7 @@
  * on whitespace with capped name and value lengths, so it only ever runs on ≤ 1 KB.
  */
 import { gunzipSync } from 'node:zlib';
+import { IST_CLOCK, type CityClock } from './clock.ts';
 import { MAX_SERVE_M, stationPayload, type StationEntry } from './stations.ts';
 import { category } from './cpcb.ts';
 import { LIVE_H, STALE_DAYS } from './build.ts';
@@ -134,20 +136,19 @@ function whole(v: string | undefined): number | null {
   return Number(v);
 }
 
-const IST_MS = 5.5 * 3_600_000;
 
 /**
  * "27-09-2026 05:00:00" (IST) → ISO UTC. Impossible values ("31-02-2026", hour 24)
  * are rejected, not rolled over as Date.parse does: the parts must read back unchanged.
  */
-export function istStamp(s: string): string {
+export function istStamp(s: string, clock: CityClock = IST_CLOCK): string {
   const m = /^(\d{2})-(\d{2})-(\d{4}) (\d{2}):(\d{2}):(\d{2})$/.exec(s);
   if (!m) throw new FeedError(`bad lastupdate: ${s}`);
   const [d, mo, y, h, mi, se] = [m[1], m[2], m[3], m[4], m[5], m[6]].map(Number) as [number, number, number, number, number, number];
   const local = Date.UTC(y, mo - 1, d, h, mi, se), back = new Date(local);
   if (back.getUTCFullYear() !== y || back.getUTCMonth() !== mo - 1 || back.getUTCDate() !== d
     || back.getUTCHours() !== h || back.getUTCMinutes() !== mi || back.getUTCSeconds() !== se) throw new FeedError(`bad lastupdate: ${s}`);
-  return new Date(local - IST_MS).toISOString();
+  return new Date(local - clock.offsetMs).toISOString();
 }
 
 /**

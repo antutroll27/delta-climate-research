@@ -26,6 +26,7 @@
  * that asks "has this hour arrived yet?" passes `fresh` (useCache: false, straight to origin);
  * a read of an hour that is already settled uses the CDN. cpcb-archive.ts says which is which.
  */
+import { IST_CLOCK, type CityClock } from './clock.ts';
 import { BlobError, get as blobGet, head as blobHead, put as blobPut } from '@vercel/blob';
 
 /** The largest gzip accepted or read back, bytes (spec §4: 1 MB; the real feed is ~43 KB). */
@@ -46,17 +47,16 @@ export interface FeedStore {
   getArchive(path: string, o?: ReadOptions): Promise<Uint8Array | null>;
 }
 
-const IST_MS = 5.5 * 3_600_000;
 const pad = (n: number): string => String(n).padStart(2, '0');
 
 /**
  * The archive path for the IST hour containing `at` (ISO with an offset): cpcb/archive/2026/09/27/05.xml.gz.
  * Built from UTC getters on the instant + 5:30, so the machine's own zone never enters.
  */
-export function archivePath(at: string): string {
+export function archivePath(at: string, clock: CityClock = IST_CLOCK): string {
   const ms = Date.parse(at);
   if (!Number.isFinite(ms)) throw new RangeError(`not an ISO time: ${at}`);
-  const d = new Date(ms + IST_MS);
+  const d = new Date(ms + clock.offsetMs);
   return `cpcb/archive/${d.getUTCFullYear()}/${pad(d.getUTCMonth() + 1)}/${pad(d.getUTCDate())}/${pad(d.getUTCHours())}.xml.gz`;
 }
 

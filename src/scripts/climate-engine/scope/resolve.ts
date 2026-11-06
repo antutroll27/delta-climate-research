@@ -411,6 +411,15 @@ export function resolve(key: AreaKey): ResolvedScope {
 }
 
 /**
+ * The costs as the country declared them, INCLUDING the null. For the readout of a
+ * drawable city whose country has adopted no cost basis (the Netherlands): it prints
+ * `noCostBasisLine` where a figure would have been. Never substitute a zero here.
+ */
+export function costsOrNull(scope: ResolvedScope): Costs | null {
+  return scope.climate.costs;
+}
+
+/**
  * The costs, or a refusal — never a zero.
  *
  * `computeCost` takes a non-null `Costs` because there is no such thing as a cost
@@ -423,6 +432,11 @@ export function resolve(key: AreaKey): ResolvedScope {
  * four figures. It becomes reachable the moment a second country is selectable, and
  * at that point the right answer is a readout saying "no cost basis for the UAE",
  * not a number. The type is what forces that work to be done rather than defaulted.
+ *
+ * The STRICT form, for callers that cannot continue without prices. A drawable
+ * geometry-tier city outside India (the Netherlands: `costs: null`) must not go
+ * through here: it takes `costsOrNull` and prints `noCostBasisLine` where a figure
+ * would have been. Every existing caller of this function stays strict.
  */
 export function requireCosts(scope: ResolvedScope): Costs {
   const costs = scope.climate.costs;

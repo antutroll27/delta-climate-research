@@ -1,5 +1,5 @@
-import { fmtMoney } from '../money.ts';
-import { resolve, requireCosts } from '../scope/resolve.ts';
+import { fmtMoneyOrNone } from '../money.ts';
+import { resolve, costsOrNull } from '../scope/resolve.ts';
 import { createPairedScenarioClient } from './paired-client.ts';
 import { statsOverLabel, type PairedResult, type WardScenarioResult } from './paired-protocol.ts';
 import { parsePairedScenario, serializePairedScenario } from '../scenario/scenario-url.ts';
@@ -36,11 +36,11 @@ export function mountPairedBrief(): () => void {
     set(`[data-value="${slot}-scenario"]`, `${result.scenarioMeanC.toFixed(1)}°C`);
     set(`[data-value="${slot}-cooling"]`, `−${result.coolingC.toFixed(1)}°C`);
     /* The SAME `Costs` paired-core priced this figure with — `runWard` resolves the
-       area's own scope and calls `requireCosts` before `computeCost`, and this
+       area's own scope and calls `costsOrNull` before `computeCost`, and this
        resolves the same key to the same frozen object. So the label cannot name a
        currency other than the one the arithmetic used. The ₹ that stood here could,
        and did: it was a literal, and it survived the country becoming data. */
-    set(`[data-value="${slot}-cost"]`, fmtMoney(result.capitalCost, requireCosts(scope)));
+    set(`[data-value="${slot}-cost"]`, fmtMoneyOrNone(result.capitalCost, costsOrNull(scope), scope.country.name));
   };
   root.setAttribute('aria-busy', 'true');
   void client.run(state).then((result: PairedResult) => {

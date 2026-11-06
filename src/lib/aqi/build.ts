@@ -1,4 +1,5 @@
 /** Compose the payload from raw readings. Pure; the clock is a parameter. */
+import { IST_CLOCK, type CityClock } from './clock.ts';
 import { ALGORITHM, combine, subIndex, MIN_HOURS } from './cpcb.ts';
 import { hoursBefore, istHourKey, istHours, isUsable, window24, window8, type Hour, type HourKey, type Raw } from './hours.ts';
 import { POLLUTANTS, stationPayload, type StationEntry } from './stations.ts';
@@ -8,7 +9,6 @@ export const LIVE_H = 2;
 export const STALE_DAYS = 7;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
-const IST_MS = 5.5 * HOUR_MS;
 const HISTORY_DAYS = 30;
 /** A row stamped further than this after `now` is a clock or feed error, dropped before anything reads it. */
 const FUTURE_SLACK_MS = 15 * 60_000;
@@ -16,7 +16,7 @@ const EIGHT_HOUR: ReadonlySet<Pollutant> = new Set(['co', 'o3']);
 
 /** The no-station source: nobody measured anything, so no owner. With a station, `owner` comes from the station entry. */
 const SOURCE: SourceNote = { owner: null, via: 'CPCB via OpenAQ', standard: 'CPCB National AQI' };
-const keyToIso = (k: HourKey): string => `${k}:00:00+05:30`;
+const keyToIso = (k: HourKey, clock: CityClock): string => `${k}:00:00${clock.isoSuffix}`;
 
 function readings(hours: Record<string, Map<HourKey, Hour>>, st: StationEntry, endKey: HourKey): PollutantReading[] {
   return POLLUTANTS.map((p) => {
@@ -44,8 +44,8 @@ function lastStampMs(raw: Partial<Record<Pollutant, Raw[]>>): number {
  * The 30 complete IST days ending yesterday relative to `now` (IST date of `now` minus one).
  * Anchored to the clock, not to the last reading: days after a feed dies show as missing.
  */
-function historyDays(hours: Record<string, Map<HourKey, Hour>>, st: StationEntry, now: Date): HistoryDay[] {
-  const todayIstMs = Date.parse(`${new Date(now.getTime() + IST_MS).toISOString().slice(0, 10)}T00:00:00Z`);
+function historyDays(hours: Record<string, Map<HourKey, Hour>>, st: StationEntry, now: Date, clock: CityClock): HistoryDay[] {
+  const todayIstMs = Date.parse(`${new Date(now.getTime() + clock.offsetMs).toISOString().slice(0, 10)}T00:00:00Z`);
   return Array.from({ length: HISTORY_DAYS }, (_, i) => {
     const dayMs = todayIstMs - (HISTORY_DAYS - i) * DAY_MS;
     const date_ist = new Date(dayMs).toISOString().slice(0, 10);
@@ -58,7 +58,8 @@ function historyDays(hours: Record<string, Map<HourKey, Hour>>, st: StationEntry
   });
 }
 
-export function buildPayload(areaKey: string, st: StationEntry | null, raw: Partial<Record<Pollutant, Raw[]>>, now: Date): AirQualityPayload {
+/** `clock` is the city's (default IST, the only one with an Air card today); the payload's `date_ist` / `hour_ist` / `window_end_ist` field names are the published schema and keep their names. */
+export function buildPayload(areaKey: string, st: StationEntry | null, raw: Partial<Record<Pollutant, Raw[]>>, now: Date, clock: CityClock = IST_CLOCK): AirQualityPayload {
   const served_at = now.toISOString();
   if (!st) return { current: { schema: SCHEMA, area_id: areaKey, served_at, source: SOURCE, state: 'no_station', message: 'No government air monitor within 3 km of this area\'s centre.' }, history: null };
 
@@ -67,7 +68,7 @@ export function buildPayload(areaKey: string, st: StationEntry | null, raw: Part
   /* Drop future-stamped rows once, so neither the freshness clock nor any window sees them. */
   const rows = Object.fromEntries(POLLUTANTS.map((p) => [p, (raw[p] ?? []).filter((r) => !(Date.parse(r.end_utc) > horizon))])) as Partial<Record<Pollutant, Raw[]>>;
   const station: AqiStation = stationPayload(st);
-  const hours = Object.fromEntries(POLLUTANTS.map((p) => [p, istHours(rows[p] ?? [])])) as Record<string, Map<HourKey, Hour>>;
+  const hours = Object.fromEntries(POLLUTANTS.map((p) => [p, istHours(rows[p] ?? [], clock)])) as Record<string, Map<HourKey, Hour>>;
   const lastMs = lastStampMs(rows);
   /* Nothing usable in the whole 31-day window: the feed has been quiet far longer than 7 days. */
   if (!Number.isFinite(lastMs)) return { current: { ...common, state: 'unavailable', station, last_observed_at: null, reason: 'feed_quiet' }, history: null };
@@ -78,15 +79,15 @@ export function buildPayload(areaKey: string, st: StationEntry | null, raw: Part
   const ageH = Math.floor(ageMs / HOUR_MS);
   const fresh = ageMs <= LIVE_H * HOUR_MS;
   /* The window closes at the end of the IST hour holding the last reading. */
-  const lastHourKey = istHourKey(last.toISOString());
+  const lastHourKey = istHourKey(last.toISOString(), clock);
   const nextHourKey: HourKey = new Date(Date.parse(`${lastHourKey}:00:00Z`) + HOUR_MS).toISOString().slice(0, 13);
   const current = readings(hours, st, nextHourKey);
   const c = combine(current);
 
   const pm = hours['pm25']!;
-  const history = { schema: SCHEMA, area_id: areaKey, station, days: historyDays(hours, st, now),
+  const history = { schema: SCHEMA, area_id: areaKey, station, days: historyDays(hours, st, now, clock),
     /** The last 24 hours the station reported: anchored to the last reading, not to `now`. */
-    pm25_24h: hoursBefore(nextHourKey).map((k) => ({ hour_ist: keyToIso(k), value: pm.has(k) ? Math.round(pm.get(k)!.mean * 10) / 10 : null })) };
+    pm25_24h: hoursBefore(nextHourKey).map((k) => ({ hour_ist: keyToIso(k, clock), value: pm.has(k) ? Math.round(pm.get(k)!.mean * 10) / 10 : null })) };
 
   const observed_at = last.toISOString();
   if (ageMs > STALE_DAYS * DAY_MS) return { current: { ...common, state: 'unavailable', station, last_observed_at: observed_at, reason: 'feed_quiet' }, history };
@@ -96,7 +97,7 @@ export function buildPayload(areaKey: string, st: StationEntry | null, raw: Part
       ? { current: { ...common, state: 'insufficient_data', origin: 'obos' as const, station, pollutants: current, reasons: c.reasons, observed_at }, history }
       : { current: { ...common, state: 'unavailable', station, last_observed_at: observed_at, reason: 'no_valid_aqi' }, history };
   }
-  const result = { origin: 'obos' as const, aqi: c.aqi, category: c.category, dominant: c.dominant, pollutants: current, window_end_ist: keyToIso(nextHourKey), algorithm: ALGORITHM };
+  const result = { origin: 'obos' as const, aqi: c.aqi, category: c.category, dominant: c.dominant, pollutants: current, window_end_ist: keyToIso(nextHourKey, clock), algorithm: ALGORITHM };
   return fresh
     ? { current: { ...common, state: 'live', station, result, observed_at }, history }
     : { current: { ...common, state: 'stale', station, result, observed_at, age_h: ageH }, history };

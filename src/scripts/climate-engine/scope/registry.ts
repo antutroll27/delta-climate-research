@@ -484,6 +484,12 @@ export function splitKey(key: AreaKey): AreaParts {
   return parts;
 }
 
+/** The IANA zone the key's city is registered in. For server code that needs the clock without resolving a whole scope (api/air-quality.ts). */
+export function cityTz(key: AreaKey): string {
+  const { country, city } = splitKey(key);
+  return COUNTRIES[country]!.cities[city]!.tz;
+}
+
 /**
  * The keys sharing one key's CITY, in declaration order — including the key itself.
  *

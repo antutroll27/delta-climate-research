@@ -1,6 +1,6 @@
-import { fmtMoney } from '../money.ts';
+import { fmtMoneyOrNone } from '../money.ts';
 import { areaKeysInCity, isAreaKey, nextDistinctArea, type AreaKey } from '../scope/registry.ts';
-import { resolve, requireCosts } from '../scope/resolve.ts';
+import { resolve, costsOrNull } from '../scope/resolve.ts';
 import { enablePairedMapInteraction, renderPairedMap, resetPairedMapView, thermalPatternSummary } from './paired-map-2d.ts';
 import { createPairedScenarioClient } from './paired-client.ts';
 import { statsOverLabel, type MetricValue, type PairedResult, type WardScenarioResult } from './paired-protocol.ts';
@@ -259,7 +259,7 @@ export function mountPairedBench(): () => void {
       setText(`[data-value="${slot}-green-reference"]`, `${ward.greenReferenceContrastC >= 0 ? '+' : ''}${ward.greenReferenceContrastC.toFixed(1)}°C`);
       /* Currency from the area's OWN scope, which is the same frozen object
          paired-core resolved to price this figure — see paired-brief.ts. */
-      setText(`[data-value="${slot}-cost"]`, fmtMoney(ward.capitalCost, requireCosts(scope)));
+      setText(`[data-value="${slot}-cost"]`, fmtMoneyOrNone(ward.capitalCost, costsOrNull(scope), scope.country.name));
       setText(`[data-value="${slot}-delivered"]`, formatDelivered(ward));
       setText(`[data-value="${slot}-pattern"]`, thermalPatternSummary(ward.field));
       /* The square each field is drawn over, and — for a ward with a boundary — what

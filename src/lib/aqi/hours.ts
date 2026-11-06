@@ -3,12 +3,13 @@
  * Never use OpenAQ's /hours: it drops one quarter-hour in four and buckets by UTC
  * hours, which straddle IST hours (register AQI-R23).
  */
+import { IST_CLOCK, type CityClock } from './clock.ts';
+
 export interface Raw { end_utc: string; value: number }
 export interface Hour { mean: number; n: number }
-/** Hour keys are 'YYYY-MM-DDTHH' in IST, naming the hour's START. */
+/** Hour keys are 'YYYY-MM-DDTHH' on the city's clock (IST by default), naming the hour's START. */
 export type HourKey = string;
 
-const IST_MS = 5.5 * 3_600_000;
 const QUARTER_MS = 15 * 60_000;
 /** A timestamp with an explicit zone offset (Z or ±HH:MM). Without one, Date.parse reads it as local time. */
 const HAS_ZONE_OFFSET = /(Z|[+-]\d\d:\d\d)$/;
@@ -27,16 +28,16 @@ export function isUsable(r: Raw): boolean {
   return Number.isFinite(r.value) && r.value > 0 && isStampedUtc(r.end_utc);
 }
 
-export function istHourKey(endUtc: string): HourKey {
-  const startIst = new Date(Date.parse(endUtc) + IST_MS - QUARTER_MS);
+export function istHourKey(endUtc: string, clock: CityClock = IST_CLOCK): HourKey {
+  const startIst = new Date(Date.parse(endUtc) + clock.offsetMs - QUARTER_MS);
   return startIst.toISOString().slice(0, 13);
 }
 
-export function istHours(raw: readonly Raw[]): Map<HourKey, Hour> {
+export function istHours(raw: readonly Raw[], clock: CityClock = IST_CLOCK): Map<HourKey, Hour> {
   const acc = new Map<HourKey, { sum: number; n: number }>();
   for (const r of raw) {
     if (!isUsable(r)) continue;
-    const k = istHourKey(r.end_utc);
+    const k = istHourKey(r.end_utc, clock);
     const a = acc.get(k) ?? { sum: 0, n: 0 };
     a.sum += r.value; a.n += 1; acc.set(k, a);
   }

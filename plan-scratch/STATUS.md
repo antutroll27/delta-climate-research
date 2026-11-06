@@ -25,3 +25,7 @@ raw cache ~/.cache/delta-climate/cities/amsterdam/raw = 564 MB (3D BAG 95 MB gz,
 
 ## log
 04:15 A0 done. 05:21 A1 done. 06:21 A2 done. A4/A5/A6 followed; see commits.
+
+# Chunk 2 (A3, A7-A11)
+- Step 0 done: rebased onto origin/main e20758a (PR #75 + #76). `git log origin/main..HEAD` = the 7 chunk-1 commits, `HEAD..origin/main` = #75/#76 only (9 files: accuracy-claim, HeatCards, MethodsCards, heat-map-app, sim-ts, ward-raster, 3 tests). Freeze check passes UNCHANGED against the f0eeaa5 baseline: no regeneration needed (the main-side changes are source, not artefacts).
+- HH:MM A3 code + tests green (costs null-safe, CITY_CREDITS data, per-city AQI clock); committing.

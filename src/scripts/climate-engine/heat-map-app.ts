@@ -68,13 +68,14 @@ import { nearestImage } from './streetview/nearest-image';
 import { OPEN_AREA_EVENT, type OpenAreaDetail } from './shell/console-shell.ts';
 import { SELECT_SYNC_EVENT } from './shell/select-field.ts';
 import { isLayerId, type LayerId } from './scope/layers.ts';
-import { resolve, requireCosts } from './scope/resolve.ts';
+import { resolve, costsOrNull } from './scope/resolve.ts';
 import { heatAccuracyClaim, heightsNote } from './scope/accuracy-claim.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
-import { fmtMoney, fmtRate, currencyMark } from './money.ts';
+import { fmtMoney, fmtRate, currencyMark, noCostBasisLine, planScoreLine } from './money.ts';
 import { pvRanges, tierOf } from './solar-ranges.ts';
 import { wardSummary, validatedSentence, noteFor, sharePct, ESTIMATE_TAG, paybackText, oldestAsOf } from './solar-copy.ts';
 import { costBasisFor } from './solar-cost.ts';
+import { CITY_MAP_CREDIT, joinMapCredits, type CityId } from '../../data/city-credits.ts';
 import { wardRoi, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
 import { mountPaybackSheet, type PaybackSheet } from './solar-payback-sheet.ts';
 import { areaPath, paths, cityPaths, wardMaskPath } from './scope/paths.ts';
@@ -243,15 +244,19 @@ export function mountHeatMap(): () => void {
    */
   const SCOPE = resolve(INITIAL_AREA);
   /**
-   * The unit prices, refused ONCE here rather than defaulted deeper — see the
-   * docblock above `requireCosts`. It moved inside the mount when the boot area
-   * did: costs are a COUNTRY fact and every area reachable from this page's tabs
-   * shares one country, so this is still resolved once per mount rather than per
-   * switch. It becomes reachable — as a throw — the first time a page for a
-   * country with no adopted cost basis mounts an instrument, and at that point the
-   * right answer is a readout saying the cost basis is unavailable, not a zero.
+   * The unit prices, or NULL for a country that has adopted no cost basis (the
+   * Netherlands). Resolved ONCE per mount: costs are a COUNTRY fact and every area
+   * reachable from this page's tabs shares one country. It used to be `requireCosts`
+   * and THROW at mount, which is why no such country could be drawable. Every readout
+   * of a capital figure now branches on the null and says `noCostBasisLine` — a zero
+   * would read as a budget of nothing; a euro figure borrowed from India as an answer.
    */
-  const COSTS = requireCosts(SCOPE);
+  const COSTS = costsOrNull(SCOPE);
+  /* The solar pane and its sheet are India-only (`costBasisFor` is keyed by city and
+     the pv artefacts exist for Kolkata alone), so these are reached only with prices;
+     they still branch, so a null can never print a figure. */
+  const solarMoney = (n: number): string => (COSTS ? fmtMoney(n, COSTS) : noCostBasisLine(SCOPE.country.name));
+  const solarRate = (n: number): string => (COSTS ? fmtRate(n, COSTS) : '—');
   const el = (id: string) => document.getElementById(id);
   const loadChip = createLoadChip(el('loadchip'), {
     now: () => performance.now(),
@@ -976,7 +981,7 @@ export function mountHeatMap(): () => void {
     setHTML('bcSolLoss', `${pct(pv.loss[i])}<small>of which trees ${sharePct(pv.loss_trees[i])} · annual</small>`);
     setHTML('bcSolFloor', `${pct(pv.loss_strict[i])}<small>under a strict roof mask</small>`);
     setHTML('bcSolRaised', `${pct(pv.loss_raised[i])}<small>elevated mounting · what-if</small>`);
-    setHTML('bcSolRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr<small>at ${fmtRate(tariff, COSTS)} per kWh · assumed</small>`);
+    setHTML('bcSolRs', `${solarMoney(pv.kwh[i] * tariff)}/yr<small>at ${solarRate(tariff)} per kWh · assumed</small>`);
     /* THE LADDER, FILLED. Each rung's <b> is this roof's own band, so the limit is
        stated in the reader's numbers rather than as a general caution. */
     setText('bcSureRoof', `Capacity ${r.kwpLow.toFixed(1)}–${r.kwpHigh.toFixed(1)} kWp today.`);
@@ -1059,7 +1064,7 @@ export function mountHeatMap(): () => void {
     setText('brLoss', `${pct(pv.loss[i])} · buildings ${sharePct(pv.loss_buildings[i])} · trees ${sharePct(pv.loss_trees[i])}`);
     setText('brFloor', `${pct(pv.loss_strict[i])} · under a strict roof mask`);
     setText('brRaised', `${pct(pv.loss_raised[i])} · elevated mounting, what-if`);
-    setText('brRs', `${fmtMoney(pv.kwh[i] * tariff, COSTS)}/yr at ${fmtRate(tariff, COSTS)} per kWh · assumed`);
+    setText('brRs', `${solarMoney(pv.kwh[i] * tariff)}/yr at ${solarRate(tariff)} per kWh · assumed`);
     /* THE PAYBACK, ON PAPER, NEVER WITHOUT ITS ASSUMPTIONS (spec §4 rule 2). */
     const pay = SOLAR_BASIS && paySheet ? paySheet.summaryFor({ idx: i, pv }) : null;
     setText('brPay', pay && SOLAR_BASIS ? `${pay.payback} · net over ${SOLAR_BASIS.horizonYears.value} years: ${pay.saving}` : '—');
@@ -1238,7 +1243,7 @@ export function mountHeatMap(): () => void {
       setText(`${pre}Floor`, `Shading costs ${t.shading_loss_gwh_yr.toFixed(1)} GWh a year. On the average roof it takes `
         + `${(t.mean_loss * 100).toFixed(1)}% of the yield, at least ${(t.mean_loss_strict * 100).toFixed(1)}% under a strict roof mask.`);
       setHTML(`${pre}Kwh`, `${t.generation_gwh_yr.toFixed(1)}<small>GWh/yr · floor</small>`);
-      setHTML(`${pre}Rs`, `${fmtMoney(t.generation_gwh_yr * 1e6 * tariff, COSTS)}<small>per yr at ${fmtRate(tariff, COSTS)} · assumed</small>`);
+      setHTML(`${pre}Rs`, `${solarMoney(t.generation_gwh_yr * 1e6 * tariff)}<small>per yr at ${solarRate(tariff)} · assumed</small>`);
       setText(`${pre}BigK`, `Roofs ≥ ${s.threshold_kwp} kWp`);
       setHTML(`${pre}Big`, `${s.n.toLocaleString()}<small>${Math.round(100 * s.n / n)}% of ${n.toLocaleString()} roofs</small>`);
       setHTML(`${pre}Sh`, `${Math.round(s.share_losing_5pct * 100)}%<small>of those roofs</small>`);
@@ -1257,8 +1262,8 @@ export function mountHeatMap(): () => void {
         const verdict = r.status === 'ok' ? `pays back in ${said}` : `${said.charAt(0).toLowerCase()}${said.slice(1)}`;
         /* Its own assumptions, not assumptionsLine's: that would name the owner ("Business"),
            and this is a ward case. Valuation, tariff, price and as-of all travel with it (§4 rules 2, 5, 6). */
-        wardPay.textContent = `${wardMask ? `${wardMask.name} estimate` : 'Whole-ward estimate'}: every roof${wardMask ? ' in the ward' : ''} that can take ${MIN_SYSTEM_KW} kW or more, at its floor capacity, no subsidy, every kWh valued at ${fmtRate(tariff, COSTS)} as if all of it is used: ${verdict}`
-          + ` at ${fmtMoney(SOLAR_BASIS.costPerKw.value[0], COSTS)}–${fmtMoney(SOLAR_BASIS.costPerKw.value[1], COSTS)} per kW, today's prices`
+        wardPay.textContent = `${wardMask ? `${wardMask.name} estimate` : 'Whole-ward estimate'}: every roof${wardMask ? ' in the ward' : ''} that can take ${MIN_SYSTEM_KW} kW or more, at its floor capacity, no subsidy, every kWh valued at ${solarRate(tariff)} as if all of it is used: ${verdict}`
+          + ` at ${solarMoney(SOLAR_BASIS.costPerKw.value[0])}–${solarMoney(SOLAR_BASIS.costPerKw.value[1])} per kW, today's prices`
           + ` · reference defaults as of ${oldestAsOf(SOLAR_BASIS)} · ${ESTIMATE_TAG}`;
         wardPay.removeAttribute('hidden');
       }
@@ -1431,7 +1436,7 @@ export function mountHeatMap(): () => void {
         ['loss_raised', pv.loss_raised[i]],
         ['worth_per_yr', Math.round(pv.kwh[i] * tariff)],
         ['tariff_per_kwh', tariff.toFixed(2)],
-        ['currency', COSTS.currency],
+        ['currency', COSTS?.currency ?? 'n/a'],
         ['tier', tier],
         /* Only where a polygon exists: there the square holds context roofs, and a
            sheet that cannot tell them apart from the ward's would let the ward's
@@ -1484,8 +1489,8 @@ export function mountHeatMap(): () => void {
   }
   const tariffInput = el('solTariff') as HTMLInputElement | null;
   if (tariffInput) tariffInput.value = tariff.toFixed(2);
-  setText('solCur', currencyMark(COSTS));   // the country names the currency; never typed into a template
-  tariffInput?.setAttribute('aria-label', `Tariff, ${currencyMark(COSTS)} per kilowatt-hour, assumed`);
+  setText('solCur', COSTS ? currencyMark(COSTS) : '');   // the country names the currency; never typed into a template
+  tariffInput?.setAttribute('aria-label', `Tariff, ${COSTS ? currencyMark(COSTS) : 'currency not set'} per kilowatt-hour, assumed`);
   const onTariff = () => {
     const v = Number(tariffInput?.value);
     /* refused above TARIFF_MAX too: 1e308 would overflow every figure to "∞" */
@@ -1508,8 +1513,8 @@ export function mountHeatMap(): () => void {
     paySheet = mountPaybackSheet({
       el,
       basis: SOLAR_BASIS,
-      money: (n) => fmtMoney(n, COSTS),
-      rate: (n) => fmtRate(n, COSTS),
+      money: solarMoney,
+      rate: solarRate,
       tariff: () => tariff,
       setTariff: (v) => { if (tariffInput) { tariffInput.value = v; tariffInput.dispatchEvent(new Event('input')); } },
       csvName: (idx) => `solar-payback-${areaOf(state.ward)}-${idx}.csv`,
@@ -3004,9 +3009,11 @@ export function mountHeatMap(): () => void {
       credit.hidden = wardMask === null;
       credit.textContent = wardMask ? `Ward boundary © DataMeet (${wardMask.licence}) · ` : '';
     }
-    setMapCredit(wardMask
+    /* The CITY's own required credit (3D BAG: bottom-right of a browsable map) first, then the ward boundary's. Null for
+       Kolkata and Bengaluru, so their control is exactly what it was. */
+    setMapCredit(joinMapCredits(CITY_MAP_CREDIT[SCOPE.city.id as CityId], wardMask
       ? `Ward boundary © DataMeet, <a href="${wardMask.licenceUri}" target="_blank" rel="noopener noreferrer">CC BY-SA 2.5 IN</a>`
-      : null);
+      : null));
   }
 
   function paintWardTools(): void {
@@ -3494,7 +3501,7 @@ export function mountHeatMap(): () => void {
       (elm as HTMLElement).style.height = bins[i] === 0 ? '0%' : `${Math.max(7, share)}%`;
     });
     const iv = state.iv;
-    const cost = M.computeCost(iv, state.spatial, COSTS);
+    const cost = COSTS === null ? null : M.computeCost(iv, state.spatial, COSTS);
     const anyIv = iv.trees || iv.roof || iv.parks || iv.facades;
 
     /* ── DC-URS ────────────────────────────────────────────────────────────
@@ -3564,7 +3571,7 @@ export function mountHeatMap(): () => void {
         /* The symbol comes from COSTS, not from this template. It used to be a ₹
            typed in beside the number, which meant the country half of the scope
            knew the currency and the readout ignored it. */
-        ? `${(now - U.dcUrs(base)).toFixed(1)} pts from this plan · ${fmtMoney(cost, COSTS)}<br>${tier.guidance}`
+        ? planScoreLine(now - U.dcUrs(base), cost, COSTS, SCOPE.country.name, tier.guidance)
         // `headroom` is exactly invariant to the missing input — it shifts ceiling
         // and current equally — so it needs no hedge. `withheld` only ever RISES,
         // so one word makes it true instead of understated by a quarter.
