@@ -8,8 +8,11 @@ import { allWardRecords, LICENCES } from '../../../scripts/standards/ward-record
 import { ACCURACY, SPATIAL, HEIGHTS, PEAK_EVIDENCE_BASIS, HEIGHTS_EVIDENCE_BASIS } from '../../../scripts/climate-engine/accuracy.ts';
 import { areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
 import { resolve, type ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
+import { heatAccuracyClaim } from '../../../scripts/climate-engine/scope/accuracy-claim.ts';
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
+/* The tier, not the existence of a ward record, decides whether this city may print a band (scope/accuracy-claim.ts). */
+const claim = heatAccuracyClaim(scope.tier);
 const records = allWardRecords();
 const sibs = areaKeysInCity(scope.key).map(resolve).map((s) => ({ key: s.key, name: s.area.name, publishes: s.area.publishes, rec: records.find((r) => r.id === s.area.id) ?? null }));
 /* GROUPING (B-S7 audit F9): counts are grouped en-GB, never in the Indian locale (the "no currency written by hand" guard bans it). That prints the same digits as v1's
@@ -47,7 +50,7 @@ const shareAlike = sibs.find((s) => s.rec?.boundary)?.rec?.boundary?.shareAlike 
   <p class="body-s">The paired scenario brief OBOS prints from Compare.</p>
   <a class="cta" data-v2-brief href="/heat-map/brief/">Open the ward brief →</a>
 </article>
-{first && (
+{first && claim.kind === 'band' && (
 <article class="card" data-v2-card="how-sure" data-sections="methods">
   <span class="micro">How sure</span>
   <ul class="method">
@@ -57,6 +60,11 @@ const shareAlike = sibs.find((s) => s.rec?.boundary)?.rec?.boundary?.shareAlike 
     <li><span class="micro">Pattern</span><span class="foot">r {SPATIAL.rModel.toFixed(2)} block by block, below a vegetation map's r {SPATIAL.rVegOnly.toFixed(2)} · n = {SPATIAL.n}. {SPATIAL.note}</span></li>
     <li><span class="micro">Heights</span><span class="foot">{HEIGHTS.nBuildings} of {HEIGHTS.minBuildings} buildings needed · {HEIGHTS.verdict}. {HEIGHTS_EVIDENCE_BASIS}</span></li>
   </ul>
+</article>)}
+{claim.kind === 'none' && (
+<article class="card" data-v2-card="how-sure" data-sections="methods">
+  <span class="micro">How sure</span>
+  <p class="body-s">{claim.line}</p>
 </article>)}
 <article class="card" data-v2-card="licences" data-sections="methods">
   <span class="micro">Building footprints and every licence</span>

@@ -47,6 +47,9 @@ const SECOND_CITY = [
 
 for (const ward of SECOND_CITY) {
   test(`${ward.name} mounts the instrument, not just the shell`, async ({ page }) => {
+    /* The CPU solver paints the first temperature well after the mount (measured
+       ~60-100 s under a loaded machine), and the accuracy-line assertion below waits for it. */
+    test.setTimeout(240_000);
     const thrown: string[] = [];
     page.on('pageerror', (error) => thrown.push(String(error)));
 
@@ -71,6 +74,17 @@ for (const ward of SECOND_CITY) {
     /* THE SOLVER PICKED A BACKEND. "SELECTING ENGINE" is the boot state, and it is
        exactly what a reader saw for ever while the mount was dead. */
     await expect(page.locator('#simBackend')).not.toHaveText(/SELECTING ENGINE/i, { timeout: 30_000 });
+
+    /* NO KOLKATA BAND ON A GEOMETRY-TIER CITY. The ±3.0 / ±4.5 °C bands were measured
+       over three Kolkata wards; Bengaluru's tier says its physics is not evidenced
+       here, so the chip carries the one honest line and no number, in dry weather
+       too (scope/accuracy-claim.ts). The temperature must have painted first, or an
+       empty chip would pass for the wrong reason. */
+    await expect(page.locator('#lst')).toContainText(/\d\d\.\d/, { timeout: 150_000 });
+    await expect(page.locator('#conf')).toHaveText('Heat accuracy not yet validated for this city', { timeout: 30_000 });
+    expect(await page.locator('#lst .band').count(), `${ward.name}: a band sits beside the temperature`).toBe(0);
+    await expect(page.locator('#patternNote')).toHaveText('Block pattern illustrative');
+    expect(((await page.locator('#conf').textContent()) ?? '') + ((await page.locator('#lst').textContent()) ?? ''), `${ward.name}: a ± reached the readout`).not.toContain('±');
 
     /* Say what actually went wrong, rather than leaving a timeout to be read as a
        slow machine — the misreading this repo's tier spec records. */

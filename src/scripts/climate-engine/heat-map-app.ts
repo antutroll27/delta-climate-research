@@ -69,6 +69,7 @@ import { OPEN_AREA_EVENT, type OpenAreaDetail } from './shell/console-shell.ts';
 import { SELECT_SYNC_EVENT } from './shell/select-field.ts';
 import { isLayerId, type LayerId } from './scope/layers.ts';
 import { resolve, requireCosts } from './scope/resolve.ts';
+import { heatAccuracyClaim } from './scope/accuracy-claim.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
 import { fmtMoney, fmtRate, currencyMark } from './money.ts';
 import { pvRanges, tierOf } from './solar-ranges.ts';
@@ -3286,6 +3287,25 @@ export function mountHeatMap(): () => void {
     setText('lstPhase', live ? 'modelled now'
       : state.heatTairC != null ? 'modelled at 13:00 · 1-in-100 heat'
       : state.phase === 'night' ? 'modelled at 22:00' : 'modelled at 13:00');
+    /* THE CITY'S TIER COMES BEFORE THE WEATHER. Every figure below was measured over
+       Kolkata; a geometry-tier city has none of its own, so it gets one honest line
+       and no band, in any weather (scope/accuracy-claim.ts). Read from the CURRENT
+       ward, not the boot scope: the ward can change in place. */
+    const claim = heatAccuracyClaim(resolve(state.ward).tier);
+    paintPatternNote(claim);
+    if (claim.kind === 'none') {
+      const seasonOff = el('seasonNote');
+      if (seasonOff) { seasonOff.textContent = ''; (seasonOff as HTMLElement).hidden = true; }
+      const noneTag = el('conf');
+      if (noneTag) {
+        noneTag.textContent = claim.line;
+        noneTag.className = 'conf indicative';
+        (noneTag as HTMLElement).title = claim.detail;
+      }
+      const noneLst = el('lst');
+      if (noneLst) (noneLst as HTMLElement).title = claim.detail;
+      return;
+    }
     /* THE SEASON CAN BREAK THE BAND (accuracy.ts SEASONAL_CAVEATS). Read in the
        ward's own calendar month, because every view — Now, 13:00, 22:00 and the
        1-in-100 heatwave — forces the physics with the current month. */
@@ -3360,16 +3380,25 @@ export function mountHeatMap(): () => void {
   }
   /* The legend states the limit of what its own colours mean. Written from the
      measured constant so it cannot drift from the number in accuracy.ts — the
-     same reason unmeasuredNote() stopped being a hardcoded string. */
-  {
+     same reason unmeasuredNote() stopped being a hardcoded string.
+     The r is Kolkata's (SPATIAL, ECOSTRESS over three wards): a city with no
+     accuracy claim keeps the words and loses the figure. */
+  function paintPatternNote(claim: ReturnType<typeof heatAccuracyClaim>) {
     const pn = el('patternNote');
     // Deliberately ONE line. The legend sits directly above the ward strip with
     // ~27 px of slack; a two-line note pushed the OpenStreetMap attribution
     // underneath the strip, and that line is a licence obligation, not decoration.
     // The full sentence — and n — is on the tooltip and in SPATIAL.note.
-    if (pn) pn.textContent = `Block pattern illustrative · r ${SPATIAL.rModel.toFixed(2)}`;
-    (pn as HTMLElement | null)?.setAttribute('title', SPATIAL.note);
+    if (!pn) return;
+    if (claim.kind === 'band') {
+      pn.textContent = `Block pattern illustrative · r ${SPATIAL.rModel.toFixed(2)}`;
+      pn.setAttribute('title', SPATIAL.note);
+    } else {
+      pn.textContent = 'Block pattern illustrative';
+      pn.setAttribute('title', claim.detail);
+    }
   }
+  paintPatternNote(heatAccuracyClaim(resolve(state.ward).tier));
   /* Push the bounds to every consumer AND to the legend, so the printed numbers
      can never disagree with the colours above them. */
   function syncRamp(p: SimParams) {
@@ -3438,8 +3467,11 @@ export function mountHeatMap(): () => void {
     if (lst) {
       // The band is measured, not decorative: it is this model's out-of-sample
       // error against ECOSTRESS for the phase on screen. See accuracy.ts.
-      // ...and no band at all on a wet ward, which no measurement covers (applyConfidence).
-      const unvalidated = state.sunNow != null && M.outsideValidation(state.live, state.phase === 'peak') !== null;
+      // ...and no band at all on a wet ward, which no measurement covers (applyConfidence),
+      // nor in a city whose tier carries no measurement (heatAccuracyClaim).
+      const claim = heatAccuracyClaim(resolve(state.ward).tier);
+      const unvalidated = claim.kind !== 'band'
+        || (state.sunNow != null && M.outsideValidation(state.live, state.phase === 'peak') !== null);
       lst.innerHTML = `${st.meanC.toFixed(1)}<span class="u">°C</span>`
         + (unvalidated ? '' : `<span class="band">${bandLabel(state.phase)}</span>`);
       (lst as HTMLElement).style.color = lstColor(st.meanC);
