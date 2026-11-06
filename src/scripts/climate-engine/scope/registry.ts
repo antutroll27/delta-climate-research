@@ -256,6 +256,50 @@ export const REGISTRY = {
       },
     },
   },
+  nl: {
+    /* NO PATHWAY AND NO COSTS, null rather than a plausible placeholder (founder Q1
+       default, plan §8). A euro figure or a warming delta borrowed from India would
+       compute silently and read as an answer. Costs stay null until the founder
+       sources EUR unit costs; `heat-map-app.ts` still calls `requireCosts` at mount
+       and THROWS on null, which is why this country's area is not drawable yet —
+       plan Task A3 makes that branch null-safe BEFORE `drawable` flips (A12). */
+    name: 'Netherlands',
+    pathway: null,
+    costs: null,
+    cities: {
+      amsterdam: {
+        /* MEASURED: Beck et al. (2023) 1 km Köppen-Geiger, 1991-2020 map, class
+           value 15 = Cfb at the area centre and at both corners of the 2.8 km
+           square. CC BY 4.0, doi:10.6084/m9.figshare.21789074.v2. */
+        koppen: 'Cfb',
+        tier: 'geometry',
+        /* The first DST zone in the registry: UTC+1 in winter, UTC+2 in summer. */
+        tz: 'Europe/Amsterdam',
+        airNormals: {
+          station: 'KNMI Schiphol 240',
+          period: '1991–2020',
+          source: 'KNMI, Schiphol (240), langjarige gemiddelden 1991-2020, klimaatatlas table klimtab_9120_240.pdf; bron: KNMI',
+          measured: true,
+          maxC: [6.2, 6.9, 10.1, 14.3, 17.8, 20.3, 22.5, 22.4, 19.2, 14.7, 10.0, 6.9],
+          minC: [1.2, 1.0, 2.8, 5.2, 8.6, 11.3, 13.5, 13.4, 11.0, 7.7, 4.5, 1.9],
+        },
+        parkRadiusM: 50,
+        data: { heatwave: null, dcUrs: null },
+        /* Registered and nameable, NOT drawable: the artefacts do not exist yet.
+           `drawable` flips in plan Task A12, after A3 (null-safe costs) and A10.
+
+           THE NAME AND DESCRIPTOR ARE TEMPORARY, and the Dubai pattern: scope/
+           resolve.ts reads names from the RENDERABLE ward table, and canal-ring is
+           not renderable until A12 adds 'amsterdam' to RENDERABLE_CITIES. Until
+           then it has to name itself here or resolve throws at module load. The
+           day it becomes renderable, resolve REFUSES an area that names itself in
+           both places, so A12 must DELETE these two fields (a test pins this). */
+        areas: {
+          'canal-ring': { shipsData: false, drawable: false, name: 'Canal Ring', descriptor: 'Canal Belt · Vondelpark' },
+        },
+      },
+    },
+  },
 } as const satisfies Record<string, CountryEntry>;
 
 type Registry = typeof REGISTRY;

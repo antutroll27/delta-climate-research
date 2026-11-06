@@ -124,6 +124,32 @@ const BENGALURU_WARDS: readonly WardRecord[] = [
 ];
 
 /**
+ * AMSTERDAM, third city, geometry tier (docs: research/new-cities/PLAN-amsterdam-tokyo.md §2).
+ *
+ * TWO VALUES ARE DELIBERATE PLACEHOLDERS, and each is held by a test rather than
+ * a comment:
+ *   · `veg` is 0 until Task A8 measures the Sentinel-2 fractional vegetation cover
+ *     over this footprint (tests/unit/amsterdam-registry.test.mjs carries a `todo`
+ *     that goes red-by-design the day A8 lands and this is still 0).
+ *   · `swatch` is a neutral stand-in for the founder's visual review (plan A13).
+ *
+ * `body` names the three stadsdelen the 2.8 km square actually covers, MEASURED by
+ * intersecting it with the Gemeente Amsterdam gebieden/stadsdelen polygons
+ * (api.data.amsterdam.nl, retrieved 2026-11-06): Centrum 46.3 %, Zuid 33.0 %,
+ * West 20.6 %, Oost 0.1 %. See data/cities/amsterdam/sources.json.
+ *
+ * NOT drawable and NOT published: registry.ts says so, and `since` / `showcase`
+ * are absent until the release commit (plan A13), because adding `since` changes
+ * what the new-city badge test means.
+ */
+const AMSTERDAM_WARDS: readonly WardRecord[] = [
+  { id: 'canal-ring', name: 'Canal <em>Ring</em>', zone: 'Canal Belt · Vondelpark',
+    body: 'Gemeente Amsterdam (stadsdelen Centrum, Zuid, West)',
+    lat: 52.3640, lon: 4.8850, veg: 0, footprintM: 2800,
+    swatch: 'radial-gradient(circle at 40% 40%,#6fcad6,#9fb98a 58%,#093a3e)' },
+];
+
+/**
  * A city's cell size is DERIVED from its wards, never typed in beside them.
  *
  * Typing it in is how the two drift: 384 cells over a 1400 m ward yields arrays
@@ -145,6 +171,8 @@ export const CITIES: Record<string, CityRecord> = {
   bengaluru: { id: 'bengaluru', name: 'Bengaluru', country: 'India',
     cellMeters: declaredCellMeters(BENGALURU_WARDS), wards: BENGALURU_WARDS,
     since: '2026-09-16', showcase: 'mg-road' },
+  amsterdam: { id: 'amsterdam', name: 'Amsterdam', country: 'Netherlands',
+    cellMeters: declaredCellMeters(AMSTERDAM_WARDS), wards: AMSTERDAM_WARDS },
 };
 
 export const CITY_OF: Record<string, string> = Object.fromEntries(

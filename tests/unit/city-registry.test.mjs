@@ -10,10 +10,11 @@ import { gridFor } from '../../src/scripts/climate-engine/types.ts';
    second city was not a data change but a type change rippling through every
    switch. This registry is the one source; these tests keep it honest. */
 
-test('both cities are present with three wards each', () => {
-  assert.deepEqual(Object.keys(CITIES).sort(), ['bengaluru', 'kolkata']);
+test('every city is present with its wards', () => {
+  assert.deepEqual(Object.keys(CITIES).sort(), ['amsterdam', 'bengaluru', 'kolkata']);
   assert.equal(wardsOfCity('kolkata').length, 3);
   assert.equal(wardsOfCity('bengaluru').length, 3);
+  assert.equal(wardsOfCity('amsterdam').length, 1);
 });
 
 test('every ward id is unique across cities', () => {
