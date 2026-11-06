@@ -15,7 +15,7 @@
  * Every network string goes through `esc()`, every number through `num()`; an unknown class or pollutant falls back
  * to a dash. Pure; no DOM.
  */
-import { JP_BASIS_NOTE, JP_POLLUTANTS, JP_STANDARDS } from '../../../lib/aqi/jp-standards.ts';
+import { JP_BASIS_NOTE, JP_POLLUTANTS, JP_ROADSIDE_NOTE, JP_ROW_NOTE, JP_STANDARDS } from '../../../lib/aqi/jp-standards.ts';
 import { LKI_COLOUR, LKI_KEY, LKI_LABEL } from '../../../lib/aqi/lki.ts';
 import { localAirArea, LOCAL_LIVE_MS, LOCAL_STANDARD_TZ } from '../../../lib/aqi/local-areas.ts';
 import type { JpReading, LkiBand, LocalAirPayload, LocalStation, NlReading } from '../../../lib/aqi/local-types.ts';
@@ -100,17 +100,6 @@ function lkiKey(): string {
 const JP_NAME: Readonly<Record<string, string>> = { pm25: 'PM2.5', no2: 'NO₂', ox: 'Ox (photochemical oxidants)' };
 const JP_UNIT: Readonly<Record<string, string>> = { ug_m3: 'µg/m³', ppm: 'ppm' };
 
-/** A reference bar: the latest hourly value against the standard's mark(s). Scale to twice the highest mark; a value past it is clipped and still reads from the number. */
-function refBar(r: JpReading): string {
-  const std = JP_STANDARDS[r.pollutant];
-  const top = Math.max(...std.marks) * 2, W = 200;
-  const x = (v: number): number => Math.min(W, (v / top) * W);
-  const marks = std.marks.map((m) => `<line x1="${x(m)}" x2="${x(m)}" y1="0" y2="12" stroke="var(--ink-1)" stroke-width="1.5"/>`).join('');
-  const label = `${JP_NAME[r.pollutant] ?? '—'} ${num(r.value)} ${JP_UNIT[r.unit] ?? ''} against ${std.short_term_en}`;
-  return `<svg viewBox="0 0 ${W} 12" width="100%" height="12" role="img" aria-label="${esc(label)}" preserveAspectRatio="none" style="display:block;margin-top:4px">`
-    + `<rect x="0" y="4" width="${W}" height="4" fill="var(--well-2, var(--line))"/><rect x="0" y="3" width="${x(r.value)}" height="6" fill="var(--ink-3)"/>${marks}</svg>`;
-}
-
 function jpRow(r: JpReading, place: string): string {
   if (!has(JP_STANDARDS, r.pollutant)) return '';
   const std = JP_STANDARDS[r.pollutant];
@@ -118,8 +107,10 @@ function jpRow(r: JpReading, place: string): string {
   const name = s.name_en ? `${esc(s.name)} (${esc(s.name_en)})` : esc(s.name);
   const kind = s.kind ? `${esc(s.kind)} · ` : '';
   return `<div style="margin-top:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span><b>${esc(JP_NAME[r.pollutant] ?? '—')}</b></span>`
-    + `<span><b style="font-size:20px;font-weight:300">${num(r.value)}</b> ${esc(JP_UNIT[r.unit] ?? '')}</span></div>${refBar(r)}`
+    + `<span><b style="font-size:20px;font-weight:300">${num(r.value)}</b> ${esc(JP_UNIT[r.unit] ?? '')}</span></div>`
     + `<p class="meta">Standard (環境基準): ${esc(std.short_term_en)}</p>`
+    + `<p class="meta">${esc(JP_ROW_NOTE)}</p>`
+    + (s.kind === 'roadside' ? `<p class="meta">${esc(JP_ROADSIDE_NOTE)}</p>` : '')
     + `<p class="meta">${name} · ${s.fallback ? 'nearest reporting ' : ''}${kind}${km(s.distance_m)} from the ${esc(place)} centre</p></div>`;
 }
 

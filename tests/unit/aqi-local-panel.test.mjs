@@ -180,3 +180,20 @@ test('THE CARD FOLLOWS THE MAP: isAirCity for a local city is exactly "drawable"
 test('the zone each standard\'s card tells time in is the zone every area using it declares', () => {
   for (const a of Object.values(LOCAL_AIR_AREAS)) assert.equal(LOCAL_STANDARD_TZ[a.standard], a.tz);
 });
+
+/* F2 (audit): a single hour must not read as a pass/fail against an averaged standard, and a roadside monitor is not on ground the standard covers. */
+test('F2: every Tokyo row says, in view, that one hour is not a test of the standard; roadside rows say the standard does not apply on roadways; no scale bar', () => {
+  const h = localCardHtml(jpLive, 'Marunouchi', JP_NOW);
+  const outside = h.replace(/<details[\s\S]*?<\/details>/g, '').replace(/&#39;/g, "'");
+  const ONE = "Latest single hour (provisional). Japan's standard is judged on a daily mean (Ox: 8-hour value), so one hour is not a test of it.";
+  const ROAD = 'Roadside monitor: the standard does not apply on roadways.';
+  assert.equal(jpLive.readings.length, 3);
+  assert.equal(outside.split(ONE).length - 1, 3, 'one line under each of the three rows, outside any <details>');
+  const roadside = jpLive.readings.filter((r) => r.station.kind === 'roadside').length;
+  assert.ok(roadside >= 2);
+  assert.equal(outside.split(ROAD).length - 1, roadside, 'under every roadside row, and only those');
+  assert.ok(!/<svg/.test(h), 'the bar with the standard\'s mark is dropped');
+  const general = structuredClone(jpLive);
+  general.readings = general.readings.map((r) => ({ ...r, station: { ...r.station, kind: 'general' } }));
+  assert.ok(!localCardHtml(general, 'Marunouchi', JP_NOW).includes(ROAD), 'a general station gets no roadway line');
+});

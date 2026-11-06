@@ -70,3 +70,11 @@ export const JP_POLLUTANTS: readonly JpPollutant[] = ['pm25', 'no2', 'ox'];
 /** The sentence that keeps a single hour from being read as a verdict. */
 export const JP_BASIS_NOTE = 'Each standard is judged on an average (a daily mean, or an 8-hour value), not on one hour. '
   + 'The value shown is the latest single provisional hour, drawn against the standard for orientation only.';
+
+/** Said in view under EVERY row (not in a collapsed note): the value is one provisional hour, and the standard is judged on an average. */
+export const JP_ROW_NOTE = "Latest single hour (provisional). Japan's standard is judged on a daily mean (Ox: 8-hour value), so one hour is not a test of it.";
+/**
+ * Said under a roadside (自排局) row. The Ministry's page (備考): 「環境基準は、工業専用地域、車道その他一般公衆が通常生活していない地域または場所については、適用しない。」
+ * (the standards do not apply to industrial zones, roadways and other places where the public does not ordinarily live).
+ */
+export const JP_ROADSIDE_NOTE = 'Roadside monitor: the standard does not apply on roadways.';
