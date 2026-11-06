@@ -8,6 +8,7 @@
  * NOx closure) but its SO₂ µg/m³ is INFERRED, not verified (AQI-R31). A change here
  * is a data claim: update the register in the same commit.
  */
+import { localAirCityReady } from './local-areas.ts';
 import type { AqiStation, Pollutant } from './types.ts';
 
 export interface SensorRef { id: number; unit: 'ug_m3' | 'mg_m3' }
@@ -137,10 +138,14 @@ export function candidatesFor(key: string): readonly StationEntry[] {
 }
 
 export function isAirArea(key: string): boolean { return Object.hasOwn(AREAS, key); }
-/** True when the area's city has an Air card (`in/bengaluru/x` → true): the UI's one gate, read from AREAS. */
+/**
+ * True when the area's city has an Air card (`in/bengaluru/x` → true): the UI's one gate. The Indian cities are read from AREAS;
+ * a city whose standard is its own regulator's (Amsterdam, Tokyo) counts only once it is DRAWABLE (local-areas.ts), so a card is
+ * never offered beside a map that cannot be opened.
+ */
 export function isAirCity(key: string): boolean {
   const prefix = key.split('/').slice(0, 2).join('/') + '/';
-  return Object.keys(AREAS).some((k) => k.startsWith(prefix));
+  return Object.keys(AREAS).some((k) => k.startsWith(prefix)) || localAirCityReady(key);
 }
 /**
  * The station as the wire carries it — ONE builder for every response path (OBOS's
