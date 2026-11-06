@@ -126,8 +126,9 @@ const BENGALURU_WARDS: readonly WardRecord[] = [
 /**
  * AMSTERDAM, third city, geometry tier (docs: research/new-cities/PLAN-amsterdam-tokyo.md §2).
  *
- * `veg` IS MEASURED (Task A8): 0.295 is the mean fractional vegetation cover of the
- * exported Sentinel-2 raster (surface-meta.json `fvc_mean` 0.2947, 25 scenes 2021-2025),
+ * `veg` IS MEASURED (Task A8): 0.350 is the mean fractional vegetation cover of the
+ * exported Sentinel-2 raster (surface-meta.json `fvc_mean` 0.3503, 27 scenes 2021-2025 with the sun >= 40 degrees; the first
+ * all-season composite read 0.295, depressed by leaf-off and shadowed winter scenes),
  * and tests/unit/amsterdam-artefacts.test.mjs holds the two equal to three places.
  * `swatch` is a neutral stand-in for the founder's visual review (plan A13).
  *
@@ -143,7 +144,7 @@ const BENGALURU_WARDS: readonly WardRecord[] = [
 const AMSTERDAM_WARDS: readonly WardRecord[] = [
   { id: 'canal-ring', name: 'Canal <em>Ring</em>', zone: 'Canal Belt · Vondelpark',
     body: 'Gemeente Amsterdam (stadsdelen Centrum, Zuid, West)',
-    lat: 52.3640, lon: 4.8850, veg: 0.295, footprintM: 2800,
+    lat: 52.3640, lon: 4.8850, veg: 0.350, footprintM: 2800,
     swatch: 'radial-gradient(circle at 40% 40%,#6fcad6,#9fb98a 58%,#093a3e)' },
 ];
 

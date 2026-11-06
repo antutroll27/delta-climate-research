@@ -98,12 +98,46 @@ def _covers_ward(bbox: list[float] | None, lat: float, lon: float, footprint_m: 
             and bbox[2] >= lon + dlon and bbox[3] >= lat + dlat)
 
 
-def search(lat: float, lon: float, year: int, footprint_m: int) -> list[dict[str, Any]]:
+def sun_high_enough(feat: dict[str, Any], min_sun_elevation_deg: float | None) -> bool:
+    """Is the scene's sun at least `min_sun_elevation_deg` above the horizon (STAC `view:sun_elevation`)?
+
+    None means no filter (Kolkata, Bengaluru: every scene qualifies, as before). A scene that does
+    not STATE its sun elevation fails the filter: a gate that cannot read its input must not pass.
+    """
+    if min_sun_elevation_deg is None:
+        return True
+    elev = feat.get("properties", {}).get("view:sun_elevation")
+    return isinstance(elev, (int, float)) and not isinstance(elev, bool) and float(elev) >= min_sun_elevation_deg
+
+
+def spread_across_months(feats: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The lowest-cloud scene of each month, thinned to at most SCENES_PER_YEAR across the calendar.
+
+    spread across months rather than taking the N cleanest, which would all
+    cluster in the dry season and reintroduce exactly the bias we are avoiding
+    """
+    by_month = defaultdict(list)
+    for f in feats:
+        by_month[f["properties"]["datetime"][5:7]].append(f)
+    picked = []
+    for mth in sorted(by_month):
+        best = min(by_month[mth], key=lambda f: f["properties"].get("eo:cloud_cover", 100))
+        picked.append(best)
+    step = max(1, len(picked) // SCENES_PER_YEAR)
+    return picked[::step][:SCENES_PER_YEAR]
+
+
+def search(lat: float, lon: float, year: int, footprint_m: int,
+           min_sun_elevation_deg: float | None = None) -> list[dict[str, Any]]:
     """Lowest-cloud scenes for one year, spread across the calendar.
 
     `footprint_m` has no default for the reason the read path has none, plus a
     second: it is what decides whether a returned scene actually COVERS the ward
     or merely touches the search box.
+
+    `min_sun_elevation_deg` (default None = every scene, Kolkata's and Bengaluru's selection
+    exactly) drops scenes shot with the sun low BEFORE the per-month pick, so a winter month
+    with only low-sun scenes is skipped rather than filled by one.
     """
     # A fixed box is correct here and does not need to scale: any scene that
     # covers the ward necessarily intersects a box that also contains the ward,
@@ -128,20 +162,10 @@ def search(lat: float, lon: float, year: int, footprint_m: int) -> list[dict[str
 
     # Drop scenes that only clip the ward BEFORE the per-month pick, not after:
     # picking first would let a clipped scene win its month on cloud cover and
-    # then be discarded, losing the month entirely.
-    feats = [f for f in feats if _covers_ward(f.get("bbox"), lat, lon, footprint_m)]
-
-    # spread across months rather than taking the N cleanest, which would all
-    # cluster in the dry season and reintroduce exactly the bias we are avoiding
-    by_month = defaultdict(list)
-    for f in feats:
-        by_month[f["properties"]["datetime"][5:7]].append(f)
-    picked = []
-    for mth in sorted(by_month):
-        best = min(by_month[mth], key=lambda f: f["properties"].get("eo:cloud_cover", 100))
-        picked.append(best)
-    step = max(1, len(picked) // SCENES_PER_YEAR)
-    return picked[::step][:SCENES_PER_YEAR]
+    # then be discarded, losing the month entirely. The sun filter works the same way.
+    feats = [f for f in feats if _covers_ward(f.get("bbox"), lat, lon, footprint_m)
+             and sun_high_enough(f, min_sun_elevation_deg)]
+    return spread_across_months(feats)
 
 
 # Sentinel-2 mixes resolutions: blue/red/nir are 10 m, the SWIR bands 20 m. Read
@@ -314,6 +338,21 @@ def _self_test() -> None:
     # the same box that HOLDS a 1400 m ward CLIPS a 2800 m one — the whole point
     assert _covers_ward([77.59, 12.965, 77.615, 12.986], lat_b, lon_b, 1400)
     assert not _covers_ward([77.59, 12.965, 77.615, 12.986], lat_b, lon_b, 2800)
+
+    # SUN-ELEVATION FLOOR: None keeps everything; a number drops low-sun scenes; a scene that does not
+    # state its sun elevation cannot pass a floor.
+    lo, hi = {"properties": {"view:sun_elevation": 14.5}}, {"properties": {"view:sun_elevation": 52.0}}
+    assert sun_high_enough(lo, None) and sun_high_enough(hi, None) and sun_high_enough({}, None)
+    assert not sun_high_enough(lo, 35.0) and sun_high_enough(hi, 35.0)
+    assert sun_high_enough({"properties": {"view:sun_elevation": 35.0}}, 35.0), "the floor is inclusive"
+    assert not sun_high_enough({"properties": {}}, 35.0), "a scene with no stated elevation fails a floor"
+    assert not sun_high_enough({"properties": {"view:sun_elevation": True}}, 0.0), "a bool is not an angle"
+    def mk(m: int, c: float) -> dict[str, Any]:
+        return {"properties": {"datetime": f"2024-{m:02d}-15T10:30:00Z", "eo:cloud_cover": c}}
+    twelve = [mk(m, 5.0) for m in range(1, 13)]
+    assert [f["properties"]["datetime"][5:7] for f in spread_across_months(twelve)] == ["01", "03", "05", "07", "09", "11"], \
+        "the unfiltered pick is the original every-second-month thinning"
+    assert [f["properties"]["datetime"][5:7] for f in spread_across_months(twelve[4:8])] == ["05", "06", "07", "08"]
 
     for gone in ("GRID", "FOOTPRINT_M"):
         assert gone not in globals(), f"{gone} is back as a module constant"

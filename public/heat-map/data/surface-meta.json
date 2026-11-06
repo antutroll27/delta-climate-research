@@ -408,11 +408,13 @@
     "canal-ring": {
       "grid": 280,
       "footprint_m": 2800,
-      "veg_std": 0.231,
-      "albedo_std": 0.0278,
+      "veg_std": 0.2652,
+      "albedo_std": 0.03,
       "level": "measured",
-      "fvc_mean": 0.2947,
-      "albedo_mean": 0.0942
+      "fvc_mean": 0.3503,
+      "albedo_mean": 0.1067,
+      "sunElevationFloorDeg": 40.0,
+      "scenes": 27
     }
   }
 }

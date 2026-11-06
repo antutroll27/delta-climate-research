@@ -140,8 +140,18 @@ def surface_wards() -> dict[str, _types.Ward]:
     return wards
 
 
+def sun_floor(ward_id: str) -> float | None:
+    """The scene-selection sun-elevation floor of a city after Bengaluru, else None (no filter).
+
+    Kolkata's and Bengaluru's wards are not in `_city.AREAS`, so they get None and the selection is
+    exactly what it always was (their committed rasters stay reproducible).
+    """
+    a = _city.AREAS.get(ward_id)
+    return None if a is None or a.min_sun_elevation_deg is None else float(a.min_sun_elevation_deg)
+
+
 def composite(ward: _types.Ward, years: list[int]) -> tuple[npt.NDArray[np.float32],
-                                                            npt.NDArray[np.float32]]:
+                                                            npt.NDArray[np.float32], int]:
     """Per-cell median NDVI and albedo across every usable scene in `years`.
 
     Median across scenes, per cell — the same reducer the ward scalar uses, just
@@ -155,17 +165,23 @@ def composite(ward: _types.Ward, years: list[int]) -> tuple[npt.NDArray[np.float
     # committed rasters were built under.
     stem = (ward.id if not _wardmask.has_polygon(ward.id) else
             f"{ward.id}-{ward.footprint_m}m-{ward.centre.lat:.6f}-{ward.centre.lon:.6f}")
+    floor = sun_floor(ward.id)
+    # A floor changes WHICH scenes are read, so it is part of the cache name: the unfiltered
+    # composite under the old name must never be served for a filtered build.
+    if floor is not None:
+        stem = f"{stem}-sun{floor:g}"
     key = os.path.join(COMPOSITE_CACHE, f"{stem}-{min(years)}-{max(years)}.npz")
     if os.path.exists(key):
         cached = np.load(key)
         print(f"    {ward.id}: composite from cache ({os.path.relpath(key, os.path.expanduser('~'))})")
-        return cached["ndvi"].astype(np.float32), cached["albedo"].astype(np.float32)
+        return (cached["ndvi"].astype(np.float32), cached["albedo"].astype(np.float32),
+                int(cached["scenes"]))
 
     lat, lon = ward.centre.lat, ward.centre.lon
     ndvis: list[npt.NDArray[np.float32]] = []
     albedos: list[npt.NDArray[np.float32]] = []
     for y in years:
-        for feat in search(lat, lon, y, ward.footprint_m):
+        for feat in search(lat, lon, y, ward.footprint_m, floor):
             got = scene_arrays(feat, lat, lon, ward.footprint_m)
             if got is None:
                 continue
@@ -181,7 +197,7 @@ def composite(ward: _types.Ward, years: list[int]) -> tuple[npt.NDArray[np.float
     ndvi_c = np.nanmedian(np.stack(ndvis), axis=0).astype(np.float32)
     albedo_c = np.nanmedian(np.stack(albedos), axis=0).astype(np.float32)
     np.savez_compressed(key, ndvi=ndvi_c, albedo=albedo_c, scenes=len(ndvis))
-    return ndvi_c, albedo_c
+    return ndvi_c, albedo_c, len(ndvis)
 
 
 def fill_gaps(a: npt.NDArray[np.float32], fallback: float) -> npt.NDArray[np.float32]:
@@ -320,7 +336,7 @@ def main() -> None:
 
         print(f"  {ward.id}  {ward.footprint_m} m → {n}×{n}"
               + ("" if targets is not None else "  (no DC-URS scalar — level is measured)"))
-        ndvi, albedo_raw = composite(ward, args.years)
+        ndvi, albedo_raw, n_scenes = composite(ward, args.years)
 
         # NDVI -> fractional vegetation cover, the same transform and the same
         # endpoints the ward scalar uses, so the two are the same quantity.
@@ -385,6 +401,10 @@ def main() -> None:
             }
             print(f"    fvc {veg_mean:.4f} measured (sd {fvc.std():.3f}) · "
                   f"albedo {alb_mean:.4f} measured (sd {albedo.std():.3f}) · {kb:.1f} KB")
+        floor = sun_floor(ward_id)
+        if floor is not None:
+            # Provenance for a city whose scenes were selected by sun height (Amsterdam audit F5).
+            entry |= {"sunElevationFloorDeg": floor, "scenes": n_scenes}
         meta["wards"][ward_id] = entry
 
         # A raster with no spatial variance is a constant, and a constant is what

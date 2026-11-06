@@ -307,18 +307,20 @@
       ],
       "level": "measured",
       "result": {
-        "scenesUsed": 25,
+        "scenesUsed": 27,
         "perYear": {
-          "2021": 5,
+          "2021": 6,
           "2022": 4,
-          "2023": 6,
+          "2023": 5,
           "2024": 6,
-          "2025": 4
+          "2025": 6
         },
         "scenesPerYearCap": 6,
-        "note": "_sentinel.py picks the lowest-cloud scene per month, at most 6 a year; 25 of 30 possible passed Amsterdam's cloud filter",
-        "fvcMean": 0.2947,
-        "albedoMean": 0.0942,
+        "sunElevationFloorDeg": 40,
+        "note": "_sentinel.py picks the lowest-cloud scene per month, at most 6 a year, among scenes with the sun at least 40 degrees up (STAC view:sun_elevation; Area.min_sun_elevation_deg). 30 candidates 2021-25 passed the cloud filter, 10 of them with the sun below 25 degrees (Jan, Feb, Nov, down to 14.5): L2A has no shadow correction, so those darken a canyon city's per-cell median (Amsterdam audit F5). The 40 degree floor keeps 28 of 30 candidates; 27 were readable.",
+        "fvcMean": 0.3503,
+        "albedoMean": 0.1067,
+        "before": {"scenesUsed": 25, "sunElevationFloorDeg": null, "fvcMean": 0.2947, "albedoMean": 0.0942},
         "retrieved": "2026-11-06"
       }
     },
