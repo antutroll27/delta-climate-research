@@ -84,7 +84,7 @@ import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
 import { toLegacyWard } from './scope/legacy.ts';
 import { prefetchPlan, runPrefetch, shouldPrefetch, type PrefetchConnection } from './ward-prefetch';
-import { loadAir, loadingPaneHtml, uncoveredPaneHtml, wireBarTips } from './air/air-panel.ts';
+import { loadAir, loadingPaneHtml, uncoveredPaneHtml, wireBarTips, type AirPaint } from './air/air-panel.ts';
 import { isAirCity } from '../../lib/aqi/stations.ts';
 
 // Ward set lives in src/data/wards.ts so widening beyond three is a data change,
@@ -1327,9 +1327,24 @@ export function mountHeatMap(): () => void {
      load: the pane says "Loading", the card stays hidden until an answer lands, and
      an answer for an area the reader has already left is dropped (loadAir). */
   let airAbort: AbortController | null = null;
+  /* The local-regulator cities (Amsterdam, Tokyo) hand back a way to re-judge the payload they painted: a tab left open must not keep a
+     "Live" number past its window. It rides the clock tick below (no timer of its own) and repaints only when the markup changes. */
+  let airRefresh: NonNullable<AirPaint['refresh']> | null = null;
+  let airBlockHtml = '';
+  function refreshAir() {
+    const block = el('aqiBlock'), pane = el('airPane'), status = el('airStatus');
+    if (!airRefresh || !block || !pane) return;
+    const r = airRefresh(new Date());
+    if (r.block === airBlockHtml) return;
+    airBlockHtml = r.block ?? '';
+    pane.innerHTML = r.pane;
+    if (status) status.textContent = r.status;
+    if (r.block !== null) block.innerHTML = r.block;
+  }
   function paintAir() {
     airAbort?.abort();
     airAbort = null;
+    airRefresh = null;
     const block = el('aqiBlock'), pane = el('airPane'), status = el('airStatus');
     if (!block || !pane) return;
     const area = state.ward, place = areaName();
@@ -1341,6 +1356,8 @@ export function mountHeatMap(): () => void {
     airAbort = ctl;
     void loadAir(area, place, { fetch: (u, i) => fetch(u, i), signal: ctl.signal, isCurrent: () => state.ward === area }).then((v) => {
       if (!v || airAbort !== ctl) return;
+      airRefresh = v.refresh ?? null;
+      airBlockHtml = v.block ?? '';
       pane.innerHTML = v.pane;
       wireBarTips(pane, v.days);
       if (status) status.textContent = v.status;
@@ -3186,7 +3203,7 @@ export function mountHeatMap(): () => void {
   /* Age advances with the wall clock, not with any event, so it needs its own
      slow tick. One minute is far below the resolution of the thing being shown
      and costs nothing next to the sim. */
-  const clockTick = window.setInterval(paintClock, 60_000);
+  const clockTick = window.setInterval(() => { paintClock(); refreshAir(); }, 60_000);
   cleanup.push(() => clearInterval(clockTick));
   /* `force` bypasses the session cache. Without it this fetched once per ward
      per session and never again: a tab left open overnight kept a pulsing green

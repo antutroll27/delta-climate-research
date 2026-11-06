@@ -14,6 +14,7 @@
  * answer for 5 minutes (+5 stale-while-revalidate); the browser re-judges the age on every paint, so a number is
  * never shown past its window.
  */
+import { judge, secondsLeft } from './local-judge.ts';
 import { readAmsterdam } from './luchtmeetnet.ts';
 import { localAirArea, localAirReady, type DrawableFn } from './local-areas.ts';
 import type { LocalAirPayload } from './local-types.ts';
@@ -24,8 +25,19 @@ interface Res { status(c: number): Res; setHeader(k: string, v: string): void; j
 
 export const CACHE_TTL_MS = 10 * 60_000;
 export const BUDGET_MS = 20_000;
-const LIVE_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=300';
 const NO_CACHE = 'no-store';
+
+/**
+ * The Cache-Control for a LIVE answer: 60 s in the browser, 5 min (+5 min stale-while-revalidate) at the CDN, but never
+ * more than the seconds the payload has left of its window, so no cache can hold a hour past the point it stops being
+ * current. Nothing left means `no-store`.
+ */
+export function liveCacheControl(p: Extract<LocalAirPayload, { state: 'live' }>, now: Date): string {
+  const left = secondsLeft(p, now);
+  if (left <= 0) return NO_CACHE;
+  const shared = Math.min(300, left);
+  return `public, max-age=${Math.min(60, left)}, s-maxage=${shared}, stale-while-revalidate=${Math.min(300, left - shared)}`;
+}
 
 interface Entry { at: number; payload: LocalAirPayload }
 export interface LocalCache { entries: Map<string, Entry>; inflight: Map<string, Promise<LocalAirPayload>> }
@@ -53,7 +65,9 @@ async function read(area: string, now: Date, d: LocalDeps): Promise<LocalAirPayl
 function payloadFor(area: string, now: Date, d: LocalDeps): Promise<LocalAirPayload> {
   const c = d.cache ?? SHARED;
   const hit = c.entries.get(area);
-  if (hit && now.getTime() - hit.at < CACHE_TTL_MS) return Promise.resolve(hit.payload);
+  /* A cached hour is re-judged on THIS request's clock: one that has since passed its window is not handed back (the CPCB path
+     rebuilds every hit against its own `now` for the same reason). It is dropped and the source asked again. */
+  if (hit && now.getTime() - hit.at < CACHE_TTL_MS && judge(hit.payload, now).state === 'live') return Promise.resolve(hit.payload);
   let p = c.inflight.get(area);
   if (!p) {
     p = read(area, now, d)
@@ -68,7 +82,7 @@ export async function handleLocal(area: string, res: Res, d: LocalDeps = {}): Pr
   if (!localAirReady(area, d.drawable)) { res.status(404).json({ error: 'unknown area' }); return; }
   const now = (d.now ?? (() => new Date()))();
   const payload = await payloadFor(area, now, d);
-  res.setHeader('Cache-Control', payload.state === 'live' ? LIVE_CACHE : NO_CACHE);
+  res.setHeader('Cache-Control', payload.state === 'live' ? liveCacheControl(payload, now) : NO_CACHE);
   res.status(200).json(payload);
 }
 

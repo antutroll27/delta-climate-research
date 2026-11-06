@@ -19,6 +19,7 @@ import { JP_BASIS_NOTE, JP_POLLUTANTS, JP_STANDARDS } from '../../../lib/aqi/jp-
 import { LKI_COLOUR, LKI_KEY, LKI_LABEL } from '../../../lib/aqi/lki.ts';
 import { localAirArea, LOCAL_LIVE_MS, LOCAL_STANDARD_TZ } from '../../../lib/aqi/local-areas.ts';
 import type { JpReading, LkiBand, LocalAirPayload, LocalStation, NlReading } from '../../../lib/aqi/local-types.ts';
+import { judge } from '../../../lib/aqi/local-judge.ts';
 import { isLocalAirPayload } from '../../../lib/aqi/local-valid.ts';
 import type { AirIo, AirPaint } from './air-panel.ts';
 
@@ -43,15 +44,7 @@ export function localTime(iso: string, standard: LocalAirPayload['standard'], wi
   return new Intl.DateTimeFormat('en-GB', withDate ? { ...opts, day: 'numeric', month: 'short' } : opts).format(new Date(ms)).replace(',', '');
 }
 
-/** Re-judge a live payload against the viewer's clock: past its window it carries no number. */
-export function judge(p: LocalAirPayload, now: Date): LocalAirPayload {
-  if (p.state !== 'live') return p;
-  const age = now.getTime() - Date.parse(p.observed_at);
-  if (!(age > LOCAL_LIVE_MS[p.standard])) return p;
-  const station: LocalStation | null = p.standard === 'nl-lki' ? p.station : ([...p.readings].sort((a, b) => a.station.distance_m - b.station.distance_m)[0]?.station ?? null);
-  return { schema: p.schema, area_id: p.area_id, served_at: p.served_at, credit: p.credit, standard: p.standard,
-    state: 'not_reporting', reason: 'no_current_hour', station, last_observed_at: p.observed_at };
-}
+export { judge };
 
 const head = (title: string, chip: string): string => `<div class="k legend-head"><span>${title}</span>${chip}</div>`;
 const SOURCE_NAME = { 'nl-lki': 'Luchtmeetnet', 'jp-eqs': 'the Ministry of the Environment\'s Soramame system' } as const;
@@ -239,5 +232,7 @@ export async function loadLocalAir(area: string, place: string, io: AirIo): Prom
     return { block: localUnavailableHtml(place), pane: failedPane(place), days: [], status: `Air quality, ${place}: could not be loaded just now.` };
   }
   const now = io.now ?? new Date();
-  return { block: localCardHtml(body, place, now), pane: localPaneHtml(body, place, now), days: [], status: localStatusText(body, place, now) };
+  /* `refresh` re-judges the payload the app KEPT on the viewer's clock, so a tab left open flips to "Not reporting" when the window passes. */
+  const paint = (at: Date) => ({ block: localCardHtml(body, place, at), pane: localPaneHtml(body, place, at), status: localStatusText(body, place, at) });
+  return { ...paint(now), days: [], refresh: paint };
 }
