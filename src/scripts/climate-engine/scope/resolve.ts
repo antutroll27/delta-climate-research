@@ -30,7 +30,7 @@
  * this file owns is the pathway TABLE below, because a table of warming deltas is
  * not geography and has nowhere else to be.
  */
-import { REGISTRY, splitKey, AREA_KEYS, type AreaKey } from './registry.ts';
+import { REGISTRY, splitKey, AREA_KEYS, type AreaKey, type CityKey } from './registry.ts';
 /* THE RENDERABLE TABLE, not the published one. `label()` answers "what is this
    area called" for every area the instrument can open; `wardById` searches the
    CATALOGUE list and would throw here for a city that draws but does not yet
@@ -172,7 +172,8 @@ export interface ResolvedScope {
   readonly key: AreaKey;
   readonly country: { readonly id: string; readonly name: string };
   readonly city: {
-    readonly id: string;
+    /** a registered city slug (the registry's own union), so city-keyed tables are indexed without a cast */
+    readonly id: CityKey;
     readonly name: string;
     readonly koppen: string;
     /**

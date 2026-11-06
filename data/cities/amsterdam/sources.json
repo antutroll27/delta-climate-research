@@ -199,8 +199,10 @@
         "annual mean (jaar, gemiddeld)": 10.7
       },
       "readingNote": "Read from the PDF text layer with pdftotext -layout; columns are gemiddeld / gemiddeld minimum / gemiddeld maximum. Schiphol is about 8.5 km from the area (READINESS.md).",
-      "licence": "per https://www.knmi.nl/copyright (site default CC0 with credit 'bron: KNMI' and a statement that KNMI is not involved in derivative work, as summarised in READINESS.md; the copyright page itself was re-requested here (HTTP 200) but its wording was not re-read in this task)",
-      "requiredCredit": "bron: KNMI"
+      "licence": "CC0 by default, https://www.knmi.nl/copyright, RE-READ IN FULL 2026-11-06 (HTTP 200). Reuse needs the credit \"bron: KNMI\" AND, when quoting, a statement that KNMI is not involved in the derived work and does not necessarily endorse its purport. Verbatim: \"U mag de inhoud van deze website hergebruiken onder naamsvermelding \u201cbron: KNMI\u201d, maar u dient bij het citeren van de inhoud aan te geven dat het KNMI niet betrokken is bij het afgeleide werk en de strekking daarvan niet noodzakelijkerwijs onderschrijft.\" Patent and trademark rights, and third parties' rights (portrait, privacy), are expressly unchanged.",
+      "licenceReadOn": "2026-11-06",
+      "requiredCredit": "bron: KNMI",
+      "requiredStatement": "KNMI is not involved in this derived product and does not necessarily endorse its purport (niet betrokken bij het afgeleide werk en de strekking daarvan niet noodzakelijkerwijs onderschrijft)"
     },
     {
       "id": "amsterdam-stadsdelen",

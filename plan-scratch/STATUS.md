@@ -35,3 +35,4 @@ raw cache ~/.cache/delta-climate/cities/amsterdam/raw = 564 MB (3D BAG 95 MB gz,
 
 # Fix-pass (audit fixes F1-F10), started 17:56 IST, box 4h
 - 17:56 starting: step 0 rebase onto origin/main 37c8f2ad.
+- 18:09 step 0 (rebase onto 37c8f2ad, #77 claim shape), 1 (Dubai crash), 2 (credits byte-identical) committed.

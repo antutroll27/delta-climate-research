@@ -795,8 +795,9 @@ rule verbatim.
 **Copernicus Sentinel-2 L2A** (Earth Search STAC) · Copernicus open terms · **role:** the 10 m vegetation and
 albedo raster, `level: "measured"` (there is no DC-URS scalar to pin to).
 
-**KNMI Schiphol (240) climate normals 1991-2020** · site default CC0, credit "bron: KNMI", and a statement that
-KNMI is not involved in derivative work · **role:** the fallback air temperature (`airNormals`).
+**KNMI Schiphol (240) climate normals 1991-2020** · site default CC0, credit "bron: KNMI", and (when quoting) a statement that
+KNMI is not involved in the derived work and does not necessarily endorse its purport ("niet betrokken ... en de strekking
+daarvan niet noodzakelijkerwijs onderschrijft"; knmi.nl/copyright re-read in full 2026-11-06) · **role:** the fallback air temperature (`airNormals`).
 
 **Beck et al. (2023) Köppen-Geiger 1 km** · CC BY 4.0 · Cfb at the centre and both corners.
 

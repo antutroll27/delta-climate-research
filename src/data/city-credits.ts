@@ -24,8 +24,14 @@
  * time (v2/credits.ts), so it is a marker here and the renderer is handed the
  * credit.
  */
-/** Every city OBOS knows; tests/unit/city-credits.test.mjs holds this equal to the CITIES keys. */
-export type CityId = 'kolkata' | 'bengaluru' | 'amsterdam';
+import type { CityKey } from '../scripts/climate-engine/scope/registry.ts';
+
+/**
+ * Every REGISTERED city (scope/registry.ts), not every drawable one. It was `keyof typeof CITIES`'s hand-written twin, and `CITIES`
+ * has no Dubai, so the tables below were partial over the registry and the build threw on the three Dubai pages (Amsterdam audit F1).
+ * Keyed by the registry's own union, a city added there and missing here fails to COMPILE.
+ */
+export type CityId = CityKey;
 
 export type CreditPart =
   | string
@@ -98,7 +104,9 @@ const AMSTERDAM_STACK: readonly CreditEntry[] = Object.freeze([
   line(['Canopy © Meta / WRI'], CC_BY_4),
   SENTINEL,
   line(['Ground ', link('AHN4', AHN_URL), ' via PDOK, ', { slotId: 'terrLab', text: 'indicative' }], CC0),
-  line(['Air-temperature normals, Schiphol 1991–2020: bron: KNMI. KNMI is not involved in this derived product']),
+  /* knmi.nl/copyright (read 2026-11-06): "…onder naamsvermelding "bron: KNMI", maar u dient bij het citeren van de inhoud aan te geven dat het
+     KNMI niet betrokken is bij het afgeleide werk en de strekking daarvan niet noodzakelijkerwijs onderschrijft." BOTH halves are required. */
+  line(['Air-temperature normals, Schiphol 1991–2020 (bron: KNMI). KNMI is not involved in this derived product and does not necessarily endorse its purport.']),
   WEATHER,
 ]);
 
@@ -106,6 +114,9 @@ export const CITY_CREDITS: Readonly<Record<CityId, readonly CreditEntry[]>> = Ob
   kolkata: INDIA_STACK,
   bengaluru: INDIA_STACK,
   amsterdam: AMSTERDAM_STACK,
+  /* Registered but not drawable: its pages say "Nothing is mapped for this area yet" and never print this list. An EMPTY list is the
+     honest row; the India stack would credit Overture and Google for data Dubai does not show. */
+  dubai: Object.freeze([]),
 });
 
 /**
@@ -117,6 +128,7 @@ export const CITY_CREDITS: Readonly<Record<CityId, readonly CreditEntry[]>> = Ob
 export const CITY_MAP_CREDIT: Readonly<Record<CityId, string | null>> = Object.freeze({
   kolkata: null,
   bengaluru: null,
+  dubai: null,
   amsterdam: [
     `<a href="https://docs.3dbag.nl/en/copyright/" ${NEW_TAB}>© 3DBAG by tudelft3d and 3DGI</a>`,
     `Heights: <a href="${AHN_URL}" ${NEW_TAB}>AHN5</a>, Het Waterschapshuis (<a href="https://creativecommons.org/licenses/by/4.0/" ${NEW_TAB}>CC BY 4.0</a>)`,
@@ -133,6 +145,7 @@ export const CITY_MAP_CREDIT: Readonly<Record<CityId, string | null>> = Object.f
 export const CITY_CREDIT_NOTE: Readonly<Record<CityId, string | null>> = Object.freeze({
   kolkata: null,
   bengaluru: null,
+  dubai: null,
   amsterdam: 'Building heights: © 3DBAG by tudelft3d and 3DGI (3D geoinformation research group, TU Delft, and 3DGI), '
     + 'release v2025.09.03, CC BY 4.0. The heights derive from Actueel Hoogtebestand Nederland: AHN5 (2023-2025), '
     + '© Het Waterschapshuis, CC BY 4.0, plus AHN3 and AHN4 (CC0). Terrain: AHN4 DTM/DSM 0.5 m (Het Waterschapshuis, CC0 1.0), '
@@ -141,7 +154,8 @@ export const CITY_CREDIT_NOTE: Readonly<Record<CityId, string | null>> = Object.
 });
 
 /** The map control's text: the city's required credit and the ward boundary's, either may be absent; null when both are. */
-export function joinMapCredits(cityCredit: string | null, wardCredit: string | null): string | null {
-  const parts = [cityCredit, wardCredit].filter((c): c is string => c !== null);
+export function joinMapCredits(cityCredit: string | null | undefined, wardCredit: string | null | undefined): string | null {
+  /* `typeof`, not `!== null`: a missing table row is `undefined`, and that must never reach the map control as the text "undefined". */
+  const parts = [cityCredit, wardCredit].filter((c): c is string => typeof c === 'string');
   return parts.length === 0 ? null : parts.join(' · ');
 }

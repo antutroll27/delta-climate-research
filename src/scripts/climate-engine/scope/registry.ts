@@ -331,6 +331,18 @@ export type AreaKey = {
 }[keyof Registry];
 
 /**
+ * Every registered city slug, derived from the same literal as `AreaKey` (`kolkata | bengaluru | dubai | amsterdam | ...`).
+ *
+ * WHY IT EXISTS. Tables keyed by city (src/data/city-credits.ts) were typed over a hand-written union that had to be kept equal to
+ * `CITIES` (src/data/cities.ts) by a test. `CITIES` is the DRAWABLE catalogue and has no Dubai, so a table total over `CITIES` was
+ * partial over the registry and the build threw on the Dubai pages. Keyed by this, a city added here and missing from such a table
+ * is a compile error, with no cast to hide it.
+ */
+export type CityKey = {
+  [C in keyof Registry]: keyof Registry[C]['cities'] & string
+}[keyof Registry];
+
+/**
  * The authoring contract. REGISTRY closes with
  * `as const satisfies Record<string, CountryEntry>`, and that clause is what makes
  * an incomplete entry fail HERE.
@@ -417,7 +429,7 @@ const COUNTRIES: Readonly<Record<string, CountryEntry>> = REGISTRY;
 
 interface AreaParts {
   readonly country: string;
-  readonly city: string;
+  readonly city: CityKey;
   readonly area: string;
 }
 
@@ -446,7 +458,8 @@ for (const [country, entry] of Object.entries(COUNTRIES)) {
       const key = `${country}/${city}/${areaId}` as AreaKey;
       keys.push(key);
       if (!AREA_PARTS.has(key)) {
-        AREA_PARTS.set(key, Object.freeze({ country, city, area: areaId }));
+        /* `city as CityKey`: the same trust as `as AreaKey` above; both come from walking REGISTRY itself. */
+        AREA_PARTS.set(key, Object.freeze({ country, city: city as CityKey, area: areaId }));
       }
     }
   }

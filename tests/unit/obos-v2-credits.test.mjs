@@ -25,7 +25,7 @@ test('the water credit is OpenStreetMap under ODbL, as in v1\'s attribution line
 
 test('the area page credits Sentinel-2 where the area has a model (inside the hasData branch), from the shared constant', () => {
   const o = readFileSync('src/components/ClimateEngine/v2/Overlays.astro', 'utf8');
-  assert.match(o, /creditListHtml\(CITY_CREDITS\[cityId\], SENTINEL_CREDIT\)/, 'the shared constant is what the renderer is handed (it writes .lead and .url; tests/unit/city-credits.test.mjs holds the output)');
+  assert.match(o, /creditsPanelHtml\(scope\.city\.id, SENTINEL_CREDIT\)/, 'the shared constant is what the renderer is handed (it writes .lead and .url; tests/unit/city-credits.test.mjs holds the output)');
   const data = o.indexOf('scope.area.hasData ? (<Fragment>');
   const lines = o.indexOf('set:html={creditsHtml}');
   const none = o.indexOf('Nothing is mapped for this area yet.');

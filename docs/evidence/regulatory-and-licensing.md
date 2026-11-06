@@ -127,9 +127,11 @@ Nothing in the Amsterdam stack blocks republication. The duties, read from the p
   people download raw 3D BAG or AHN5 data with terms that forbid reuse would not be.
 - **AHN4 terrain, CC0.** The PDOK WCS serves AHN4. No credit is required; one is given as a courtesy. If the pipeline
   ever moves to AHN5/AHN6 tiles or the Ellipsis Drive services, the terrain needs the same CC BY credit.
-- **KNMI.** Site default CC0 with the credit "bron: KNMI" and a statement that KNMI is not involved in derivative
-  work. Printed as one line in the credits panel. (The copyright page itself was re-requested, HTTP 200, but its
-  wording was not re-read in this task: the summary is from the readiness audit.)
+- **KNMI.** Site default CC0 (knmi.nl/copyright, re-read in full 2026-11-06). Reuse "onder naamsvermelding 'bron: KNMI'",
+  and "bij het citeren van de inhoud aan te geven dat het KNMI niet betrokken is bij het afgeleide werk en de strekking
+  daarvan niet noodzakelijkerwijs onderschrijft": both the credit and the non-involvement/non-endorsement statement are
+  required. The credits panel line carries both ("... (bron: KNMI). KNMI is not involved in this derived product and does
+  not necessarily endorse its purport."). An earlier version of this file omitted the endorsement clause (audit F4).
 - **Overture / OSM, ODbL.** Share-alike on a published derived database; the in-map credit names OpenStreetMap
   contributors via Overture Maps.
 - **Meta/WRI CHM v2, CC BY 4.0.** Credited.

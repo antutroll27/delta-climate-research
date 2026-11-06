@@ -25,7 +25,7 @@ test('the DataMeet credit is shown wherever the boundary is: scope line, map att
   assert.match(paint, /scope\.hidden = wardMask === null;/, 'the scope line is not shown with the boundary');
   assert.match(paint, /<span class="ward-credit">boundary © DataMeet, <a href="\$\{wardMask\.licenceUri\}"/, 'the on-screen credit left the scope line');
   assert.match(paint, /credit\.hidden = wardMask === null;/, 'the legend credit is never shown');
-  assert.match(paint, /setMapCredit\(joinMapCredits\(CITY_MAP_CREDIT\[SCOPE\.city\.id as CityId\], wardMask\s*\? `Ward boundary © DataMeet, <a href="\$\{wardMask\.licenceUri\}"/, 'the map attribution does not credit DataMeet');
+  assert.match(paint, /setMapCredit\(joinMapCredits\(CITY_MAP_CREDIT\[SCOPE\.city\.id\], wardMask\s*\? `Ward boundary © DataMeet, <a href="\$\{wardMask\.licenceUri\}"/, 'the map attribution does not credit DataMeet');
   assert.match(body('setMapCredit'), /new maplibregl\.AttributionControl\(\{ compact: true, \.\.\.\(credit \? \{ customAttribution: credit \} : \{\}\) \}\)/);
 });
 

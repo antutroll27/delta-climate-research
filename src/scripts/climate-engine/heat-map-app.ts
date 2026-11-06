@@ -75,7 +75,7 @@ import { fmtMoney, fmtRate, currencyMark, noCostBasisLine, planScoreLine } from 
 import { pvRanges, tierOf } from './solar-ranges.ts';
 import { wardSummary, validatedSentence, noteFor, sharePct, ESTIMATE_TAG, paybackText, oldestAsOf } from './solar-copy.ts';
 import { costBasisFor } from './solar-cost.ts';
-import { CITY_MAP_CREDIT, joinMapCredits, type CityId } from '../../data/city-credits.ts';
+import { CITY_MAP_CREDIT, joinMapCredits } from '../../data/city-credits.ts';
 import { wardRoi, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
 import { mountPaybackSheet, type PaybackSheet } from './solar-payback-sheet.ts';
 import { areaPath, paths, cityPaths, wardMaskPath } from './scope/paths.ts';
@@ -3011,7 +3011,7 @@ export function mountHeatMap(): () => void {
     }
     /* The CITY's own required credit (3D BAG: bottom-right of a browsable map) first, then the ward boundary's. Null for
        Kolkata and Bengaluru, so their control is exactly what it was. */
-    setMapCredit(joinMapCredits(CITY_MAP_CREDIT[SCOPE.city.id as CityId], wardMask
+    setMapCredit(joinMapCredits(CITY_MAP_CREDIT[SCOPE.city.id], wardMask
       ? `Ward boundary © DataMeet, <a href="${wardMask.licenceUri}" target="_blank" rel="noopener noreferrer">CC BY-SA 2.5 IN</a>`
       : null));
   }

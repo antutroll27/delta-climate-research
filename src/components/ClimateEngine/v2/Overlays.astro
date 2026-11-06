@@ -3,15 +3,12 @@
 import Sym from './Sym.astro';
 import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 import { SENTINEL_CREDIT } from '../../../scripts/climate-engine/v2/credits.ts';
-import { CITY_CREDITS, CITY_CREDIT_NOTE, type CityId } from '../../../data/city-credits.ts';
-import { creditListHtml, creditNoteHtml } from '../../../scripts/climate-engine/v2/credit-html.ts';
+import { creditsPanelHtml } from '../../../scripts/climate-engine/v2/credit-html.ts';
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
 /* The data lines are DATA, per city (src/data/city-credits.ts): Kolkata and Bengaluru reproduce the lines this file used to type, an
    Amsterdam page credits 3D BAG and AHN instead of Overture/Google. The note is the long-form provenance some licences ask for. */
-const cityId = scope.city.id as CityId;
-const creditsHtml = [creditListHtml(CITY_CREDITS[cityId], SENTINEL_CREDIT), creditNoteHtml(CITY_CREDIT_NOTE[cityId])]
-  .filter((h) => h !== '').join('\n      ');
+const creditsHtml = creditsPanelHtml(scope.city.id, SENTINEL_CREDIT);
 /* S2 audit F1: the chip lists only sources that area really draws. A DataMeet ward boundary exists only on the areas that ship one,
    and the app writes its credit (with the licence link) into MapLibre's control, which the credits popover mirrors; an area with no
    map says only "Credits". */
