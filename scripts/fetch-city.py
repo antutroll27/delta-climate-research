@@ -70,7 +70,8 @@ def fetch_buildings(area: Area) -> None:
     doc = CityBuildingsFile(
         city=area.city, area=area.id, name=area.name, centre=[area.centre.lat, area.centre.lon],
         sizeM=float(area.size_m), release=f"3D BAG {bag.RELEASE}", retrieved=TODAY, count=len(rows),
-        source=f"3D BAG (tudelft3d + 3DGI), {bag.RELEASE}, BAG footprints + AHN point clouds, CC BY 4.0",
+        source=(f"3D BAG (tudelft3d + 3DGI), {bag.RELEASE}, BAG footprints; heights from the AHN point clouds "
+                "(AHN5 © Het Waterschapshuis, CC BY 4.0; AHN4 and AHN3, CC0), CC BY 4.0"),
         heightSource="3D BAG LoD1.2 roof 70th percentile minus ground level (NAP)",
         heightNote=bag.height_note(op_desc, op_acc),
         fillFraction=round(st.fill_rows / max(1, len(rows)), 4), heightTiers=tiers, pointCloudMix=mix,
@@ -92,9 +93,38 @@ def fetch_buildings(area: Area) -> None:
 
 # ── terrain ────────────────────────────────────────────────────────────────
 
+def post_ahn4_patches(area: Area) -> tuple[dem.GroundPatch, ...]:
+    """Buildings that stand today but did not when AHN4 was flown, with 3D BAG's current ground at each.
+
+    Needs the buildings file (its hCheck is half the evidence) and the raw 3D BAG tiles (the BAG
+    construction year, the current ground and the exact RD footprint). Offline: both are cached.
+    """
+    bpath = out_path(area, "buildings")
+    if not os.path.isfile(bpath):
+        raise SystemExit(f"{bpath} is missing: run --layer buildings first (the terrain patch reads its hCheck)")
+    with open(bpath, encoding="utf-8") as fh:
+        rows = cast(CityBuildingsFile, json.load(fh))["b"]
+    raw3d = os.path.join(_city.raw_dir(area.city), "3dbag")
+    paths = sorted(os.path.join(raw3d, f) for f in os.listdir(raw3d) if f.endswith(".gpkg.gz"))
+    scratch = os.path.join(raw3d, "scratch")
+    seen: dict[str, bag.RawBuilding] = {}
+    for rb in itertools.chain.from_iterable(bag.read_tile(p, scratch) for p in paths):
+        seen.setdefault(rb.src_id, rb)
+    years = {k: v.build_year for k, v in seen.items()}
+    patches: list[dem.GroundPatch] = []
+    for sid in sorted(dem.post_ahn4_ids(rows, years)):
+        rb = seen[sid]
+        if rb.ground_nap is None or rb.build_year is None:
+            continue
+        patches.append(dem.GroundPatch(sid, rb.footprint, rb.ground_nap, rb.build_year))
+    return tuple(patches)
+
+
 def fetch_terrain(area: Area) -> None:
     raw = os.path.join(_city.raw_dir(area.city), "ahn")
-    doc, report = dem.build_terrain(area, raw, TODAY)
+    patches = post_ahn4_patches(area)
+    print(f"post-AHN4 buildings whose DTM is patched: {len(patches)} {[p.src_id[-8:] for p in patches]}")
+    doc, report = dem.build_terrain(area, raw, TODAY, patches)
     write_json(out_path(area, "terrain"), doc)
     print(f"\nwrote {out_path(area, 'terrain')}")
     for line in report:

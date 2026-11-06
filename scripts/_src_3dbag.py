@@ -97,6 +97,7 @@ class RawBuilding:
     insufficient: bool                   # b3_pw_onvoldoende
     pc_source: str | None                # b3_pw_bron, e.g. "ahn5"
     pc_year: int | None                  # b3_pw_datum
+    build_year: int | None = None        # oorspronkelijkbouwjaar (BAG): when it was first built
 
 
 class BuildStats(NamedTuple):
@@ -216,16 +217,17 @@ def read_tile(gz_path: str, scratch: str) -> Iterator[RawBuilding]:
                     "SELECT identificatie, b3_pand_deel_id, b3_h_70p, geom FROM lod12_2d ORDER BY identificatie, b3_pand_deel_id"):
                 parts.setdefault(cast(str, ident), []).append(
                     Part(int(deel), gpkg_geometry(cast(bytes, blob)), None if h70 is None else float(h70)))
-            for (ident, blob, ground, qual, insufficient, bron, datum) in con.execute(
+            for (ident, blob, ground, qual, insufficient, bron, datum, bouwjaar) in con.execute(
                     "SELECT identificatie, geom, b3_h_maaiveld, b3_kwaliteitsindicator, b3_pw_onvoldoende, "
-                    "b3_pw_bron, b3_pw_datum FROM pand"):
+                    "b3_pw_bron, b3_pw_datum, oorspronkelijkbouwjaar FROM pand"):
                 sid = cast(str, ident)
                 yield RawBuilding(
                     src_id=sid, footprint=gpkg_geometry(cast(bytes, blob)),
                     parts=tuple(parts.get(sid, ())),
                     ground_nap=None if ground is None else float(ground),
                     quality=bool(qual), insufficient=bool(insufficient),
-                    pc_source=None if bron is None else str(bron), pc_year=_year(datum))
+                    pc_source=None if bron is None else str(bron), pc_year=_year(datum),
+                    build_year=_year(bouwjaar))
         finally:
             con.close()
     finally:

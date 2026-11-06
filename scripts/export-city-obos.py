@@ -84,12 +84,24 @@ def water_doc(area: Area, ctx: CityContextFile) -> dict[str, Any]:
 
 def trees_doc(area: Area, canopy: CityCanopyFile, retrieved: str) -> dict[str, Any]:
     trees: list[TreeInstanceJSON] = canopy["trees"]
+    # THIS file's own header: the names its city draws from (Amsterdam: broadleaf only), not Kolkata's three.
+    names = _trees.names_for(area.species_draw())
     return {
         "ward": area.id, "grid": canopy["grid"], "sizeM": float(area.size_m), "retrieved": retrieved,
         "source": canopy["source"], "densityRefM": canopy["densityRefM"],
-        "cols": list(_trees.COLS), "speciesNames": list(_trees.SPECIES_NAMES),
-        "trees": _trees.encode_trees(trees),
+        "cols": list(_trees.COLS), "speciesNames": list(names),
+        "trees": _trees.encode_trees(trees, names),
     }
+
+
+def _patch_note(src: CityTerrainFile) -> str:
+    """One sentence on the post-AHN4 pit patch, or '' where the terrain was not patched."""
+    patch = src.get("postAhn4Patch")
+    if not patch:
+        return ""
+    buildings = cast("list[object]", patch["buildings"])
+    return (f"; lifted to 3D BAG's current ground under and around {len(buildings)} building(s) first built after the AHN4 flight "
+            f"(open construction pits in the 2020 DTM; {patch['cellsChanged']} mesh cells changed)")
 
 
 def terrain_doc(area: Area, src: CityTerrainFile) -> dict[str, Any]:
@@ -106,7 +118,8 @@ def terrain_doc(area: Area, src: CityTerrainFile) -> dict[str, Any]:
         "confidence": "indicative",
         "note": ("AHN4 DTM 0.5 m (Het Waterschapshuis, CC0) area-averaged onto the solver mesh; metres relative to datumM "
                  "(the mesh mean), rows north-first; no data under buildings or water is filled from the nearest valid "
-                 "neighbour; not smoothed, so smoothSpanM equals rawSpanM; NOT used by the simulation"),
+                 "neighbour; not smoothed, so smoothSpanM equals rawSpanM; NOT used by the simulation"
+                 + _patch_note(src)),
         "h": rel,
     }
 

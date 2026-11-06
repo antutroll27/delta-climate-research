@@ -3,9 +3,9 @@
  "area": "canal-ring",
  "measuredAt": "2026-11-06",
  "inputs": {
-  "canal-ring-buildings.json": "f125785823a29e221a60a55a12827c90ec117e564413bb87925ae444dadff717",
-  "canal-ring-terrain.json": "ab71eac2690758a24162375da4b6944a78f1173a1adc0e0406f4fa12340e5bd1",
-  "canal-ring-context.json": "7be53c81627ac66d70b8d0d8cb6196ad63c220971e9706d70303c30e84c06176"
+  "canal-ring-buildings.json": "d913c72f225643024d224b391a8e08d48d7be0b6e79f383d02611e1acfd03874",
+  "canal-ring-terrain.json": "a6d72fb15f57d109627fe3245d4254befc9559affb8bc29b8c2d42dc2bd8fa36",
+  "canal-ring-context.json": "05b56089f8550ada18b42e61f2a7e39457ff92edb96e42c400d6369087357530"
  },
  "guards": [
   {
@@ -52,7 +52,7 @@
    "name": "landmarks",
    "evidence": "Wikidata P625 for four landmarks (landmarks.json)",
    "statistic": "distance to the nearest footprint of plausible area, m",
-   "rule": "north-up <= 60 m for EACH; mirrored >= 100 m for each and a median >= 200 m",
+   "rule": "north-up <= 15 m for EACH; mirrored >= 100 m for each and a median >= 200 m",
    "status": "pass",
    "north": 0.0,
    "mirrored": 122.7,

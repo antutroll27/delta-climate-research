@@ -37,6 +37,11 @@ from typing import Final, Literal, NamedTuple, NewType, NotRequired, TypedDict
 
 from pyproj import CRS, Transformer
 
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from _trees import Species  # noqa: E402
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 
@@ -65,6 +70,33 @@ DISAGREE_M = Metres(5.0)
 TERRAIN_N = 96
 
 
+#: An angle in degrees (a sun elevation above the horizon). A NewType, like `Metres`.
+Degrees = NewType("Degrees", float)
+
+#: Kolkata's species draw, VERBATIM (`fetch-canopy.py` SPECIES: a weighted tuple, neem twice).
+#: `_src_canopy`'s self-test requires it to equal the tuple read out of that file. The tropical
+#: (Köppen A) draw: neem, gulmohar and palm are what the tuple means in Kolkata and Bengaluru.
+TROPICAL_SPECIES_DRAW: Final[tuple[Species, ...]] = ("neem", "neem", "gulmohar", "palm")
+#: Temperate and cold climates (Köppen C and D): ONE generic broadleaf. Founder decision
+#: 2026-11-06: no palms outside the tropics, and no invented species mix either. The 10 m
+#: placement knows a canopy HEIGHT, not a species; "broadleaf" claims nothing it cannot support.
+TEMPERATE_SPECIES_DRAW: Final[tuple[Species, ...]] = ("broadleaf",)
+
+
+def species_draw_for_koppen(koppen: str) -> tuple[Species, ...]:
+    """The species draw a Köppen-Geiger class implies, by its first letter (the climate GROUP).
+
+    Raises for a group nobody has decided (B arid, E polar): a city there must set its draw
+    explicitly on its `Area` rather than inherit a palm or a broadleaf by default.
+    """
+    group = koppen[:1]
+    if group == "A":
+        return TROPICAL_SPECIES_DRAW
+    if group in ("C", "D"):
+        return TEMPERATE_SPECIES_DRAW
+    raise ValueError(f"no species draw is decided for Koppen {koppen!r}: set Area.tree_species explicitly")
+
+
 class LatLon(NamedTuple):
     lat: float
     lon: float
@@ -79,11 +111,28 @@ class Area:
     size_m: int
     #: EPSG code of the metric CRS the city's open data are published in.
     local_crs: int
+    #: Beck et al. (2023) Koppen-Geiger class at the centre. Drives the species draw below.
+    koppen: str
+    #: Scene selection for the Sentinel-2 surface composite: keep only scenes whose sun is at least
+    #: this high above the horizon (STAC `view:sun_elevation`). None = no filter, which is
+    #: Kolkata's and Bengaluru's selection exactly. At 52 N a winter scene is shadow-dominated and L2A
+    #: reflectance has no shadow correction, so the per-cell median is pulled down (Amsterdam audit F5).
+    min_sun_elevation_deg: Degrees | None = None
+    #: Set only to override the Koppen-derived draw (needed for Koppen B and E).
+    tree_species: tuple[Species, ...] | None = None
+
+    def species_draw(self) -> tuple[Species, ...]:
+        """The weighted tuple `place_trees` indexes with its hash: explicit if set, else from `koppen`."""
+        return self.tree_species if self.tree_species is not None else species_draw_for_koppen(self.koppen)
 
 
 #: Tokyo's area is added by Phase B (Task B2). One area per entry, ids globally unique.
 AREAS: dict[str, Area] = {
-    "canal-ring": Area("canal-ring", "amsterdam", "Canal Ring", LatLon(52.3640, 4.8850), 2800, 28992),
+    "canal-ring": Area("canal-ring", "amsterdam", "Canal Ring", LatLon(52.3640, 4.8850), 2800, 28992, "Cfb",
+                       # MEASURED 2026-11-06 over 2021-25: 30 candidate scenes, 10 with the sun below 25 deg (Jan, Feb, Nov, down to 14.5).
+                       # A 40 deg floor keeps 28 of 30 (every year 4-6, April to September); 35 deg would keep 29 and admit March at
+                       # 35-37 deg. 40 is the stricter floor that still leaves a full composite.
+                       min_sun_elevation_deg=Degrees(40.0)),
 }
 
 
@@ -235,6 +284,8 @@ class CityTerrainFile(TypedDict):
     #: Relief at the DEM's NATIVE posting, before the area-average resample to `n`.
     reliefNativeM: float
     resampleNote: str
+    #: Set only where the DTM was patched under buildings put up after the AHN4 flight (`_src_dem.patch_post_ahn4`).
+    postAhn4Patch: NotRequired[dict[str, object]]
     #: Row-major, n*n, metres. Row 0 is the SOUTH edge (see the module header).
     h: list[float]
 
@@ -306,7 +357,7 @@ def _self_test() -> None:
     worst = 0.0
     checked = 0
     for bw in blr.WARDS.values():
-        ca = Area(bw.id, "amsterdam", bw.name, LatLon(bw.centre.lat, bw.centre.lon), int(bw.size_m), 28992)
+        ca = Area(bw.id, "amsterdam", bw.name, LatLon(bw.centre.lat, bw.centre.lon), int(bw.size_m), 28992, "Aw")
         for pad in (0.0, 50.0):
             ours, theirs = bounds(ca, pad), blr.bounds(bw, pad)
             worst = max(worst, max(abs(o - t) for o, t in zip(ours, theirs, strict=True)))
@@ -357,6 +408,21 @@ def _self_test() -> None:
     assert CRS.from_epsg(6697).is_geographic
     assert all(a.local_crs in (28992, 6677) for a in AREAS.values())
     assert len({a.id for a in AREAS.values()}) == len(AREAS)
+
+    # (e) the species draw: tropical keeps Kolkata's tuple, temperate is broadleaf-only, an undecided group refuses.
+    assert species_draw_for_koppen("Aw") == TROPICAL_SPECIES_DRAW == ("neem", "neem", "gulmohar", "palm")
+    assert species_draw_for_koppen("Cfb") == species_draw_for_koppen("Dfb") == ("broadleaf",)
+    for undecided in ("BWh", "ET", ""):
+        try:
+            species_draw_for_koppen(undecided)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Koppen {undecided!r} has no decided draw and must refuse")
+    assert AREAS["canal-ring"].species_draw() == ("broadleaf",), "Amsterdam draws no palms"
+    arid = Area("x", "amsterdam", "X", LatLon(0.0, 0.0), 100, 28992, "BWh", tree_species=("palm",))
+    assert arid.species_draw() == ("palm",), "an explicit draw overrides the Koppen default"
+    assert all("palm" not in a.species_draw() for a in AREAS.values() if a.koppen[:1] in ("C", "D"))
 
     print(f"_city self-test: ok -- parity with _bangalore to {worst:.2e} m over {checked} lattice points + "
           f"{len(blr.WARDS)} centres x2 pads; sign test and CRS round trips pass for {len(AREAS)} area(s); "

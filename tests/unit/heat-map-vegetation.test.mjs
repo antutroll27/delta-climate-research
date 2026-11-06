@@ -58,6 +58,14 @@ test('asTreesFile decodes rows into the objects the layer draws', () => {
   assert.equal(f.trees[1].species, 'neem');
 });
 
+test('asTreesFile reads a file under its OWN header: a one-name temperate file, and Kolkata\'s stored three-name header', () => {
+  const one = asTreesFile({ ...HEADER, speciesNames: ['broadleaf'], trees: [[1, -2, 63, 21, 0]] });
+  assert.deepEqual(one.trees[0], { x: 1, y: -2, h: 6.3, species: 'broadleaf', r: 2.1 });
+  assert.equal(asTreesFile({ ...HEADER, speciesNames: ['broadleaf'], trees: [[1, -2, 63, 21, 1]] }), null, 'index 1 does not exist in a one-name file');
+  // the order of the three is the contract; broadleaf was APPENDED
+  assert.equal(asTreesFile({ ...HEADER, trees: [[0, 0, 50, 10, 0], [0, 0, 50, 10, 1], [0, 0, 50, 10, 2]] }).trees.map((t) => t.species).join(), 'neem,gulmohar,palm');
+});
+
 test('asTreesFile refuses the old object rows rather than rendering half a migration', () => {
   assert.equal(asTreesFile({ ...HEADER, trees: [{ x: 1, y: 2, h: 6, species: 'neem', r: 2 }] }), null);
   assert.equal(asTreesFile({ ward: 'x', grid: 140, sizeM: 1400, trees: [{ x: 1, y: 2, h: 6, species: 'neem', r: 2 }] }), null);

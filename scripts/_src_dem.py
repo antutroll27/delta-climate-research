@@ -23,6 +23,8 @@ from __future__ import annotations
 import math
 import os
 import time
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from typing import Final
 
 import numpy as np
@@ -30,24 +32,36 @@ import numpy.typing as npt
 import rasterio
 import requests
 from rasterio.enums import Resampling
+from rasterio.features import geometry_mask
 from rasterio.transform import Affine, from_bounds, from_origin
 from rasterio.warp import reproject
 from scipy import ndimage
+from shapely.geometry import Polygon, mapping
 
 import _city
-from _city import Area, CityTerrainFile
+from _city import Area, CityBuilding, CityTerrainFile
 
 WCS_URL: Final = "https://service.pdok.nl/rws/ahn/wcs/v1_0"
 USER_AGENT: Final = "obos-pipeline/1.0 (+https://deltaclimate.earth)"
 PIXEL_M: Final = 0.5
 TILE_M: Final = 1000.0
 PAD_M: Final = 50.0
-SOURCE: Final = "AHN DTM 0.5 m (Rijkswaterstaat et al., PDOK WCS dtm_05m), CC0"
+SOURCE: Final = "AHN4 DTM 0.5 m (Het Waterschapshuis, PDOK WCS dtm_05m), CC0"
 DATUM: Final = "NAP"
 #: What the service writes for 'no data'. Compared exactly, because it is a float32 maximum.
 WCS_NODATA: Final = float(np.float32(3.4028234663852886e+38))
 
 F32 = npt.NDArray[np.float32]
+
+#: The year AHN4 was flown over Amsterdam: 3D BAG's `b3_pw_datum` for the AHN4-sourced buildings in the
+#: square is 2020 (measured 2026-11-06; the service abstract says AHN4 as a whole was flown 2020-2022).
+AHN4_FLIGHT_YEAR: Final = 2020
+#: "AHN4 sees no building": h - hCheck beyond this. The same 5 m as the height cross-check's flag.
+FAR_BELOW_M: Final = float(_city.DISAGREE_M)
+#: A construction pit runs past its own footprint. Around a patched building, ground this much lower than the
+#: building's current ground, within PIT_MARGIN_M of it, is the same pit (a kerb or a quay edge is not 1.5 m).
+PIT_MARGIN_M: Final = 15.0
+PIT_TOL_M: Final = 1.5
 
 
 def _grid_extent(area: Area) -> tuple[float, float, float, float]:
@@ -129,10 +143,80 @@ def fill_nearest(mesh: F32) -> tuple[F32, int]:
     return mesh[idx[0], idx[1]].astype(np.float32), n_bad
 
 
-def build_terrain(area: Area, raw: str, retrieved: str) -> tuple[CityTerrainFile, list[str]]:
+@dataclass(frozen=True, slots=True)
+class GroundPatch:
+    """A building that stands today but did not when AHN4 was flown, with the ground 3D BAG measures at it NOW."""
+    src_id: str
+    footprint_rd: Polygon      # EPSG:28992, as 3D BAG publishes it
+    ground_nap: float          # b3_h_maaiveld
+    build_year: int
+
+
+def post_ahn4_ids(rows: Iterable[CityBuilding], build_year: Mapping[str, int | None]) -> set[str]:
+    """Buildings AHN4 could not have seen, from evidence in the data and not from the year alone.
+
+    BOTH must hold: the BAG says it was first built AFTER the AHN4 flight (`AHN4_FLIGHT_YEAR`), and the AHN4
+    nDSM finds almost nothing where 3D BAG's later point cloud finds a building (hCheck more than FAR_BELOW_M
+    under h). A new building that AHN4 happens to show, or an old one it mismeasures, is not touched.
+    A building cut into parts has several rows under `<id>#<part>`; any one failing the second test selects it.
+    """
+    out: set[str] = set()
+    for r in rows:
+        base = r["src_id"].split("#")[0]
+        year = build_year.get(base)
+        hc = r["hCheck"]
+        if year is not None and year > AHN4_FLIGHT_YEAR and hc is not None and r["h"] - hc > FAR_BELOW_M:
+            out.add(base)
+    return out
+
+
+def patch_post_ahn4(dtm: F32, transform: Affine, patches: Iterable[GroundPatch]) -> tuple[F32, int]:
+    """Lift the AHN4 DTM to today's ground under (and just around) buildings AHN4 pre-dates. Returns (patched, pixels raised).
+
+    WHY. AHN4 was flown in 2020. A building finished in 2021-22 stands on a site that was an open pit then, and
+    the DTM, which has ground points wherever the sensor saw ground, records the pit: -7 m NAP, 6 m below the
+    street. The served mesh then dropped 3.6 m under a 27 m building whose base 3D BAG puts at -0.98 m NAP.
+    `b3_h_maaiveld` is that same building's ground from the 2023 AHN5 point cloud.
+
+    ONLY EVER RAISES, and only pixels with a valid DTM value below that ground: inside the footprint any pixel under
+    `ground_nap`; within PIT_MARGIN_M of it, those more than PIT_TOL_M under. Pixels already at or above it, and
+    nodata, are left alone. The DSM is not changed (it feeds only the nodata-mask guard G6).
+    """
+    out = dtm.copy()
+    raised = 0
+    for p in patches:
+        inside = geometry_mask([mapping(p.footprint_rd)], out_shape=out.shape, transform=transform, invert=True)
+        near = geometry_mask([mapping(p.footprint_rd.buffer(PIT_MARGIN_M))], out_shape=out.shape, transform=transform,
+                             invert=True) & ~inside
+        valid = np.isfinite(out)
+        low = (inside & valid & (out < p.ground_nap)) | (near & valid & (out < p.ground_nap - PIT_TOL_M))
+        out[low] = np.float32(p.ground_nap)
+        raised += int(low.sum())
+    return out, raised
+
+
+def build_terrain(area: Area, raw: str, retrieved: str,
+                  patches: tuple[GroundPatch, ...] = ()) -> tuple[CityTerrainFile, list[str]]:
     n = _city.TERRAIN_N
     dtm, tf = mosaic("dtm_05m", area, raw)
     dsm, _ = mosaic("dsm_05m", area, raw)
+    patch_doc: dict[str, object] | None = None
+    if patches:
+        before = to_mesh(dtm, tf, area, n, Resampling.average)
+        dtm, raised = patch_post_ahn4(dtm, tf, patches)
+        after = to_mesh(dtm, tf, area, n, Resampling.average)
+        # cells that had a value on both sides; a cell that was nodata before is not "changed"
+        delta = np.abs(np.nan_to_num(after - before))
+        patch_doc = {
+            "rule": (f"building first built after the AHN4 flight ({AHN4_FLIGHT_YEAR}) AND AHN4 nDSM p70 more than "
+                     f"{FAR_BELOW_M:g} m under the 3D BAG height; DTM raised to 3D BAG b3_h_maaiveld inside the footprint, "
+                     f"and within {PIT_MARGIN_M:g} m where it is more than {PIT_TOL_M:g} m below it"),
+            "buildings": [{"id": p.src_id, "builtYear": p.build_year, "groundNap": round(p.ground_nap, 3)} for p in patches],
+            "pixelsRaised": raised,
+            "cellsChanged": int((delta > 0.005).sum()),
+            "cellsChangedOver0_5m": int((delta > 0.5).sum()),
+            "maxChangeM": round(float(delta.max()), 2),
+        }
     valid = ~np.isnan(dtm)
     native = dtm[valid]
     p = np.percentile(native, [0.1, 50.0, 99.9]).tolist()
@@ -155,6 +239,11 @@ def build_terrain(area: Area, raw: str, retrieved: str) -> tuple[CityTerrainFile
                       f"Heights are NAP metres and may be negative. AHN version served: 4 (flown 2020-2022). "
                       f"Row 0 is the SOUTH edge."),
         h=[round(float(v), 3) for v in vals])
+    if patch_doc is not None:
+        doc["postAhn4Patch"] = patch_doc
+        doc["resampleNote"] += (f" PATCHED under {len(patches)} building(s) first built after the AHN4 flight: the DTM there "
+                                f"recorded the open construction pit, and is lifted to 3D BAG's current ground "
+                                f"({patch_doc['cellsChanged']} mesh cell(s) changed; see postAhn4Patch).")
     n_dsm_valid = int((~np.isnan(dsm)).sum())
     report = [
         f"DTM mosaic {dtm.shape[1]}x{dtm.shape[0]} px; valid {valid.mean():.4f} (nodata share {1 - valid.mean():.4f}); "
@@ -208,4 +297,25 @@ def self_test() -> None:
     holey[1:3, 1:3] = np.nan
     filled, k = fill_nearest(holey)
     assert k == 4 and not np.isnan(filled).any() and filled[0, 0] == 0.0
-    print("_src_dem self-test: ok (0.5 m lattice, <= 4000 px tiles, northward ramp -> row 0 = SOUTH after the flip, nearest fill)")
+    # THE POST-AHN4 PATCH. A synthetic 1 m-posted DTM at 0 m NAP with a 6 m deep pit, two buildings over/near it.
+    tfm = from_origin(0.0, 100.0, 1.0, 1.0)
+    flat = np.zeros((100, 100), dtype=np.float32)
+    flat[40:60, 40:60] = -6.0                                            # the pit, 20 x 20
+    new_b = GroundPatch("new", Polygon([(45, 45), (55, 45), (55, 55), (45, 55)]), -1.0, 2022)   # raster rows 45-55 <-> y 55-45
+    healed, k = patch_post_ahn4(flat, tfm, [new_b])
+    assert float(healed[50, 50]) == -1.0 and k > 0, "the pit under the new building is lifted to its ground"
+    assert float(healed[42, 42]) == -1.0, "the pit ring around it (more than 1.5 m under, within 15 m) is the same pit"
+    assert float(healed[10, 10]) == 0.0 and float(flat[50, 50]) == -6.0, "elsewhere and the input are untouched"
+    hill = flat.copy()
+    hill[45:55, 45:55] = 3.0                                             # ground ABOVE the building's ground is never lowered
+    assert float(patch_post_ahn4(hill, tfm, [new_b])[0][50, 50]) == 3.0, "the patch only ever raises"
+    nan = flat.copy()
+    nan[48:52, 48:52] = np.nan
+    assert np.isnan(patch_post_ahn4(nan, tfm, [new_b])[0][50, 50]), "nodata stays nodata"
+    # SELECTION: both the year and the AHN4 nDSM must say it was not there.
+    def mk(sid: str, h: float, hc: float | None) -> CityBuilding:
+        return CityBuilding(src_id=sid, p=[], lonlat=[], h=h, hSource="3dbag-p70", quality=True, hCheck=hc, flag=False)
+    cb = [mk("a", 27.7, 1.3), mk("b", 27.7, 1.3), mk("c", 27.7, 26.0), mk("d", 27.7, None), mk("e#1", 20.0, 2.0), mk("f", 20.0, 2.0)]
+    years: dict[str, int | None] = {"a": 2022, "b": 1995, "c": 2022, "d": 2022, "e": 2021, "f": AHN4_FLIGHT_YEAR}
+    assert post_ahn4_ids(cb, years) == {"a", "e"}, post_ahn4_ids(cb, years)
+    print("_src_dem self-test: ok (0.5 m lattice, <= 4000 px tiles, northward ramp -> row 0 = SOUTH after the flip, nearest fill, post-AHN4 pit patch)")

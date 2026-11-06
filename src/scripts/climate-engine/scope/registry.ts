@@ -260,9 +260,10 @@ export const REGISTRY = {
     /* NO PATHWAY AND NO COSTS, null rather than a plausible placeholder (founder Q1
        default, plan §8). A euro figure or a warming delta borrowed from India would
        compute silently and read as an answer. Costs stay null until the founder
-       sources EUR unit costs; `heat-map-app.ts` still calls `requireCosts` at mount
-       and THROWS on null, which is why this country's area is not drawable yet —
-       plan Task A3 makes that branch null-safe BEFORE `drawable` flips (A12). */
+       sources EUR unit costs. The readouts are null-safe (plan Task A3): the app
+       resolves `costsOrNull` at mount and every capital figure branches on the
+       null, saying that no cost basis is adopted rather than printing a zero or
+       an Indian figure. `drawable` stays false only until plan Task A12. */
     name: 'Netherlands',
     pathway: null,
     costs: null,

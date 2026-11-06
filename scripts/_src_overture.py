@@ -69,7 +69,7 @@ MAJOR_ROAD_CLASSES: Final = frozenset({"primary", "secondary"})
 
 MIN_POLYGON_M2: Final = 4.0
 MIN_LINE_M: Final = 2.0
-SOURCE: Final = ("Overture Maps Foundation (ODbL): base/water, base/land_use, "
+SOURCE: Final = ("OpenStreetMap contributors via Overture Maps (ODbL): base/water, base/land_use, "
                  "transportation/segment, clipped to the area box")
 
 

@@ -107,8 +107,17 @@ def block_mean(a: F32, cell: int) -> F32:
     return cast(F32, a.reshape(g, cell, g, cell).mean(axis=(1, 3)).astype(np.float32))
 
 
-def place_trees(grid: F32, size_m: float, rule: KolkataRule) -> list[CityTree]:
-    """Kolkata's `_generate`, species included, over a (g x g) height grid, north-up."""
+def place_trees(grid: F32, size_m: float, rule: KolkataRule,
+                species: tuple[str, ...]) -> list[CityTree]:
+    """Kolkata's `_generate` over a (g x g) height grid, north-up, drawing from `species`.
+
+    `species` is the CITY's draw (`_city.Area.species_draw()`), not `rule.species`: that is Kolkata's
+    tuple (neem, neem, gulmohar, palm) and put palms on Amsterdam's canals. Everything else is the
+    rule verbatim; the self-test requires that, given Kolkata's own tuple, this reproduces
+    `fetch-canopy.py _generate` tree for tree. The species index is the same hash draw, so a
+    one-name draw changes only the label, never a position, height or count.
+    """
+    assert species, "a species draw cannot be empty"
     g = grid.shape[0]
     cell_m = size_m / g
     half = size_m / 2.0
@@ -127,7 +136,7 @@ def place_trees(grid: F32, size_m: float, rule: KolkataRule) -> list[CityTree]:
                     y=round(half - (row + 0.5) * cell_m + jy, 2),
                     h=round(h, 1),
                     r=round(h * 0.35 * (0.9 + 0.2 * rule.hash01(col, row, k, 2)), 2),
-                    species=rule.species[int(rule.hash01(col, row, k, 3) * len(rule.species))]))
+                    species=species[int(rule.hash01(col, row, k, 3) * len(species))]))
     return out
 
 
@@ -170,7 +179,8 @@ def build_canopy(area: Area, ctx: CityContextFile, bdoc: CityBuildingsFile) -> t
     chm = read_chm_metre(area, path)
     cover = float((chm >= COVER_H).mean())
     grid = block_mean(chm, CELL_M)
-    cands = place_trees(grid, float(area.size_m), rule)
+    draw = area.species_draw()
+    cands = place_trees(grid, float(area.size_m), rule, draw)
     after_roads, in_roads = drop_in_roads(cands, ctx)
     kept, in_buildings = drop_in_buildings(after_roads, bdoc)
     doc = CityCanopyFile(
@@ -179,9 +189,10 @@ def build_canopy(area: Area, ctx: CityContextFile, bdoc: CityBuildingsFile) -> t
                f"tile {path.rsplit('/', 1)[1].removesuffix('.tif')}",
         method="Kolkata fetch-canopy.py _generate: 10 m cells, 0..4 instances per cell scaling with "
                "height against a fixed 30 m reference, deterministic jitter. Tree COUNT is a display "
-               "scaling, not a measurement; canopy HEIGHT is measured. Species drawn as Kolkata's: "
-               "hash01(col, row, kk, 3) over its SPECIES tuple. Trees inside a drawn carriageway or "
-               "a building footprint are dropped.",
+               "scaling, not a measurement; canopy HEIGHT is measured. Species is a display label, not a "
+               f"measurement: drawn by hash01(col, row, kk, 3) over {list(draw)} (the city's draw, chosen by "
+               f"Koppen class {area.koppen}; Kolkata's tuple has palms, a temperate city's does not). Trees "
+               "inside a drawn carriageway or a building footprint are dropped.",
         densityRefM=rule.density_ref_h, minTreeH=rule.min_tree_h,
         coverFrac=round(cover, 4), coverThresholdM=COVER_H,
         candidates=len(cands), droppedInBuildings=in_buildings, droppedInRoads=in_roads,
@@ -194,6 +205,7 @@ def self_test() -> None:
     assert (rule.min_tree_h, rule.density_max, rule.density_ref_h, rule.jitter) == (2.0, 4, 30.0, 0.80)
     assert rule.zoom == 10 and "dinov3_global_chm_v2" in rule.prefix
     assert ovt._bangalore_constant("COVER_H") == COVER_H, "cover threshold drifted from Bengaluru's"
+    assert rule.species == _city.TROPICAL_SPECIES_DRAW, "_city's tropical draw drifted from fetch-canopy.py SPECIES"
 
     # place_trees == Kolkata's own _generate, tree for tree, on a synthetic 140 x 140 grid.
     spec = importlib.util.spec_from_file_location("fc", os.path.join(os.path.dirname(os.path.abspath(__file__)), "fetch-canopy.py"))
@@ -202,7 +214,7 @@ def self_test() -> None:
     spec.loader.exec_module(fc)
     rng = np.random.default_rng(7)
     grid = (rng.random((140, 140)) * 38.0).astype(np.float32)        # includes cells above the 30 m reference
-    mine = place_trees(grid, 1400.0, rule)
+    mine = place_trees(grid, 1400.0, rule, rule.species)
     theirs = fc._generate(fc.TEST_WARD, grid)
     assert len(mine) == len(theirs) > 1000, (len(mine), len(theirs))
     assert [dict(t) for t in mine] == theirs, "place_trees drifted from Kolkata's _generate"
@@ -215,6 +227,13 @@ def self_test() -> None:
     # NORTH CHECK: a tall cell in the NORTHERN row of the grid yields trees with y > 0.
     tall = np.zeros((4, 4), dtype=np.float32)
     tall[0, 2] = 20.0
-    ts = place_trees(tall, 40.0, rule)
+    ts = place_trees(tall, 40.0, rule, rule.species)
     assert ts and all(t["y"] > 0 and t["x"] > 0 for t in ts), ts
+    # THE TEMPERATE DRAW: same positions, heights and counts as Kolkata's draw on the same grid; only the label differs, and no palm.
+    tropical = place_trees(grid, 1400.0, rule, _city.TROPICAL_SPECIES_DRAW)
+    temperate = place_trees(grid, 1400.0, rule, _city.TEMPERATE_SPECIES_DRAW)
+    assert len(temperate) == len(tropical) and all(
+        (a["x"], a["y"], a["h"], a["r"]) == (b["x"], b["y"], b["h"], b["r"]) for a, b in zip(tropical, temperate, strict=True))
+    assert {t["species"] for t in temperate} == {"broadleaf"} and {"palm", "neem", "gulmohar"} <= {t["species"] for t in tropical}
+    assert all("palm" not in a.species_draw() for a in _city.AREAS.values() if a.koppen[:1] in ("C", "D"))
     print("_src_canopy self-test: ok (place_trees == fetch-canopy._generate on 19,600 cells)")

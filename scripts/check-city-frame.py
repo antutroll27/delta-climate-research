@@ -62,9 +62,19 @@ G1_MAX_DIFF_M: Final = 1e-9
 G2_MAX_DIFF_M: Final = 0.05
 G3_NORTH_MAX_SHARE: Final = 0.01
 G3_MIRROR_MIN_RATIO: Final = 5.0
-G4_NORTH_MAX_M: Final = 60.0
+#: Tightened from 60 m (Amsterdam audit F8). Every landmark measures 0.0 m north-up (it sits INSIDE its footprint), so 15 m
+#: is still loose against the data and leaves a margin of 15 m over a Wikidata coordinate that is only good to a few metres.
+#: At 60 m a 180-degree rotation of the whole city (its Royal Palace measured 109.9 m from the nearest large footprint) was
+#: the only case near the line; at 15 m every perturbation the audit built fails by 7x or more. G4 is the ONLY guard that
+#: recomputes against an external absolute in CI when a mirror is applied to every layer at once (G3 and G7 are relative).
+G4_NORTH_MAX_M: Final = 15.0
 G4_MIRROR_MIN_M: Final = 100.0       # for EACH landmark; the plan's 200 m held for 3 of 4 (see G4_MIRROR_MEDIAN_M)
 G4_MIRROR_MEDIAN_M: Final = 200.0    # ... and for the median of the four (measured 237 m)
+# G5 IS A REGISTRATION TEST AND NEVER A HEIGHT ACCURACY (Amsterdam audit F7). It shows that the footprints are in the right
+# place and the right way up: a mirrored copy samples different pixels (rho 0.981 north-up, 0.024 mirrored). It does not validate
+# the heights: 17.5 % of the buildings take their height from AHN4, so for them it compares AHN4 with AHN4 gridded differently,
+# and even AHN5 against AHN4 is one sensor programme and one p70 rule. NEVER QUOTE rho AS HEIGHT ACCURACY, in copy or in a
+# brief. If a height claim is ever wanted, stratify rho by `b3_pw_bron`: the AHN5 subset is the quasi-independent epoch comparison.
 G5_NORTH_MIN_RHO: Final = 0.8
 G5_MIRROR_MAX_RHO: Final = 0.3
 G5_MIN_PIXELS: Final = 8              # a footprint needs this many 1 m nDSM pixels to take part
@@ -634,6 +644,9 @@ def _self_test() -> None:
     got = p70_per_polygon(ids, vals, 2, min_pixels=1)
     assert abs(got[0] - np.percentile(vals[:2, :], 70)) < 1e-9 and abs(got[1] - np.percentile(vals[2:, :2], 70)) < 1e-9
     assert overlap_share([box(0, 0, 2, 2)], [box(1, 0, 3, 2)]) == 0.5 and overlap_share([box(0, 0, 1, 1)], []) == 0.0
+    # G4's north-up tolerance must stay tight enough to fail a 180-degree rotation (109.9 m measured for the Royal Palace)
+    # and must stay far below the mirrored side, or the guard stops discriminating.
+    assert G4_NORTH_MAX_M == 15.0 and G4_NORTH_MAX_M < 109.9 / 5 and G4_NORTH_MAX_M * 5 < G4_MIRROR_MIN_M
     print("check-city-frame self-test: ok")
 
 

@@ -36,3 +36,4 @@ raw cache ~/.cache/delta-climate/cities/amsterdam/raw = 564 MB (3D BAG 95 MB gz,
 # Fix-pass (audit fixes F1-F10), started 17:56 IST, box 4h
 - 17:56 starting: step 0 rebase onto origin/main 37c8f2ad.
 - 18:09 step 0 (rebase onto 37c8f2ad, #77 claim shape), 1 (Dubai crash), 2 (credits byte-identical) committed.
+- 18:26 hour 1: step 3 (KNMI) done; steps 4-8 coded: sun floor 40 deg (28 of 30 scenes) -> surface re-run in progress; terrain pit patched (6 post-AHN4 buildings, 14 mesh cells changed, 10 by >0.5 m); species broadleaf (16,710 trees, 0 palms); G4 15 m + G5 note; nits. Remaining: surface result, frame --measure, docs, full gates, build.

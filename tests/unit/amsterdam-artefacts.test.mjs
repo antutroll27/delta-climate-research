@@ -35,8 +35,8 @@ test('terrain: the browser draws the ground the data file holds (row 0 NORTH aft
     worst = Math.max(worst, Math.abs(terrainDrawAt(field, x, y) - (south(x, y) - src.meanM)));
   }
   assert.ok(worst < 0.02, `web ground differs from the data file by up to ${worst.toFixed(3)} m: mirrored, mis-datumed or exaggerated`);
-  // terrain.ts does not clamp heights at zero (only the sample INDEX is clamped): the -4.52 m NAP cell survives.
-  assert.ok(Math.min(...field.h) < -3, 'the lowest mesh cell (about -5 m relative to the mean) must reach the browser unclamped');
+  // terrain.ts does not clamp heights at zero (only the sample INDEX is clamped): the lowest cell (-2.5 m NAP after the pit patch) survives.
+  assert.ok(Math.min(...field.h) < -2, 'the lowest mesh cell (about -3 m relative to the mean) must reach the browser unclamped');
   // ...and the mirror is genuinely different at these points, so the check above could fail.
   let mirrored = 0;
   for (let i = 0; i < 400; i++) {
@@ -44,6 +44,36 @@ test('terrain: the browser draws the ground the data file holds (row 0 NORTH aft
     mirrored = Math.max(mirrored, Math.abs(terrainDrawAt(field, x, -y) - (south(x, y) - src.meanM)));
   }
   assert.ok(mirrored > 1, `a mirrored terrain would differ by ${mirrored.toFixed(2)} m here: the guard has teeth`);
+});
+
+/* F6 (Amsterdam audit): AHN4 was flown in 2020 and recorded the open construction pit of a building finished in 2022 (NL.IMBAG.Pand.0363100012250514,
+   27.7 m tall, 3D BAG ground -0.98 m NAP). The served mesh dropped to -4.52 m NAP under it. The terrain is patched from b3_h_maaiveld. */
+test('terrain: no pit under a building put up after the AHN4 flight', () => {
+  const src = json('data/cities/amsterdam/canal-ring-terrain.json');
+  const n = src.n;
+  // the cell the audit measured: row 19 from the SOUTH edge, column 49 (about 52.35653 N, 4.88564 E)
+  const pit = src.h[19 * n + 49];
+  assert.ok(pit > -1.5, `the pit cell is ${pit} m NAP: the AHN4 construction pit is back in the served terrain`);
+  assert.ok(Math.min(...src.h) > -3, 'no mesh cell may sit more than 3 m under NAP in this square');
+  const patch = src.postAhn4Patch;
+  assert.ok(patch, 'the patch is recorded in the terrain file');
+  const ids = patch.buildings.map((b) => b.id);
+  assert.ok(ids.includes('NL.IMBAG.Pand.0363100012250514'));
+  assert.ok(patch.buildings.every((b) => b.builtYear > 2020), 'only buildings first built after the 2020 AHN4 flight are patched');
+  assert.equal(patch.cellsChanged, 14);
+  assert.ok(patch.cellsChangedOver0_5m >= 8 && patch.pixelsRaised > 5000);
+  // and the file the browser fetches carries the same fix (public = data, datum removed, flipped to row 0 = NORTH)
+  const pub = json(`${PUB}-terrain.json`);
+  assert.ok(Math.min(...pub.h) + pub.datumM > -3);
+});
+
+test('trees: Amsterdam draws no palms (founder decision: none outside the tropics), under its own one-name header', () => {
+  const raw = json(`${PUB}-trees.json`);
+  assert.deepEqual(raw.speciesNames, ['broadleaf']);
+  const t = asTreesFile(raw);
+  assert.ok(t && t.trees.length > 10000);
+  assert.ok(t.trees.every((p) => p.species === 'broadleaf'));
+  assert.ok(!JSON.stringify(raw.speciesNames).includes('palm'));
 });
 
 test('trees: the file narrows through asTreesFile, in the north-up frame', () => {
@@ -88,4 +118,15 @@ test('veg in cities.ts is the measured Sentinel-2 FVC of the exported surface ra
   assert.equal(meta.grid, 280);
   assert.ok(veg > 0 && veg < 1, `veg is ${veg}`);
   assert.equal(veg, Math.round(meta.fvc_mean * 1000) / 1000, 'cities.ts holds the measured mean to three places');
+});
+
+test('surface: Amsterdam is composited from high-sun scenes only, and the file says so', () => {
+  const meta = json('public/heat-map/data/surface-meta.json').wards['canal-ring'];
+  assert.equal(meta.sunElevationFloorDeg, 40);
+  assert.ok(meta.scenes >= 20, `only ${meta.scenes} scenes in the composite`);
+  // Kolkata's and Bengaluru's rows carry no floor: their selection is unchanged
+  const wards = json('public/heat-map/data/surface-meta.json').wards;
+  for (const id of ['ballygunge', 'baruipur', 'barrackpore', 'indiranagar', 'mg-road', 'whitefield']) {
+    assert.equal(wards[id].sunElevationFloorDeg, undefined, id);
+  }
 });
