@@ -47,6 +47,9 @@ const SECOND_CITY = [
 
 for (const ward of SECOND_CITY) {
   test(`${ward.name} mounts the instrument, not just the shell`, async ({ page }) => {
+    /* The CPU solver paints the first temperature well after the mount (measured
+       ~60-100 s under a loaded machine), and the accuracy-line assertion below waits for it. */
+    test.setTimeout(240_000);
     const thrown: string[] = [];
     page.on('pageerror', (error) => thrown.push(String(error)));
 
@@ -77,7 +80,7 @@ for (const ward of SECOND_CITY) {
        here, so the chip carries the one honest line and no number, in dry weather
        too (scope/accuracy-claim.ts). The temperature must have painted first, or an
        empty chip would pass for the wrong reason. */
-    await expect(page.locator('#lst')).toContainText(/\d\d\.\d/, { timeout: 60_000 });
+    await expect(page.locator('#lst')).toContainText(/\d\d\.\d/, { timeout: 150_000 });
     await expect(page.locator('#conf')).toHaveText('Heat accuracy not yet validated for this city', { timeout: 30_000 });
     expect(await page.locator('#lst .band').count(), `${ward.name}: a band sits beside the temperature`).toBe(0);
     await expect(page.locator('#patternNote')).toHaveText('Block pattern illustrative');
