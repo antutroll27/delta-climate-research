@@ -69,11 +69,11 @@ export const LICENCES: Readonly<Record<string, { readonly licence: string; reado
   },
   'Google Open Buildings': {
     licence: 'CC-BY-4.0 OR ODbL-1.0', holder: 'Google Research', url: 'https://sites.research.google/gr/open-buildings/',
-    note: 'DUAL-LICENSED at source — Google offers CC BY 4.0 or ODbL v1.0 and lets the user elect. We elect ODbL for the footprints, which is what makes declaring the exports as ODbL Derivative Databases lawful rather than an unlawful downstream restriction on CC-BY material. Footprints reach us via Overture, so ODbL governs those as we redistribute them; heights are taken DIRECT from the 2.5D Temporal product (zonal p65) via Earth Engine and remain CC-BY-4.0. No coverage of the Gulf.',
+    note: 'DUAL-LICENSED at source — Google offers CC BY 4.0 or ODbL v1.0 and lets the user elect. We elect ODbL for the footprints, which is what makes declaring the exports as ODbL Derivative Databases lawful rather than an unlawful downstream restriction on CC-BY material. Footprints reach us via Overture, so ODbL governs those as we redistribute them; heights are taken DIRECT from the 2.5D Temporal product (zonal p65) via Earth Engine and remain CC-BY-4.0.',
   },
   'Microsoft ML Buildings': {
     licence: 'CDLA-Permissive-2.0', holder: 'Microsoft', url: 'https://github.com/microsoft/GlobalMLBuildingFootprints',
-    note: 'CDLA-Permissive-2.0 AT SOURCE. Kolkata footprints reach us inside the Overture buildings theme, which is ODbL as a whole, so ODbL governs what we redistribute. Dubai is taken direct from Microsoft, never via Overture, so CDLA governs there and no share-alike is inherited.',
+    note: 'CDLA-Permissive-2.0 AT SOURCE. Kolkata footprints reach us inside the Overture buildings theme, which is ODbL as a whole, so ODbL governs what we redistribute.',
   },
   'Overture Maps': {
     licence: 'ODbL-1.0', holder: 'Overture Maps Foundation', url: 'https://overturemaps.org/',
@@ -106,10 +106,6 @@ export const LICENCES: Readonly<Record<string, { readonly licence: string; reado
   'DataMeet Municipal Spatial Data': {
     licence: 'CC-BY-SA-2.5-IN', holder: 'DataMeet community', url: 'https://github.com/datameet/Municipal_Spatial_Data',
     note: 'Kolkata/kolkata.geojson, the KMC 141-ward scheme (commit cd52891). Defines Ballygunge as KMC Ward 68: every ward statistic is taken inside this polygon. KMC now has 144 wards; this is the 2018 map. Share-alike: a derivative of the polygon itself carries CC BY-SA 2.5 India.',
-  },
-  'WSF3D': {
-    licence: 'CC-BY-4.0', holder: 'DLR — World Settlement Footprint 3D (WSF3D) © DLR', url: 'https://geoservice.dlr.de/web/datasets/wsf_3d',
-    note: 'Dubai building heights (TanDEM-X). Not yet shipped in a ward record.',
   },
 };
 

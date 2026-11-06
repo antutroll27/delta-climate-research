@@ -82,18 +82,6 @@ export const MATRIX: readonly MatrixRow[] = [
     gap: 'A statement of principle, not an assessed conformance.',
   },
   {
-    standard: 'Dubai Pulse / Digital Dubai Authority', region: 'Dubai', purpose: 'City data ecosystem',
-    posture: 'roadmap',
-    ships: 'An integration pathway is documented. There is no integration.',
-    gap: 'Official review and approval. As of 2026-08-11 the Dubai Pulse host refuses connections from outside the UAE, so nothing has been tested against it.',
-  },
-  {
-    standard: 'Dubai Municipality GIS / BIM', region: 'Dubai', purpose: 'Municipal planning workflows',
-    posture: 'roadmap',
-    ships: 'Nothing. Ward heat maps and shadow reports could feed a planning workflow; none has been validated by the municipality.',
-    gap: 'Municipal validation. Self-service geodatabase access is government-only; this is a relationship ask.',
-  },
-  {
     standard: 'UAE Data Governance (Law 26/2015; FDL 45/2021)', region: 'UAE', purpose: 'Privacy and data compliance',
     posture: 'aligned',
     ships: 'The prototype processes no personal data: aggregated, ward-level, open geospatial inputs only.',
@@ -131,7 +119,7 @@ export const UNCERTAINTY_STATEMENT =
 export const PROHIBITED = Object.freeze([
   'is certified', 'are certified', 'certified platform', 'certified by',
   'certification achieved', 'iso certified',
-  'fully compliant', 'officially integrated', 'approved by dubai municipality',
+  'fully compliant', 'officially integrated', 'approved by the municipality',
   'medically validated', 'engineering-grade', 'guaranteed heat reduction',
 ]);
 
@@ -224,7 +212,7 @@ export const PHASES: readonly Phase[] = [
     objective: 'Formal governance review, official integration discussions, 3D Tiles, IFC/BIM pathway, audit logs.',
     items: [
       { item: 'Formal governance and legal review', status: 'todo' },
-      { item: 'Official integration discussions (Dubai Pulse, Dubai Municipality)', status: 'todo', evidence: 'Blocked on access, not on engineering: as of 2026-08-11 the Dubai Pulse host refuses connections from outside the UAE.' },
+      { item: 'Official integration discussions with municipal data authorities', status: 'todo' },
       { item: '3D Tiles tileset with real geometric error and radian bounding volumes', status: 'done', evidence: '/3d-tiles/{ward}/tileset.json — built by scripts/build-3d-tiles.py, 0 errors and 0 warnings from the official Cesium validator, which does open and check the glTF content.' },
       { item: 'IFC / BIM pathway', status: 'todo' },
       { item: 'Audit logs and data residency controls', status: 'todo' },
