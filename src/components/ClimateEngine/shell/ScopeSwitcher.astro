@@ -40,7 +40,7 @@
  * so the tier stays a fact this file states about a city.
  */
 import {
-  AREA_KEYS, areaKeysInCity, splitKey, type AreaKey,
+  PUBLIC_AREA_KEYS, areaKeysInCity, splitKey, type AreaKey,
 } from '../../../scripts/climate-engine/scope/registry.ts';
 import { resolve, type CityTier } from '../../../scripts/climate-engine/scope/resolve.ts';
 import type { SelectFieldOption } from '../../../scripts/climate-engine/shell/select-field.ts';
@@ -112,7 +112,7 @@ interface Option extends SelectFieldOption {
 /**
  * One option per distinct group, in registry declaration order.
  *
- * DERIVED FROM `AREA_KEYS`, never by walking `REGISTRY`'s nested shape. That
+ * DERIVED FROM `PUBLIC_AREA_KEYS` (the registry minus areas with no page, i.e. Dubai), never by walking `REGISTRY`'s nested shape. That
  * shape needs a cast to index generically, and a cast is how the shape drifts
  * out from under its readers. The keys are already flat, and `splitKey` reads
  * back the parts the flatten recorded rather than re-splitting the string.
@@ -146,7 +146,7 @@ function groupOptions(
 
 /** Every country that has somewhere to go. */
 const countryOptions = groupOptions(
-  AREA_KEYS,
+  PUBLIC_AREA_KEYS,
   (key) => splitKey(key).country,
   (key) => resolve(key).country.name,
 );
@@ -154,7 +154,7 @@ const countryOptions = groupOptions(
 /** The cities of the selected country — the fiddly one, and the reason
     `resolve` is asked for the name: a city's display name is not in the key. */
 const cityOptions = groupOptions(
-  AREA_KEYS.filter((key) => splitKey(key).country === here.country),
+  PUBLIC_AREA_KEYS.filter((key) => splitKey(key).country === here.country),
   (key) => splitKey(key).city,
   (key) => resolve(key).city.name,
 );

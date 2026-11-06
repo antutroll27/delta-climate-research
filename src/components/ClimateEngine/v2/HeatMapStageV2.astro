@@ -32,7 +32,7 @@ import V2Prefs from './V2Prefs.astro';
    ward strip. The toolbox's rules stay in the is:global block below because
    heat-map-app.ts classes its markup at runtime; see its own header. */
 import { symbolCssVars } from '../../../scripts/climate-engine/v2/symbols.ts';
-import { AREA_KEYS, areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
+import { PUBLIC_AREA_KEYS, areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
 import { areaPath } from '../../../scripts/climate-engine/scope/paths.ts';
 import { resolve, type ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 import { newCityToAnnounce } from '../../../scripts/climate-engine/shell/new-city.ts';
@@ -133,7 +133,7 @@ const strip = siblings.flatMap((sib) => {
 
 /* THE OTHER CITY, for the dock's cross-city chip (spec §3.6): the first data-shipping area of another registered city.
    null when none, and the chip is then not drawn. */
-const otherArea = AREA_KEYS.map(resolve).find((s) => s.city.id !== scope.city.id && s.area.hasData);
+const otherArea = PUBLIC_AREA_KEYS.map(resolve).find((s) => s.city.id !== scope.city.id && s.area.hasData);
 const otherCity = otherArea ? { href: areaPath(otherArea.key), name: otherArea.city.name } : null;
 
 

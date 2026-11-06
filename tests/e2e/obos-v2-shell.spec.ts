@@ -228,30 +228,6 @@ test.describe('@v2 shell', () => {
     await expect(pop).not.toContainText('DataMeet');
     await expect(pop.locator('[data-v2-map-attrib] a[href*="by-sa"]')).toHaveCount(0);
     await expect(page.locator('li:has(> #attrWard)'), 'the empty ward row draws no stray divider').toBeHidden();
-    await page.goto('/heat-map/ae/dubai/al-quoz/');
-    await expect(page.locator('html')).toHaveAttribute('data-ui', 'v2');
-    await expect(page.locator('.st-attrib .attrib'), 'no map, no source list; the chip stays').toHaveText('Credits');
-    await page.locator('[data-pop-open="credits"]').click();
-    const alq = page.locator('#v2Credits');
-    await expect(alq).toBeVisible();
-    await expect(alq, 'a-02 (A-S5 ruling): the popover says what the page says').toContainText('Nothing is mapped for this area yet.');
-    for (const w of ['Cloud deck', 'Overture', 'OpenFreeMap', 'SRTM', 'Met Norway', 'Sentinel']) await expect(alq, `no model runs on Al Quoz: ${w} is not credited`).not.toContainText(w);
-    await expect(page.locator('.st-attrib .attrib')).toBeVisible();
-  });
-
-  test('@v2 no data (Al Quoz): no compass, no measured/modelled legend, no coordinate (S2 audit F8)', async ({ page }) => {
-    const errors: string[] = []; page.on('pageerror', (e) => errors.push(e.message));
-    await openV2(page, '/heat-map/ae/dubai/al-quoz/');
-    /* A-S5 audit F8: the credit-card title body is empty here (no outline, coordinate, legend or compass) and the not-yet card already carries the name:
-       the empty card is hidden (it stays in the tree: #pname/#pzone/#coord are bound ids) */
-    await expect(page.locator('.tc')).toBeHidden();
-    await expect(page.locator('.notyet h1')).toHaveText('Al Quoz');
-    await expect(page.locator('#compass')).toHaveCount(0);
-    await expect(page.locator('.tc-legend')).toHaveCount(0);
-    await expect(page.locator('#coord'), 'the app binds #coord (the unit contract counts it), so it stays in the tree, hidden and empty').toBeHidden();
-    await expect(page.locator('#coord')).toHaveText('');
-    await page.waitForTimeout(1500);
-    expect(errors).toEqual([]);
   });
 
   test('@v2 compass: four ticks that turn with the dial and never touch N or S (S2 audit F6)', async ({ page }) => {
@@ -444,11 +420,11 @@ test.describe('@v2 shell', () => {
   });
 
   /* the S2 audit's gate addition: the Explore pane is never an empty slab, on any area, in either section it serves */
-  for (const path of ['/heat-map/in/kolkata/ballygunge/', '/heat-map/in/bengaluru/mg-road/', '/heat-map/ae/dubai/al-quoz/']) {
+  for (const path of ['/heat-map/in/kolkata/ballygunge/', '/heat-map/in/bengaluru/mg-road/']) {
     test(`@v2 Explore is never an empty slab: ${path}`, async ({ page }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await openV2(page, path);
-      for (const section of path.includes('/ae/') ? ['overview'] : ['overview', 'scenarios']) {       // Al Quoz: Scenarios is disabled (nothing ships)
+      for (const section of ['overview', 'scenarios']) {
         const item = page.locator(`.nav-item[data-section="${section}"]`);
         const pane = page.locator('[data-side-pane="explore"]');
         if (!(await pane.isVisible()) || (await item.getAttribute('aria-current')) !== 'true') await item.click({ position: { x: 30, y: 22 } });
@@ -458,8 +434,7 @@ test.describe('@v2 shell', () => {
         expect(box!.height, 'a panel with content is taller than its head').toBeGreaterThan(200);
         await expect(pane.locator('#scope-area-trigger')).toBeVisible();
         expect(await pane.locator('.sp-scroll').evaluate((e) => e.scrollHeight)).toBeGreaterThan(150);
-        if (path.includes('/ae/')) await expect(pane).toContainText('There is nothing to intervene in here.');
-        else await expect(pane.locator('#ivTrees')).toBeVisible();
+        await expect(pane.locator('#ivTrees')).toBeVisible();
       }
     });
   }

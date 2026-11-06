@@ -47,7 +47,7 @@ function pageParts(path) {
 }
 const idsIn = (s) => [...s.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
 
-for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road', 'heat-map/ae/dubai/al-quoz']) {
+for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road']) {
   test(`${path}: every bound id is in the v2 tree exactly once`, () => {
     const { v1ids, v2 } = pageParts(path);
     assert.ok(v1ids.length > 40, 'the frozen v1 id list is present');
@@ -92,13 +92,13 @@ test('the area page renders HeatMapStageV2 as v2 and mounts the v2 shell after t
 /* A1 (parallel tracks): the right column is a frame region, not a Track A card. It exists
    on every area, and the app's re-seated blocks and the building card sit
    inside it, before the .attr marker the app inserts against (app:1212, :1238). */
-for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road', 'heat-map/ae/dubai/al-quoz']) {
+for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road']) {
   test(`${path}: A1 the right column is #legend, once`, () => {
     const { v2 } = pageParts(path);
     const col = v2.indexOf(' id="legend"');
     assert.equal((v2.match(/\sid="legend"/g) ?? []).length, 1);
     assert.ok(col > 0, '#legend must be in the v2 tree');
-    if (!path.includes('/ae/')) {
+    {
       const attr = v2.indexOf('<span class="attr" hidden></span>', col);
       for (const id of ['aqiBlock', 'solBlock']) {
         const at = v2.indexOf(` id="${id}"`);

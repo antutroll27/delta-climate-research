@@ -14,8 +14,7 @@ import { papers } from './src/data/papers.ts';
 import { projects } from './src/data/projects.ts';
 // Same idea, one layer up: an area page's indexability is its `shipsData` flag, so
 // the sitemap reads the registry rather than keeping a list of heat-map routes.
-import { isAreaKey } from './src/scripts/climate-engine/scope/registry.ts';
-import { resolve } from './src/scripts/climate-engine/scope/resolve.ts';
+import { areaPageIndexable } from './src/scripts/climate-engine/scope/public-routes.ts';
 import { DEFAULT_AREA_PATH } from './src/scripts/climate-engine/scope/paths.ts';
 
 /**
@@ -95,20 +94,18 @@ const sitemapFilter = (page) => {
   // page and absence from the sitemap are then driven by ONE fact and cannot drift.
   //
   // Kolkata's three ship measured artefacts and carry their caveats on the page.
-  // Dubai's three do not: they render the city's name, its confidence tier and a
-  // statement that no observations ship yet. That is the right page for a reader
-  // who followed a link and the wrong page to put in front of a searcher — three
-  // near-duplicate shells competing with the pages that have readings behind them,
-  // under a title claiming a heat twin for a city we have not measured. They flip
-  // into search the moment their artefacts land, in both places at once.
-  const area = /^\/heat-map\/([^/]+\/[^/]+\/[^/]+)\/$/.exec(path);
+  // Dubai's three used to have placeholder pages; the founder took Dubai off the
+  // site (2026-09-05, re-confirmed 2026-11-06), so they are no longer generated at
+  // all (PUBLIC_AREA_KEYS in scope/registry.ts) and areaPageIndexable says false
+  // for them should one ever be offered.
+  const area = areaPageIndexable(path);
   // `publishes`, not `hasData`: since Bengaluru those are different questions.
   // It DRAWS — six artefacts and an authored glTF city — and publishes none of
   // the catalogue's five, so `hasData` (which now means "the instrument can open
   // it") would put three pages with no catalogue record into the live sitemap.
   // The comment above says the test is the area's own `shipsData` flag; this is
   // the field that still means exactly that.
-  if (area) return isAreaKey(area[1]) && resolve(area[1]).area.publishes;
+  if (area !== null) return area;
   // /heat-map/brief and /heat-map/compare are deep-link views of the same tool, and
   // indexing near-duplicates makes them compete with the pages they are views of.
   if (path.startsWith('/heat-map/')) return false;

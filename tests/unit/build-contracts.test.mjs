@@ -10,7 +10,7 @@ import { gzipSync } from 'node:zlib';
 
 import { papers } from '../../src/data/papers.ts';
 import { projects } from '../../src/data/projects.ts';
-import { AREA_KEYS } from '../../src/scripts/climate-engine/scope/registry.ts';
+import { PUBLIC_AREA_KEYS } from '../../src/scripts/climate-engine/scope/registry.ts';
 import { resolve as resolveScope } from '../../src/scripts/climate-engine/scope/resolve.ts';
 import { areaPath } from '../../src/scripts/climate-engine/scope/paths.ts';
 
@@ -135,7 +135,7 @@ function publicationContracts() {
        question. astro.config.mjs's sitemapFilter and the checker's own route list
        both read `publishes` too, so all three still follow ONE fact rather than
        three opinions; the fact simply got more precise. */
-    ...AREA_KEYS.map((key) => ({
+    ...PUBLIC_AREA_KEYS.map((key) => ({
       route: areaPath(key),
       indexable: resolveScope(key).area.publishes,
       placeholder: false,

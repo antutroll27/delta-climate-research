@@ -1,7 +1,7 @@
 ---
 import Base from '../../../../layouts/Base.astro';
 import HeatMapStageV2 from '../../../../components/ClimateEngine/v2/HeatMapStageV2.astro';
-import { AREA_KEYS, splitKey, type AreaKey } from '../../../../scripts/climate-engine/scope/registry.ts';
+import { PUBLIC_AREA_KEYS, splitKey, type AreaKey } from '../../../../scripts/climate-engine/scope/registry.ts';
 import { resolve } from '../../../../scripts/climate-engine/scope/resolve.ts';
 import { areaPageTitle, areaPageDescription } from '../../../../scripts/climate-engine/scope/page-meta.ts';
 /* OBOS v2 is the default UI (flip plan A.2): its one stylesheet is the LAST import, so it follows the other sheets in <head>, the order rc6 had. */
@@ -16,7 +16,8 @@ import '../../../../styles/obos-v2/index.css';
  * the same thing whichever ward was open. That is not a missing convenience. It is
  * the difference between a demo and an instrument someone can cite.
  *
- * PRERENDERED, one directory per key, six in all. The build is static — there is no
+ * PRERENDERED, one directory per PUBLIC key (`PUBLIC_AREA_KEYS`: the registry minus
+ * areas the instrument cannot open, i.e. Dubai), six in all. The build is static — there is no
  * `output` in astro.config.mjs — so `getStaticPaths` is the only way a dynamic
  * route can exist here at all, and it is also the honest one: the registry is a
  * closed set, and enumerating it means an unregistered URL 404s at the CDN instead
@@ -29,7 +30,7 @@ import '../../../../styles/obos-v2/index.css';
  * links to while the linked path 404s.
  */
 export function getStaticPaths() {
-  return AREA_KEYS.map((key) => {
+  return PUBLIC_AREA_KEYS.map((key) => {
     const { country, city, area } = splitKey(key);
     return { params: { country, city, area }, props: { key } };
   });
