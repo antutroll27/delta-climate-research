@@ -65,8 +65,7 @@ OBOS does not compute the LKI; it prints the value the API serves.
 
 ### 1.4 Which stations (the plan's list was incomplete)
 
-All 100 station details Luchtmeetnet lists were read (`tests/fixtures/aqi/nl/stations-details.json`; coordinates `[lon, lat]`; three far-away stations in Limburg, Gelderland and Brabant
-were not reached). Distance is haversine from the canal-ring centre 52.3640 N, 4.8850 E.
+All 103 stations Luchtmeetnet lists were read (`tests/fixtures/aqi/nl/stations-details.json`; coordinates `[lon, lat]`). Distance is haversine from the canal-ring centre 52.3640 N, 4.8850 E.
 
 | id | station | type | m | components | serves the LKI card |
 |---|---|---|---|---|---|

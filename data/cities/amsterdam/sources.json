@@ -348,7 +348,7 @@
         "stations": {
           "url": "https://api.luchtmeetnet.nl/open_api/stations",
           "http": 200,
-          "note": "5 pages, 103 stations; detail per station at /open_api/stations/{id} (100 read, coordinates are [lon, lat])"
+          "note": "5 pages, 103 stations; detail per station at /open_api/stations/{id} (all 103 read, coordinates are [lon, lat])"
         },
         "lki": {
           "url": "https://api.luchtmeetnet.nl/open_api/lki?station_number={id}&order_by=timestamp_measured&order_direction=desc&start={ISO}&end={ISO}",
@@ -444,7 +444,7 @@
       ],
       "stationRule": "a station serves the LKI card only if its published component list holds NO2, PM10, PM25 and O3 (the four the LKI is built from); within 20 km of the canal-ring centre 52.3640, 4.8850",
       "stationsNotUsed": "nearer stations lacking O3: NL49017 Stadhouderskade 1198 m, NL49019 Oude Schans 1593 m (NO, NO2 only), NL49020 Jan van Galenstraat 2061 m, NL49002 Haarlemmerweg 2463 m, NL49007 Einsteinweg 3317 m, NL49016 Westerpark 3482 m",
-      "stationDetailsNotRead": "NL50014, NL10738, NL53001 (Limburg, Gelderland, Brabant: far outside 20 km by name); every other station's detail is in tests/fixtures/aqi/nl/stations-details.json",
+      "stationDetails": "all 103 stations' details are in tests/fixtures/aqi/nl/stations-details.json (the last three, NL50014 Gulpen, NL10738 Wekerom, NL53001 Ossendrecht, are 63 to 192 km away)",
       "timeConvention": "Tijdnotatie page: values are stored in UTC; the website shows local time with the summer/winter correction. OBOS tells the hour-end instant in Europe/Amsterdam ('CET'/'CEST') through lib/aqi/clock.ts zoneClock.",
       "userAgent": "obos-pipeline/1.0 (+https://deltaclimate.earth)",
       "openFounderQuestion": "Q6a: written confirmation from RIVM/Luchtmeetnet of the API licence as applied to a commercial web app (the CC BY-ND 4.0 statement is on the site's own Open data page; no separate API licence text was found)."

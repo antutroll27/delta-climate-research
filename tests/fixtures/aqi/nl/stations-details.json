@@ -1373,6 +1373,34 @@
 "url": "",
 "year_start": ""
 },
+"NL10738": {
+"components": [
+"PM25",
+"NO",
+"NH3",
+"PM10",
+"O3",
+"NO2"
+],
+"description": {
+"EN": "Wekerom-Riemterdijk",
+"NL": "Wekerom-Riemterdijk"
+},
+"geometry": {
+"coordinates": [
+5.708419,
+52.111621
+],
+"type": "point"
+},
+"location": "Wekerom-Riemterdijk",
+"municipality": "Ede",
+"organisation": "RIVM",
+"province": null,
+"type": "Regional",
+"url": "",
+"year_start": ""
+},
 "NL10741": {
 "components": [
 "CO",
@@ -2559,6 +2587,65 @@
 "type": "Other",
 "url": null,
 "year_start": "2024"
+},
+"NL50014": {
+"components": [
+"NO2",
+"NO",
+"O3",
+"PM10",
+"PM25",
+"FN",
+"PS",
+"BCWB"
+],
+"description": {
+"EN": "Gulpen-Kuttingerweg",
+"NL": "Gulpen-Kuttingerweg"
+},
+"geometry": {
+"coordinates": [
+5.916794379061132,
+50.75998070408913
+],
+"type": "point"
+},
+"location": "Gulpen-Kuttingerweg",
+"municipality": "Gulpen-Wittem",
+"organisation": "ODZL (Limburg)",
+"province": null,
+"type": "Regional",
+"url": null,
+"year_start": "2025"
+},
+"NL53001": {
+"components": [
+"C6H6",
+"C7H8",
+"C8H10",
+"NO",
+"NO2",
+"PM10",
+"PM25"
+],
+"description": {
+"EN": "Ossendrecht-Burgemeester Voetenstraat",
+"NL": "Ossendrecht-Burgemeester Voetenstraat"
+},
+"geometry": {
+"coordinates": [
+4.3202367,
+51.393289
+],
+"type": "point"
+},
+"location": "Ossendrecht-Burgemeester Voetenstraat",
+"municipality": "Woensdrecht",
+"organisation": "OMWB (Midden en West Brabant)",
+"province": null,
+"type": "Other",
+"url": "",
+"year_start": ""
 },
 "NL53004": {
 "components": [
