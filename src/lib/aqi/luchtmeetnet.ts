@@ -25,11 +25,12 @@ import { getText, type Fetch } from './http.ts';
 import { lkiBand } from './lki.ts';
 import type { LocalAirPayload, LocalCredit, LocalStation, NlComponent, NlReading, NotReportingReason } from './local-types.ts';
 import { LOCAL_SCHEMA } from './local-types.ts';
+import { LOCAL_LIVE_MS } from './local-areas.ts';
 import { CANAL_RING, nlLadder } from './nl-stations.ts';
 
 export const LM_BASE = 'https://api.luchtmeetnet.nl/open_api';
 /** Rows are hourly and appear about 35 minutes after the hour closes; two hours leaves room for one missed publication. */
-export const LIVE_MS = 2 * 3_600_000;
+export const LIVE_MS = LOCAL_LIVE_MS['nl-lki'];
 const WINDOW_MS = 6 * 3_600_000;
 const FUTURE_SLACK_MS = 15 * 60_000;
 const AMS = zoneClock('Europe/Amsterdam');

@@ -36,6 +36,8 @@ import { buildPayload } from '../src/lib/aqi/build.ts';
 import { fixedClock } from '../src/lib/aqi/clock.ts';
 import { cityTz, isAreaKey } from '../src/scripts/climate-engine/scope/registry.ts';
 import { cityAqi, cityFor } from '../src/lib/aqi/city.ts';
+import { isLocalAirArea } from '../src/lib/aqi/local-areas.ts';
+import { handleLocal, type LocalDeps } from '../src/lib/aqi/local-handler.ts';
 import { newArchiveMemo, readRelay, RelayQuietError, type ArchiveMemo } from '../src/lib/aqi/cpcb-archive.ts';
 import { currentFromFeed, fetchFeed, FeedError, pickServed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import type { Raw } from '../src/lib/aqi/hours.ts';
@@ -72,6 +74,8 @@ interface Deps {
   source?: FeedSource;
   /** The relay's store; injected by tests, production uses private Vercel Blob. */
   store?: FeedStore;
+  /** Injected by tests for the local-regulator path (Amsterdam, Tokyo); production uses the defaults. */
+  local?: LocalDeps;
 }
 
 export type FeedSource = 'relay' | 'direct';
@@ -232,6 +236,10 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
     res.setHeader('Cache-Control', 'no-store'); res.status(400).json({ error: 'unexpected query parameter' }); return;
   }
   const area = typeof req.query.area === 'string' ? req.query.area : '';
+  /* A city whose standard is its own regulator's (Amsterdam's LKI, Tokyo's Soramame) has its own contract and reader
+     (lib/aqi/local-handler.ts). It is routed here by the area key alone, before and apart from the CPCB path below,
+     which it never enters. */
+  if (isLocalAirArea(area)) { await handleLocal(area, res, { now: d.now, ...d.local }); return; }
   if (!isAirArea(area)) { res.status(404).json({ error: 'unknown area' }); return; }
   const st = stationFor(area), now = (d.now ?? (() => new Date()))();
   if (!st) { res.setHeader('Cache-Control', OK_CACHE); res.status(200).json(buildPayload(area, null, {}, now, clockOf(area))); return; }

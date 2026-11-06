@@ -27,6 +27,7 @@ import { zoneClock } from './clock.ts';
 import { getText, type Fetch } from './http.ts';
 import { isNationalStation, jpLadder, jpStation, MARUNOUCHI, type JpStationRef } from './jp-stations.ts';
 import { JP_POLLUTANTS } from './jp-standards.ts';
+import { LOCAL_LIVE_MS } from './local-areas.ts';
 import type { JpPollutant, JpReading, LocalCredit, LocalAirPayload, LocalStation, NotReportingReason } from './local-types.ts';
 import { LOCAL_SCHEMA } from './local-types.ts';
 
@@ -37,7 +38,7 @@ export const METADATA_URL = `${SORAMAME_BASE}/metadata.json`;
  * three hours is the longest a "current" hour may be, so one missed publication does not blank the card and
  * two do.
  */
-export const LIVE_MS = 3 * 3_600_000;
+export const LIVE_MS = LOCAL_LIVE_MS['jp-eqs'];
 
 const JST = zoneClock('Asia/Tokyo');
 
