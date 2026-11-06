@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { handle } from '../../api/air-quality.ts';
-import { localAirCityReady, localAirReady, LOCAL_LIVE_MS } from '../../src/lib/aqi/local-areas.ts';
+import { localAirReady, LOCAL_LIVE_MS } from '../../src/lib/aqi/local-areas.ts';
 import { newLocalCache } from '../../src/lib/aqi/local-handler.ts';
 import { isLocalAirPayload } from '../../src/lib/aqi/local-valid.ts';
 import { lkiUrl, measurementsUrl } from '../../src/lib/aqi/luchtmeetnet.ts';
@@ -37,7 +37,7 @@ test('NOT DRAWABLE, NOT SERVED: until the city can be opened, its area is a 404 
   assert.deepEqual(r.body, { error: 'unknown area' });
   assert.equal(f.calls.length, 0);
   assert.equal(localAirReady('nl/amsterdam/canal-ring', () => false), false);
-  assert.equal(localAirCityReady('jp/tokyo/marunouchi', () => false), false);
+  assert.equal(localAirReady('jp/tokyo/marunouchi', () => false), false);
   assert.equal(localAirReady('in/kolkata/ballygunge', ready), false, 'only the registered local areas are local');
 });
 

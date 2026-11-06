@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { isAirCity } from '../../src/lib/aqi/stations.ts';
-import { localAirCityReady, LOCAL_AIR_AREAS, LOCAL_STANDARD_TZ } from '../../src/lib/aqi/local-areas.ts';
+import { isLocalAirArea, localAirReady, LOCAL_AIR_AREAS, LOCAL_STANDARD_TZ } from '../../src/lib/aqi/local-areas.ts';
 import { lkiUrl, measurementsUrl, readAmsterdam } from '../../src/lib/aqi/luchtmeetnet.ts';
 import { METADATA_URL, readTokyo, SORAMAME_BASE } from '../../src/lib/aqi/soramame.ts';
 import { loadAir } from '../../src/scripts/climate-engine/air/air-panel.ts';
@@ -168,10 +168,10 @@ test('loadAir routes a local area to its own painter, and refuses a body that is
 test('THE CARD FOLLOWS THE MAP: isAirCity for a local city is exactly "drawable", whichever way that stands', () => {
   for (const [key, c, a] of [['nl/amsterdam/canal-ring', 'amsterdam', 'canal-ring'], ['jp/tokyo/marunouchi', 'tokyo', 'marunouchi']]) {
     assert.equal(isAirCity(key), isDrawable(key.split('/')[0], c, a), key);
-    assert.equal(localAirCityReady(key, () => false), false);
-    assert.equal(localAirCityReady(key, () => true), true);
+    assert.equal(localAirReady(key, () => false), false);
+    assert.equal(localAirReady(key, () => true), true);
   }
-  assert.equal(localAirCityReady('ae/dubai/creek', () => true), false, 'a city with no local card never gets one');
+  assert.equal(localAirReady('ae/dubai/creek', () => true), false, 'a city with no local card never gets one');
   assert.equal(isAirCity('in/kolkata/ballygunge'), true);
   assert.equal(isAirCity('in/bengaluru/indiranagar'), true);
   assert.equal(isAirCity('ae/dubai/creek'), false);
@@ -232,4 +232,33 @@ test('F6: the LKI explainer and the station-rule comment carry the tie rule', ()
   assert.ok(t.includes('the highest number is the index; if all the substances have the same number, the index is one point higher'), t.slice(0, 200));
   assert.match(read('src/lib/aqi/nl-stations.ts'), /same\s+index\s+number[\s\S]{0,120}one\s+point/i);
   assert.match(read('src/lib/aqi/nl-stations.ts'), /not strictly/i);
+});
+
+/* F7 (audit) */
+test('F7: a load failure says "Not loaded" (as the Indian card does), not "Not reporting"', async () => {
+  const io = { fetch: async () => ({ ok: false, json: async () => null }), signal: new AbortController().signal, isCurrent: () => true, now: NL_NOW };
+  const p = await loadLocalAir('nl/amsterdam/canal-ring', 'Canal Ring', io);
+  assert.match(p.block, /chip off">Not loaded</);
+  assert.ok(!/Not reporting/.test(p.block + p.pane));
+});
+
+test('F7: the gate and the dispatch are one question, asked per area', () => {
+  /* An area of a local city with no LOCAL_AIR_AREAS entry is neither gated in nor dispatched to the local painter. */
+  const other = 'nl/amsterdam/jordaan';
+  for (const ready of [() => false, () => true]) {
+    assert.equal(localAirReady(other, ready), false);
+    assert.equal(localAirReady('nl/amsterdam/canal-ring', ready), ready());
+  }
+  assert.equal(isAirCity(other), false, 'the gate is per area: no card is offered where the dispatch would send it to the CPCB path');
+  assert.equal(isLocalAirArea(other), false);
+  for (const k of Object.keys(LOCAL_AIR_AREAS)) assert.equal(isAirCity(k), localAirReady(k), k);
+});
+
+test('F7: the evidence file records that Soramame is read from the map\'s static files (Q6b) and why the US AQI line stays dropped', () => {
+  const e = read('docs/evidence/2026-11-06-lki-and-soramame.md');
+  assert.match(e, /static files behind the Soramame \*map\*/);
+  assert.match(e, /Q6b should be asked with that in view/);
+  assert.match(e, /Why the US AQI line stays dropped/);
+  assert.match(e, /standard follows the regulator/);
+  assert.match(e, /Do not describe the omission as "required by ND"/);
 });

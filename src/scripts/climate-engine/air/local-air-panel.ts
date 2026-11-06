@@ -173,7 +173,7 @@ function block(p: LocalAirPayload, title: string, place: string): string {
 }
 
 const FAILED = 'Air-quality data could not be loaded just now. Try again shortly.';
-const failedBlock = (title: string): string => head(title, '<span class="chip off">Not reporting</span>') + `<p class="empty">${FAILED}</p>`;
+const failedBlock = (title: string): string => head(title, '<span class="chip off">Not loaded</span>') + `<p class="empty">${FAILED}</p>`;
 
 /** The right-panel block. */
 export function localCardHtml(p: LocalAirPayload, place: string, now: Date = new Date()): string {

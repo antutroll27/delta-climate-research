@@ -53,9 +53,3 @@ export function localAirReady(key: string, drawable: DrawableFn = isDrawable): b
   const [country, city, area] = key.split('/');
   return country !== undefined && city !== undefined && area !== undefined && drawable(country, city, area);
 }
-
-/** True when any area of the same city (`nl/amsterdam/x` → the city) is ready: the UI's city-level question. */
-export function localAirCityReady(key: string, drawable: DrawableFn = isDrawable): boolean {
-  const prefix = key.split('/').slice(0, 2).join('/') + '/';
-  return Object.keys(LOCAL_AIR_AREAS).some((k) => k.startsWith(prefix) && localAirReady(k, drawable));
-}

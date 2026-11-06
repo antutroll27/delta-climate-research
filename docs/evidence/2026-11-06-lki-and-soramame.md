@@ -58,7 +58,8 @@ OBOS does not compute the LKI; it prints the value the API serves.
 - The card says "Luchtmeetnet does not endorse this page", as the second sentence requires.
 - **NoDerivatives:** the card prints the LKI and the hourly concentrations exactly as the API returns them (no rounding, averaging or unit change). It does **not**
   derive a "US AQI (computed)" line from the PM2.5, which the plan listed as optional: that would be an adaptation of the data. A test asserts no such line exists in the payload.
-- Whether a selection and layout of unaltered values is itself an adaptation under ND is a question for a lawyer (founder Q6a).
+- Whether a selection and layout of unaltered values is itself an adaptation under ND stays open as founder Q6a, to be settled in writing by RIVM/Luchtmeetnet.
+- **Why the US AQI line stays dropped.** The independent audit (2026-11-06) reads CC BY-ND 4.0 §1 so that "Adapted Material" is only what is modified in a manner needing permission under copyright or similar rights; a figure computed from a fact (one station's PM2.5 for one hour) is a new figure, not a modification of the published expression, so the licence probably did not require dropping it. It stays dropped for a product reason, not a licence one: the standard follows the regulator, and the Amsterdam card shows Luchtmeetnet's own index rather than a competing one beside it. Do not describe the omission as "required by ND".
 
 "Tijdnotatie" (timestamps): "Alle meetwaarden zijn uurgemiddelde waarden en zijn opgeslagen in wintertijd (UTC/GMT)." Measured 2026-11-06: `timestamp_measured` is the **end** of the hour
 (row `13:00Z` carries `timestamp_measured_start 12:00Z`, `_end 13:00Z`; at 13:36Z it was the newest). "Disclaimer": the data are "indicatief", unvalidated, may be corrected, and no rights can be derived.
@@ -88,6 +89,8 @@ labelled "nearest reporting" with its true distance. A unit test re-derives the 
 ## 2. Tokyo: Soramame and Japan's environmental quality standards
 
 ### 2.1 The data and its rights
+
+**What the feed is.** The cards read the static files behind the Soramame *map* (`/data/sokutei/noudoAll/…`), not the documented JSON API (a day behind, and it timed out for a whole prefecture). The copyright text of API manual §2-1 is written about "APIで取得するデータ"; the same Ministry rules almost certainly cover the map's files, since they are the same system's data, but that basis is indirect, and these undocumented paths can change without notice. Founder Q6b should be asked with that in view.
 
 `soramame.env.go.jp`, API manual §2-1 (`/data/apiManual/2.html`):
 
