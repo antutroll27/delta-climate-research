@@ -212,3 +212,16 @@ test('F3: the credit links the licence and shows the terms URL', () => {
   evil.credit.licence_url = 'javascript:alert(1)';
   assert.ok(!localCardHtml(evil, 'Canal Ring', NL_NOW).includes('javascript:'), 'only https links are drawn');
 });
+
+/* F4 (audit): an unreadable newest file is not an old hour. */
+test('F4: a Tokyo placeholder hour says it could not be read right now, never "no longer current"', async () => {
+  const placeholder = await readTokyo('jp/tokyo/marunouchi', { now: JP_NOW, fetch: reply({
+    [METADATA_URL]: read(JP + 'noudoAll-metadata.json'), [`${SORAMAME_BASE}/2026/11/06/21.csv`]: read(JP + 'noudoAll-2026-11-06-22-placeholder.html') }) });
+  assert.equal(placeholder.reason, 'source_down');
+  const t = text(localCardHtml(placeholder, 'Marunouchi', JP_NOW));
+  assert.ok(t.includes('The newest hour (6 Nov 21:00 JST) could not be read right now.'), t);
+  assert.ok(!t.includes('no longer current'));
+  assert.ok(!t.includes('Last hour reported'));
+  const old = judge(jpLive, new Date(Date.parse(jpLive.observed_at) + 3 * 3_600_000 + 1));
+  assert.ok(text(localCardHtml(old, 'Marunouchi', new Date(Date.parse(jpLive.observed_at) + 3 * 3_600_000 + 1))).includes('no longer current'), 'a genuinely old hour still says so');
+});

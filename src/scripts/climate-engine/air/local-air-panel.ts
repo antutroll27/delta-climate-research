@@ -156,8 +156,11 @@ function notReportingSay(p: NotReporting): string {
 }
 
 function notReporting(p: NotReporting, title: string, place: string): string {
-  const last = p.last_observed_at === null ? ''
-    : `<p class="meta">Last hour reported: ${nowrap(`<b>${esc(localTime(p.last_observed_at, p.standard, true))}</b>`)}. It is not shown, because it is no longer current.</p>`;
+  /* Only an hour that is genuinely old "is no longer current". When the newest file could not be read (source_down), the hour is not old: say that. */
+  const when = p.last_observed_at === null ? null : nowrap(`<b>${esc(localTime(p.last_observed_at, p.standard, true))}</b>`);
+  const last = when === null ? ''
+    : p.reason === 'no_current_hour' ? `<p class="meta">Last hour reported: ${when}. It is not shown, because it is no longer current.</p>`
+      : p.reason === 'source_down' ? `<p class="meta">The newest hour (${when}) could not be read right now.</p>` : '';
   return head(title, '<span class="chip off">Not reporting</span>')
     + `<p class="empty">${esc(notReportingSay(p))}</p>`
     + last + (p.station ? stationLine(p.station, place) : '') + creditHtml(p);
