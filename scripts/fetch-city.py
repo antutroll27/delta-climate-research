@@ -2,10 +2,13 @@
 
     taskpolicy -b python3 scripts/fetch-city.py --city amsterdam --layer buildings
     taskpolicy -b python3 scripts/fetch-city.py --city amsterdam --layer terrain
+    taskpolicy -b python3 scripts/fetch-city.py --city amsterdam --layer context
+    taskpolicy -b python3 scripts/fetch-city.py --city amsterdam --layer canopy   # needs buildings + context first
     python3 scripts/fetch-city.py --self-test            # offline, runs in `npm run test:py`
 
-LAYERS IMPLEMENTED SO FAR: `buildings` (3D BAG, Task A5) and `terrain` (AHN, Task A6).
-`context`, `canopy` and `guards` are added by A7, A8 and A9; a layer that does nothing is
+LAYERS IMPLEMENTED SO FAR: `buildings` (3D BAG, A5), `terrain` (AHN, A6) and `context` (Overture
+water / green / roads, A7) and `canopy` (Meta/WRI CHM v2 trees, A8). The guards are
+scripts/check-city-frame.py (A9); a layer that does nothing is
 not offered. Raw downloads go to `_city.raw_dir(city)` (on OBOSLab, never committed);
 processed JSON goes to `data/cities/<city>/` and is committed.
 
@@ -26,6 +29,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _city                                           # noqa: E402  (path set above)
 import _src_3dbag as bag                               # noqa: E402
 import _src_dem as dem                                 # noqa: E402
+import _src_overture as ovt                            # noqa: E402
+import _src_canopy as canopy                           # noqa: E402
 from _city import Area, CityBuilding, CityBuildingsFile, CityTerrainFile   # noqa: E402
 
 TODAY = datetime.date.today().isoformat()
@@ -94,6 +99,49 @@ def fetch_terrain(area: Area) -> None:
     print(f"\nwrote {out_path(area, 'terrain')}")
     for line in report:
         print("  " + line)
+
+
+# ── context ────────────────────────────────────────────────────────────────
+
+def fetch_context(area: Area) -> None:
+    raw = os.path.join(_city.raw_dir(area.city), "overture")
+    ovt.download_context(area, raw)
+    doc, st = ovt.build_context(area, raw)
+    problems = ovt.validate_context_file(area, doc)
+    assert not problems, problems
+    write_json(out_path(area, "context"), doc)
+    print(f"\nwrote {out_path(area, 'context')} ({os.path.getsize(out_path(area, 'context')) / 1e6:.2f} MB)")
+    print(f"  Overture {_city.OVERTURE_RELEASE}; raw features read {st.scanned}")
+    print(f"  water polygons {st.water_polygons}   water lines {st.water_lines} (covered {st.water_lines_covered})")
+    print(f"  green polygons {st.green_polygons}   road segments {st.road_segments}")
+    print(f"  major roads (primary+secondary) {st.road_major} = {st.major_share:.1%}   "
+          f"(Kolkata 2.5-9.0 %, Bengaluru 3.7-13.7 %)")
+
+
+# ── canopy ─────────────────────────────────────────────────────────────────
+
+def read_doc(area: Area, layer: str) -> object:
+    path = out_path(area, layer)
+    if not os.path.isfile(path):
+        raise SystemExit(f"{path} is missing: run --layer {layer} first (canopy drops trees inside buildings and roads)")
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def fetch_canopy(area: Area) -> None:
+    ctx = cast(_city.CityContextFile, read_doc(area, "context"))
+    bdoc = cast(CityBuildingsFile, read_doc(area, "buildings"))
+    doc, path = canopy.build_canopy(area, ctx, bdoc)
+    write_json(out_path(area, "canopy"), doc)
+    print(f"\nwrote {out_path(area, 'canopy')} ({os.path.getsize(out_path(area, 'canopy')) / 1e6:.2f} MB)")
+    print(f"  CHM tile {path}")
+    print(f"  cover >= {doc['coverThresholdM']:.0f} m at ~1 m: {doc['coverFrac']:.1%}")
+    print(f"  candidates {doc['candidates']}  dropped in roads {doc['droppedInRoads']}  "
+          f"dropped in buildings {doc['droppedInBuildings']}  kept {doc['count']}")
+    mix: dict[str, int] = {}
+    for t in doc["trees"]:
+        mix[t["species"]] = mix.get(t["species"], 0) + 1
+    print(f"  species {dict(sorted(mix.items()))}")
 
 
 # ── self-test (offline) ────────────────────────────────────────────────────
@@ -205,7 +253,16 @@ def self_test() -> None:
         problems = dem.validate_terrain_file(area, tdoc)
         assert not problems, problems
         note += f"; terrain file n={tdoc['n']} satisfies the contract"
+    cpath = out_path(area, "context")
+    if os.path.isfile(cpath):
+        with open(cpath, encoding="utf-8") as fh:
+            cdoc = cast(_city.CityContextFile, json.load(fh))
+        problems = ovt.validate_context_file(area, cdoc)
+        assert not problems, problems
+        note += f"; context file ({len(cdoc['water'])} water, {len(cdoc['green'])} green, {len(cdoc['roads'])} roads) satisfies the contract"
     dem.self_test()
+    ovt.self_test()
+    canopy.self_test()
     print(f"fetch-city self-test: ok ({note}); RD->WGS84 '{op_desc}' accuracy {op_acc:g} m")
 
 
@@ -213,7 +270,7 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Fetch one area of a city after Bengaluru.")
     ap.add_argument("--self-test", action="store_true", help="offline checks; no network, no cache needed")
     ap.add_argument("--city", choices=["amsterdam"], help="city id")
-    ap.add_argument("--layer", choices=["buildings", "terrain", "all"], default="all")
+    ap.add_argument("--layer", choices=["buildings", "terrain", "context", "canopy", "all"], default="all")
     ap.add_argument("--area", help="area id (default: every area of the city)")
     args = ap.parse_args(argv)
     if args.self_test:
@@ -229,6 +286,10 @@ def main(argv: list[str]) -> int:
             fetch_buildings(a)
         if args.layer in ("terrain", "all"):
             fetch_terrain(a)
+        if args.layer in ("context", "all"):
+            fetch_context(a)
+        if args.layer in ("canopy", "all"):
+            fetch_canopy(a)
     return 0
 
 

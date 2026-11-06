@@ -33,7 +33,7 @@ import math
 import os
 import sys
 from dataclasses import dataclass
-from typing import Literal, NamedTuple, NewType, TypedDict
+from typing import Final, Literal, NamedTuple, NewType, NotRequired, TypedDict
 
 from pyproj import CRS, Transformer
 
@@ -44,6 +44,12 @@ CityId = Literal["amsterdam", "tokyo"]
 #: A length in metres. A NewType, not an alias: `float` metres and `float` degrees
 #: otherwise pass each other's type checks.
 Metres = NewType("Metres", float)
+
+#: The Overture Maps release every city after Bengaluru is built on. MEASURED present in the
+#: bucket on 2026-11-06 (the bucket lists only 2026-09-23.0, 2026-09-23.1 and 2026-10-21.0).
+#: Releases leave the bucket within about three months, so `_src_overture` caches the clipped
+#: parquet the moment it is scanned. Bengaluru's own pin stays in `_bangalore.py`.
+OVERTURE_RELEASE: Final = "2026-10-21.0"
 
 #: The fill convention shared with Kolkata and Bengaluru (Google reports no
 #: confident pixel -> 2.5 m, carried openly with `hSource: "fill"`).
@@ -234,10 +240,11 @@ class CityTerrainFile(TypedDict):
 
 
 class CityWater(TypedDict):
+    """A water feature: a polygon (`p`) OR an open centreline (`line` + `covered`), as Bengaluru's context."""
     cls: str
-    covered: bool
-    line: list[float]
-    p: list[float]
+    p: NotRequired[list[float]]
+    line: NotRequired[list[float]]
+    covered: NotRequired[bool]
 
 
 class CityGreen(TypedDict):
@@ -278,6 +285,9 @@ class CityCanopyFile(TypedDict):
     method: str
     densityRefM: float
     minTreeH: float
+    #: share of 1 m CHM pixels at or above `coverThresholdM` over the whole square
+    coverFrac: float
+    coverThresholdM: float
     candidates: int
     droppedInBuildings: int
     droppedInRoads: int
