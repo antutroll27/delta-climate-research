@@ -197,3 +197,18 @@ test('F2: every Tokyo row says, in view, that one hour is not a test of the stan
   general.readings = general.readings.map((r) => ({ ...r, station: { ...r.station, kind: 'general' } }));
   assert.ok(!localCardHtml(general, 'Marunouchi', JP_NOW).includes(ROAD), 'a general station gets no roadway line');
 });
+
+/* F3 (audit): CC BY-ND 4.0 §3(a)(1)(C) wants the licence indicated with its text or a URI/hyperlink. */
+test('F3: the credit links the licence and shows the terms URL', () => {
+  const nl = localCardHtml(nlLive, 'Canal Ring', NL_NOW);
+  assert.match(nl, /<a href="https:\/\/creativecommons\.org\/licenses\/by-nd\/4\.0\/"[^>]*>CC BY-ND 4\.0<\/a>/);
+  assert.match(nl, /<a href="https:\/\/www\.luchtmeetnet\.nl\/informatie\/download-data\/open-data"[^>]*>https:\/\/www\.luchtmeetnet\.nl\/informatie\/download-data\/open-data<\/a>/);
+  assert.match(nl, /rel="noopener noreferrer"/);
+  assert.equal(nlLive.credit.licence_url, 'https://creativecommons.org/licenses/by-nd/4.0/');
+  const jp = localCardHtml(jpLive, 'Marunouchi', JP_NOW);
+  assert.match(jp, /<a href="https:\/\/www\.env\.go\.jp\/mail\.html"[^>]*>https:\/\/www\.env\.go\.jp\/mail\.html<\/a>/);
+  assert.match(jp, /<a href="https:\/\/www\.digital\.go\.jp\/resources\/open_data\/public_data_license_v1\.0"[^>]*>PDL 1\.0<\/a>/);
+  const evil = structuredClone(nlLive);
+  evil.credit.licence_url = 'javascript:alert(1)';
+  assert.ok(!localCardHtml(evil, 'Canal Ring', NL_NOW).includes('javascript:'), 'only https links are drawn');
+});

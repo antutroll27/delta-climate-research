@@ -47,6 +47,8 @@ export const SORAMAME_CREDIT: LocalCredit = {
   line: '出典：環境省大気汚染物質広域監視システム（そらまめくん）（https://soramame.env.go.jp/）（速報値）',
   edit: '「環境省大気汚染物質広域監視システム（そらまめくん）」（環境省）（https://soramame.env.go.jp/）をもとにDelta Climate Research作成（国設局の測定値を選んで表示）',
   licence: '公共データ利用規約（第1.0版）PDL 1.0（CC BY 4.0 互換）。国設局のデータのみ。',
+  licence_url: 'https://www.digital.go.jp/resources/open_data/public_data_license_v1.0',
+  licence_link_text: 'PDL 1.0',
   terms_url: 'https://www.env.go.jp/mail.html',
   note: '速報値であり、確定値ではありません。環境省が作成した情報ではありません。 Provisional values, which may be revised; not a Ministry of the Environment publication.',
 };

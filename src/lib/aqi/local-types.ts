@@ -54,6 +54,9 @@ export interface LocalCredit {
   edit: string | null;
   /** The licence as the source states it. */
   licence: string;
+  /** The licence's own URI (CC BY-ND 4.0 §3(a)(1)(C) asks for its text or a URI/hyperlink), and the words of `licence` the card turns into the link. */
+  licence_url: string;
+  licence_link_text: string;
   /** Where the licence/terms were read. */
   terms_url: string;
   /** The standing caveat printed with the credit: provisional/unvalidated data, and that the source does not endorse this page. */

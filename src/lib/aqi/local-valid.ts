@@ -10,6 +10,7 @@ import { LOCAL_SCHEMA, type LocalAirPayload } from './local-types.ts';
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const isHttps = (v: unknown): v is string => typeof v === 'string' && v.startsWith('https://');
 const isTime = (v: unknown): v is string => isStr(v) && Number.isFinite(Date.parse(v));
 
 export const LOCAL_STATES: readonly string[] = ['live', 'not_reporting'];
@@ -26,7 +27,7 @@ export function isLocalStation(v: unknown): boolean {
 }
 
 function isCredit(v: unknown): boolean {
-  return isObj(v) && isStr(v['line']) && (v['edit'] === null || isStr(v['edit'])) && isStr(v['licence']) && isStr(v['terms_url']) && isStr(v['note']);
+  return isObj(v) && isStr(v['line']) && (v['edit'] === null || isStr(v['edit'])) && isStr(v['licence']) && isHttps(v['licence_url']) && isStr(v['licence_link_text']) && isHttps(v['terms_url']) && isStr(v['note']);
 }
 
 export function isLocalAirPayload(v: unknown): v is LocalAirPayload {

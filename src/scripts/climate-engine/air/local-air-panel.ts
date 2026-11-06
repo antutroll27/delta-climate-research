@@ -49,10 +49,18 @@ export { judge };
 const head = (title: string, chip: string): string => `<div class="k legend-head"><span>${title}</span>${chip}</div>`;
 const SOURCE_NAME = { 'nl-lki': 'Luchtmeetnet', 'jp-eqs': 'the Ministry of the Environment\'s Soramame system' } as const;
 
+/** An external link, only for an https URL; anything else is plain escaped text. */
+const link = (url: string, text: string): string =>
+  (url.startsWith('https://') ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(text)}</a>` : esc(text));
+
 function creditHtml(p: LocalAirPayload): string {
   const c = p.credit;
   const edit = c.edit === null ? '' : `<br>${esc(c.edit)}`;
-  return `<p class="meta">${esc(c.line)}${edit}<br><span style="opacity:.85">${esc(c.note)} ${esc(c.licence)}.</span></p>`;
+  /* The licence is indicated with a hyperlink to its text (CC BY-ND 4.0 §3(a)(1)(C)), and the terms page it was read on is shown. */
+  const at = c.licence.indexOf(c.licence_link_text);
+  const licence = at < 0 || c.licence_link_text === '' ? esc(c.licence)
+    : `${esc(c.licence.slice(0, at))}${link(c.licence_url, c.licence_link_text)}${esc(c.licence.slice(at + c.licence_link_text.length))}`;
+  return `<p class="meta">${esc(c.line)}${edit}<br><span style="opacity:.85">${esc(c.note)} ${licence}.</span><br><span style="opacity:.85">Terms: ${link(c.terms_url, c.terms_url)}</span></p>`;
 }
 
 /** "Amsterdam-Vondelpark · municipal monitor, GGD Amsterdam · 1.4 km from the Canal Ring centre"; a fallback says so. */

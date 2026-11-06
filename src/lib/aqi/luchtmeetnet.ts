@@ -40,6 +40,8 @@ export const LUCHTMEETNET_CREDIT: LocalCredit = {
   line: 'Source: www.luchtmeetnet.nl',
   edit: null,
   licence: 'CC BY-ND 4.0 International (Naamsvermelding-GeenAfgeleideWerken), as stated for data provided through www.luchtmeetnet.nl',
+  licence_url: 'https://creativecommons.org/licenses/by-nd/4.0/',
+  licence_link_text: 'CC BY-ND 4.0',
   terms_url: 'https://www.luchtmeetnet.nl/informatie/download-data/open-data',
   note: 'Unvalidated hourly values from the Dutch air quality monitoring networks, shown as published; they are indicative and may be corrected. Luchtmeetnet does not endorse this page.',
 };
