@@ -36,7 +36,6 @@ test('NOT DRAWABLE, NOT SERVED: until the city can be opened, its area is a 404 
   assert.equal(r.code, 404);
   assert.deepEqual(r.body, { error: 'unknown area' });
   assert.equal(f.calls.length, 0);
-  /* With the registry as it stands on this branch, neither city is drawable, so the production default serves neither. */
   assert.equal(localAirReady('nl/amsterdam/canal-ring', () => false), false);
   assert.equal(localAirCityReady('jp/tokyo/marunouchi', () => false), false);
   assert.equal(localAirReady('in/kolkata/ballygunge', ready), false, 'only the registered local areas are local');
