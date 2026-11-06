@@ -59,7 +59,7 @@ if HERE not in sys.path:
 
 # The measurement lives in _suhii so build-calibration-set can import it as a
 # normal module; this file is the CLI over it. See _suhii's docstring for why.
-from _ecostress import band_url, cmr_search, fetch, token  # noqa: E402
+from _ecostress import WATER_NODATA, band_url, cmr_search, fetch, token  # noqa: E402
 from _suhii import (  # noqa: E402
     BBOX, RURAL_DEFS, SMOD, SMOD_LABEL, URBAN, align, local_solar_hour, measure_scene,
 )
@@ -112,7 +112,7 @@ def main() -> None:
 
             pw = fetch(band_url(g, "_water.tif"), tok)
             if pw:
-                w_ = align(pw, 0, "uint16") == 1
+                w_ = align(pw, WATER_NODATA, "uint16") == 1
                 water = w_ if water is None else (water | w_)
             pv = fetch(band_url(g, "_view_zenith.tif"), tok)
             if pv:

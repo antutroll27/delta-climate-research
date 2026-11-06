@@ -36,7 +36,7 @@ if HERE not in sys.path:
 
 import _types  # noqa: E402
 from _ecostress import (  # noqa: E402  (path must be set first — not a package)
-    Bbox, align as _align, band_url, cmr_search, fetch, token,
+    Bbox, WATER_NODATA, align as _align, band_url, cmr_search, fetch, token,
 )
 
 np.seterr(all="ignore")
@@ -138,7 +138,7 @@ def measure_scene(date: str, phase: str, want_view: bool = False) -> _types.Scen
 
                 pw = fetch(band_url(g, "_water.tif"), tok)
                 if pw:
-                    w_ = align(pw, 0, "uint16") == 1
+                    w_ = align(pw, WATER_NODATA, "uint16") == 1
                     water = w_ if water is None else (water | w_)
                 if want_view:
                     pv = fetch(band_url(g, "_view_zenith.tif"), tok)

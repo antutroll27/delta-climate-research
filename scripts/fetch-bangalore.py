@@ -1660,7 +1660,7 @@ def run_dcurs_lst(wards: list[blr.Ward]) -> None:
     #: granule missing any one of them cannot be trusted unmasked, so it is
     #: dropped whole rather than merged in with a silently disabled filter.
     mask_bands = (("_QC.tif", 0xFFFF, "uint16"), ("_cloud.tif", 255, "uint16"),
-                  ("_water.tif", 0, "uint16"))
+                  ("_water.tif", eco.WATER_NODATA, "uint16"))
 
     def process(grans: list[dict[str, Any]]) -> tuple[str, Any, Any]:
         """One acquisition's granules -> ("complete" | "incomplete", cel, view).
