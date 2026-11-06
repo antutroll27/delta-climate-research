@@ -10,7 +10,8 @@
     "previews",
     "inspiration",
     "attic",
-    "public/draco"
+    "public/draco",
+    "tests/fixtures"
   ],
   "compilerOptions": {
     "jsx": "react-jsx",

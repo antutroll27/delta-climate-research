@@ -24,14 +24,29 @@
  * time (v2/credits.ts), so it is a marker here and the renderer is handed the
  * credit.
  */
-import type { CityKey } from '../scripts/climate-engine/scope/registry.ts';
+import { AREA_KEYS, splitKey, type CityKey } from '../scripts/climate-engine/scope/registry.ts';
 
 /**
  * Every REGISTERED city (scope/registry.ts), not every drawable one. It was `keyof typeof CITIES`'s hand-written twin, and `CITIES`
- * has no Dubai, so the tables below were partial over the registry and the build threw on the three Dubai pages (Amsterdam audit F1).
+ * has registered cities it does not draw, so the tables below were partial over the registry and the build threw on their pages (Amsterdam audit F1).
  * Keyed by the registry's own union, a city added there and missing here fails to COMPILE.
  */
 export type CityId = CityKey;
+
+/** Every registered city slug, from the same walk the registry's own tables use. */
+const REGISTERED_CITIES: readonly CityKey[] = Object.freeze([...new Set(AREA_KEYS.map((k) => splitKey(k).city))]);
+
+/**
+ * A table total over the REGISTRY from the few rows that differ: every registered city not named takes `fallback`. This replaces
+ * a hand-written row per city. A registered city that draws nothing needs no row of its own, and no published module has
+ * to spell its name; a drawable city that wants a real row is pinned by tests/unit/city-credits.test.mjs (a drawable city must
+ * have a non-empty credits list). `rows` is keyed by the registry's own union, so a typo'd city is a compile error.
+ */
+export function byCity<T>(rows: Readonly<Partial<Record<CityKey, T>>>, fallback: T): Readonly<Record<CityKey, T>> {
+  const out = {} as Record<CityKey, T>;
+  for (const c of REGISTERED_CITIES) out[c] = rows[c] ?? fallback;
+  return Object.freeze(out);
+}
 
 export type CreditPart =
   | string
@@ -110,14 +125,13 @@ const AMSTERDAM_STACK: readonly CreditEntry[] = Object.freeze([
   WEATHER,
 ]);
 
-export const CITY_CREDITS: Readonly<Record<CityId, readonly CreditEntry[]>> = Object.freeze({
+/* A city with no row (registered, not drawable) says nothing: its pages print "Nothing is mapped for this area yet" and never this
+   list. An EMPTY list is the honest fallback; the India stack would credit Overture and Google for data it does not show. */
+export const CITY_CREDITS: Readonly<Record<CityId, readonly CreditEntry[]>> = byCity<readonly CreditEntry[]>({
   kolkata: INDIA_STACK,
   bengaluru: INDIA_STACK,
   amsterdam: AMSTERDAM_STACK,
-  /* Registered but not drawable: its pages say "Nothing is mapped for this area yet" and never print this list. An EMPTY list is the
-     honest row; the India stack would credit Overture and Google for data Dubai does not show. */
-  dubai: Object.freeze([]),
-});
+}, Object.freeze([]));
 
 /**
  * The credit a city's data licence REQUIRES on the map itself (MapLibre's
@@ -125,33 +139,49 @@ export const CITY_CREDITS: Readonly<Record<CityId, readonly CreditEntry[]>> = Ob
  * browsable electronic map, the credit should appear in the bottom right corner."
  * Null for cities whose licences ask for nothing there; they keep today's control.
  */
-export const CITY_MAP_CREDIT: Readonly<Record<CityId, string | null>> = Object.freeze({
-  kolkata: null,
-  bengaluru: null,
-  dubai: null,
+export const CITY_MAP_CREDIT: Readonly<Record<CityId, string | null>> = byCity<string | null>({
   amsterdam: [
     `<a href="https://docs.3dbag.nl/en/copyright/" ${NEW_TAB}>© 3DBAG by tudelft3d and 3DGI</a>`,
     `Heights: <a href="${AHN_URL}" ${NEW_TAB}>AHN5</a>, Het Waterschapshuis (<a href="https://creativecommons.org/licenses/by/4.0/" ${NEW_TAB}>CC BY 4.0</a>)`,
     `Terrain: <a href="${AHN_URL}" ${NEW_TAB}>AHN4</a> (CC0) via PDOK`,
     'modified by Delta Climate',
   ].join(' · '),
-});
+}, null);
 
 /**
  * A closing paragraph for the credits panel: the long-form provenance and the
  * no-endorsement statement CC BY 4.0 s.2(a)(6) asks for. Null for cities whose list
  * above is the whole of it (Kolkata, Bengaluru: nothing is added to their panel).
  */
-export const CITY_CREDIT_NOTE: Readonly<Record<CityId, string | null>> = Object.freeze({
-  kolkata: null,
-  bengaluru: null,
-  dubai: null,
+export const CITY_CREDIT_NOTE: Readonly<Record<CityId, string | null>> = byCity<string | null>({
   amsterdam: 'Building heights: © 3DBAG by tudelft3d and 3DGI (3D geoinformation research group, TU Delft, and 3DGI), '
     + 'release v2025.09.03, CC BY 4.0. The heights derive from Actueel Hoogtebestand Nederland: AHN5 (2023-2025), '
     + '© Het Waterschapshuis, CC BY 4.0, plus AHN3 and AHN4 (CC0). Terrain: AHN4 DTM/DSM 0.5 m (Het Waterschapshuis, CC0 1.0), '
     + 'served by PDOK. Delta Climate selected roof-height percentiles, clipped the data to the study area and converted it to a '
     + '3D mesh. Neither 3DBAG, TU Delft, 3DGI nor Het Waterschapshuis endorses this product.',
-});
+}, null);
+
+/**
+ * The lead of the bottom-right credits chip on a desktop screen ("lead + Credits"). Kolkata and Bengaluru keep the string the chip
+ * has always printed, BYTE FOR BYTE (a test pins it). Amsterdam leads with 3D BAG's required credit text: its licence asks for the
+ * credit "in the bottom right corner" of a browsable map, and the chip is the only credit visible there (the MapLibre control is
+ * hidden on every v2 viewport, shell.css). Empty for a city that draws nothing.
+ */
+const INDIA_CHIP_LEAD = '© OpenStreetMap · OpenMapTiles · OpenFreeMap · Overture · ';
+export const CITY_CHIP_LEAD: Readonly<Record<CityId, string>> = byCity<string>({
+  kolkata: INDIA_CHIP_LEAD,
+  bengaluru: INDIA_CHIP_LEAD,
+  amsterdam: '© 3DBAG by tudelft3d and 3DGI · AHN · OpenStreetMap/Overture · OpenFreeMap · ',
+}, '');
+
+/**
+ * The short credit a PHONE keeps. The phone chip hides its lead (phone.css) and reads "© Credits"; a licence that requires a visible
+ * credit cannot sit behind that button, so a city that has one prints it in a span the phone CSS does not hide (`.at-req`). Null for
+ * Kolkata and Bengaluru: their chip renders nothing new. Founder-delegated decision (2026-11-06): "© 3DBAG" on the phone chip.
+ */
+export const CITY_CHIP_REQUIRED: Readonly<Record<CityId, string | null>> = byCity<string | null>({
+  amsterdam: '© 3DBAG',
+}, null);
 
 /** The map control's text: the city's required credit and the ward boundary's, either may be absent; null when both are. */
 export function joinMapCredits(cityCredit: string | null | undefined, wardCredit: string | null | undefined): string | null {

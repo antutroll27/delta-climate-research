@@ -263,7 +263,7 @@ export const REGISTRY = {
        sources EUR unit costs. The readouts are null-safe (plan Task A3): the app
        resolves `costsOrNull` at mount and every capital figure branches on the
        null, saying that no cost basis is adopted rather than printing a zero or
-       an Indian figure. `drawable` stays false only until plan Task A12. */
+       an Indian figure. `drawable` flipped in plan Task A12. */
     name: 'Netherlands',
     pathway: null,
     costs: null,
@@ -286,17 +286,11 @@ export const REGISTRY = {
         },
         parkRadiusM: 50,
         data: { heatwave: null, dcUrs: null },
-        /* Registered and nameable, NOT drawable: the artefacts do not exist yet.
-           `drawable` flips in plan Task A12, after A3 (null-safe costs) and A10.
-
-           THE NAME AND DESCRIPTOR ARE TEMPORARY, and the Dubai pattern: scope/
-           resolve.ts reads names from the RENDERABLE ward table, and canal-ring is
-           not renderable until A12 adds 'amsterdam' to RENDERABLE_CITIES. Until
-           then it has to name itself here or resolve throws at module load. The
-           day it becomes renderable, resolve REFUSES an area that names itself in
-           both places, so A12 must DELETE these two fields (a test pins this). */
+        /* DRAWABLE since plan Task A12. `shipsData` stays false: the page draws and is noindex and out of the sitemap
+           (both read `publishes`) until the founder decides to index it. Its name and descriptor come from the ward table
+           (src/data/wards.ts), like every other drawable area; resolve refuses an area that names itself in both places. */
         areas: {
-          'canal-ring': { shipsData: false, drawable: false, name: 'Canal Ring', descriptor: 'Canal Belt · Vondelpark' },
+          'canal-ring': { shipsData: false, drawable: true },
         },
       },
     },

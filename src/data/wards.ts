@@ -74,7 +74,7 @@ export const WARDS: readonly Ward[] = PUBLISHED_CITIES.flatMap((c) => [...wardsO
  * That is the honest state rather than a gap: the catalogue must not advertise
  * files that are not on disk, and the map must not refuse data that is.
  */
-export const RENDERABLE_CITIES: readonly string[] = ['kolkata', 'bengaluru'];
+export const RENDERABLE_CITIES: readonly string[] = ['kolkata', 'bengaluru', 'amsterdam'];
 
 export const RENDERABLE_WARDS: readonly Ward[] =
   RENDERABLE_CITIES.flatMap((c) => [...wardsOfCity(c)]);

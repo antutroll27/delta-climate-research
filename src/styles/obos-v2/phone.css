@@ -100,6 +100,10 @@ html[data-ui="v2"] .obos-v2 .rnudge .rn-x { width: 44px; height: 44px; min-width
   html[data-ui="v2"] .obos-v2 .sheet-head .st-attrib { position: static; flex: none; }
   html[data-ui="v2"] .obos-v2 .attrib .at-lead { display: none; }
   html[data-ui="v2"] .obos-v2 .attrib::before { content: "© "; }
+  /* a city whose licence REQUIRES a visible credit (3D BAG) keeps it on the phone chip: "© 3DBAG · Credits". It carries its own ©. */
+  html[data-ui="v2"] .obos-v2 button.attrib .at-req { display: inline; }
+  html[data-ui="v2"] .obos-v2 .attrib .at-req::after { content: " · "; }
+  html[data-ui="v2"] .obos-v2 .attrib[data-req]::before { content: none; }
 
   html[data-ui="v2"] .obos-v2 #v2Sheet #legend.heat-panel { position: static; width: auto; top: auto; right: auto; bottom: auto; left: auto; transform: none; max-height: none; z-index: auto; gap: 8px; padding: 2px 0 8px; overflow: visible; border-radius: 0; background: transparent; }
   html[data-ui="v2"] .obos-v2 #v2Sheet .mapstack { position: static; width: auto; gap: 8px; padding: 0 0 8px; }

@@ -117,8 +117,12 @@ Nothing in the Amsterdam stack blocks republication. The duties, read from the p
   https://docs.3dbag.nl/en/copyright/; a statement if the data were modified; and **on a browsable map the credit
   appears in the bottom-right corner**. OBOS puts it in MapLibre's attribution control (`CITY_MAP_CREDIT`,
   `src/data/city-credits.ts`) and in the credits panel, with the modification line: *footprints simplified to
-  0.5 m; height = 70th-percentile roof minus ground level*. Phones hide MapLibre's attribution control: the credits
-  panel is the phone's copy (check at the drawable flip).
+  0.5 m; height = 70th-percentile roof minus ground level*. **MapLibre's attribution control is hidden on every v2
+  viewport** (`shell.css`), so the visible bottom-right credit is the `.st-attrib` chip. On a desktop its lead is
+  "© 3DBAG by tudelft3d and 3DGI · AHN · OpenStreetMap/Overture · OpenFreeMap" (`CITY_CHIP_LEAD`). On a phone the lead is
+  hidden, so a short "© 3DBAG" credit stays on the chip (`CITY_CHIP_REQUIRED`, the `.at-req` span the phone CSS does not
+  hide): "© 3DBAG · Credits". **Founder-delegated decision, 2026-11-06**; Kolkata and Bengaluru render nothing new (a test
+  pins both chips against the pre-change template).
 - **AHN5, CC BY 4.0, Het Waterschapshuis.** The readiness note's "AHN is CC0" was wrong. AHN3 and AHN4 are CC0;
   **AHN5 and AHN6 are CC BY 4.0** and ahn.nl requires the source (AHN) on derived products. About 79 % of the
   building heights come from AHN5, and 3D BAG's credit does not cover it, so AHN is credited separately
