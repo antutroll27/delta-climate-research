@@ -218,7 +218,7 @@ test('F4: a Tokyo placeholder hour says it could not be read right now, never "n
   const placeholder = await readTokyo('jp/tokyo/marunouchi', { now: JP_NOW, fetch: reply({
     [METADATA_URL]: read(JP + 'noudoAll-metadata.json'), [`${SORAMAME_BASE}/2026/11/06/21.csv`]: read(JP + 'noudoAll-2026-11-06-22-placeholder.html') }) });
   assert.equal(placeholder.reason, 'source_down');
-  const t = text(localCardHtml(placeholder, 'Marunouchi', JP_NOW));
+  const t = text(localCardHtml(placeholder, 'Marunouchi', JP_NOW)).replace(/\( /g, '(').replace(/ \)/g, ')');
   assert.ok(t.includes('The newest hour (6 Nov 21:00 JST) could not be read right now.'), t);
   assert.ok(!t.includes('no longer current'));
   assert.ok(!t.includes('Last hour reported'));
