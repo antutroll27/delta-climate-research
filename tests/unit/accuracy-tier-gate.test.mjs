@@ -128,6 +128,8 @@ const LITERALS = [
   [/\bn\s?=\s?\d{2,}/, 'a hand-typed sample size'],
   [/\bCalibrated\b/, 'the "Calibrated" chip word'],
   [/\bSatellite-checked\b/, 'the "Satellite-checked" claim'],
+  // the tier must come from the registry (resolve(ward).tier), never be typed in: heatAccuracyClaim('validated') is a forged pass
+  [/\bheatAccuracyClaim\s*\(\s*['"`]/, 'a tier typed in by hand'],
 ];
 
 const SOURCE_MODULE = /(?:^|\/)(?:accuracy|method-copy)(?:\.[tj]s)?$|(?:^|\/)data\/calibration\//;
@@ -168,6 +170,7 @@ function scanSource(path, src) {
 /* The seven synthetic leaks from the independent audit of PR #75 (guard-probe.mjs),
    then the rest of what it named, then the other ways round. */
 const LEAKS = {
+  'a card that types the tier in by hand': "const c = heatAccuracyClaim('validated');\nel.textContent = c.figures.chip();",
   'a new file printing transitionChip()': "import { transitionChip } from './method-copy.ts';\nel.textContent = transitionChip();",
   'a new file printing TRANSITION_RMSE_K': "import { TRANSITION_RMSE_K } from '../accuracy.ts';\nel.textContent = `~±${TRANSITION_RMSE_K} K`;",
   'a new file hard-coding the chip': "el.textContent = 'Calibrated · ±3.0 °C · n=50';",
