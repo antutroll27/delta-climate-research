@@ -29,11 +29,10 @@ function pointOnSegment(
     && y <= Math.max(ay, by) + 1e-9;
 }
 
-function pointInPolygon(x: number, y: number, vertices: ReadonlyArray<readonly [number, number]>): boolean {
+function pointInPolygon(x: number, y: number, vx: Float64Array, vy: Float64Array, count: number): boolean {
   let inside = false;
-  for (let current = 0, previous = vertices.length - 1; current < vertices.length; previous = current++) {
-    const [ax, ay] = vertices[previous];
-    const [bx, by] = vertices[current];
+  for (let current = 0, previous = count - 1; current < count; previous = current++) {
+    const ax = vx[previous], ay = vy[previous], bx = vx[current], by = vy[current];
     if (pointOnSegment(x, y, ax, ay, bx, by)) return true;
     if ((ay > y) !== (by > y) && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) inside = !inside;
   }
@@ -61,7 +60,9 @@ function stampRing(
   cellM: number,
   n: number,
 ): void {
-  const vertices: Array<readonly [number, number]> = [];
+  const capacity = Math.max(0, (flat.length - start) >> 1);
+  const vx = new Float64Array(capacity), vy = new Float64Array(capacity);
+  let count = 0;
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
@@ -70,13 +71,13 @@ function stampRing(
     const x = flat[index];
     const y = flat[index + 1];
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    vertices.push([x, y]);
+    vx[count] = x; vy[count] = y; count += 1;
     minX = Math.min(minX, x);
     maxX = Math.max(maxX, x);
     minY = Math.min(minY, y);
     maxY = Math.max(maxY, y);
   }
-  if (vertices.length < 3) return;
+  if (count < 3) return;
   const startX = Math.max(0, Math.floor((minX + half) / cellM) - 1);
   const endX = Math.min(n - 1, Math.floor((maxX + half) / cellM) + 1);
   const startY = Math.max(0, Math.floor((minY + half) / cellM) - 1);
@@ -89,7 +90,7 @@ function stampRing(
         const sampleY = -half + (gridY + offsetY) * cellM;
         for (const offsetX of SAMPLE_OFFSETS) {
           const sampleX = -half + (gridX + offsetX) * cellM;
-          if (pointInPolygon(sampleX, sampleY, vertices)) sampleBits[cellIndex] |= bit;
+          if (pointInPolygon(sampleX, sampleY, vx, vy, count)) sampleBits[cellIndex] |= bit;
           bit <<= 1;
         }
       }
