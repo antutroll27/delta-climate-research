@@ -115,18 +115,18 @@ export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): She
 
   const head = el('div', 'si-head', panel);
   el('span', 'si-grip', head).setAttribute('aria-hidden', 'true');
-  const title = el('h2', 'si-title', head, 'Sheet index');
+  const title = el('h2', 'si-title', head, 'Areas');
   title.id = `${uid}-title`;
-  el('span', 'si-sub', head, `${city} · ${formatCount(model.counts.shipping)} sheets`);
+  el('span', 'si-sub', head, `${city} · ${formatCount(model.counts.shipping)} areas`);
   const closeBtn = el('button', 'si-close', head);
   closeBtn.type = 'button';
-  closeBtn.setAttribute('aria-label', 'Close sheet index');
+  closeBtn.setAttribute('aria-label', 'Close areas');
   closeBtn.textContent = '×';
 
   const body = el('div', 'si-body', panel);
   const grid = el('div', 'si-grid', body);
   grid.setAttribute('role', 'grid');
-  grid.setAttribute('aria-label', `${city} map sheets`);
+  grid.setAttribute('aria-label', `${city} areas`);
   grid.setAttribute('aria-rowcount', String(model.rowCount));
   grid.setAttribute('aria-colcount', String(model.columns.length));
   grid.style.setProperty('--si-cols', String(model.columns.length));
@@ -172,7 +172,7 @@ export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): She
     const sec = el('section', 'si-group', list);
     const h = el('h3', 'si-group-h', sec);
     el('span', '', h, g.stadsdeel);
-    el('small', '', h, `${g.cells.length} ${g.cells.length === 1 ? 'sheet' : 'sheets'}`);
+    el('small', '', h, `${g.cells.length} ${g.cells.length === 1 ? 'area' : 'areas'}`);
     const ul = el('ul', 'si-items', sec);
     for (const c of g.cells) {
       const li = el('li', '', ul);
@@ -207,7 +207,7 @@ export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): She
 
   function showReadout(c: IndexCell | null): void {
     const cell = c ?? (state.current === null ? null : model.byCode.get(state.current) ?? null);
-    if (cell === null) { roTitle.textContent = 'Pick a sheet'; roDetail.textContent = `${formatCount(model.counts.shipping)} sheets ship`; return; }
+    if (cell === null) { roTitle.textContent = 'Pick an area'; roDetail.textContent = `${formatCount(model.counts.shipping)} areas available`; return; }
     const r = cellReadout(cell);
     roTitle.textContent = r.title;
     roDetail.textContent = r.detail;
@@ -218,7 +218,7 @@ export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): She
     const pend = state.pending !== null ? model.byCode.get(state.pending) ?? null : null;
     chipCode.textContent = cur?.code ?? '··';
     chipName.textContent = cur !== null && cur.name !== cur.code ? cur.name : '';
-    chip.setAttribute('aria-label', cur === null ? 'Open sheet index' : `Sheet ${cur.code}${cur.name === cur.code ? '' : `, ${cur.name}`}. Open sheet index`);
+    chip.setAttribute('aria-label', cur === null ? 'Choose an area' : `Area ${cur.code}${cur.name === cur.code ? '' : `, ${cur.name}`}. Choose another area`);
     root.toggleAttribute('data-pending', pend !== null);
     chip.setAttribute('aria-busy', pend !== null ? 'true' : 'false');
     for (const [code, d] of cellEl) {

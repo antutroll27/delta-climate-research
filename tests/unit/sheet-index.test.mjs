@@ -180,9 +180,9 @@ test('labels carry the building count; the readout and announcements say what th
     if (!c.available) assert.ok(label.includes('not available'));
     assert.ok(cellReadout(c).detail.includes(new Intl.NumberFormat('en-GB').format(c.buildings)));
   }
-  assert.ok(cellLabel(M.byCode.get('E4'), 'E4').includes('current sheet'));
-  assert.ok(!cellLabel(M.byCode.get('E4'), 'D4').includes('current sheet'));
-  assert.equal(announceCurrent(M.byCode.get('E4')), 'Current sheet E4, Canal Ring. 21,348 buildings.');
+  assert.ok(cellLabel(M.byCode.get('E4'), 'E4').includes('current area'));
+  assert.ok(!cellLabel(M.byCode.get('E4'), 'D4').includes('current area'));
+  assert.equal(announceCurrent(M.byCode.get('E4')), 'Current area E4, Canal Ring. 21,348 buildings.');
   assert.equal(reasonText('something-new-here'), 'something new here');
 });
 

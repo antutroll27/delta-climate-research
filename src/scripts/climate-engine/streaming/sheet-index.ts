@@ -294,8 +294,8 @@ const DIRECTION_WORD: Readonly<Record<Arrow, string>> = Object.freeze({ ArrowLef
 export function cellLabel(c: IndexCell, current: string | null = null): string {
   if (c.state === 'outside') return `${c.code}, outside the city`;
   if (c.state === 'skipped') return `${c.code}, not available, ${c.reason ?? 'no data'}, ${formatCount(c.buildings ?? 0)} buildings`;
-  const kind = c.state === 'core' ? 'core sheet' : 'edge sheet';
-  const here = current === c.code ? ', current sheet' : '';
+  const kind = c.state === 'core' ? 'core area' : 'edge area';
+  const here = current === c.code ? ', current area' : '';
   const name = c.name === c.code ? '' : `, ${c.name}`;
   return `${c.code}${name}, ${kind}, ${formatCount(c.buildings ?? 0)} buildings${here}`;
 }
@@ -304,20 +304,20 @@ export function cellLabel(c: IndexCell, current: string | null = null): string {
 export function cellReadout(c: IndexCell): { readonly title: string; readonly detail: string } {
   if (c.state === 'outside') return { title: c.code, detail: 'Outside the city' };
   if (c.state === 'skipped') return { title: `${c.code} · not available`, detail: `${c.reason ?? 'no data'} · ${formatCount(c.buildings ?? 0)} buildings in the box` };
-  const kind = c.state === 'core' ? 'Core sheet' : 'Edge sheet';
+  const kind = c.state === 'core' ? 'Core area' : 'Edge area';
   const muni = c.municipalBuildings !== null && c.municipalBuildings !== c.buildings ? ` · ${formatCount(c.municipalBuildings)} inside the municipality` : '';
   return { title: c.name === c.code ? c.code : `${c.code} · ${c.name}`, detail: `${formatCount(c.buildings ?? 0)} buildings · ${kind}${muni}` };
 }
 
 /** The live-region text for a sheet becoming current. */
 export function announceCurrent(c: IndexCell): string {
-  return `Current sheet ${c.code}${c.name === c.code ? '' : `, ${c.name}`}. ${formatCount(c.buildings ?? 0)} buildings.`;
+  return `Current area ${c.code}${c.name === c.code ? '' : `, ${c.name}`}. ${formatCount(c.buildings ?? 0)} buildings.`;
 }
 export function announceLoading(c: IndexCell): string {
-  return `Loading sheet ${c.code}${c.name === c.code ? '' : `, ${c.name}`}.`;
+  return `Loading area ${c.code}${c.name === c.code ? '' : `, ${c.name}`}.`;
 }
 export function announceMiss(from: string, arrow: Arrow): string {
-  return `No sheet to the ${DIRECTION_WORD[arrow]} of ${from}.`;
+  return `No area to the ${DIRECTION_WORD[arrow]} of ${from}.`;
 }
 export function announceRefusal(c: IndexCell): string {
   return `${c.code} is not available: ${c.reason ?? 'no data'}.`;

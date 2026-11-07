@@ -48,10 +48,10 @@ for (const [name, viewport] of Object.entries(sizes)) {
   await page.keyboard.press('Shift+ArrowRight');
   assert.deepEqual(await sel(), ['F4'], `${name}: Shift+Right from E4 selects F4`);
   await page.waitForTimeout(200);
-  assert.match(await page.locator('.si-live').textContent(), /Loading sheet F4/, `${name}: loading is announced`);
+  assert.match(await page.locator('.si-live').textContent(), /Loading area F4/, `${name}: loading is announced`);
   assert.equal(await page.locator('.si-chip').getAttribute('aria-busy'), 'true');
   await page.waitForTimeout(900);
-  assert.match(await page.locator('.si-live').textContent(), /Current sheet F4/, `${name}: arrival is announced`);
+  assert.match(await page.locator('.si-live').textContent(), /Current area F4/, `${name}: arrival is announced`);
   assert.equal(await page.locator('.si-chip').getAttribute('aria-busy'), 'false');
   assert.match(await page.locator('.si-chip').textContent(), /F4/);
 
@@ -99,7 +99,7 @@ for (const [name, viewport] of Object.entries(sizes)) {
   await page.waitForTimeout(700);
   for (let i = 0; i < 12; i++) await page.keyboard.press('Shift+ArrowUp');
   await page.waitForTimeout(100);
-  assert.match(await page.locator('.si-live').textContent(), /No sheet to the north of/);
+  assert.match(await page.locator('.si-live').textContent(), /No area to the north of/);
   assert.notEqual(await current(), undefined);
 
   if (name === 'phone') {
