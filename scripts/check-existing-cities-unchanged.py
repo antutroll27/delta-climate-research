@@ -28,7 +28,9 @@ top-level key except `wards` must be unchanged.
 CANAL RING (2026-11-08). Amsterdam's Canal Ring joined the freeze after its surface, ground and canopy fixes (branch
 fix/canal-ring-surface-ground): `public/heat-map/data/canal-ring*`, `data/cities/amsterdam/canal-ring-*` and the frame-guard record are pinned,
 and so is its surface-meta row (the `wards` pins cover every row present at the baseline). The first pin is taken from that branch's tip
-(`--ref HEAD`), because the corrected files are not on origin/main yet; later pins are from origin/main again.
+(`--ref HEAD`), because the corrected files are not on origin/main yet. A pin taken from any ref other than origin/main records a CONTENT
+hash (`commit: "content:<sha256>"`, `ref: "content"`) and no commit id, because a branch commit need not exist on main after a squash or a
+rebase; the next pin from origin/main replaces it with a commit.
 
 `--write-baseline` reads the blobs with `git cat-file` from `origin/main`, NOT from
 the working tree, so a baseline can never be pinned to an edit that is already in
@@ -176,11 +178,14 @@ def baseline_from_git(root: str, ref: str) -> Baseline:
         pos = nl + 1 + size + 1
 
     files = {p: sha256_bytes(b) for p, b in sorted(contents.items()) if p != SURFACE_META_REL}
+    pins = surface_meta_pins(contents[SURFACE_META_REL])
+    if ref != BASELINE_REF:                  # a branch tip: pin by content, never by a commit id that main may not keep
+        ref, commit = "content", "content:" + sha256_bytes(canonical({"files": files, "surfaceMeta": pins}).encode())
     return Baseline(
         schema=1, ref=ref, commit=commit,
         note="sha256 of every frozen artefact as it is at `commit`; see scripts/check-existing-cities-unchanged.py",
         fileCount=len(files), files=files,
-        surfaceMeta=surface_meta_pins(contents[SURFACE_META_REL]),
+        surfaceMeta=pins,
     )
 
 
@@ -354,7 +359,7 @@ def main(argv: list[str]) -> int:
             fh.write("\n")
         print(f"wrote {BASELINE_REL}: {base['fileCount']} files + surface-meta "
               f"({len(base['surfaceMeta']['wards'])} ward rows, {len(base['surfaceMeta']['topLevel'])} top-level keys) "
-              f"at {args.ref} = {base['commit'][:12]}")
+              f"at {args.ref} = {base['commit'].removeprefix('content:')[:12]}")
         return 0
 
     base = load_baseline(ROOT)
@@ -363,7 +368,7 @@ def main(argv: list[str]) -> int:
         report(problems)
         return 1
     print(f"ok: {base['fileCount']} frozen files + {len(base['surfaceMeta']['wards'])} surface-meta rows "
-          f"match the baseline taken at {base['commit'][:12]}")
+          f"match the baseline taken at {base['commit'].removeprefix('content:')[:12]}")
     return 0
 
 

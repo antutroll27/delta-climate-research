@@ -1,5 +1,5 @@
 {
- "commit": "d65e242dd648f6d5e501ac2ce6cd3ed9785a5c3c",
+ "commit": "content:2affeaaac2b5fbbdca904b25e009e3a4747326c10ba8365d0ed7111b3cf0b8e0",
  "fileCount": 174,
  "files": {
   "data/bangalore/dc-urs-inputs.json": "48eba3e5f244fffc65c4d66ee2f2778c08f555eaff8aa4ef477eb852f08db1ec",
@@ -178,7 +178,7 @@
   "public/heat-map/models/whitefield.glb": "3a6fea171ce815fc7dd980f356012dcab9b1057e5854746443d9d87a1659f6f9"
  },
  "note": "sha256 of every frozen artefact as it is at `commit`; see scripts/check-existing-cities-unchanged.py",
- "ref": "HEAD",
+ "ref": "content",
  "schema": 1,
  "surfaceMeta": {
   "topLevel": {

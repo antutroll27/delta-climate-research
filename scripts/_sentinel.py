@@ -296,7 +296,7 @@ def _products(feat: dict[str, Any], read_band: Callable[[str], npt.NDArray[np.fl
 GeoBox = tuple[float, float, float, float]
 
 #: Every `read_box` failure of this process: (href, reason). A scene that cannot be read is DROPPED from the composite, and a silent drop
-#: once made two sheets use 22 scenes where the others use 23 (P2B-AUDIT N1): so it is logged to stderr and counted here.
+#: once made two sheets use 22 scenes where the others use 23: so it is logged to stderr and counted here.
 READ_FAILURES: list[tuple[str, str]] = []
 
 

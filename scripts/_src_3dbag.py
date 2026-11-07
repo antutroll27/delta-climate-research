@@ -105,7 +105,7 @@ class RawBuilding:
     pc_source: str | None                # b3_pw_bron, e.g. "ahn5"
     pc_year: int | None                  # b3_pw_datum
     build_year: int | None = None        # oorspronkelijkbouwjaar (BAG): when it was first built
-    ground_fixed: bool = False           # `ground_nap` was replaced by the AHN4 ring p5 (`repair_grounds`); sheets only
+    ground_fixed: bool = False           # `ground_nap` was replaced by the AHN4 ring p5 (`repair_grounds`)
 
 
 class BuildStats(NamedTuple):
@@ -389,7 +389,7 @@ def height_note(op_desc: str, op_accuracy: float) -> str:
             f"'{op_desc}' (stated accuracy {op_accuracy:g} m). {LICENCE_CREDIT}; modified as stated.")
 
 
-# ── ground plausibility (city-streaming P2b; sheets only, Canal Ring's shipped file is unchanged) ──────────────────────────
+# ── ground plausibility (city-streaming P2b audit; used by the sheets and, since 2026-11-08, by Canal Ring's `fetch-city.py --layer buildings`) ──
 
 #: A ground this far below its reference is implausible. NOT an absolute NAP floor: Amsterdam's polders really do lie below -5 m, and
 #: a building whose neighbours and AHN ring are at -5.3 m with its own ground at -5.5 m is fine.
@@ -438,7 +438,7 @@ GroundOutcome = Literal["ok", "fill", "ring-only", "post-ahn4", "no-ring", "not-
 
 def ground_decision(own: float, neighbours: Sequence[float], ring: Sequence[float], fix_ring: Sequence[float], build_year: int | None,
                     roofs: Sequence[float], h_check: Callable[[], float | None]) -> tuple[GroundOutcome, float | None]:
-    """What to do with one building's 3D BAG ground: (outcome, new ground when repaired). The audit's rule (P2B-AUDIT B1):
+    """What to do with one building's 3D BAG ground: (outcome, new ground when repaired). The audit's rule:
 
     * REPAIR ONLY WHEN THE NEIGHBOURS DISAGREE: at least `GROUND_MIN_NEIGHBOURS` buildings within `GROUND_NEIGHBOUR_R_M` whose median ground is more
       than `GROUND_DROP_M` above this one's. The AHN4 ring alone ("ring-only") repairs nothing: it is 2020-22 ground and 3D BAG's is mostly 2023.
@@ -542,7 +542,7 @@ def repair_grounds(raws: Sequence[RawBuilding], dtm: npt.NDArray[np.float32], tf
         ring = ring_cells(b.footprint, dtm, tf) if covered else np.empty(0, dtype=np.float64)
         checked += covered
         fix_ring, was_widened = ring, False
-        if covered and len(ring) < RING_MIN_CELLS and len(nb) >= 0:
+        if covered and len(ring) < RING_MIN_CELLS:
             for outer in RING_OUTER_STEPS_M[1:]:
                 fix_ring = ring_cells(b.footprint, dtm, tf, outer)
                 if len(fix_ring) >= RING_MIN_CELLS:
@@ -587,7 +587,7 @@ def make_buildings_doc(area: Area, rows: list[CityBuilding], st: BuildStats, mix
 # ── self-test ───────────────────────────────────────────────────────────────
 
 def self_test() -> None:
-    """Offline: the ground rule on synthetic buildings, every case the audit names (P2B-AUDIT B1)."""
+    """Offline: the ground rule on synthetic buildings, every case the audit names."""
     from rasterio.transform import from_origin
     ftf = from_origin(0.0, 400.0, 0.5, 0.5)                      # a 200 m x 200 m DTM, x 0..200, y 200..400
 

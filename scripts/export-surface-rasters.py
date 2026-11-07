@@ -152,7 +152,7 @@ def sun_floor(ward_id: str) -> float | None:
 
 
 #: Cities after Bengaluru read each scene by REPROJECTION onto the area's own lon/lat grid (`_sentinel.read_box`), not by the UTM envelope: the
-#: envelope read turns the raster by the grid convergence (1.5 degrees at Amsterdam, up to 73 m at a corner; P2B-AUDIT B1). Kolkata and
+#: envelope read turns the raster by the grid convergence (1.5 degrees at Amsterdam, up to 73 m at a corner). Kolkata and
 #: Bengaluru keep the shipped reader, so their committed rasters stay reproducible.
 #: Set by --scenes: (Earth Search items, directory of local band crops named `<item id>_<band>.tif`). None = search the STAC API.
 LOCAL_SCENES: tuple[list[dict[str, Any]], str] | None = None

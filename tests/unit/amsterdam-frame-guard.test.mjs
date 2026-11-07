@@ -61,7 +61,7 @@ test('the height cross-check is recorded per building and never blended into h',
 /* 2026-11-08 (branch fix/canal-ring-surface-ground): the surface is read by REPROJECTION, 3D BAG's implausible grounds are repaired only where
    the neighbours disagree, and the canopy is read without GDAL's nodata nudge. These pins hold those three to account. */
 
-test('ground repair: 51 buildings, tagged, none taller than before, none left under 2 m, none from AHN4\'s year on', () => {
+test('ground repair: 51 buildings, tagged, none left under 2 m (the rule never repairs a building from AHN4\'s year on: unit-tested in _src_3dbag.self_test; the file carries no build years)', () => {
   const doc = JSON.parse(read('data/cities/amsterdam/canal-ring-buildings.json'));
   const fixed = doc.b.filter((b) => b.hSource === '3dbag-p70-ahn4-ground');
   assert.equal(fixed.length, 51);
