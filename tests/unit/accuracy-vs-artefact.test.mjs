@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
-import { ACCURACY } from '../../src/scripts/climate-engine/accuracy.ts';
+import { ACCURACY, NIGHT_AS_SHIPPED } from '../../src/scripts/climate-engine/accuracy.ts';
 import { DEFAULT_PARAMS, STORE_NIGHT } from '../../src/scripts/climate-engine/types.ts';
 import { skyTemperatureC } from '../../src/scripts/climate-engine/sky.ts';
 
@@ -90,16 +90,18 @@ test('the night band is the smallest half-kelvin step that covers both errors', 
   assert.equal(ACCURACY.night.bandK, Math.ceil(need * 2) / 2);
 });
 
-test('every number quoted in the night note is the field it quotes', () => {
+test('the night note quotes the model as shipped, and the band covers it as well as the calibration run', () => {
   const note = ACCURACY.night.note;
+  const S = NIGHT_AS_SHIPPED;
   const has = (s) => assert.ok(note.includes(s), `the night note lacks "${s}":\n${note}`);
-  const bias = art.night.bias_K;
-  has(`over ${ACCURACY.night.n} ward-scenes`);
-  has(`${ACCURACY.night.modelRmseK} K against a best-achievable ${ACCURACY.night.ceilingRmseK} K`);
-  has(`bias ${bias >= 0 ? '+' : '−'}${Math.abs(bias).toFixed(2)} K`);
-  const side = bias >= 0 ? 'warmer' : 'colder';
-  has(`${side} than the measured surface`);
-  has(`runs ${Math.abs(bias).toFixed(2)} K ${side}`);
-  has(`+/-${ACCURACY.night.bandK.toFixed(1)} K`);
-  has(`leave-one-overpass-out error of ${ACCURACY.night.looOverpassRmseK} K`);
+  has(`Over ${ACCURACY.night.n} ward-scenes (${S.overpasses} ECOSTRESS overpasses)`);
+  has(`the model as shipped is off by ${S.rmseK.toFixed(2)} K, ${S.looOverpassRmseK.toFixed(2)} K out of sample`);
+  has(`runs ${S.biasK.toFixed(2)} K warmer than the measured surface`);
+  has(`Air temperature plus a fixed offset does as well (${S.airOffsetLooRmseK.toFixed(2)} K out of sample)`);
+  has('ward-to-ward differences at night are not yet validated');
+  /* the band is unchanged and covers BOTH sets of figures: the artefact's (Python mirror) and the shipped model's */
+  assert.equal(ACCURACY.night.bandK, 3.0);
+  assert.ok(ACCURACY.night.bandK >= Math.max(S.rmseK, S.looOverpassRmseK, art.night.rmse_K, art.night.loo_overpass_rmse_K));
+  /* the shipped bias has the artefact's sign, so "warmer" is still the right word */
+  assert.ok(art.night.bias_K > 0 && S.biasK > 0);
 });

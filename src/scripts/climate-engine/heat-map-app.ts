@@ -3289,8 +3289,9 @@ export function mountHeatMap(): () => void {
   const lstColor = (t: number) => t >= 40 ? 'var(--red)' : t >= 37 ? 'var(--orange)' : t >= 33 ? 'var(--bronze)' : 'var(--cyan)';
 
   /**
-   * Show how much to trust the number on screen. Night is calibratable against
-   * ECOSTRESS (data ceiling 1.87 K); daytime is not (3.33 K), because noon
+   * Show how much to trust the number on screen. Night is calibrated against
+   * ECOSTRESS for the city-wide level only (ward-to-ward detail is not validated;
+   * accuracy.ts NIGHT_AS_SHIPPED); daytime is only indicative, because noon
    * surface temperature depends on local insolation, cloud timing and soil
    * moisture that 50 km reanalysis forcing cannot resolve. Presenting the
    * daytime figure as decision-grade would be the real inaccuracy, so it is
@@ -3317,11 +3318,17 @@ export function mountHeatMap(): () => void {
        Kolkata; a geometry-tier city has none of its own, so it gets one honest line
        and no band, in any weather (scope/accuracy-claim.ts). Read from the CURRENT
        ward, not the boot scope: the ward can change in place. */
-    const claim = heatAccuracyClaim(resolve(state.ward).tier);
+    const claim = heatAccuracyClaim(resolve(state.ward).tier, resolve(state.ward).city.id);
     paintPatternNote(claim);
     if (claim.kind === 'none') {
+      /* The seasonal line is Kolkata's and stays off. The one note a non-validated city may carry
+         is its own measured finding (accuracy-claim.ts CITY_CAVEATS), shown where the season line goes. */
       const seasonOff = el('seasonNote');
-      if (seasonOff) { seasonOff.textContent = ''; (seasonOff as HTMLElement).hidden = true; }
+      if (seasonOff) {
+        seasonOff.textContent = claim.caveat ?? '';
+        (seasonOff as HTMLElement).hidden = claim.caveat == null;
+        (seasonOff as HTMLElement).removeAttribute('title');
+      }
       const noneTag = el('conf');
       if (noneTag) {
         noneTag.textContent = claim.line;
@@ -3413,7 +3420,7 @@ export function mountHeatMap(): () => void {
       pn.setAttribute('title', claim.detail);
     }
   }
-  paintPatternNote(heatAccuracyClaim(resolve(state.ward).tier));
+  paintPatternNote(heatAccuracyClaim(resolve(state.ward).tier, resolve(state.ward).city.id));
   /* Push the bounds to every consumer AND to the legend, so the printed numbers
      can never disagree with the colours above them. */
   function syncRamp(p: SimParams) {
@@ -3484,7 +3491,7 @@ export function mountHeatMap(): () => void {
       // error against ECOSTRESS for the phase on screen. See accuracy.ts.
       // ...and no band at all on a wet ward, which no measurement covers (applyConfidence),
       // nor in a city whose tier carries no measurement (heatAccuracyClaim).
-      const claim = heatAccuracyClaim(resolve(state.ward).tier);
+      const claim = heatAccuracyClaim(resolve(state.ward).tier, resolve(state.ward).city.id);
       const unvalidated = claim.kind !== 'band'
         || (state.sunNow != null && M.outsideValidation(state.live, state.phase === 'peak') !== null);
       lst.innerHTML = `${st.meanC.toFixed(1)}<span class="u">°C</span>`

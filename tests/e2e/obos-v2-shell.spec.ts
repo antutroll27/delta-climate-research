@@ -345,14 +345,14 @@ test.describe('@v2 shell', () => {
     }
     /* A-S5 audit F3 (mutation M3): the hero follows #conf and #lstPhase on THEIR OWN, not only when #lst changes with them in the same tick.
        The app writes these two ids; writing them here exercises the mirror's own observers. */
-    await page.evaluate(() => { document.getElementById('conf')!.innerHTML = 'Calibrated · <b>±3.0 °C</b> · <b>n=50</b>'; });
-    await expect(page.locator('[data-v2-mirror="conf"]')).toHaveText('Calibrated · n=50');
+    await page.evaluate(() => { document.getElementById('conf')!.innerHTML = 'Night level calibrated · ward detail unvalidated · <b>±3.0 °C</b> · <b>n=50</b>'; });
+    await expect(page.locator('[data-v2-mirror="conf"]')).toHaveText('Night level calibrated · ward detail unvalidated · n=50');
     await page.evaluate(() => { document.getElementById('lstPhase')!.textContent = 'modelled at 22:00'; });
     await expect(page.locator('[data-v2-mirror="phase"]')).toHaveText('modelled at 22:00');
     const path = page.locator('[data-side-pane="explore"] #segPath');
     await expect(path.locator('button')).toHaveCount(3);
     await phase.locator('button[data-p="night"]').click();
-    await expect(page.locator('#conf')).toContainText('Calibrated', { timeout: 30_000 });
+    await expect(page.locator('#conf')).toContainText('Night level calibrated', { timeout: 30_000 });
     const base = await page.locator('#lst').textContent();
     await path.locator('button').nth(2).click();
     await expect(path.locator('button').nth(2)).toHaveClass(/\bon\b/);

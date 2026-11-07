@@ -47,7 +47,7 @@ test.describe('@v2 honesty', () => {
     await stubWeather(page, '2026-10-07T06:05:00Z');
     await openV2(page);
     await phase(page, 'night');
-    await expect(page.locator('#conf')).toContainText(/Calibrated · ±\d\.\d °C · n=\d+/, { timeout: 60_000 });
+    await expect(page.locator('#conf')).toContainText(/Night level calibrated · ward detail unvalidated · ±\d\.\d °C · n=\d+/, { timeout: 60_000 });
     expect(await singlePm(page)).toBe(1);
     await markFollowsHero(page);
     await phase(page, 'peak');

@@ -56,6 +56,26 @@ test('a validated ward may show a band; every other tier gets one honest line in
   for (const k of BENGALURU) assert.equal(heatAccuracyClaim(resolve(k).tier).kind, 'none', k);
 });
 
+/* AMSTERDAM'S ONE MEASURED FINDING (science audit 2026-11-07). The "not yet validated" line is
+   unchanged; the daytime cold-bias caveat rides beside it, keyed on the city key and nothing else. */
+test('Amsterdam states its measured daytime cold bias beside the unchanged not-validated line', () => {
+  const AMS = 'Satellite checks (ECOSTRESS and Landsat, summers 2019–2026) show this model reads cooler than the measured surface by day, by about 5–7 °C from late morning to afternoon, more on clear days.';
+  const a = heatAccuracyClaim(resolve('nl/amsterdam/canal-ring').tier, resolve('nl/amsterdam/canal-ring').city.id);
+  assert.equal(a.kind, 'none');
+  assert.equal(a.line, 'Heat accuracy not yet validated for this city');
+  assert.equal(a.caveat, AMS);
+  assert.ok(a.detail.endsWith(AMS) && a.detail.startsWith(NOT_VALIDATED_LINE));
+  assert.equal('figures' in a, false);
+  /* keyed on the city, not on the tier and not on the words: every other non-validated city carries none */
+  for (const k of BENGALURU) assert.equal(heatAccuracyClaim(resolve(k).tier, resolve(k).city.id).caveat, null, k);
+  assert.equal(heatAccuracyClaim('geometry').caveat, null);
+  assert.equal(heatAccuracyClaim('geometry', 'dubai').caveat, null);
+  assert.equal(heatAccuracyClaim('geometry', 'amsterdam').caveat, AMS);
+  /* a city key can add a caveat; it can never make a band */
+  assert.equal(heatAccuracyClaim('validated', 'amsterdam').kind, 'band');
+  assert.equal(heatAccuracyClaim('platinum', 'amsterdam').caveat, AMS);
+});
+
 test('the gate fails closed on a tier it does not know', () => {
   for (const t of ['platinum', undefined, null, '']) {
     const c = heatAccuracyClaim(t);
@@ -252,17 +272,17 @@ test('every accuracy figure under src is reached through heatAccuracyClaim(tier)
 
 test('the three live consumers branch on the claim before they touch a figure', () => {
   const app = read('src/scripts/climate-engine/heat-map-app.ts');
-  assert.match(app, /heatAccuracyClaim\(resolve\(state\.ward\)\.tier\)/, 'heat-map-app reads the CURRENT ward\'s tier (a closure over the boot scope would go stale)');
+  assert.match(app, /heatAccuracyClaim\(resolve\(state\.ward\)\.tier, resolve\(state\.ward\)\.city\.id\)/, 'heat-map-app reads the CURRENT ward\'s tier (a closure over the boot scope would go stale)');
   const conf = /function applyConfidence\(\)[\s\S]*?\n  \}\n/.exec(app)?.[0] ?? '';
   assert.ok(conf.includes("claim.kind === 'none'"), 'applyConfidence must branch on the claim');
   assert.ok(conf.indexOf("claim.kind === 'none'") < conf.indexOf('claim.figures'), 'the gate comes BEFORE any figure is read');
   const refresh = /function refreshStats[\s\S]*?applyConfidence\(\);/.exec(app)?.[0] ?? '';
   assert.match(refresh, /claim\.kind !== 'band'/, '#lst .band is gated on the claim, not only on dry weather');
   const methods = read('src/components/ClimateEngine/v2/MethodsCards.astro');
-  assert.match(methods, /heatAccuracyClaim\(scope\.tier\)/);
+  assert.match(methods, /heatAccuracyClaim\(scope\.tier, scope\.city\.id\)/);
   assert.match(methods, /claim\.kind === 'band'/, 'the "How sure" ledger needs the tier, not just a ward record');
   const heat = read('src/components/ClimateEngine/v2/HeatCards.astro');
-  assert.match(heat, /heatAccuracyClaim\(scope\.tier\)/);
+  assert.match(heat, /heatAccuracyClaim\(scope\.tier, scope\.city\.id\)/);
 });
 
 /* KOLKATA, BYTE FOR BYTE. The chip, the tooltips, the season note and the pattern note
@@ -271,10 +291,10 @@ test('Kolkata keeps its chip, tooltip and pattern words byte for byte', () => {
   const F = heatAccuracyClaim('validated').figures;
   const fig = (t) => `<b>${t}</b>`;
   const n = ACC.ACCURACY.night, p = ACC.ACCURACY.peak;
-  assert.deepEqual(F.chip('night', false, ''), { html: `Calibrated · ${fig(`±${n.bandK.toFixed(1)} °C`)} · ${fig(`n=${n.n}`)}`, confidence: 'quantitative' });
+  assert.deepEqual(F.chip('night', false, ''), { html: `Night level calibrated · ward detail unvalidated · ${fig(`±${n.bandK.toFixed(1)} °C`)} · ${fig(`n=${n.n}`)}`, confidence: 'quantitative' });
   assert.deepEqual(F.chip('peak', false, ''), { html: `Indicative only · ${fig(`±${p.bandK.toFixed(1)} °C`)} · ${fig(`n=${p.n}`)} · ${ACC.PEAK_CHIP_BASIS}`, confidence: 'indicative' });
   assert.deepEqual(F.chip('night', true, ' · dry-season warm'), { html: `Outside validation · ${fig(`~±${ACC.TRANSITION_RMSE_K.toFixed(1)} °C`)} at this hour · dry-season warm`, confidence: 'indicative' });
-  assert.equal(F.chip('night', false, ' · s').html, `Calibrated · ${fig(`±${n.bandK.toFixed(1)} °C`)} · ${fig(`n=${n.n}`)} · s`);
+  assert.equal(F.chip('night', false, ' · s').html, `Night level calibrated · ward detail unvalidated · ${fig(`±${n.bandK.toFixed(1)} °C`)} · ${fig(`n=${n.n}`)} · s`);
   assert.equal(F.chip('peak', false, ' · s').html, `Indicative only · ${fig(`±${p.bandK.toFixed(1)} °C`)} · ${fig(`n=${p.n}`)} · ${ACC.PEAK_CHIP_BASIS} · s`);
   for (const ph of ['night', 'peak']) {
     assert.equal(F.tooltip(ph, false, 'S'), `S${ACC.ACCURACY[ph].note}\n\n${ACC.SPATIAL.note}`);
@@ -295,7 +315,7 @@ test('Kolkata keeps its chip, tooltip and pattern words byte for byte', () => {
   assert.deepEqual(F.limits('ballygunge'), COPY.caveatRows('ballygunge'));
   /* the methods ledger, as MethodsCards printed it */
   const L = F.ledger, sp = ACC.SPATIAL, h = ACC.HEIGHTS;
-  assert.equal(L.night, `calibrated · ±${n.bandK.toFixed(1)} °C · n = ${n.n} · model error ${n.modelRmseK} K · ceiling ${n.ceilingRmseK} K`);
+  assert.equal(L.night, `night level calibrated, ward detail unvalidated · ±${n.bandK.toFixed(1)} °C · n = ${n.n} · calibration-run error ${n.modelRmseK} K · ceiling ${n.ceilingRmseK} K`);
   assert.equal(L.peak, `indicative · ±${p.bandK.toFixed(1)} °C · n = ${p.n}. ${ACC.PEAK_EVIDENCE_BASIS}`);
   assert.deepEqual([L.patternR, L.patternVegR, L.patternN, L.patternNote], [sp.rModel.toFixed(2), sp.rVegOnly.toFixed(2), sp.n, sp.note]);
   assert.equal(L.heights, `${h.nBuildings} of ${h.minBuildings} buildings needed · ${h.verdict}. ${ACC.HEIGHTS_EVIDENCE_BASIS}`);
