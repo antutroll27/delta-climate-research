@@ -9,7 +9,8 @@ export interface VegetationLook {
   hazeCol: { value: THREE.Color };
 }
 
-export type Species = 'neem' | 'gulmohar' | 'palm';
+/** APPEND ONLY, mirroring scripts/_trees.py `Species`. A file's rows index into its OWN `speciesNames` (any subset of these). */
+export type Species = 'neem' | 'gulmohar' | 'palm' | 'broadleaf';
 export interface TreeInstance { x: number; y: number; h: number; species: Species; r: number; }
 export interface TreesFile { ward: string; grid: number; sizeM: number; retrieved: string; trees: TreeInstance[]; }
 
@@ -34,7 +35,7 @@ export interface VegetationLayer {
 
 /** The on-disk row format written by scripts/_trees.py. The order is the contract. */
 export const TREE_COLS = ['x_m', 'y_m', 'h_dm', 'r_dm', 'species'] as const;
-const SPECIES_NAMES: readonly Species[] = ['neem', 'gulmohar', 'palm'];
+const SPECIES_NAMES: readonly Species[] = ['neem', 'gulmohar', 'palm', 'broadleaf'];
 
 export function asTreesFile(raw: unknown): TreesFile | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -297,6 +298,9 @@ export function assertVegetationLogic(): void {
   ok(asTreesFile({ ...header, trees: [{ x: 1, y: 2, h: 6, species: 'palm', r: 2 }] }) === null, 'old object rows rejected');
   const f = asTreesFile({ ...header, trees: [[1, 2, 60, 20, 2]] });
   ok(f !== null && f.trees[0].species === 'palm' && f.trees[0].h === 6 && f.trees[0].r === 2, 'valid rows accepted');
+  const bl = asTreesFile({ ...header, speciesNames: ['broadleaf'], trees: [[1, 2, 80, 28, 0]] });
+  ok(bl !== null && bl.trees[0].species === 'broadleaf', 'a file naming only broadleaf decodes: rows index into the file\'s own header');
+  ok(asTreesFile({ ...header, speciesNames: ['broadleaf'], trees: [[1, 2, 80, 28, 1]] }) === null, 'an index past the file\'s own header is refused');
   // No-data path only: constructing InstancedMeshes requires a WebGL-capable
   // renderer context that node does not provide, so real-data construction is
   // NOT exercised here (it is covered by the headless-browser screenshot check).

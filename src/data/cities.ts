@@ -124,6 +124,31 @@ const BENGALURU_WARDS: readonly WardRecord[] = [
 ];
 
 /**
+ * AMSTERDAM, third city, geometry tier (docs: research/new-cities/PLAN-amsterdam-tokyo.md §2).
+ *
+ * `veg` IS MEASURED (Task A8): 0.350 is the mean fractional vegetation cover of the
+ * exported Sentinel-2 raster (surface-meta.json `fvc_mean` 0.3503, 27 scenes 2021-2025 with the sun >= 40 degrees; the first
+ * all-season composite read 0.295, depressed by leaf-off and shadowed winter scenes),
+ * and tests/unit/amsterdam-artefacts.test.mjs holds the two equal to three places.
+ * `swatch` is a neutral stand-in for the founder's visual review (plan A13).
+ *
+ * `body` names the three stadsdelen the 2.8 km square actually covers, MEASURED by
+ * intersecting it with the Gemeente Amsterdam gebieden/stadsdelen polygons
+ * (api.data.amsterdam.nl, retrieved 2026-11-06): Centrum 46.3 %, Zuid 33.0 %,
+ * West 20.6 %, Oost 0.1 %. See data/cities/amsterdam/sources.json.
+ *
+ * DRAWABLE, announced and NOT indexed (release commit, plan A13): `since` / `showcase`
+ * make the NEW CITY card announce Amsterdam; `shipsData` stays false in registry.ts, so
+ * the page is noindex and out of the sitemap exactly as Bengaluru's was at its launch.
+ */
+const AMSTERDAM_WARDS: readonly WardRecord[] = [
+  { id: 'canal-ring', name: 'Canal <em>Ring</em>', zone: 'Canal Belt · Vondelpark',
+    body: 'Gemeente Amsterdam (stadsdelen Centrum, Zuid, West)',
+    lat: 52.3640, lon: 4.8850, veg: 0.350, footprintM: 2800,
+    swatch: 'radial-gradient(circle at 40% 40%,#6fcad6,#9fb98a 58%,#093a3e)' },
+];
+
+/**
  * A city's cell size is DERIVED from its wards, never typed in beside them.
  *
  * Typing it in is how the two drift: 384 cells over a 1400 m ward yields arrays
@@ -145,6 +170,9 @@ export const CITIES: Record<string, CityRecord> = {
   bengaluru: { id: 'bengaluru', name: 'Bengaluru', country: 'India',
     cellMeters: declaredCellMeters(BENGALURU_WARDS), wards: BENGALURU_WARDS,
     since: '2026-09-16', showcase: 'mg-road' },
+  amsterdam: { id: 'amsterdam', name: 'Amsterdam', country: 'Netherlands',
+    cellMeters: declaredCellMeters(AMSTERDAM_WARDS), wards: AMSTERDAM_WARDS,
+    since: '2026-11-07', showcase: 'canal-ring' },
 };
 
 export const CITY_OF: Record<string, string> = Object.fromEntries(

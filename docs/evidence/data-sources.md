@@ -759,6 +759,85 @@ and never by ward join.**
 
 ---
 
+## Amsterdam: the third-city stack (2026-11)
+
+Everything below was fetched or queried for the **canal-ring area** (52.3640 N, 4.8850 E, 2,800 m square,
+Cfb), on 2026-11-06, by a generic-User-Agent pipeline. Provenance per source (URL, HTTP status, release,
+retrieval date) is in `data/cities/amsterdam/sources.json`; the readiness audit that chose the sources is
+`/Volumes/OBOSLab/research/new-cities/READINESS.md` (its AHN licence line was wrong and is corrected below);
+the licence reading is `/Volumes/OBOSLab/research/new-cities/AHN5-LICENCE.md`. Nothing here ships: the area
+is registered, not drawable, until the founder reviews it.
+
+### In use
+
+**3D BAG** (TU Delft 3D geoinformation group + 3DGI) · release **v20250903** · **CC BY 4.0** · footprints
+and per-building roof height (LoD1.2, roof 70th percentile minus ground level, NAP) · **role:** the footprints
+and the heights, replacing Overture + Google Open Buildings 2.5D · 21,342 footprints, 0 fills, h p50 14.90 m,
+p95 18.74 m, max 41.96 m (46 tiles, 95 MB) · credit and placement duties in `regulatory-and-licensing.md`.
+
+**AHN (Actueel Hoogtebestand Nederland), PDOK WCS** · 0.5 m DTM and DSM, **AHN4 (2020-22)** as served · **CC0 1.0**
+· **role:** the terrain mesh (96 x 96 over 2,800 m, NAP −2.53…+3.53 m after the post-AHN4 patch below, render-only, "not used by the
+simulation") and the independent nDSM for guards G5/G6. G5 is a REGISTRATION test (footprints in the right place, right way up), **never a height accuracy**: 17.5 % of the buildings take their height from AHN4 itself, and even AHN5 against AHN4 is one sensor programme and one p70 rule; never quote its rho as accuracy. *Not AHN5:* the service abstract says the current
+AHN is version 4, and AHN5 changed the gridding method, so `dtm_05m`/`dsm_05m` are AHN4. AHN5 is what ~79 % of
+the 3D BAG heights come from (CC BY 4.0), so a G5 comparison spans a one-to-three-year gap.
+
+**Overture Maps `base/water`, `base/land_use`, `transportation/segment`, release 2026-10-21.0** · **ODbL 1.0** ·
+OSM-derived · **role:** water, green ground and roads (213 water polygons, 469 water centrelines of which 6
+covered, 708 green polygons, 2,252 carriageway segments, 7.5 % at the major width against Kolkata's 2.5-9.0 %
+and Bengaluru's 3.7-13.7 %). The clipped parquet is cached on OBOSLab (releases leave the bucket within about
+three months; Bengaluru's has already gone).
+
+**Meta/WRI Canopy Height Model v2** (`dinov3_global_chm_v2_ml3`, tile `1202021101`) · **CC BY 4.0** · windowed
+COG read, never downloaded whole · **role:** canopy height and the placed trees (25,668 candidates, 3,408 dropped
+in drawn carriageways, 5,550 in footprints, **16,710 kept**; cover ≥ 3 m at ~1 m: 27.9 %). Kolkata's placement
+rule verbatim.
+
+**Copernicus Sentinel-2 L2A** (Earth Search STAC) · Copernicus open terms · **role:** the 10 m vegetation and
+albedo raster, `level: "measured"` (there is no DC-URS scalar to pin to). **Scene selection for Amsterdam is gated on sun height**
+(`Area.min_sun_elevation_deg` = 40°, STAC `view:sun_elevation`): of 30 candidate scenes 2021-25, 10 had the sun below
+25° (Jan, Feb, Nov, down to 14.5°), and L2A reflectance has no shadow correction, so a low sun in a canyon city darkens
+the per-cell median. The 40° floor keeps 28 of 30 candidates (every year 4-6; April-September), 27 usable. Result:
+albedo 0.0942 → 0.1067, FVC 0.2947 → 0.3503 (leaf-on). Kolkata and Bengaluru pass no floor, so their selection is
+unchanged. The residual gap to the audit's 0.11-0.14 expectation is real low reflectance of dark slate roofs, brick and
+water, and the level is shipped as measured.
+
+**KNMI Schiphol (240) climate normals 1991-2020** · site default CC0, credit "bron: KNMI", and (when quoting) a statement that
+KNMI is not involved in the derived work and does not necessarily endorse its purport ("niet betrokken ... en de strekking
+daarvan niet noodzakelijkerwijs onderschrijft"; knmi.nl/copyright re-read in full 2026-11-06) · **role:** the fallback air temperature (`airNormals`).
+
+**Beck et al. (2023) Köppen-Geiger 1 km** · CC BY 4.0 · Cfb at the centre and both corners.
+
+**Wikidata P625** · CC0 · four landmark coordinates for guard G4 (`landmarks.json`, retrieved 2026-11-06).
+
+### Ruled out (with the reason)
+
+- **Google Open Buildings 2.5D Temporal** — the catalogue covers Africa, South and South-East Asia and Latin
+  America; no Europe. 3D BAG replaces it.
+- **Copernicus GLO-30 for terrain** — a surface model (rooftops and canopy), not a ground model; AHN has a real DTM.
+- **Amsterdam municipal tree inventory** — its terms carry a pass-on clause (state that the original is free from
+  the municipality and flow the same terms down). Not used at geometry tier; canopy comes from the CHM.
+- **Open-Meteo** — the free tier is non-commercial.
+- **AHN5 for terrain** — CC BY 4.0 rather than CC0, and its tiles are served by other endpoints; the PDOK WCS stays
+  on AHN4 so the terrain stays CC0.
+
+### Findings that change how the data are read
+
+- **The −4.52 m NAP mesh cell** (row 19, col 49, ~830 m south of centre, 52.3565 N 4.8856 E) was real AHN4 ground
+  level, not a registration error: an open construction pit when AHN4 was flown (2020), floor −6.7…−7.2 m NAP, since built
+  on (3D BAG `NL.IMBAG.Pand.0363100012250514`: first built 2022, 27.7 m tall, `b3_h_maaiveld` −0.98 m NAP, point cloud AHN5
+  2023; AHN4 nDSM sees 1.3 m). The served mesh put that building's base 3.5 m under 3D BAG's own ground, so since the audit
+  fix the terrain is **patched**: for every building first built after the AHN4 flight AND whose AHN4 nDSM p70 is more than
+  5 m under its 3D BAG height, the DTM is raised to `b3_h_maaiveld` inside the footprint and, within 15 m, where it is
+  more than 1.5 m lower (the pit outruns its footprint). It only ever raises. Six buildings qualify; 14 mesh cells change
+  (10 by more than 0.5 m; the pit cell −4.52 → −0.66 m), the lowest mesh cell is now −2.53 m NAP. The rule and the building
+  list are in `canal-ring-terrain.json` `postAhn4Patch`.
+- **Tree species.** Kolkata's draw has palms; Amsterdam's does not. The founder's rule is no palms outside the tropics, so a
+  Köppen C/D city draws one generic `broadleaf` (the 10 m placement knows a canopy height, not a species). Positions,
+  heights and the 16,710 count are unchanged; only the label differs, and `canal-ring-trees.json` carries its own
+  one-name `speciesNames`.
+- **DTM beside Overture water** — see `data/cities/amsterdam/frame-guard.json` `waterLevel`. The reference canal
+  level (NAP −0.40 m summer) is **not verified here**; the block records what the data say and gates nothing.
+
 ## Free EO backbones the open-data pitch rests on (commercial use OK)
 
 [Copernicus Data Space](https://dataspace.copernicus.eu/) · [MS Planetary

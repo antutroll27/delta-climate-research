@@ -1,0 +1,343 @@
+{
+  "city": "amsterdam",
+  "area": "canal-ring",
+  "retrieved": "2026-11-06",
+  "userAgent": "obos-pipeline/1.0 (+https://deltaclimate.earth)",
+  "note": "Every URL below was requested on the retrieval date with the HTTP status shown. Nothing here is copied from a plan or memory without being re-requested. Overture, Meta CHM, Sentinel-2, AHN5 and Wikidata were added by Tasks A7-A11 (2026-11-06).",
+  "sources": [
+    {
+      "id": "3dbag-release",
+      "role": "footprints + per-building roof height (Task A5)",
+      "name": "3D BAG",
+      "release": "v20250903 (edition v2025.09.03, creation date 2025-09-03)",
+      "urls": {
+        "metadata": {
+          "url": "https://3dbag.fsn1.your-objectstorage.com/v20250903/metadata.json",
+          "http": 200,
+          "lastModified": "Fri, 23 Oct 2026 17:53:30 GMT"
+        },
+        "tileIndexFlatGeobuf": {
+          "url": "https://3dbag.fsn1.your-objectstorage.com/v20250903/tile_index.fgb",
+          "http": 200,
+          "bytes": 3330872
+        },
+        "tilePatternGpkg": {
+          "url": "https://3dbag.fsn1.your-objectstorage.com/v20250903/tiles/{x}/{y}/{z}/{x}-{y}-{z}.gpkg.gz",
+          "http": 200,
+          "verifiedOn": "tiles/10/428/718/10-428-718.gpkg.gz, 2,359,615 bytes",
+          "foundIn": "the 3dbag.nl viewer bundle js/app.90a1aa28.js, and the WFS tiles layer property gpkg_download"
+        },
+        "wfs": {
+          "url": "https://data.3dbag.nl/api/BAG3D/wfs",
+          "http": 200,
+          "layers": [
+            "BAG3D:lod12",
+            "BAG3D:lod13",
+            "BAG3D:lod22",
+            "BAG3D:tiles"
+          ],
+          "defaultCrs": "urn:ogc:def:crs:EPSG::28992"
+        },
+        "api": {
+          "url": "https://api.3dbag.nl/collections",
+          "http": 200,
+          "note": "NOT used: per-tile GeoPackage is chosen over API paging (plan A5 preference)"
+        },
+        "docsGpkg": {
+          "url": "https://docs.3dbag.nl/en/delivery/gpkg/",
+          "http": 200
+        },
+        "docsAttributes": {
+          "url": "https://docs.3dbag.nl/en/schema/attributes/",
+          "http": 200
+        }
+      },
+      "licence": "CC BY 4.0",
+      "licenceUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "copyrightPage": {
+        "url": "https://docs.3dbag.nl/en/copyright/",
+        "http": 200
+      },
+      "requiredCredit": "© 3DBAG by tudelft3d and 3DGI",
+      "creditRules": "give credit; link to the copyright page in digital media; indicate if you made changes; on a browsable map the credit appears in the bottom right corner",
+      "upstreamLicences": {
+        "BAG 2.0 Extract (footprints, Kadaster, 2025-08-08)": "http://creativecommons.org/publicdomain/mark/1.0/ (public domain mark), per metadata.json lineage",
+        "TOP10NL (Kadaster, 2025-06-04, greenhouse / warehouse info)": "CC BY 4.0, per metadata.json lineage",
+        "AHN3 (2014-2019)": "CC0, per metadata.json lineage",
+        "AHN4 (2020-2022)": "CC0, per metadata.json lineage",
+        "AHN5 (2023-2025)": "CC BY 4.0 (Het Waterschapshuis), per metadata.json lineage. NOTE: READINESS.md says AHN is CC0; the AHN5 point cloud that 3D BAG heights mostly come from is listed here as CC BY 4.0. 3D BAG's own credit chain already carries it, but Task A11 must decide whether an AHN credit line is owed. The exact AHN5 credit wording was NOT found on an official AHN page."
+      },
+      "tilesIntersectingArea": {
+        "count": 46,
+        "gpkgGzBytesTotal": 94685465,
+        "buildingsInTiles": 37150,
+        "method": "WFS BAG3D:tiles, bbox = area + 50 m in EPSG:28992"
+      },
+      "used": {
+        "tiles": 46,
+        "tileIds": "10/422..434 x 710..722 (leaf tiles) + 9/420/708, 9/420/720, 9/424/708, 9/428/708",
+        "gpkgGzBytes": 94685465,
+        "rawBuildingsRead": 37150,
+        "rowsWritten": 21342,
+        "rule": "centroid inside the 2.8 km square; height = lod12_2d b3_h_70p minus pand b3_h_maaiveld (NAP); multi-part buildings one row per part; sha256 of each .gpkg.gz verified against the WFS tile index",
+        "rdToWgs84": "pyproj default operation \"Inverse of RD New + Amersfoort to WGS 84 (4)\", stated accuracy 1 m; \"(3)\" differs by 5 mm at the centre; no grid-based RDNAPTRANS2018 operation is offered by the local PROJ 9.8.1 database even with the network enabled",
+        "downloadNote": "the server sets Content-Encoding: gzip on the .gz files; requests must read raw bytes (decode_content=False) or the published sha256 never matches"
+      }
+    },
+    {
+      "id": "ahn-wcs",
+      "role": "terrain DTM and DSM (Task A6; DSM for guard G5)",
+      "name": "Actueel Hoogtebestand Nederland (AHN) WCS, PDOK / Rijkswaterstaat",
+      "urls": {
+        "getCapabilities": {
+          "url": "https://service.pdok.nl/rws/ahn/wcs/v1_0?request=GetCapabilities&service=WCS",
+          "http": 200
+        },
+        "describeCoverage": {
+          "url": "https://service.pdok.nl/rws/ahn/wcs/v1_0?service=WCS&version=2.0.1&request=DescribeCoverage&coverageId=dtm_05m",
+          "http": 200
+        }
+      },
+      "serviceVersions": [
+        "2.0.1",
+        "1.1.1"
+      ],
+      "coverages": [
+        "dsm_05m",
+        "dtm_05m"
+      ],
+      "nativeCrs": "EPSG:28992 (RD New), 0.5 m, values in metres above NAP",
+      "epoch": "The service abstract says: 'Het huidige AHN is versie 4. Deze versie is ingewonnen over de jaren 2020, 2021 en 2022.' So the WCS serves AHN4 (2020-2022), NOT AHN5 (2023). 3D BAG heights for this area come mostly from AHN5 (2023). Guard G5 therefore compares across a 1-3 year vintage gap.",
+      "nodata": 3.4028234663852886e+38,
+      "maxRequestPx": 4000,
+      "getCoverageSyntax": "service=WCS&version=2.0.1&request=GetCoverage&coverageId=<id>&format=image/tiff&subset=x(minx,maxx)&subset=y(miny,maxy)  (coordinates in EPSG:28992; larger than 4000 px per side returns HTTP 400 'Raster size out of range ... MAXSIZE=4000')",
+      "dtmDefinition": "ground-classified points resampled by squared IDW; DSM = all points except water",
+      "accessConstraints": "otherRestrictions; Geen beperkingen; http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+      "licence": "CC0 1.0 (for the AHN4 coverage served here)",
+      "licenceUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+      "used": {
+        "tiles": "9 x 1 km per coverage, 2 coverages",
+        "extentRD": "119329.0 484883.0 .. 122255.0 487822.0 (+50 m pad, snapped outward to the 0.5 m lattice)",
+        "mosaic": "5853 x 5879 px",
+        "dtmValidShare": 0.4385,
+        "dsmValidShare": 0.8926,
+        "rawDir": "~/.cache/delta-climate/cities/amsterdam/raw/ahn (dtm_05m_clip.tif 54 MB, dsm_05m_clip.tif 108 MB)"
+      }
+    },
+    {
+      "id": "koppen-beck2023",
+      "role": "Koppen class (Task A2a)",
+      "name": "Beck et al. (2023) 1 km Koppen-Geiger maps 1901-2099, Scientific Data 10, 724",
+      "urls": {
+        "figshareApi": {
+          "url": "https://api.figshare.com/v2/articles/21789074",
+          "http": 200
+        },
+        "download": {
+          "url": "https://ndownloader.figshare.com/files/61012822",
+          "http": 200,
+          "file": "koppen_geiger_tif.zip",
+          "bytes": 130618411
+        },
+        "doi": {
+          "url": "https://doi.org/10.6084/m9.figshare.21789074.v2",
+          "http": 202
+        }
+      },
+      "version": "figshare v2, published 2026-01-14",
+      "member": "1991_2020/koppen_geiger_0p00833333.tif (uint8, EPSG:4326, 1/120 degree)",
+      "result": "class 15 = Cfb (Temperate, no dry season, warm summer) at the area centre and at both north-east and south-west corners of the 2.8 km square",
+      "licence": "CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "cite": "Beck, H. E., McVicar, T. R., Vergopolan, N., Berg, A., Lutsko, N. J., Dufour, A., Zeng, Z., Jiang, X., van Dijk, A. I. J. M., Miralles, D. G. (2023) Scientific Data 10, 724"
+    },
+    {
+      "id": "knmi-normals-240",
+      "role": "air temperature normals (Task A2b)",
+      "name": "KNMI, Schiphol (station 240), langjarige gemiddelden, tijdvak 1991-2020",
+      "urls": {
+        "table": {
+          "url": "https://cdn.knmi.nl/knmi/map/page/klimatologie/klimaatatlas/tabel/stationsdata/klimtab_9120_240.pdf",
+          "http": 200,
+          "bytes": 125637,
+          "contentType": "application/pdf"
+        },
+        "copyright": {
+          "url": "https://www.knmi.nl/copyright",
+          "http": 200
+        }
+      },
+      "values": {
+        "maxC (gemiddeld maximum, Jan..Dec)": [
+          6.2,
+          6.9,
+          10.1,
+          14.3,
+          17.8,
+          20.3,
+          22.5,
+          22.4,
+          19.2,
+          14.7,
+          10.0,
+          6.9
+        ],
+        "minC (gemiddeld minimum, Jan..Dec)": [
+          1.2,
+          1.0,
+          2.8,
+          5.2,
+          8.6,
+          11.3,
+          13.5,
+          13.4,
+          11.0,
+          7.7,
+          4.5,
+          1.9
+        ],
+        "annual mean (jaar, gemiddeld)": 10.7
+      },
+      "readingNote": "Read from the PDF text layer with pdftotext -layout; columns are gemiddeld / gemiddeld minimum / gemiddeld maximum. Schiphol is about 8.5 km from the area (READINESS.md).",
+      "licence": "CC0 by default, https://www.knmi.nl/copyright, RE-READ IN FULL 2026-11-06 (HTTP 200). Reuse needs the credit \"bron: KNMI\" AND, when quoting, a statement that KNMI is not involved in the derived work and does not necessarily endorse its purport. Verbatim: \"U mag de inhoud van deze website hergebruiken onder naamsvermelding \u201cbron: KNMI\u201d, maar u dient bij het citeren van de inhoud aan te geven dat het KNMI niet betrokken is bij het afgeleide werk en de strekking daarvan niet noodzakelijkerwijs onderschrijft.\" Patent and trademark rights, and third parties' rights (portrait, privacy), are expressly unchanged.",
+      "licenceReadOn": "2026-11-06",
+      "requiredCredit": "bron: KNMI",
+      "requiredStatement": "KNMI is not involved in this derived product and does not necessarily endorse its purport (niet betrokken bij het afgeleide werk en de strekking daarvan niet noodzakelijkerwijs onderschrijft)"
+    },
+    {
+      "id": "amsterdam-stadsdelen",
+      "role": "which stadsdelen the square covers (the 'body' string, Task A2)",
+      "name": "Gemeente Amsterdam, gebieden/stadsdelen",
+      "urls": {
+        "api": {
+          "url": "https://api.data.amsterdam.nl/v1/gebieden/stadsdelen/?_format=json&_pageSize=100",
+          "http": 200
+        },
+        "terms": {
+          "url": "https://maps.amsterdam.nl/open_geodata/terms.php",
+          "http": 200
+        }
+      },
+      "method": "stadsdel polygons (EPSG:28992) intersected with the 2.8 km square (centre 52.3640 N 4.8850 E, local-frame bounds converted to RD); share of the square's 7.91 km2",
+      "result": {
+        "Centrum": 46.3,
+        "Zuid": 33.0,
+        "West": 20.6,
+        "Oost": 0.1
+      },
+      "use": "a display string only; no geometry from this source is redistributed",
+      "licence": "Gemeente Amsterdam open-geodata terms (reuse and commercial use allowed, attribution not required, per READINESS.md summary; the terms page was re-requested here (HTTP 200) but not re-read)"
+    },
+    {
+      "id": "ahn5-credit",
+      "role": "credit duty for the AHN5-derived share of the 3D BAG heights (Task A11)",
+      "name": "Actueel Hoogtebestand Nederland 5 (AHN5, 2023-2025), Het Waterschapshuis",
+      "licence": "CC BY 4.0",
+      "licenceUrl": "http://creativecommons.org/licenses/by/4.0/deed.nl",
+      "evidence": "NGR records 4995e338-fec7-425e-bb86-eea3875cf114 (AHN5), 9700bf7f-428f-48b9-be21-b3781cb80701 (DTM), bef7439f-833e-4a10-8dc1-c5ad1b5fdd51 (DSM), dateStamp 2025-11-19: 'Naamsvermelding verplicht'; ahn.nl (2023-12-22, 2024-07-02, 2025-10-13) requires the source on derived products. 3D BAG metadata lineage lists AHN5 as CC BY 4.0.",
+      "readme": "/Volumes/OBOSLab/research/new-cities/AHN5-LICENCE.md (read 2026-11-06)",
+      "creditText": "Heights: AHN5, Het Waterschapshuis (CC BY 4.0)",
+      "share": "about 79 % of the buildings take their heights from AHN5 (pointCloudMix in canal-ring-buildings.json)",
+      "used": "credited only: AHN5 data are not downloaded by OBOS; the heights arrive through 3D BAG"
+    },
+    {
+      "id": "ahn4-terrain-credit",
+      "role": "terrain credit (courtesy; Task A11)",
+      "name": "AHN4 (2020-2022) via PDOK WCS",
+      "licence": "CC0 1.0",
+      "licenceUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+      "note": "No credit is required. If the terrain ever moves to AHN5/AHN6 tiles or the Ellipsis Drive services, it needs the AHN5 CC BY 4.0 credit as well."
+    },
+    {
+      "id": "overture-context",
+      "role": "water, green and roads (Task A7)",
+      "name": "Overture Maps Foundation",
+      "release": "2026-10-21.0",
+      "urls": {
+        "release": "s3://overturemaps-us-west-2/release/2026-10-21.0/"
+      },
+      "themes": [
+        "base/water",
+        "base/land_use",
+        "transportation/segment"
+      ],
+      "licence": "ODbL 1.0 (OpenStreetMap contributors)",
+      "retrieved": "2026-11-06",
+      "cache": "~/.cache/delta-climate/cities/amsterdam/raw/overture (clipped parquet, ~13 MB)",
+      "result": {
+        "waterPolygons": 213,
+        "waterLines": 469,
+        "waterLinesCovered": 6,
+        "greenPolygons": 708,
+        "roadSegments": 2252,
+        "majorRoadShare": 0.075
+      }
+    },
+    {
+      "id": "meta-wri-chm-v2",
+      "role": "canopy height and placed trees (Task A8)",
+      "name": "Meta / WRI global canopy height model v2 (dinov3_global_chm_v2_ml3)",
+      "tile": "1202021101",
+      "urls": {
+        "tile": "s3://dataforgood-fb-data/forests/v2/global/dinov3_global_chm_v2_ml3/chm/1202021101.tif"
+      },
+      "licence": "CC BY 4.0",
+      "retrieved": "2026-11-06",
+      "access": "windowed read of the COG; the 100 MB tile is not downloaded",
+      "result": {
+        "candidates": 25668,
+        "droppedInRoads": 3408,
+        "droppedInBuildings": 5550,
+        "kept": 16710,
+        "coverGe3m": 0.279
+      }
+    },
+    {
+      "id": "sentinel-2-surface",
+      "role": "10 m vegetation and albedo raster (Task A8)",
+      "name": "Copernicus Sentinel-2 L2A via Earth Search STAC",
+      "licence": "Copernicus Sentinel data terms",
+      "licenceUrl": "https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice",
+      "years": [
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "level": "measured",
+      "result": {
+        "scenesUsed": 27,
+        "perYear": {
+          "2021": 6,
+          "2022": 4,
+          "2023": 5,
+          "2024": 6,
+          "2025": 6
+        },
+        "scenesPerYearCap": 6,
+        "sunElevationFloorDeg": 40,
+        "note": "_sentinel.py picks the lowest-cloud scene per month, at most 6 a year, among scenes with the sun at least 40 degrees up (STAC view:sun_elevation; Area.min_sun_elevation_deg). 30 candidates 2021-25 passed the cloud filter, 10 of them with the sun below 25 degrees (Jan, Feb, Nov, down to 14.5): L2A has no shadow correction, so those darken a canyon city's per-cell median (Amsterdam audit F5). The 40 degree floor keeps 28 of 30 candidates; 27 were readable.",
+        "fvcMean": 0.3503,
+        "albedoMean": 0.1067,
+        "before": {"scenesUsed": 25, "sunElevationFloorDeg": null, "fvcMean": 0.2947, "albedoMean": 0.0942},
+        "retrieved": "2026-11-06"
+      }
+    },
+    {
+      "id": "wikidata-landmarks",
+      "role": "guard G4 landmarks (Task A9)",
+      "name": "Wikidata P625",
+      "licence": "CC0",
+      "retrieved": "2026-11-06",
+      "file": "data/cities/amsterdam/landmarks.json",
+      "qids": {
+        "Rijksmuseum": "Q190804",
+        "Royal Palace of Amsterdam": "Q1056152",
+        "Westerkerk": "Q1130722",
+        "Concertgebouw": "Q849957"
+      },
+      "userAgent": "obos-pipeline/1.0 (+https://deltaclimate.earth)"
+    }
+  ]
+}

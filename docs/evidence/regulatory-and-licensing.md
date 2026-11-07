@@ -108,6 +108,43 @@ different authority, so clearing one says nothing about the next.
 a mirror is not an open licence on the source. Read the terms attached to the authority that actually
 produced the data.
 
+## Netherlands, added 2026-11
+
+Nothing in the Amsterdam stack blocks republication. The duties, read from the primary pages on 2026-11-06
+(`/Volumes/OBOSLab/research/new-cities/AHN5-LICENCE.md`, `data/cities/amsterdam/sources.json`):
+
+- **3D BAG, CC BY 4.0.** Credit "© 3DBAG by tudelft3d and 3DGI"; in digital media a link to
+  https://docs.3dbag.nl/en/copyright/; a statement if the data were modified; and **on a browsable map the credit
+  appears in the bottom-right corner**. OBOS puts it in MapLibre's attribution control (`CITY_MAP_CREDIT`,
+  `src/data/city-credits.ts`) and in the credits panel, with the modification line: *footprints simplified to
+  0.5 m; height = 70th-percentile roof minus ground level*. **MapLibre's attribution control is hidden on every v2
+  viewport** (`shell.css`), so the visible bottom-right credit is the `.st-attrib` chip. On a desktop its lead is
+  "© 3DBAG by tudelft3d and 3DGI · AHN · OpenStreetMap/Overture · OpenFreeMap" (`CITY_CHIP_LEAD`). On a phone the lead is
+  hidden, so a short "© 3DBAG" credit stays on the chip (`CITY_CHIP_REQUIRED`, the `.at-req` span the phone CSS does not
+  hide): "© 3DBAG · Credits". **Founder-delegated decision, 2026-11-06**; Kolkata and Bengaluru render nothing new (a test
+  pins both chips against the pre-change template).
+- **AHN5, CC BY 4.0, Het Waterschapshuis.** The readiness note's "AHN is CC0" was wrong. AHN3 and AHN4 are CC0;
+  **AHN5 and AHN6 are CC BY 4.0** and ahn.nl requires the source (AHN) on derived products. About 79 % of the
+  building heights come from AHN5, and 3D BAG's credit does not cover it, so AHN is credited separately
+  ("Heights: AHN5, Het Waterschapshuis, CC BY 4.0"). CC BY adds a no-endorsement duty (s.2(a)(6)) and a
+  no-downstream-restriction duty (s.2(a)(5)(C)): putting OBOS's derived output behind the access gate is fine; letting
+  people download raw 3D BAG or AHN5 data with terms that forbid reuse would not be.
+- **AHN4 terrain, CC0.** The PDOK WCS serves AHN4. No credit is required; one is given as a courtesy. If the pipeline
+  ever moves to AHN5/AHN6 tiles or the Ellipsis Drive services, the terrain needs the same CC BY credit.
+- **KNMI.** Site default CC0 (knmi.nl/copyright, re-read in full 2026-11-06). Reuse "onder naamsvermelding 'bron: KNMI'",
+  and "bij het citeren van de inhoud aan te geven dat het KNMI niet betrokken is bij het afgeleide werk en de strekking
+  daarvan niet noodzakelijkerwijs onderschrijft": both the credit and the non-involvement/non-endorsement statement are
+  required. The credits panel line carries both ("... (bron: KNMI). KNMI is not involved in this derived product and does
+  not necessarily endorse its purport."). An earlier version of this file omitted the endorsement clause (audit F4).
+- **Overture / OSM, ODbL.** Share-alike on a published derived database; the in-map credit names OpenStreetMap
+  contributors via Overture Maps.
+- **Meta/WRI CHM v2, CC BY 4.0.** Credited.
+- **Municipal trees: not used.** The terms carry a pass-on clause (the original is free from the municipality; the same
+  terms flow down). Using the tree file would have created the duty; the canopy comes from the CHM instead.
+- **`/attribution`** is generated from published wards' provenance. Amsterdam is `shipsData: false`, so it is absent
+  there, as Bengaluru is; the in-map credits panel carries the CC BY 4.0 obligation (credit, licence link and
+  modification statement on the same page as the map). *To confirm with the Opus wording review.*
+
 ## Licences we rely on, and why they hold
 
 | source | licence | commercial |

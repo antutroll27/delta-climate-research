@@ -256,6 +256,45 @@ export const REGISTRY = {
       },
     },
   },
+  nl: {
+    /* NO PATHWAY AND NO COSTS, null rather than a plausible placeholder (founder Q1
+       default, plan §8). A euro figure or a warming delta borrowed from India would
+       compute silently and read as an answer. Costs stay null until the founder
+       sources EUR unit costs. The readouts are null-safe (plan Task A3): the app
+       resolves `costsOrNull` at mount and every capital figure branches on the
+       null, saying that no cost basis is adopted rather than printing a zero or
+       an Indian figure. `drawable` flipped in plan Task A12. */
+    name: 'Netherlands',
+    pathway: null,
+    costs: null,
+    cities: {
+      amsterdam: {
+        /* MEASURED: Beck et al. (2023) 1 km Köppen-Geiger, 1991-2020 map, class
+           value 15 = Cfb at the area centre and at both corners of the 2.8 km
+           square. CC BY 4.0, doi:10.6084/m9.figshare.21789074.v2. */
+        koppen: 'Cfb',
+        tier: 'geometry',
+        /* The first DST zone in the registry: UTC+1 in winter, UTC+2 in summer. */
+        tz: 'Europe/Amsterdam',
+        airNormals: {
+          station: 'KNMI Schiphol 240',
+          period: '1991–2020',
+          source: 'KNMI, Schiphol (240), langjarige gemiddelden 1991-2020, klimaatatlas table klimtab_9120_240.pdf; bron: KNMI',
+          measured: true,
+          maxC: [6.2, 6.9, 10.1, 14.3, 17.8, 20.3, 22.5, 22.4, 19.2, 14.7, 10.0, 6.9],
+          minC: [1.2, 1.0, 2.8, 5.2, 8.6, 11.3, 13.5, 13.4, 11.0, 7.7, 4.5, 1.9],
+        },
+        parkRadiusM: 50,
+        data: { heatwave: null, dcUrs: null },
+        /* DRAWABLE since plan Task A12. `shipsData` stays false: the page draws and is noindex and out of the sitemap
+           (both read `publishes`) until the founder decides to index it. Its name and descriptor come from the ward table
+           (src/data/wards.ts), like every other drawable area; resolve refuses an area that names itself in both places. */
+        areas: {
+          'canal-ring': { shipsData: false, drawable: true },
+        },
+      },
+    },
+  },
 } as const satisfies Record<string, CountryEntry>;
 
 type Registry = typeof REGISTRY;
@@ -284,6 +323,18 @@ export type AreaKey = {
         ? { [N in keyof A]: `${C & string}/${Y & string}/${N & string}` }[keyof A]
         : never
   }[keyof Registry[C]['cities']]
+}[keyof Registry];
+
+/**
+ * Every registered city slug, derived from the same literal as `AreaKey` (`kolkata | bengaluru | dubai | amsterdam | ...`).
+ *
+ * WHY IT EXISTS. Tables keyed by city (src/data/city-credits.ts) were typed over a hand-written union that had to be kept equal to
+ * `CITIES` (src/data/cities.ts) by a test. `CITIES` is the DRAWABLE catalogue and has no Dubai, so a table total over `CITIES` was
+ * partial over the registry and the build threw on the Dubai pages. Keyed by this, a city added here and missing from such a table
+ * is a compile error, with no cast to hide it.
+ */
+export type CityKey = {
+  [C in keyof Registry]: keyof Registry[C]['cities'] & string
 }[keyof Registry];
 
 /**
@@ -373,7 +424,7 @@ const COUNTRIES: Readonly<Record<string, CountryEntry>> = REGISTRY;
 
 interface AreaParts {
   readonly country: string;
-  readonly city: string;
+  readonly city: CityKey;
   readonly area: string;
 }
 
@@ -402,7 +453,8 @@ for (const [country, entry] of Object.entries(COUNTRIES)) {
       const key = `${country}/${city}/${areaId}` as AreaKey;
       keys.push(key);
       if (!AREA_PARTS.has(key)) {
-        AREA_PARTS.set(key, Object.freeze({ country, city, area: areaId }));
+        /* `city as CityKey`: the same trust as `as AreaKey` above; both come from walking REGISTRY itself. */
+        AREA_PARTS.set(key, Object.freeze({ country, city: city as CityKey, area: areaId }));
       }
     }
   }
@@ -438,6 +490,12 @@ export function splitKey(key: AreaKey): AreaParts {
     throw new Error(`scope/registry: "${key}" is not a registered area key`);
   }
   return parts;
+}
+
+/** The IANA zone the key's city is registered in. For server code that needs the clock without resolving a whole scope (api/air-quality.ts). */
+export function cityTz(key: AreaKey): string {
+  const { country, city } = splitKey(key);
+  return COUNTRIES[country]!.cities[city]!.tz;
 }
 
 /**

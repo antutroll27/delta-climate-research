@@ -11,7 +11,7 @@ import type { PairedScenarioState } from '../scenario/scenario-state.ts';
 import { SimulationCancelled } from '../sim-cooperative.ts';
 import { assertPairedResult, type MetricValue, type PairedBackendVersion, type PairedJobStage, type PairedResult, type ReleaseEvidence, type WardScenarioResult } from './paired-protocol.ts';
 import { resolveReferenceForcing, type CompareReferenceForcing } from './reference-forcing.ts';
-import { resolve, requireCosts } from '../scope/resolve.ts';
+import { resolve, costsOrNull } from '../scope/resolve.ts';
 import { confineToWard, wardSpatial } from './ward-plan.ts';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -29,9 +29,10 @@ import { confineToWard, wardSpatial } from './ward-plan.ts';
    number. That is the failure mode this codebase keeps paying for.
 
    So each side of the comparison resolves its OWN scope, in `runWard`, where the
-   area is known. `requireCosts` therefore runs per area rather than at module load
-   — a country with no adopted cost basis now fails when that country is asked for,
-   with a message naming it, rather than at import for everyone.
+   area is known. `costsOrNull` therefore runs per area rather than at module load
+   — a country with no adopted cost basis gets a null cost when that country is
+   asked for (the readout then says so, naming it), never a zero and never an
+   import-time failure for everyone.
 
    `currentParamsForReference` is deliberately NOT given a scope. It takes an
    explicit `Ambient` from a named forcing record, so it reads neither the fallback
@@ -183,7 +184,7 @@ async function runWard(
      two cities, and a shared radius or a shared currency would be applied to both
      without a word. */
   const scope = resolve(id);
-  const costs = requireCosts(scope);
+  const costs = costsOrNull(scope);   // null for a country with no cost basis: the cost is then null, never a zero
   const interventions = coverageToInterventions(state.coverage);
   const phase = state.phase === 'peak' ? 'peak' : 'night';
   const forcingValues: Ambient = forcing.values[state.phase];
@@ -228,7 +229,7 @@ async function runWard(
     scenarioHotAreaPct: scenarioHot,
     hotAreaChangePp: hotAreaChange,
     greenReferenceContrastC: greenReferenceContrastC(scenario.stats.meanC, scenarioParams),
-    capitalCost: computeCost(interventions, prepared.planSpatial, costs),
+    capitalCost: costs === null ? null : computeCost(interventions, prepared.planSpatial, costs),
     delivered: deliveredQuantities(state.coverage, prepared.planSpatial),
     statsOver: prepared.boundary ? { name: prepared.boundary.name, areaM2: prepared.boundary.areaM2 } : null,
     boundaryRing: prepared.boundary?.ring ?? null,

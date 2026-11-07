@@ -37,17 +37,30 @@ export function scriptIds() {
 /* FLIP: the built page IS the v2 tree (flip plan B.1). The ids v1 carried and a script binds are frozen in tests/unit/fixtures/obos-v1-bound-ids.json (taken from the rc6 v1 build, so this
    test no longer needs v1 on the site, and v1's source can be deleted in PR 2). */
 const V1_BOUND = JSON.parse(readFileSync('tests/unit/fixtures/obos-v1-bound-ids.json', 'utf8'));
+/* Ids Kolkata's tree carries that Amsterdam's page legitimately does not, each with its reason (checked both ways below: an exempt id
+   that appears must be removed from this list, so it cannot hide a regression). */
+const NOT_ON_PAGE = new Map([
+  ['heat-map/nl/amsterdam/canal-ring', new Map([
+    ['big-ballygunge', 'the building-card tab of another city\'s ward: Amsterdam has one area'],
+    ['big-barrackpore', 'the building-card tab of another city\'s ward: Amsterdam has one area'],
+    ['big-baruipur', 'the building-card tab of another city\'s ward: Amsterdam has one area'],
+    ['report-link', 'the ward-record download exists only where area.publishes (shipsData false)'],
+    ['segPath', 'the warming-pathway control exists only where the country adopts a pathway (the Netherlands: pathway null)'],
+  ])],
+]);
 function pageParts(path) {
   const file = `dist/${path}/index.html`;
   assert.ok(existsSync(file), `run npm run build first (${file})`);
   const html = readFileSync(file, 'utf8');
   const s = html.indexOf('<main id="main"'); const e = html.indexOf('</main>', s);
   assert.ok(s >= 0 && e > s, `${path}: no <main id="main">`);
-  return { v1ids: V1_BOUND[path], v2: html.slice(s, e) };
+  /* A page the v1 build never had (Amsterdam, plan Task A12) is held to the SAME frozen list as Kolkata's: it is one template, and a
+     script binds the same ids on every city. */
+  return { v1ids: V1_BOUND[path] ?? V1_BOUND['heat-map/in/kolkata/ballygunge'], v2: html.slice(s, e) };
 }
 const idsIn = (s) => [...s.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
 
-for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road']) {
+for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road', 'heat-map/nl/amsterdam/canal-ring']) {
   test(`${path}: every bound id is in the v2 tree exactly once`, () => {
     const { v1ids, v2 } = pageParts(path);
     assert.ok(v1ids.length > 40, 'the frozen v1 id list is present');
@@ -56,7 +69,9 @@ for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-
     assert.deepEqual([...new Set(dup)], [], `duplicate ids in the v2 tree: ${dup.join(', ')}`);
     const v2ids = new Set(v2list);
     const required = v1ids;
-    const missing = required.filter((id) => !v2ids.has(id) && !RETIRED_IN_V2.has(id));
+    const exempt = NOT_ON_PAGE.get(path) ?? new Map();
+    const missing = required.filter((id) => !v2ids.has(id) && !RETIRED_IN_V2.has(id) && !exempt.has(id));
+    for (const id of exempt.keys()) assert.ok(!v2ids.has(id), `${path}: ${id} is exempt but present; drop it from NOT_ON_PAGE`);
     assert.deepEqual(missing, [], `v2 lacks ids the v1 tree carries and a script binds: ${missing.join(', ')}`);
   });
 
@@ -92,7 +107,7 @@ test('the area page renders HeatMapStageV2 as v2 and mounts the v2 shell after t
 /* A1 (parallel tracks): the right column is a frame region, not a Track A card. It exists
    on every area, and the app's re-seated blocks and the building card sit
    inside it, before the .attr marker the app inserts against (app:1212, :1238). */
-for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road']) {
+for (const path of ['heat-map/in/kolkata/ballygunge', 'heat-map/in/bengaluru/mg-road', 'heat-map/nl/amsterdam/canal-ring']) {
   test(`${path}: A1 the right column is #legend, once`, () => {
     const { v2 } = pageParts(path);
     const col = v2.indexOf(' id="legend"');

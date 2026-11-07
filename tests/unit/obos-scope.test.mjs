@@ -23,11 +23,12 @@ test('every registered area produces a key', () => {
   assert.ok(AREA_KEYS.includes('in/kolkata/ballygunge'));
   assert.ok(AREA_KEYS.includes('in/bengaluru/mg-road'));
   assert.ok(AREA_KEYS.includes('ae/dubai/al-quoz'));
-  /* NINE: Kolkata's three, Bengaluru's three, Dubai's three. Bengaluru is
+  assert.ok(AREA_KEYS.includes('nl/amsterdam/canal-ring'));
+  /* TEN: Kolkata's three, Bengaluru's three, Dubai's three, Amsterdam's one. Bengaluru is
      registered but does not ship the catalogue's artefacts — see `drawable` in
      registry.ts. Registration is what makes an area NAMEABLE; shipsData is what
      makes it published. */
-  assert.equal(AREA_KEYS.length, 9);
+  assert.equal(AREA_KEYS.length, 10);
 });
 
 test('isAreaKey rejects anything not registered', () => {
@@ -174,6 +175,8 @@ test('city-level files are city-scoped, not global', () => {
   assert.equal(cityPaths('in/bengaluru/mg-road').heatwave, null);
   assert.equal(cityPaths('ae/dubai/al-quoz').heatwave, null);
   assert.equal(cityPaths('ae/dubai/al-quoz').dcUrs, null);
+  assert.equal(cityPaths('nl/amsterdam/canal-ring').heatwave, null);
+  assert.equal(cityPaths('nl/amsterdam/canal-ring').dcUrs, null);
 });
 
 test('every URL paths() emits exists on disk', async () => {
@@ -291,11 +294,11 @@ test('an area outside the ward table carries its own name and says what it is', 
 });
 
 test('every registered key resolves', () => {
-  // The module resolves all NINE eagerly at load, so this is really a check that
+  // The module resolves all TEN eagerly at load, so this is really a check that
   // nothing in the walk is unreachable -- and that the count has not silently
-  // shrunk, which would make the loop pass while covering less. Nine since
-  // Bengaluru was registered: three Kolkata, three Bengaluru, three Dubai.
-  assert.equal(AREA_KEYS.length, 9);
+  // shrunk, which would make the loop pass while covering less. Ten since
+  // Amsterdam: three Kolkata, three Bengaluru, three Dubai, one Amsterdam.
+  assert.equal(AREA_KEYS.length, 10);
   for (const key of AREA_KEYS) assert.equal(resolve(key).key, key);
 });
 

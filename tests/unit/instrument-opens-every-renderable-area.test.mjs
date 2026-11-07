@@ -38,8 +38,9 @@ const drawable = AREA_KEYS.filter((key) => {
 
 test('the registry declares something drawable at all', () => {
   // Guard the guard: an empty list would make every loop below vacuously true.
-  assert.ok(drawable.length >= 6,
-    `expected at least Kolkata's three and Bengaluru's three, got ${drawable.length}`);
+  assert.ok(drawable.length >= 7,
+    `expected at least Kolkata's three, Bengaluru's three and Amsterdam's canal ring, got ${drawable.length}`);
+  assert.ok(drawable.includes('nl/amsterdam/canal-ring'), 'Amsterdam (plan Task A12) must be drawable');
 });
 
 for (const key of drawable) {

@@ -3,7 +3,7 @@
 import { areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
 import { resolve, type ResolvedScope } from '../../../scripts/climate-engine/scope/resolve.ts';
 import { renderableWardById as wardById, formatLatLon } from '../../../data/wards.ts';
-import { areaFacts, formatHa } from '../../../scripts/climate-engine/v2/area-facts.ts';
+import { areaFacts, formatHa, showsAreaStamp } from '../../../scripts/climate-engine/v2/area-facts.ts';
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
 const ward = wardById(scope.area.id);
@@ -15,7 +15,7 @@ const ha = (n: number): { int: string; rest: string } => { const t = formatHa(n)
   <h1 class="tc-brand" id="pname" set:html={ward?.name ?? scope.area.name}></h1>
   <p class="tc-tag">{scope.city.name} · <span id="pzone">{scope.area.descriptor}</span></p>
   {sibs.map((s) => <span class="tc-grade" data-v2-for={s.key} hidden={s.key !== scope.key}>{s.kind}</span>)}
-  {sibs.map((s) => s.facts && (
+  {sibs.map((s) => s.facts && showsAreaStamp(s.key, s.facts) && (
     <svg class="tc-park" data-v2-for={s.key} data-outline={s.facts.kind} viewBox={s.facts.viewBox} aria-hidden="true" {...(s.key !== scope.key ? { hidden: true } : {})}><path class="ward-fill" d={s.facts.path} /></svg>))}
   {scope.area.hasData && <p class="tc-legend" aria-hidden="true"><span><i class="solid"></i>measured</span><span><i class="outlined"></i>modelled</span></p>}
   {sibs.map((s) => s.facts && (

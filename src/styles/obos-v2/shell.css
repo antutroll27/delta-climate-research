@@ -221,6 +221,7 @@ html[data-ui="v2"] .obos-v2 .aq-dots { display: inline-flex; gap: 2px; }
 /* ── the attribution button and the credits popover (sys.css :398–399, :602–624) ── */
 html[data-ui="v2"] .obos-v2 .st-attrib { position: absolute; z-index: 20; right: 12px; bottom: 12px; }
 html[data-ui="v2"] .obos-v2 .attrib { font: 400 11px/14px var(--sans); letter-spacing: 0.01em; color: var(--ink-1); padding: 4px 10px; min-height: 24px; min-width: 24px; border-radius: 11px; white-space: nowrap; cursor: pointer; }
+html[data-ui="v2"] .obos-v2 .attrib .at-req { display: none; }   /* the short licence credit is for the phone chip; on desktop the lead carries the full text */
 html[data-ui="v2"] .obos-v2 .credits-pop { right: 16px; bottom: 44px; }
 html[data-ui="v2"] .obos-v2 .credits-pop[data-open="false"] { display: none; }
 html[data-ui="v2"] .obos-v2 .credits-pop[data-open="true"] { display: block; }

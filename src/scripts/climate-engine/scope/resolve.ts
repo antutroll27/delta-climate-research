@@ -30,7 +30,7 @@
  * this file owns is the pathway TABLE below, because a table of warming deltas is
  * not geography and has nowhere else to be.
  */
-import { REGISTRY, splitKey, AREA_KEYS, type AreaKey } from './registry.ts';
+import { REGISTRY, splitKey, AREA_KEYS, type AreaKey, type CityKey } from './registry.ts';
 /* THE RENDERABLE TABLE, not the published one. `label()` answers "what is this
    area called" for every area the instrument can open; `wardById` searches the
    CATALOGUE list and would throw here for a city that draws but does not yet
@@ -172,7 +172,8 @@ export interface ResolvedScope {
   readonly key: AreaKey;
   readonly country: { readonly id: string; readonly name: string };
   readonly city: {
-    readonly id: string;
+    /** a registered city slug (the registry's own union), so city-keyed tables are indexed without a cast */
+    readonly id: CityKey;
     readonly name: string;
     readonly koppen: string;
     /**
@@ -411,6 +412,15 @@ export function resolve(key: AreaKey): ResolvedScope {
 }
 
 /**
+ * The costs as the country declared them, INCLUDING the null. For the readout of a
+ * drawable city whose country has adopted no cost basis (the Netherlands): it prints
+ * `noCostBasisLine` where a figure would have been. Never substitute a zero here.
+ */
+export function costsOrNull(scope: ResolvedScope): Costs | null {
+  return scope.climate.costs;
+}
+
+/**
  * The costs, or a refusal — never a zero.
  *
  * `computeCost` takes a non-null `Costs` because there is no such thing as a cost
@@ -423,6 +433,11 @@ export function resolve(key: AreaKey): ResolvedScope {
  * four figures. It becomes reachable the moment a second country is selectable, and
  * at that point the right answer is a readout saying "no cost basis for the UAE",
  * not a number. The type is what forces that work to be done rather than defaulted.
+ *
+ * The STRICT form, for callers that cannot continue without prices. A drawable
+ * geometry-tier city outside India (the Netherlands: `costs: null`) must not go
+ * through here: it takes `costsOrNull` and prints `noCostBasisLine` where a figure
+ * would have been. Every existing caller of this function stays strict.
  */
 export function requireCosts(scope: ResolvedScope): Costs {
   const costs = scope.climate.costs;

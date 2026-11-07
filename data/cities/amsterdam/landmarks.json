@@ -1,0 +1,42 @@
+{
+ "source": "Wikidata P625 (coordinate location), CC0",
+ "retrieved": "2026-11-06",
+ "landmarks": [
+  {
+   "name": "Rijksmuseum",
+   "qid": "Q190804",
+   "lat": 52.36,
+   "lon": 4.885277777777778,
+   "minAreaM2": 6500.0,
+   "url": "https://www.wikidata.org/wiki/Q190804",
+   "retrieved": "2026-11-06"
+  },
+  {
+   "name": "Royal Palace of Amsterdam",
+   "qid": "Q1056152",
+   "lat": 52.37316666666667,
+   "lon": 4.891361111111111,
+   "minAreaM2": 3200.0,
+   "url": "https://www.wikidata.org/wiki/Q1056152",
+   "retrieved": "2026-11-06"
+  },
+  {
+   "name": "Westerkerk",
+   "qid": "Q1130722",
+   "lat": 52.3745,
+   "lon": 4.8839,
+   "minAreaM2": 1200.0,
+   "url": "https://www.wikidata.org/wiki/Q1130722",
+   "retrieved": "2026-11-06"
+  },
+  {
+   "name": "Concertgebouw",
+   "qid": "Q849957",
+   "lat": 52.356305555556,
+   "lon": 4.8790833333333,
+   "minAreaM2": 2800.0,
+   "url": "https://www.wikidata.org/wiki/Q849957",
+   "retrieved": "2026-11-06"
+  }
+ ]
+}

@@ -33,6 +33,8 @@
  */
 import { waitUntil } from '@vercel/functions';
 import { buildPayload } from '../src/lib/aqi/build.ts';
+import { fixedClock } from '../src/lib/aqi/clock.ts';
+import { cityTz, isAreaKey } from '../src/scripts/climate-engine/scope/registry.ts';
 import { cityAqi, cityFor } from '../src/lib/aqi/city.ts';
 import { newArchiveMemo, readRelay, RelayQuietError, type ArchiveMemo } from '../src/lib/aqi/cpcb-archive.ts';
 import { currentFromFeed, fetchFeed, FeedError, pickServed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
@@ -217,6 +219,12 @@ function unavailable(area: string, st: StationEntry, now: Date, reason: 'upstrea
     state: 'unavailable', station, last_observed_at: null, reason }, history: null };
 }
 
+/** The hour clock of an area's registered city (`scope/registry.ts` `tz`), never a typed offset. Fixed-offset zones only (clock.ts). */
+function clockOf(area: string) {
+  if (!isAreaKey(area)) throw new RangeError(`air-quality: ${area} is not a registered area`);
+  return fixedClock(cityTz(area));
+}
+
 export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
   if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); res.status(405).json({ error: 'GET only' }); return; }
   // Every distinct URL is a CDN miss; an extra parameter would let anyone spend the OpenAQ quota.
@@ -226,7 +234,7 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
   const area = typeof req.query.area === 'string' ? req.query.area : '';
   if (!isAirArea(area)) { res.status(404).json({ error: 'unknown area' }); return; }
   const st = stationFor(area), now = (d.now ?? (() => new Date()))();
-  if (!st) { res.setHeader('Cache-Control', OK_CACHE); res.status(200).json(buildPayload(area, null, {}, now)); return; }
+  if (!st) { res.setHeader('Cache-Control', OK_CACHE); res.status(200).json(buildPayload(area, null, {}, now, clockOf(area))); return; }
   const feedP = d.cpcbFeed ? feedFor(now, d) : Promise.resolve(null);
   /* A station with no OpenAQ sensors (Bengaluru) has no second source: CPCB's feed or nothing. */
   const sensors = st.sensors;
@@ -250,7 +258,7 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
       if (r === null) {
         try { (d.waitUntil ?? waitUntil)(rawP); } catch { /* no request context (tests, dev): the fetch simply finishes on its own */ }
       } else if ('raw' in r) {
-        history = buildPayload(area, st, r.raw, now).history;
+        history = buildPayload(area, st, r.raw, now, clockOf(area)).history;
       } else {
         logUpstream(area, r.e); // `in` narrows under Vercel's non-strict compile too (re-audit M-3)
       }
@@ -291,7 +299,7 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
   /* With the feed on, this is a fallback from a failed CPCB and lives 60 s at the CDN (M-2); with it off,
      it is the only answer there is and keeps main's 10-minute cache. */
   res.setHeader('Cache-Control', d.cpcbFeed ? PARTIAL_CACHE : OK_CACHE);
-  res.status(200).json(buildPayload(area, st, r.raw, now));
+  res.status(200).json(buildPayload(area, st, r.raw, now, clockOf(area)));
 }
 
 export default async function handler(req: Req, res: Res): Promise<void> {

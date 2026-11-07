@@ -48,12 +48,17 @@ function stripComments(src) {
 
 test('the registry still NAMES Dubai (the scope code relies on it) but the gate excludes it', () => {
   assert.ok(AREA_KEYS.includes('ae/dubai/creek'), 'Dubai left the registry -- the scope code needs to name it');
-  assert.equal(AREA_KEYS.length, 9);
-  assert.equal(PUBLIC_AREA_KEYS.length, 6, 'the public set is Kolkata (3) + Bengaluru (3)');
-  assert.deepEqual(
-    [...PUBLIC_AREA_KEYS].sort(),
-    AREA_KEYS.filter((k) => !k.startsWith('ae/')).sort(),
-  );
+  /* The public set is DEFINED as the drawable keys (the next test pins the derivation), so the count is the drawable count: Kolkata (3)
+     + Bengaluru (3) + Amsterdam's canal ring (1) = 7 after plan Task A12 (6 before). It is never "everything but /ae/": the registry holds
+     other not-yet-drawable areas too. */
+  const drawable = AREA_KEYS.filter((k) => {
+    const { country, city, area } = splitKey(k);
+    return REGISTRY[country].cities[city].areas[area].drawable;
+  });
+  assert.equal(PUBLIC_AREA_KEYS.length, 7, 'Kolkata (3) + Bengaluru (3) + Amsterdam canal ring (1)');
+  assert.deepEqual([...PUBLIC_AREA_KEYS].sort(), drawable.sort());
+  assert.ok(PUBLIC_AREA_KEYS.includes('nl/amsterdam/canal-ring'));
+  assert.ok(AREA_KEYS.length > PUBLIC_AREA_KEYS.length, 'something registered is still not public');
   for (const key of AREA_KEYS) {
     assert.equal(isPublicArea(key), PUBLIC_AREA_KEYS.includes(key));
   }

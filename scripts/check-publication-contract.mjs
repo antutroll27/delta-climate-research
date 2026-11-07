@@ -321,6 +321,9 @@ const routeContracts = [
   routeContract('/heat-map/in/bengaluru/indiranagar/', 'heat-map-tool', false),
   routeContract('/heat-map/in/bengaluru/mg-road/', 'heat-map-tool', false),
   routeContract('/heat-map/in/bengaluru/whitefield/', 'heat-map-tool', false),
+  /* AMSTERDAM'S CANAL RING DRAWS AND DOES NOT PUBLISH, `false`, like Bengaluru: geometry tier, `shipsData: false`, so the page is
+     noindex and out of the sitemap until the founder decides to index it. */
+  routeContract('/heat-map/nl/amsterdam/canal-ring/', 'heat-map-tool', false),
   routeContract('/heat-map/compare/', 'heat-map-tool', false),
   routeContract('/heat-map/brief/', 'heat-map-tool', false),
   // The three standards documents. Indexable and permanent: they are the public

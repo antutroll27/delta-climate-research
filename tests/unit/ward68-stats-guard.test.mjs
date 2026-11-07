@@ -90,6 +90,6 @@ test('Compare takes Ballygunge\'s figures inside the polygon too, and says so', 
      behaviour in ward68-compare-plan.test.mjs) */
   assert.match(core, /const planSpatial = wardSpatial\(spatial, loaded\.boundary, /, 'the plan is targeted over the square');
   assert.match(core, /confineToWard\(prepared\.base,\s*applyInterventions\(prepared\.base, interventions, prepared\.planSpatial, /, 'the plan lands outside the ward');
-  assert.match(core, /capitalCost: computeCost\(interventions, prepared\.planSpatial, costs\),/, 'Compare prices the square\'s plan');
+  assert.match(core, /capitalCost: costs === null \? null : computeCost\(interventions, prepared\.planSpatial, costs\),/, 'Compare prices the square\'s plan');
   assert.match(core, /delivered: deliveredQuantities\(state\.coverage, prepared\.planSpatial\),/, 'Compare counts the square\'s quantities');
 });

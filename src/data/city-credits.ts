@@ -1,0 +1,204 @@
+/**
+ * The data-and-credits lines of the area page, PER CITY.
+ *
+ * WHY THIS IS DATA. `v2/Overlays.astro` typed one list of seven lines for every
+ * city: "Footprints © Overture", "Heights Google Open Buildings 2.5D", "Ground SRTM
+ * via AWS terrain tiles". That is the truth for Kolkata and Bengaluru and a false
+ * statement for Amsterdam, whose footprints and heights are 3D BAG and whose ground
+ * is AHN. 3D BAG's licence also REQUIRES its credit, a link to its copyright page,
+ * a statement of changes, and (on a browsable map) a place in the bottom-right
+ * corner. A credit that has to differ by city is a fact about the city.
+ *
+ * KOLKATA AND BENGALURU REPRODUCE TODAY'S LINES CHARACTER FOR CHARACTER. They share
+ * one list, `INDIA_STACK`, because the page printed one list for both. The rendered
+ * HTML is held byte-identical to the Overlays.astro they came from by
+ * tests/unit/city-credits.test.mjs against tests/fixtures/credits/.
+ *
+ * SHAPE. A line is an ordered list of parts (plain text, a link, or a slot the app
+ * fills after load) plus an optional licence and an optional statement of changes.
+ * The plan sketched `{ lead, holder, licence, licenceUrl, modified }`; the basemap
+ * line has three linked holders and the ground line has a live slot, so a flat record
+ * could not reproduce them character for character. `rendered by credit-html.ts`.
+ *
+ * PURE: no fs, no DOM. The Sentinel-2 line takes its years from a data file at build
+ * time (v2/credits.ts), so it is a marker here and the renderer is handed the
+ * credit.
+ */
+import { AREA_KEYS, splitKey, type CityKey } from '../scripts/climate-engine/scope/registry.ts';
+
+/**
+ * Every REGISTERED city (scope/registry.ts), not every drawable one. It was `keyof typeof CITIES`'s hand-written twin, and `CITIES`
+ * has registered cities it does not draw, so the tables below were partial over the registry and the build threw on their pages (Amsterdam audit F1).
+ * Keyed by the registry's own union, a city added there and missing here fails to COMPILE.
+ */
+export type CityId = CityKey;
+
+/** Every registered city slug, from the same walk the registry's own tables use. */
+const REGISTERED_CITIES: readonly CityKey[] = Object.freeze([...new Set(AREA_KEYS.map((k) => splitKey(k).city))]);
+
+/**
+ * A table total over the REGISTRY from the few rows that differ: every registered city not named takes `fallback`. This replaces
+ * a hand-written row per city. A registered city that draws nothing needs no row of its own, and no published module has
+ * to spell its name; a drawable city that wants a real row is pinned by tests/unit/city-credits.test.mjs (a drawable city must
+ * have a non-empty credits list). `rows` is keyed by the registry's own union, so a typo'd city is a compile error.
+ */
+export function byCity<T>(rows: Readonly<Partial<Record<CityKey, T>>>, fallback: T): Readonly<Record<CityKey, T>> {
+  const out = {} as Record<CityKey, T>;
+  for (const c of REGISTERED_CITIES) out[c] = rows[c] ?? fallback;
+  return Object.freeze(out);
+}
+
+export type CreditPart =
+  | string
+  | { readonly text: string; readonly href: string }
+  /** an element the app fills after load (`#terrLab`): the text is its initial content */
+  | { readonly slotId: string; readonly text: string };
+
+export interface CreditLicence { readonly text: string; readonly href: string | null }
+
+export interface CreditLine {
+  readonly kind: 'line';
+  readonly parts: readonly CreditPart[];
+  readonly licence: CreditLicence | null;
+  /** a statement of what was changed (CC BY requires one); rendered as its own <small> */
+  readonly modified: string | null;
+}
+/** The Sentinel-2 line: years and licence come from build-time provenance, not from here. */
+export interface SentinelMarker { readonly kind: 'sentinel' }
+export type CreditEntry = CreditLine | SentinelMarker;
+
+const NEW_TAB = 'target="_blank" rel="noopener noreferrer"';
+export { NEW_TAB as CREDIT_LINK_ATTRS };
+
+const line = (parts: readonly CreditPart[], licence: CreditLicence | null = null, modified: string | null = null): CreditLine =>
+  Object.freeze({ kind: 'line', parts: Object.freeze([...parts]), licence, modified });
+const link = (text: string, href: string) => ({ text, href });
+const SENTINEL: SentinelMarker = Object.freeze({ kind: 'sentinel' });
+
+const CC_BY_4 = Object.freeze({ text: 'CC BY 4.0', href: 'https://creativecommons.org/licenses/by/4.0/' });
+const ODBL = Object.freeze({ text: 'ODbL', href: null });
+
+const BASEMAP = line([
+  'Basemap © ', link('OpenStreetMap', 'https://www.openstreetmap.org/copyright'),
+  ' · ', link('OpenFreeMap', 'https://openfreemap.org'),
+  ' · ', link('© OpenMapTiles', 'https://www.openmaptiles.org/'),
+], ODBL);
+const WEATHER = line(['Live weather © Met Norway'], CC_BY_4);
+
+/** Kolkata's and Bengaluru's list: exactly the seven lines Overlays.astro printed for both. */
+const INDIA_STACK: readonly CreditEntry[] = Object.freeze([
+  BASEMAP,
+  line(['Footprints © ', link('Overture Maps Foundation', 'https://overturemaps.org')], ODBL),
+  line(['Heights Google Open Buildings 2.5D'], CC_BY_4),
+  line(['Water © OpenStreetMap'], ODBL),
+  SENTINEL,
+  line(['Ground SRTM via AWS terrain tiles, ', { slotId: 'terrLab', text: 'indicative' }]),
+  WEATHER,
+]);
+
+/**
+ * AHN5 HEIGHT CREDIT. About 79 % of Amsterdam's building heights come from AHN5
+ * (2023-25), CC BY 4.0, Het Waterschapshuis: it asks for the source on derived
+ * products and 3D BAG's credit does not cover it. AHN4 (the PDOK terrain we serve)
+ * is CC0, credited here as a courtesy. Wording per
+ * /Volumes/OBOSLab/research/new-cities/AHN5-LICENCE.md (settled 2026-11-06).
+ */
+const AHN_URL = 'https://www.ahn.nl/';
+const CC0 = Object.freeze({ text: 'CC0', href: 'https://creativecommons.org/publicdomain/zero/1.0/' });
+
+const AMSTERDAM_STACK: readonly CreditEntry[] = Object.freeze([
+  BASEMAP,
+  line(
+    [link('© 3DBAG by tudelft3d and 3DGI', 'https://docs.3dbag.nl/en/copyright/'), ' · footprints and building heights'],
+    CC_BY_4,
+    'footprints of 3DBAG v2025.09.03 simplified to 0.5 m; height = 70th-percentile roof minus ground level',
+  ),
+  line(['Heights: ', link('AHN5', AHN_URL), ', Het Waterschapshuis'], CC_BY_4,
+    'roof-height percentile taken per building, clipped to the study area'),
+  line(['Water, green and roads © OpenStreetMap contributors via ', link('Overture Maps', 'https://overturemaps.org')], ODBL),
+  line(['Canopy © Meta / WRI'], CC_BY_4),
+  SENTINEL,
+  line(['Ground ', link('AHN4', AHN_URL), ' via PDOK, ', { slotId: 'terrLab', text: 'indicative' }], CC0),
+  /* knmi.nl/copyright (read 2026-11-06): "…onder naamsvermelding "bron: KNMI", maar u dient bij het citeren van de inhoud aan te geven dat het
+     KNMI niet betrokken is bij het afgeleide werk en de strekking daarvan niet noodzakelijkerwijs onderschrijft." BOTH halves are required. */
+  line(['Air-temperature normals, Schiphol 1991–2020 (bron: KNMI). KNMI is not involved in this derived product and does not necessarily endorse its purport.']),
+  WEATHER,
+]);
+
+/* A city with no row (registered, not drawable) says nothing: its pages print "Nothing is mapped for this area yet" and never this
+   list. An EMPTY list is the honest fallback; the India stack would credit Overture and Google for data it does not show. */
+export const CITY_CREDITS: Readonly<Record<CityId, readonly CreditEntry[]>> = byCity<readonly CreditEntry[]>({
+  kolkata: INDIA_STACK,
+  bengaluru: INDIA_STACK,
+  amsterdam: AMSTERDAM_STACK,
+}, Object.freeze([]));
+
+/**
+ * The credit a city's data licence REQUIRES on the map itself (MapLibre's
+ * attribution control, bottom-right). 3D BAG: "If you integrate the 3DBAG data in a
+ * browsable electronic map, the credit should appear in the bottom right corner."
+ * Null for cities whose licences ask for nothing there; they keep today's control.
+ */
+export const CITY_MAP_CREDIT: Readonly<Record<CityId, string | null>> = byCity<string | null>({
+  amsterdam: [
+    `<a href="https://docs.3dbag.nl/en/copyright/" ${NEW_TAB}>© 3DBAG by tudelft3d and 3DGI</a>`,
+    `Heights: <a href="${AHN_URL}" ${NEW_TAB}>AHN5</a>, Het Waterschapshuis (<a href="https://creativecommons.org/licenses/by/4.0/" ${NEW_TAB}>CC BY 4.0</a>)`,
+    `Terrain: <a href="${AHN_URL}" ${NEW_TAB}>AHN4</a> (CC0) via PDOK`,
+    'modified by Delta Climate',
+  ].join(' · '),
+}, null);
+
+/**
+ * A closing paragraph for the credits panel: the long-form provenance and the
+ * no-endorsement statement CC BY 4.0 s.2(a)(6) asks for. Null for cities whose list
+ * above is the whole of it (Kolkata, Bengaluru: nothing is added to their panel).
+ */
+export const CITY_CREDIT_NOTE: Readonly<Record<CityId, string | null>> = byCity<string | null>({
+  amsterdam: 'Building heights: © 3DBAG by tudelft3d and 3DGI (3D geoinformation research group, TU Delft, and 3DGI), '
+    + 'release v2025.09.03, CC BY 4.0. The heights derive from Actueel Hoogtebestand Nederland: AHN5 (2023-2025), '
+    + '© Het Waterschapshuis, CC BY 4.0, plus AHN3 and AHN4 (CC0). Terrain: AHN4 DTM/DSM 0.5 m (Het Waterschapshuis, CC0 1.0), '
+    + 'served by PDOK. Delta Climate selected roof-height percentiles, clipped the data to the study area and converted it to a '
+    + '3D mesh. Neither 3DBAG, TU Delft, 3DGI nor Het Waterschapshuis endorses this product.',
+}, null);
+
+/**
+ * The lead of the bottom-right credits chip on a desktop screen ("lead + Credits"). Kolkata and Bengaluru keep the string the chip
+ * has always printed, BYTE FOR BYTE (a test pins it). Amsterdam leads with 3D BAG's required credit text: its licence asks for the
+ * credit "in the bottom right corner" of a browsable map, and the chip is the only credit visible there (the MapLibre control is
+ * hidden on every v2 viewport, shell.css). Empty for a city that draws nothing.
+ */
+const INDIA_CHIP_LEAD = '© OpenStreetMap · OpenMapTiles · OpenFreeMap · Overture · ';
+export const CITY_CHIP_LEAD: Readonly<Record<CityId, string>> = byCity<string>({
+  kolkata: INDIA_CHIP_LEAD,
+  bengaluru: INDIA_CHIP_LEAD,
+  amsterdam: '© 3DBAG by tudelft3d and 3DGI · AHN · OpenStreetMap/Overture · OpenFreeMap · ',
+}, '');
+
+/**
+ * The short credit a PHONE keeps. The phone chip hides its lead (phone.css) and reads "© Credits"; a licence that requires a visible
+ * credit cannot sit behind that button, so a city that has one prints it in a span the phone CSS does not hide (`.at-req`). Null for
+ * Kolkata and Bengaluru: their chip renders nothing new. Founder-delegated decision (2026-11-06): "© 3DBAG" on the phone chip.
+ */
+export const CITY_CHIP_REQUIRED: Readonly<Record<CityId, string | null>> = byCity<string | null>({
+  amsterdam: '© 3DBAG',
+}, null);
+
+/**
+ * The one-line source summary on the ward card's layer list (v2/MapStack.astro): "Live basemap, real footprints & <heights source> heights".
+ * It was typed once, for every city, as "... & Google heights", which is true of Kolkata and Bengaluru (Google Open Buildings 2.5D) and
+ * false of Amsterdam, whose heights are 3D BAG's (TU Delft / 3DGI, built from AHN). Kolkata and Bengaluru keep today's text BYTE FOR
+ * BYTE (a test pins it). Empty for a city that draws nothing: its pages never print the row.
+ */
+const INDIA_PROVENANCE_LINE = 'Live basemap, real footprints & Google heights';
+export const CITY_PROVENANCE_LINE: Readonly<Record<CityId, string>> = byCity<string>({
+  kolkata: INDIA_PROVENANCE_LINE,
+  bengaluru: INDIA_PROVENANCE_LINE,
+  amsterdam: 'Live basemap, real footprints & 3D BAG heights',
+}, '');
+
+/** The map control's text: the city's required credit and the ward boundary's, either may be absent; null when both are. */
+export function joinMapCredits(cityCredit: string | null | undefined, wardCredit: string | null | undefined): string | null {
+  /* `typeof`, not `!== null`: a missing table row is `undefined`, and that must never reach the map control as the text "undefined". */
+  const parts = [cityCredit, wardCredit].filter((c): c is string => typeof c === 'string');
+  return parts.length === 0 ? null : parts.join(' · ');
+}

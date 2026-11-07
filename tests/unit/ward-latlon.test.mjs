@@ -85,7 +85,7 @@ test('five decimals, and the hemisphere is stated', () => {
    shipped, byte for byte. They are THREE decimals and a middot, not this
    function's default five, which is why `decimals` became a parameter: removing
    a duplicate must not move text a visitor can see. */
-test('deriving the ward coordinate labels reproduces the six shipped strings', async () => {
+test('deriving the ward coordinate labels reproduces the shipped strings (six, plus Amsterdam)', async () => {
   const shipped = {
     // Re-pinned 2026-10-02: Ballygunge's centre is now KMC Ward 68's bbox centre.
     ballygunge: '22.523° N · 88.369° E',
@@ -94,9 +94,10 @@ test('deriving the ward coordinate labels reproduces the six shipped strings', a
     indiranagar: '12.978° N · 77.641° E',
     'mg-road': '12.976° N · 77.603° E',
     whitefield: '12.970° N · 77.750° E',
+    'canal-ring': '52.364° N · 4.885° E',
   };
   const wards = allWards();
-  assert.equal(wards.length, 6, 'every registry ward must be covered, published or not');
+  assert.equal(wards.length, 7, 'every registry ward must be covered, published or not');
   for (const w of wards) {
     assert.equal(formatLatLon(w.lat, w.lon, ' · ', 3), shipped[w.id],
       `${w.id}: the header coordinate moved when the stored copy went`);

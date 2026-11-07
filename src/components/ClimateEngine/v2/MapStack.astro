@@ -6,6 +6,7 @@ import ConstructionStamp from '../../states/ConstructionStamp.astro';
 import { areaKeysInCity } from '../../../scripts/climate-engine/scope/registry.ts';
 import { resolve } from '../../../scripts/climate-engine/scope/resolve.ts';
 import { areaFacts } from '../../../scripts/climate-engine/v2/area-facts.ts';
+import { CITY_PROVENANCE_LINE } from '../../../data/city-credits.ts';
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
 /* A study square is not a measured boundary, so its glyph is drawn OUTLINED (A-S4 audit F10). The breadcrumb glyph is each sibling ward's OWN outline (the title card's data, build time); the one for the open area shows (bindPerArea). No country outline is drawn here. */
@@ -42,7 +43,7 @@ const glyphs = areaKeysInCity(scope.key).map(resolve).map((s) => ({ key: s.key, 
       {scope.area.hasData ? <span id="bcount">— buildings</span> : <span>no artefacts · {scope.tier} tier</span>}</p>
     {scope.area.hasData && <p class="wc-sub"><span class="chip" id="simBackend" aria-live="polite">SELECTING ENGINE</span></p>}
     {scope.area.hasData && <ul class="sym-list wc-prov">
-      <li><span class="sym-tile sm"><Sym shape="square" c="ink" size={13} /></span><span>Live basemap, real footprints &amp; Google heights</span></li>
+      <li><span class="sym-tile sm"><Sym shape="square" c="ink" size={13} /></span><span>{CITY_PROVENANCE_LINE[scope.city.id]}</span></li>
     </ul>}
     {scope.area.hasData && <div class="loadchip foot" id="loadchip"></div>}
   </div>
