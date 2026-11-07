@@ -25,26 +25,27 @@ async function countGlBuffers(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const buffers = new Map<WebGLBuffer, number>();
     (window as unknown as { __glBytes: () => number }).__glBytes = () => [...buffers.values()].reduce((a, b) => a + b, 0);
-    /* every upload over 5 MB, in order: the building mesh is the only thing this page sends in pieces that big */
+    /* every upload over 4 MB, in order: on these pages the building mesh is what goes up in pieces that big */
     const big: number[] = [];
     (window as unknown as { __bigUploads: number[] }).__bigUploads = big;
     for (const C of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
       const p = C.prototype as unknown as Record<string, (...a: unknown[]) => unknown>;
       const bound = new WeakMap<object, Record<number, WebGLBuffer | null>>();
       const { bindBuffer, bufferData, deleteBuffer } = p;
-      p.bindBuffer = function (this: object, t: number, b: WebGLBuffer | null) {
+      p.bindBuffer = function (this: object, ...a: unknown[]) {
+        const [t, buffer] = a as [number, WebGLBuffer | null];
         if (!bound.has(this)) bound.set(this, {});
-        bound.get(this)![t] = b; return bindBuffer.call(this, t, b);
+        bound.get(this)![t] = buffer; return bindBuffer.apply(this, a);
       };
       p.bufferData = function (this: object, ...a: unknown[]) {
         const [t, data] = a as [number, ArrayBufferView | number | null];
         const b = bound.get(this)?.[t];
         const bytes = typeof data === 'number' ? data : (data?.byteLength ?? 0);
         if (b) buffers.set(b, bytes);
-        if (bytes > 5e6) big.push(bytes);
+        if (bytes > 4e6) big.push(bytes);
         return bufferData.apply(this, a);
       };
-      p.deleteBuffer = function (this: object, b: WebGLBuffer) { buffers.delete(b); return deleteBuffer.call(this, b); };
+      p.deleteBuffer = function (this: object, ...a: unknown[]) { buffers.delete(a[0] as WebGLBuffer); return deleteBuffer.apply(this, a); };
     }
   });
 }
@@ -67,6 +68,33 @@ async function cityUploaded(page: Page): Promise<void> {
     return flat;
   }, { timeout: 120_000, intervals: [1000] }).toBeGreaterThanOrEqual(4);
   await page.waitForTimeout(3000);   // the grow animation and the first solver frames
+}
+
+/**
+ * A LOST CONTEXT COMES BACK WITH ITS CITY. The building mesh has no array left for three to re-upload, so the renderer rebuilds it from
+ * the ward data: the same big buffers must go to the GPU a second time, and nothing may throw. (Not a pixel comparison: after a restore the
+ * app also demotes the heat solver and rebuilds three's environment map, so the frame is not the same frame, with or without this change.)
+ */
+async function restoreBringsCityBack(page: Page, thrown: string[], atLeast: number): Promise<void> {
+  const bigBefore = await page.evaluate(() => [...(window as unknown as { __bigUploads: number[] }).__bigUploads]);
+  expect(bigBefore.length, 'the building mesh went up in big buffers').toBeGreaterThanOrEqual(atLeast);
+  await page.evaluate(async () => {
+    const canvas = (window as unknown as { __obosMap: { getCanvas(): HTMLCanvasElement } }).__obosMap.getCanvas();
+    const ext = (canvas.getContext('webgl2') ?? canvas.getContext('webgl'))!.getExtension('WEBGL_lose_context')!;
+    const restored = new Promise<void>((done) => canvas.addEventListener('webglcontextrestored', () => done(), { once: true }));
+    ext.loseContext();
+    await new Promise((r) => setTimeout(r, 500));
+    ext.restoreContext();
+    await restored;
+  });
+  const n = bigBefore.length;
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __bigUploads: number[] }).__bigUploads.length), {
+    message: 'the building mesh was uploaded again after the restore', timeout: 60_000,
+  }).toBeGreaterThanOrEqual(n * 2);
+  const bigAfter = await page.evaluate((from) => (window as unknown as { __bigUploads: number[] }).__bigUploads.slice(from), n);
+  expect([...bigAfter].sort((a, b) => b - a).slice(0, n), 'the same buffers, byte for byte').toEqual([...bigBefore].sort((a, b) => b - a));
+  await page.waitForTimeout(3000);
+  expect(thrown, `threw:\n${thrown.join('\n')}`).toEqual([]);
 }
 
 test.describe('the building mesh gives back its CPU copy', () => {
@@ -110,28 +138,23 @@ test.describe('the building mesh gives back its CPU copy', () => {
     await expect(page.locator('#bcard')).toBeHidden();
     await page.waitForTimeout(1500);
 
-    /* 3 · A LOST CONTEXT COMES BACK WITH ITS CITY. The building mesh has no array left for three to re-upload, so the renderer
-       rebuilds it from the ward data: the same big buffers must go to the GPU a second time, and nothing may throw. (Not a pixel
-       comparison: after a restore the app also demotes the heat solver and rebuilds three's environment map, so the frame is not
-       the same frame, with or without this change.) */
-    const bigBefore = await page.evaluate(() => [...(window as unknown as { __bigUploads: number[] }).__bigUploads]);
-    expect(bigBefore.length, 'the building mesh went up in big buffers').toBeGreaterThanOrEqual(4);
-    await page.evaluate(async () => {
-      const canvas = (window as unknown as { __obosMap: { getCanvas(): HTMLCanvasElement } }).__obosMap.getCanvas();
-      const ext = (canvas.getContext('webgl2') ?? canvas.getContext('webgl'))!.getExtension('WEBGL_lose_context')!;
-      const restored = new Promise<void>((done) => canvas.addEventListener('webglcontextrestored', () => done(), { once: true }));
-      ext.loseContext();
-      await new Promise((r) => setTimeout(r, 500));
-      ext.restoreContext();
-      await restored;
-    });
-    const n = bigBefore.length;
-    await expect.poll(() => page.evaluate(() => (window as unknown as { __bigUploads: number[] }).__bigUploads.length), {
-      message: 'the building mesh was uploaded again after the restore', timeout: 60_000,
-    }).toBeGreaterThanOrEqual(bigBefore.length * 2);
-    const bigAfter = await page.evaluate((from) => (window as unknown as { __bigUploads: number[] }).__bigUploads.slice(from), n);
-    expect([...bigAfter].sort((a, b) => b - a).slice(0, bigBefore.length), 'the same buffers, byte for byte').toEqual([...bigBefore].sort((a, b) => b - a));
-    await page.waitForTimeout(3000);
-    expect(thrown, `threw:\n${thrown.join('\n')}`).toEqual([]);
+    /* 3 · A LOST CONTEXT COMES BACK WITH ITS CITY. */
+    await restoreBringsCityBack(page, thrown, 4);
+  });
+
+  test('Bengaluru, the glTF path: the arrays are gone and a lost context re-decodes the model', async ({ page }) => {
+    const thrown: string[] = [];
+    page.on('pageerror', (error) => thrown.push(String(error)));
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await countGlBuffers(page);
+    await stubAt(page, '2026-10-07T06:05:00Z');
+    await openV2(page, '/heat-map/in/bengaluru/mg-road/?lab=1');
+    await relief(page);
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __bigUploads: number[] }).__bigUploads.length), { timeout: 120_000 }).toBeGreaterThanOrEqual(2);
+    await page.waitForTimeout(8000);
+    /* MG Road, measured: ArrayBuffers 39.0 MB before, 27.9 MB after, against 18.4 MB of GL either way (2.1x, then 1.5x): the rest is the ward's own data. */
+    const m = await memory(page);
+    expect(m.arrayMB / m.glMB, `ArrayBuffers ${m.arrayMB.toFixed(1)} MB vs GL ${m.glMB.toFixed(1)} MB`).toBeLessThan(1.8);
+    await restoreBringsCityBack(page, thrown, 2);
   });
 });
