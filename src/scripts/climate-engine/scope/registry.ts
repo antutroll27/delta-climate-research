@@ -46,6 +46,7 @@
    invariant is right: an area that SHIPS DATA must be in the published ward
    table, because shipsData is what puts it in the sitemap and the catalogue. */
 import { WARDS as WARD_TABLE } from '../../../data/wards.ts';
+import { AMSTERDAM_SHEET_AREAS } from '../../../data/sheets/amsterdam.ts';
 import type { AirNormals } from '../types.ts';
 
 /**
@@ -291,6 +292,13 @@ export const REGISTRY = {
            (src/data/wards.ts), like every other drawable area; resolve refuses an area that names itself in both places. */
         areas: {
           'canal-ring': { shipsData: false, drawable: true },
+          /* THE OTHER 36 SHEETS of the whole-city tiling (city-streaming phase P1; Canal Ring is sheet E4 and stays
+             exactly as written above). NAMEABLE, NOT PUBLIC: every one is `drawable: false`, so none reaches
+             PUBLIC_AREA_KEYS, getStaticPaths, the sitemap or the switcher (the Dubai mechanism), and `sheet: true`
+             keeps them out of the per-city area lists (`areaKeysInCity`). Generated from
+             data/cities/amsterdam/sheets.json by scripts/_sheets.py; see scope/sheets.ts for the index model.
+             Founder D10: they stay noindex and geometry tier until satellite validation. */
+          ...AMSTERDAM_SHEET_AREAS,
         },
       },
     },
@@ -394,6 +402,12 @@ interface AreaEntry {
    * fact about Dubai rather than an omission.
    */
   readonly drawable: boolean;
+  /**
+   * A SHEET of a whole-city tiling (scope/sheets.ts), not an area a visitor chooses. Sheets are registered so the
+   * scope code can NAME them, and are left out of `areaKeysInCity` so no list that already exists grows 36 rows.
+   * Present (as `true`) only on the generated sheet entries; Canal Ring is sheet E4 and does not carry it.
+   */
+  readonly sheet?: true;
   /** present ONLY for areas absent from src/data/wards.ts — see the header */
   readonly name?: string;
   readonly descriptor?: string;
@@ -499,7 +513,8 @@ export function cityTz(key: AreaKey): string {
 }
 
 /**
- * The keys sharing one key's CITY, in declaration order — including the key itself.
+ * The keys sharing one key's CITY, in declaration order — including the key itself. A tiling's sheets are not
+ * listed (`AreaEntry.sheet`): this is the list of areas a visitor can choose.
  *
  * Reads the parts back through `splitKey`, never by splitting the string: see the
  * note above `AREA_PARTS` for why a left-to-right split cannot be right in general.
@@ -508,7 +523,10 @@ export function areaKeysInCity(key: AreaKey): readonly AreaKey[] {
   const { country, city } = splitKey(key);
   return AREA_KEYS.filter((candidate) => {
     const parts = splitKey(candidate);
-    return parts.country === country && parts.city === city;
+    if (parts.country !== country || parts.city !== city) return false;
+    /* A tiling's sheets are not areas to pick from (see AreaEntry.sheet); `sheetKeysInCity` in scope/sheets.ts is their
+       list. The key itself stays in, so "including the key itself" holds even for a sheet key. */
+    return candidate === key || COUNTRIES[country]!.cities[city]!.areas[parts.area]!.sheet !== true;
   });
 }
 
