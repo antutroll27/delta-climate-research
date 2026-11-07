@@ -65,3 +65,24 @@ test('a sheet\'s artefacts are the flat directory by area id; Canal Ring keeps i
   assert.equal(sheetUrls('E4').ward, '/heat-map/data/canal-ring.json');
   assert.equal(sheetUrls('E4').trees, '/heat-map/data/canal-ring-trees.json');
 });
+
+import { makeHeatOverlay } from '../../src/scripts/climate-engine/explore/heat-overlay.ts';
+
+test('S1: `streamed` reaches the renderer from the flag alone, whatever the order of caps, map load and the sim host', () => {
+  const app = readFileSync(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
+  const flag = app.indexOf('const STREAM_DEV = ');
+  const relief = app.indexOf('async function ensureRelief');
+  assert.ok(flag > 0 && relief > 0 && flag < relief, 'the flag is declared before the code that builds the renderer');
+  const options = app.slice(relief, relief + 2500);
+  assert.match(options, /\.\.\.\(STREAM_DEV \? \{ streamed:/);
+  assert.ok(!/wrapHost \? \{ streamed/.test(app), 'it must not depend on startStream having run');
+});
+
+test('S1: a renderer given the seam holder compiles the seam-aware overlay; without it, the shipped one', () => {
+  const holders = {
+    heat: { value: null }, heatMin: { value: 0 }, heatMax: { value: 1 }, cooling: { value: 0 }, ao: { value: null },
+    aoAmt: { value: 0 }, aoW: { value: null }, haze: { value: 0 }, hazeCol: { value: null }, opBoost: { value: 1 },
+  };
+  assert.ok(makeHeatOverlay({ ...holders, seams: { value: null } }).fragmentShader.includes('uSeams'));
+  assert.ok(!makeHeatOverlay(holders).fragmentShader.includes('uSeams'));
+});

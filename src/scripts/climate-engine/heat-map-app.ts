@@ -2053,8 +2053,16 @@ export function mountHeatMap(): () => void {
 
   /* ── capability-selected heat sim + field bridge (R=blur ground · G=raw buildings) ── */
   let simHost: HeatSimHost | null = null;
-  /* WHOLE-CITY STREAMING, dev only (city-streaming P3b). Null on every page that is not streaming, which is every page a
-     visitor can reach: it needs a build made with PUBLIC_OBOS_STREAM_DEV=1 AND `?stream=1` on Canal Ring's URL. */
+  /* ── WHOLE-CITY STREAMING, DEV ONLY (city-streaming P3b) ────────────────────────
+     Two keys must both be turned: a build made with PUBLIC_OBOS_STREAM_DEV=1 (a compile-time constant: in every other build the
+     condition below is `false`, the branch is removed, and none of streaming/ or streaming-host/ is in the bundle), and `?stream=1`
+     on Canal Ring's page. TILED_CITY_READY stays false. What it does: the page opens Canal Ring through the stream controller
+     instead of `loadWard(INITIAL_AREA)`, draws its neighbours as grey massing, moves to the next sheet when the camera has
+     crossed a seam, and solves each sheet on its 504-cell halo grid. `?streamtier=low|balanced|full` forces a device tier. */
+  const STREAM_DEV = import.meta.env.PUBLIC_OBOS_STREAM_DEV === '1'
+    && INITIAL_AREA === 'nl/amsterdam/canal-ring'
+    && new URLSearchParams(window.location.search).get('stream') === '1';
+
   let wrapHost: ((host: HeatSimHost) => HeatSimHost) | null = null;
   let streamControl: CityStream | null = null;
   /** The sheet being opened by the stream controller, for the span of its commit; null otherwise. */
@@ -2340,7 +2348,7 @@ export function mountHeatMap(): () => void {
            `resetSim` after the ward loads, while this runs off `capsReady` directly.
            Passing the value measured ZERO `.hdr` requests on a tier-2 machine. */
         deviceTier: () => runtimeTier,
-        ...(wrapHost ? { streamed: { onNeighboursLost: () => console.warn('streaming: the WebGL context was lost; the neighbour massing is gone until the next move') } } : {}),
+        ...(STREAM_DEV ? { streamed: { onNeighboursLost: () => console.warn('streaming: the WebGL context was lost; the neighbour massing is gone until the next move') } } : {}),
       });
       relief = instance;
       attachReliefLayer();
@@ -2850,7 +2858,7 @@ export function mountHeatMap(): () => void {
       else console.warn('Heat simulation unavailable:', error);
       return;
     }
-    if (wrapHost) streamTimings.reset.push(Math.round(performance.now() - tReset));
+    if (STREAM_DEV) streamTimings.reset.push(Math.round(performance.now() - tReset));
     if (presentSnapshot(request, snapshot)) {
       lastSimulationAt = performance.now();
       requestRuntimeFrame('render');
@@ -3798,7 +3806,7 @@ export function mountHeatMap(): () => void {
    * Compare URL the same way, for the same reason.
    */
   function updateAddressBar() {
-    if (wrapHost) return;     // a streamed sheet has no page of its own (TILED_CITY_READY is false): the URL stays on Canal Ring
+    if (STREAM_DEV) return;     // a streamed sheet has no page of its own (TILED_CITY_READY is false): the URL stays on Canal Ring
     history.replaceState(null, '', `${areaPath(state.ward)}${window.location.search}${window.location.hash}`);
   }
 
@@ -4448,16 +4456,6 @@ export function mountHeatMap(): () => void {
     map.triggerRepaint();
   };
   map.on('style.load', onStyleLoad);
-
-  /* ── WHOLE-CITY STREAMING, DEV ONLY (city-streaming P3b) ────────────────────────
-     Two keys must both be turned: a build made with PUBLIC_OBOS_STREAM_DEV=1 (a compile-time constant: in every other build the
-     condition below is `false`, the branch is removed, and none of streaming/ or streaming-host/ is in the bundle), and `?stream=1`
-     on Canal Ring's page. TILED_CITY_READY stays false. What it does: the page opens Canal Ring through the stream controller
-     instead of `loadWard(INITIAL_AREA)`, draws its neighbours as grey massing, moves to the next sheet when the camera has
-     crossed a seam, and solves each sheet on its 504-cell halo grid. `?streamtier=low|balanced|full` forces a device tier. */
-  const STREAM_DEV = import.meta.env.PUBLIC_OBOS_STREAM_DEV === '1'
-    && INITIAL_AREA === 'nl/amsterdam/canal-ring'
-    && new URLSearchParams(window.location.search).get('stream') === '1';
 
   const streamPaths = (key: AreaKey): AreaPaths => streamedAreaPaths(splitKey(key).area);
 
