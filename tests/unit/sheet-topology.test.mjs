@@ -111,7 +111,7 @@ test('tiers are ordered: a smaller device never holds more, and the plan numbers
 test('every budget number says where it comes from; the unmeasured ones are marked estimates (audit S3)', () => {
   const { full, balanced, low } = SHEET_BUDGETS;
   for (const tier of [full, balanced, low]) {
-    assert.deepEqual(Object.keys(tier.sources).sort(), ['baselineMB', 'gpuCeilingMB', 'lod0', 'lod1MeshMB', 'maxLod0Sheets']);
+    assert.deepEqual(Object.keys(tier.sources).sort(), ['baselineMB', 'gpuCeilingMB', 'heapAllowanceMB', 'lod0', 'lod1MeshMB', 'maxLod0Sheets']);
     assert.equal(tier.sources.lod1MeshMB, 'P3b-measured');
     assert.equal(tier.sources.lod0, 'P3b-measured');
     assert.equal(tier.sources.gpuCeilingMB, 'plan');

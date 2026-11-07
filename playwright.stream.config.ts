@@ -5,7 +5,7 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = process.env.OBOS_E2E_PORT ?? '4736';
 export default defineConfig({
   testDir: './tests/e2e',
-  testMatch: /stream-smoke\.spec\.ts/,
+  testMatch: /stream-(smoke|crossings)\.spec\.ts/,
   workers: 1,
   reporter: [['list']],
   use: { ...devices['Desktop Chrome'], launchOptions: { args: ['--headless=new', '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] } },

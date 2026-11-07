@@ -257,6 +257,18 @@ export function mountHeatMap(): () => void {
    * re-resolved per switch in `loadWard`.
    */
   const SCOPE = resolve(INITIAL_AREA);
+  /* ── WHOLE-CITY STREAMING, DEV ONLY (city-streaming P3b) ────────────────────────
+     Two keys must both be turned: a build made with PUBLIC_OBOS_STREAM_DEV=1 (a compile-time constant: in every other build the
+     condition below is `false`, the branch is removed, and none of streaming/ or streaming-host/ is in the bundle), and `?stream=1`
+     on Canal Ring's page. TILED_CITY_READY stays false. What it does: the page opens Canal Ring through the stream controller
+     instead of `loadWard(INITIAL_AREA)`, draws its neighbours as grey massing, moves to the next sheet when the camera has
+     crossed a seam, and solves each sheet on its 504-cell halo grid. `?streamtier=low|balanced|full` forces a device tier. */
+  const STREAM_DEV = import.meta.env.PUBLIC_OBOS_STREAM_DEV === '1'
+    && INITIAL_AREA === 'nl/amsterdam/canal-ring'
+    && new URLSearchParams(window.location.search).get('stream') === '1';
+  /* Installed as early as the page allows (it only sees what is created after it), and only in a dev-streaming build. */
+  const glMeterReady = STREAM_DEV ? import('./streaming-host/gl-meter').then((m) => { m.installGlMeter(); return m; }) : Promise.resolve(null as never);
+
   /**
    * The unit prices, or NULL for a country that has adopted no cost basis (the
    * Netherlands). Resolved ONCE per mount: costs are a COUNTRY fact and every area
@@ -2053,23 +2065,14 @@ export function mountHeatMap(): () => void {
 
   /* ── capability-selected heat sim + field bridge (R=blur ground · G=raw buildings) ── */
   let simHost: HeatSimHost | null = null;
-  /* ── WHOLE-CITY STREAMING, DEV ONLY (city-streaming P3b) ────────────────────────
-     Two keys must both be turned: a build made with PUBLIC_OBOS_STREAM_DEV=1 (a compile-time constant: in every other build the
-     condition below is `false`, the branch is removed, and none of streaming/ or streaming-host/ is in the bundle), and `?stream=1`
-     on Canal Ring's page. TILED_CITY_READY stays false. What it does: the page opens Canal Ring through the stream controller
-     instead of `loadWard(INITIAL_AREA)`, draws its neighbours as grey massing, moves to the next sheet when the camera has
-     crossed a seam, and solves each sheet on its 504-cell halo grid. `?streamtier=low|balanced|full` forces a device tier. */
-  const STREAM_DEV = import.meta.env.PUBLIC_OBOS_STREAM_DEV === '1'
-    && INITIAL_AREA === 'nl/amsterdam/canal-ring'
-    && new URLSearchParams(window.location.search).get('stream') === '1';
 
   let wrapHost: ((host: HeatSimHost) => HeatSimHost) | null = null;
   let streamControl: CityStream | null = null;
+  /** Dev streaming: change the device tier AND tell the controller (set once the controller exists). */
+  let setStreamTier: ((tier: ExploreDeviceTier) => void) | null = null;
   /** The sheet being opened by the stream controller, for the span of its commit; null otherwise. */
   let streamCommit: StreamOpen | null = null;
   let simReady: Promise<void> | null = null;
-  /** Dev streaming: change the device tier AND tell the controller (set once the controller exists). */
-  let setStreamTier: ((tier: ExploreDeviceTier) => void) | null = null;
   let simGeneration = 0;
   let simAnimate = !reduceMotion;
   /* THE REQUEST NAMES ITS WARD. A snapshot is drawn only for the ward it was
@@ -2128,10 +2131,10 @@ export function mountHeatMap(): () => void {
     const previous = simHost.backend;
     simHost.dispose();
     simHost = previous === 'gpu-webgl2' ? makeCpuHost() : createStaticHost();
+    if (STREAM_DEV && previous === 'gpu-webgl2' && runtimeTier === 'full') setStreamTier?.('balanced');   // a lost GPU solver is a demotion for the mesh budget too
     if (simHost.backend === 'ts-main') simAnimate = false;
     else if (wrapHost) simHost = wrapHost(simHost);
     setSimBackend(simHost.backend === 'ts-worker' ? 'CPU SIM' : 'CPU STATIC');
-    if (STREAM_DEV && previous === 'gpu-webgl2' && runtimeTier === 'full') setStreamTier?.('balanced');   // a lost GPU solver is a demotion for the mesh budget too
     return true;
   }
   /* Colour-ramp bounds for the CURRENT forcing. Recomputed whenever the phase,
@@ -4460,24 +4463,26 @@ export function mountHeatMap(): () => void {
   };
   map.on('style.load', onStyleLoad);
 
+
   const streamPaths = (key: AreaKey): AreaPaths => streamedAreaPaths(splitKey(key).area);
 
   async function startStream(): Promise<void> {
-    const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }] = await Promise.all([
+    const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }, { measured }] = await Promise.all([
       import('./streaming-host/city-stream'), import('./streaming-host/sheet-worker-client'), import('./streaming/halo-sim-host'),
+      glMeterReady,
     ]);
     let supply: (() => NeighbourLayers) | null = null;
     wrapHost = (host) => createHaloSimHost(host, () => supply?.() ?? null);
     await initSimHost();                                  // the device tier is final once the capability probe has run
     const asked = new URLSearchParams(window.location.search).get('streamtier');
     if (asked === 'low' || asked === 'balanced' || asked === 'full') runtimeTier = asked;
+    const conn = (navigator as Navigator & { connection?: EventTarget & PrefetchConnection }).connection;
+    conn?.addEventListener?.('change', () => stream.networkChanged(hooks.network()));
     const keyOf = (code: SheetCode): AreaKey => sheetKey(sheetByCode(code)!);
     const labelOf = (code: SheetCode): string => sheetByCode(code)!.label;
     const hooks: CityStreamHooks = {
       tier: () => runtimeTier,                              // the device's, in either look (the classic facade has a packed variant too)
       network: () => {
-    const conn = (navigator as Navigator & { connection?: EventTarget & PrefetchConnection }).connection;
-    conn?.addEventListener?.('change', () => stream.networkChanged(hooks.network()));
         const c = (navigator as Navigator & { connection?: PrefetchConnection }).connection;
         return c?.saveData || c?.effectiveType === '2g' || c?.effectiveType === 'slow-2g' ? 'constrained' : 'fast';
       },
@@ -4505,12 +4510,12 @@ export function mountHeatMap(): () => void {
     };
     const stream = createCityStream(hooks, spawnSheetWorker());
     streamControl = stream;
+    setStreamTier = (next) => { if (next !== runtimeTier) { runtimeTier = next; stream.tierChanged(next); } };
     /* A GESTURE IS THE CENTRE MOVING OR A POINTER DOWN, not `isMoving()`: the idle auto-orbit turns the bearing every frame and
        fires `move` on each, which would hold a crossing off for ever. */
     let pointerDown = false, last = map.getCenter(), lastZoom = map.getZoom();
     const sendCamera = (final: boolean): void => {
       const c = map.getCenter(), z = map.getZoom();
-    setStreamTier = (next) => { if (next !== runtimeTier) { runtimeTier = next; stream.tierChanged(next); } };
       const moved = Math.hypot((c.lng - last.lng) * 67_977, (c.lat - last.lat) * 110_540) > 0.5 || z !== lastZoom;
       last = c; lastZoom = z;
       stream.camera(c.lng, c.lat, !final && (pointerDown || moved), null);
@@ -4520,7 +4525,7 @@ export function mountHeatMap(): () => void {
     map.on('move', () => sendCamera(false));
     map.on('moveend', () => sendCamera(true));
     (window as unknown as { __obosStream?: unknown }).__obosStream = {
-      report: () => stream.report(), timings: () => streamTimings, select: (code: string) => stream.select(code), map, state: () => ({ ward: state.ward, mean: state.lastMean }),
+      report: () => stream.report(), measured, timings: () => streamTimings, select: (code: string) => stream.select(code), map, state: () => ({ ward: state.ward, mean: state.lastMean }),
     };
     stream.start('E4');
   }

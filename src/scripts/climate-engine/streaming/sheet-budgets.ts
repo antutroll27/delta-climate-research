@@ -18,6 +18,12 @@
  * `releaseCpuCopyAfterUpload` (explore/gpu-resident.ts) frees it. Every tier here REQUIRES the release (`releasesCpuCopy`);
  * `tabMeshMB` is what a tab holds with or without it, and a test shows `low` cannot meet its ceiling without it.
  *
+ * WHAT THE MODEL DOES NOT COVER (P3b audit S4). `gpuMB` is a COST MODEL of the buffers this table prices: baseline, the sheet
+ * mesh, the massing. It is conservative against live WebGL objects (the audit counted 161-169 MB of buffers on `full` against 255
+ * modelled) but it does not include the DRAWING BUFFER (the canvas swap chain; roughly 24-48 MB at phone DPR 3 with depth and MSAA, not
+ * measured headless) or the JS HEAP, which has its own `heapAllowanceMB` per tier. `measured()` (streaming-host/gl-meter.ts, dev only)
+ * counts live buffers, textures and the heap for comparison; a real-phone run is still owed.
+ *
  * Every field carries a `source` so nobody mistakes a guess for a measurement: 'P0' (measured), 'plan' (PLAN.md 3.2, a
  * proposal the real-phone check replaces) or 'estimate' (unmeasured; P3b replaces it).
  */
@@ -40,7 +46,7 @@ export interface MeshCostModel {
   readonly bytesPerVertex: number;
 }
 
-export type Source = 'P0' | 'P3b-measured' | 'plan' | 'estimate';
+export type Source = 'P0' | 'P3b-measured' | 'P3b-audit' | 'plan' | 'estimate';
 
 export interface TierBudget {
   /** The whole page's GPU ceiling, MapLibre included, in MB (PLAN 3.2). */
@@ -54,6 +60,9 @@ export interface TierBudget {
   readonly lod0: MeshCostModel;
   /** GPU cost of one sheet's LOD1 massing, MB: the WORST sheet (E4), P3b-measured; see LOD1_WORST_SHEET_MB. */
   readonly lod1MeshMB: number;
+  /** The JS heap this tier should expect while streaming Canal Ring, MB, OUTSIDE the cost model: the P3b audit measured 100-155 MB
+   *  after GC on `low` and a 318 MB peak on `full` (parsed ward, rasters, memoised texts, halo rims). Not part of `gpuMB`. */
+  readonly heapAllowanceMB: number;
   /** Parsed LOD0 bundles kept in the JS heap, current sheet included (PLAN 3.2). */
   readonly maxLod0Sheets: number;
   readonly ring: RingShape;
@@ -64,7 +73,7 @@ export interface TierBudget {
   readonly releasesCpuCopy: boolean;
   /** Where each number above comes from. */
   readonly sources: Readonly<{
-    gpuCeilingMB: Source; baselineMB: Source; lod0: Source; lod1MeshMB: Source; maxLod0Sheets: Source;
+    gpuCeilingMB: Source; baselineMB: Source; lod0: Source; lod1MeshMB: Source; maxLod0Sheets: Source; heapAllowanceMB: Source;
   }>;
 }
 
@@ -91,21 +100,21 @@ export const SHEET_BUDGETS: Readonly<Record<ExploreDeviceTier, TierBudget>> = Ob
     /* crossFade is OFF (P3b). A kept LOD0 mesh is tinted by the page's CURRENT heat field, sampled in the old sheet's
        coordinates, so for the length of a cross-fade the old sheet would show the wrong sheet's heat. The old sheet becomes its
        grey massing in the same frame the new one appears instead (city-stream.ts builds that massing before the swap). */
-    gpuCeilingMB: 500, baselineMB: 44, lod0: BEVELLED, lod1MeshMB: LOD1_WORST_SHEET_MB, maxLod0Sheets: 3,
+    gpuCeilingMB: 500, baselineMB: 44, lod0: BEVELLED, lod1MeshMB: LOD1_WORST_SHEET_MB, maxLod0Sheets: 3, heapAllowanceMB: 320,
     ring: 'ring8', crossFade: false, prefetch: 'heading-lod0', releasesCpuCopy: true,
-    sources: { gpuCeilingMB: 'plan', baselineMB: 'estimate', lod0: 'P3b-measured', lod1MeshMB: 'P3b-measured', maxLod0Sheets: 'plan' },
+    sources: { gpuCeilingMB: 'plan', baselineMB: 'estimate', lod0: 'P3b-measured', lod1MeshMB: 'P3b-measured', maxLod0Sheets: 'plan', heapAllowanceMB: 'P3b-audit' },
   },
   balanced: {
-    gpuCeilingMB: 250, baselineMB: 21, lod0: PACKED, lod1MeshMB: LOD1_WORST_SHEET_MB, maxLod0Sheets: 2,
+    gpuCeilingMB: 250, baselineMB: 21, lod0: PACKED, lod1MeshMB: LOD1_WORST_SHEET_MB, maxLod0Sheets: 2, heapAllowanceMB: 200,
     ring: 'ring8', crossFade: false, prefetch: 'heading-lod0', releasesCpuCopy: true,
-    sources: { gpuCeilingMB: 'plan', baselineMB: 'P0', lod0: 'P3b-measured', lod1MeshMB: 'P3b-measured', maxLod0Sheets: 'plan' },
+    sources: { gpuCeilingMB: 'plan', baselineMB: 'P0', lod0: 'P3b-measured', lod1MeshMB: 'P3b-measured', maxLod0Sheets: 'plan', heapAllowanceMB: 'P3b-audit' },
   },
   low: {
     /* "LOD1 on demand" in PLAN 3.2 is read here as: the four edge neighbours' massing, fetched after the current sheet is
        ready. Nothing of LOD0 is fetched ahead. */
-    gpuCeilingMB: 150, baselineMB: 21, lod0: PACKED, lod1MeshMB: LOD1_WORST_SHEET_MB, maxLod0Sheets: 1,
+    gpuCeilingMB: 150, baselineMB: 21, lod0: PACKED, lod1MeshMB: LOD1_WORST_SHEET_MB, maxLod0Sheets: 1, heapAllowanceMB: 155,
     ring: 'edge4', crossFade: false, prefetch: 'none', releasesCpuCopy: true,
-    sources: { gpuCeilingMB: 'plan', baselineMB: 'P0', lod0: 'P3b-measured', lod1MeshMB: 'P3b-measured', maxLod0Sheets: 'plan' },
+    sources: { gpuCeilingMB: 'plan', baselineMB: 'P0', lod0: 'P3b-measured', lod1MeshMB: 'P3b-measured', maxLod0Sheets: 'plan', heapAllowanceMB: 'P3b-audit' },
   },
 });
 
