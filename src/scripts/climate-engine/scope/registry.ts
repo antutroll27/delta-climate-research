@@ -646,6 +646,15 @@ export function areaTableDrift(
 }
 
 /**
+ * THE TILED-CITY SWITCH. False until the sheet-index surface (city-streaming phase P5) exists: while it is false the
+ * registry check (assertRegistryLogic, check 11) FAILS any area that is both `sheet: true` and `drawable: true`, so a
+ * sheet cannot be made a routable page by accident. P5 flips it, in the same change that adds the index plate, the
+ * bottom sheet and the grouped switcher. It is a plain constant, not a query flag: a flag cannot gate a static route
+ * (P1 audit F3).
+ */
+export const TILED_CITY_READY: boolean = false;
+
+/**
  * The sheet flag's invariant, pure so a bad tree can be shown to fail (tests/unit/amsterdam-sheets.test.mjs).
  *
  * `sheet: true` removes an area from every per-city list (`areaKeysInCity`), so on an area that is NOT a sheet of a
@@ -656,9 +665,10 @@ export function areaTableDrift(
  * Returns the failure messages; empty when the tree agrees.
  */
 export function sheetFlagProblems(
-  tree: Readonly<Record<string, { readonly cities: Readonly<Record<string, { readonly areas: Readonly<Record<string, { readonly sheet?: true }>> }>> }>>,
+  tree: Readonly<Record<string, { readonly cities: Readonly<Record<string, { readonly areas: Readonly<Record<string, { readonly sheet?: true; readonly drawable?: boolean }>> }>> }>>,
   tiled: Readonly<Record<string, readonly string[]>>,
   anchorId: string,
+  tiledCityReady: boolean = TILED_CITY_READY,
 ): string[] {
   const out: string[] = [];
   for (const [country, entry] of Object.entries(tree)) {
@@ -666,6 +676,13 @@ export function sheetFlagProblems(
       const sheets = tiled[`${country}/${city}`];
       for (const [areaId, area] of Object.entries(cityEntry.areas)) {
         if (area.sheet === true) {
+          /* F2, second half (P1 audit): `sheet` and `drawable` TOGETHER need the index surface. A drawable sheet is a page
+             anyone can reach by URL whose only way to its siblings is the area list the `sheet` flag removes it from, so
+             until the sheet index (phase P5) can be used to move between sheets the registry refuses the combination. */
+          if (area.drawable === true && !tiledCityReady) {
+            out.push(`"${country}/${city}/${areaId}" is a drawable sheet but TILED_CITY_READY is false — a sheet page would exist `
+              + 'with no index surface to reach its siblings (phase P5 flips the switch)');
+          }
           if (sheets === undefined) {
             out.push(`"${country}/${city}/${areaId}" carries sheet: true but ${country}/${city} is not a tiled city — `
               + 'the flag would silently drop a real area from every list');

@@ -9,7 +9,7 @@ import {
 } from '../../src/data/sheets/amsterdam.ts';
 import {
   REGISTRY, AREA_KEYS, PUBLIC_AREA_KEYS, areaKeysInCity, isDrawable, isPublicArea, nextDistinctArea,
-  assertRegistryLogic, sheetFlagProblems,
+  assertRegistryLogic, sheetFlagProblems, TILED_CITY_READY,
 } from '../../src/scripts/climate-engine/scope/registry.ts';
 import { resolve } from '../../src/scripts/climate-engine/scope/resolve.ts';
 import { paths } from '../../src/scripts/climate-engine/scope/paths.ts';
@@ -305,4 +305,22 @@ test('F2: the `sheet` flag only appears on a tiled city\'s sheets (and every gen
   /* a generated sheet that lost its flag would join the area lists; a sheet missing from the registry is drift */
   assert.match(sheetFlagProblems(tree({ 'canal-ring': {}, 'ams-f4': {} }), tiled, 'canal-ring').join('\n'), /ams-f4.*not flagged/);
   assert.match(sheetFlagProblems(tree({ 'canal-ring': {} }), tiled, 'canal-ring').join('\n'), /ams-f4.*not registered/);
+});
+
+test('F2 (second half): a sheet that is also drawable is refused until TILED_CITY_READY, and the live registry has none', () => {
+  assert.equal(TILED_CITY_READY, false, 'P5 flips this, with the index surface, and not before');
+  const tiled = { 'nl/amsterdam': ['canal-ring', 'ams-f4'] };
+  const tree = (areas) => ({ nl: { cities: { amsterdam: { areas } } } });
+  const drawableSheet = tree({ 'canal-ring': { drawable: true }, 'ams-f4': { sheet: true, drawable: true } });
+  assert.match(sheetFlagProblems(drawableSheet, tiled, 'canal-ring').join('\n'), /ams-f4.*drawable sheet.*TILED_CITY_READY/);
+  assert.deepEqual(sheetFlagProblems(drawableSheet, tiled, 'canal-ring', true), [], 'once the switch is on the combination is allowed');
+  assert.deepEqual(sheetFlagProblems(tree({ 'canal-ring': { drawable: true }, 'ams-f4': { sheet: true, drawable: false } }), tiled, 'canal-ring'), []);
+  /* E4 is drawable and unflagged: it is not a `sheet` in the registry's sense, so it never trips this */
+  assert.deepEqual(sheetFlagProblems(tree({ 'canal-ring': { drawable: true }, 'ams-f4': { sheet: true } }), tiled, 'canal-ring'), []);
+  for (const key of sheetAreaKeys) {
+    const [country, city, area] = key.split('/');
+    assert.notEqual(REGISTRY[country].cities[city].areas[area].drawable, true, `${key} is not drawable`);
+  }
+  /* and the whole registry check agrees, through the assertion the build runs */
+  assertRegistryLogic();
 });
