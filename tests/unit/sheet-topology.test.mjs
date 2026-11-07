@@ -4,7 +4,7 @@ import test from 'node:test';
 import { AMSTERDAM_SHEET_LATTICE as L } from '../../src/data/sheets/amsterdam.ts';
 import { SHEETS, SKIPPED_SHEETS, neighbours } from '../../src/scripts/climate-engine/scope/sheets.ts';
 import {
-  CROSSING, MAX_ATTEMPTS, RETRY_BACKOFF_MS, SHEET_BUDGETS, lod0MeshMB,
+  CROSSING, MAX_ATTEMPTS, RETRY_BACKOFF_MS, SHEET_BUDGETS, lod0MeshMB, tabMeshMB,
 } from '../../src/scripts/climate-engine/streaming/sheet-budgets.ts';
 import {
   AMSTERDAM_TOPOLOGY as T, DIRECTIONS, DIRECTION_STEP, EDGE_DIRECTIONS, createTopology, directionOfHeading, directionOfStep, headingFan,
@@ -98,15 +98,38 @@ test('tiers are ordered: a smaller device never holds more, and the plan numbers
   assert.deepEqual([full.gpuCeilingMB, balanced.gpuCeilingMB, low.gpuCeilingMB], [500, 250, 150], 'PLAN 3.2');
   assert.deepEqual([full.maxLod0Sheets, balanced.maxLod0Sheets, low.maxLod0Sheets], [3, 2, 1], 'PLAN 3.2');
   assert.ok(full.maxLod0Sheets > balanced.maxLod0Sheets && balanced.maxLod0Sheets > low.maxLod0Sheets);
-  assert.ok(full.fetchCacheMB > balanced.fetchCacheMB && balanced.fetchCacheMB > low.fetchCacheMB);
   assert.deepEqual([full.ring, balanced.ring, low.ring], ['ring8', 'ring8', 'edge4']);
   assert.deepEqual([full.crossFade, balanced.crossFade, low.crossFade], [true, false, false]);
   assert.equal(low.prefetch, 'none');
   for (const tier of Object.values(SHEET_BUDGETS)) {
-    assert.ok(tier.fetchCacheMB >= tier.maxLod0Sheets * 2.7, 'room for one E4-sized sheet (2.7 MB raw) per bundle slot');
+    assert.equal(tier.releasesCpuCopy, true, 'every tier must free the CPU copy (P0 section 3)');
     assert.ok(tier.baselineMB + 2 * tier.lod1MeshMB < tier.gpuCeilingMB);
   }
   assert.ok(Object.isFrozen(SHEET_BUDGETS));
+});
+
+test('every budget number says where it comes from; the unmeasured ones are marked estimates (audit S3)', () => {
+  const { full, balanced, low } = SHEET_BUDGETS;
+  for (const tier of [full, balanced, low]) {
+    assert.deepEqual(Object.keys(tier.sources).sort(), ['baselineMB', 'gpuCeilingMB', 'lod0', 'lod1MeshMB', 'maxLod0Sheets']);
+    assert.equal(tier.sources.lod1MeshMB, 'estimate');
+    assert.equal(tier.sources.lod0, 'P0');
+    assert.equal(tier.sources.gpuCeilingMB, 'plan');
+    assert.equal(tier.sources.maxLod0Sheets, 'plan');
+  }
+  assert.equal(full.sources.baselineMB, 'estimate', '36 measured + 8 estimated for the 504 solver textures');
+  assert.deepEqual([balanced.baselineMB, low.baselineMB], [21, 21], 'P0 phone viewport: 6.5 MB buffers + 14 MB textures');
+  assert.equal(balanced.sources.baselineMB, 'P0');
+  assert.equal(full.baselineMB, 36 + 8);
+});
+
+test('the CPU row: without the release a tab holds twice the mesh, and low would break its ceiling on the densest sheet if it were bevelled', () => {
+  const e4 = 21342;
+  assert.equal(tabMeshMB('full', e4), lod0MeshMB('full', e4), 'released: the GL bytes only');
+  assert.ok(Math.abs(2 * lod0MeshMB('full', e4) - 305.8) < 1, 'kept: ~306 MB (P0: 152 GL + 182 ArrayBuffers)');
+  const { low } = SHEET_BUDGETS;
+  assert.ok(low.baselineMB + lod0MeshMB('low', e4) + 4 * low.lod1MeshMB < low.gpuCeilingMB, 'low fits with the 32 B packing');
+  assert.ok(low.baselineMB + lod0MeshMB('full', e4) > low.gpuCeilingMB, 'but a bevelled E4 alone (153 MB) is over the 150 MB ceiling: P3b must ship the packing');
 });
 
 test('the camera-crossing and retry constants are the plan\'s', () => {

@@ -31,7 +31,12 @@
  * the ring is built from the topology's shipping sheets only.
  *
  * FAILURE. A failed level is retried by itself after `RETRY_BACKOFF_MS`, then left; an exhausted level of the CURRENT sheet
- * is reported once (`failure`) and waits for an explicit `retry`.
+ * is reported once (`failure`) and waits for an explicit `retry`. ARRIVING at a sheet resets its failed levels, so a user
+ * who comes back is never left on a plate with nothing behind it. A failed halo does not delay the first solve (it runs on
+ * the edge rule at once) and a halo that arrives later re-solves (`upgrade`).
+ *
+ * TIERS. Each mesh remembers the tier it was built at (`displayedTier`), the GPU model prices that, and a demotion commands
+ * `rebuild-mesh` (dispose, then build cheaper) so the page never sits over the lower tier's ceiling.
  */
 import type { ExploreDeviceTier } from '../explore/runtime-budget.ts';
 import { SKIP_FAST_MS } from '../loader-progress.ts';
@@ -55,7 +60,9 @@ export type MemoryPressure = 'none' | 'moderate' | 'critical';
 export type LevelEntry =
   | { readonly status: 'absent' }
   | { readonly status: 'loading'; readonly requestId: number; readonly priority: Priority; readonly sinceMs: number; readonly attempts: number }
-  | { readonly status: 'ready'; readonly usedSeq: number; readonly sinceMs: number }
+  | { readonly status: 'ready'; readonly usedSeq: number; readonly sinceMs: number;
+      /** a prefetched bundle nobody has stood in yet; it counts against the prefetch slots until it becomes current */
+      readonly speculative?: boolean }
   | { readonly status: 'evicted' }
   | { readonly status: 'failed'; readonly attempts: number; readonly atMs: number };
 
@@ -73,8 +80,14 @@ export interface ManagerState {
   readonly displayed: SheetCode | null;
   /** The previous mesh, kept for a cross-fade until `handover-done`. */
   readonly outgoing: SheetCode | null;
+  /** The tier each mesh was BUILT at: a demotion leaves the old mesh at the old cost until it is rebuilt, and the GPU
+   *  model prices what is really there (audit S1). */
+  readonly displayedTier: ExploreDeviceTier | null;
+  readonly outgoingTier: ExploreDeviceTier | null;
   /** The sheet the last `solve` was issued for (reset when `current` changes). */
   readonly solved: SheetCode | null;
+  /** That solve had its halo asset; false = it ran on the edge rule and a halo arriving later triggers a re-solve. */
+  readonly solvedWithHalo: boolean;
   readonly heading: Direction | null;
   /** Camera crossings are live only once the camera has been seen inside `current`: after a `select` the camera is still
    *  over the old sheet, and must not drag the user straight back to it. */
@@ -125,9 +138,13 @@ export type ManagerCommand =
   | { readonly type: 'make-current'; readonly sheet: SheetCode; readonly outgoing: SheetCode | null;
       readonly outgoingMesh: 'none' | 'keep-until-handover' | 'dispose-now' }
   | { readonly type: 'dispose-mesh'; readonly sheet: SheetCode }
+  /** The tier fell below the one `sheet`'s mesh was built at: dispose it FIRST, then build it again at `tier`'s cost model. */
+  | { readonly type: 'rebuild-mesh'; readonly sheet: SheetCode; readonly tier: ExploreDeviceTier }
   | { readonly type: 'loader'; readonly sheet: SheetCode; readonly phase: 'rise' | 'plate' | 'end' }
-  /** Solve `sheet` on its halo. `haloLoaded` false = the halo asset failed for good: solve on the edge rule. */
-  | { readonly type: 'solve'; readonly sheet: SheetCode; readonly haloLoaded: boolean; readonly neighbours: readonly HaloNeighbour[] }
+  /** Solve `sheet` on its halo. `haloLoaded` false = the halo asset has failed: solve on the edge rule now, and again (`upgrade`) if it arrives. */
+  | { readonly type: 'solve'; readonly sheet: SheetCode; readonly haloLoaded: boolean;
+      /** a re-solve: the first one ran without the halo, which has arrived since */
+      readonly upgrade: boolean; readonly neighbours: readonly HaloNeighbour[] }
   | { readonly type: 'refuse'; readonly sheet: string; readonly reason: 'unknown-sheet' }
   | { readonly type: 'failure'; readonly sheet: SheetCode; readonly level: Level; readonly attempts: number };
 
@@ -151,7 +168,7 @@ export const DEFAULT_CONFIG: ManagerConfig = Object.freeze({
 
 export function initialState(tier: ExploreDeviceTier, network: NetworkClass = 'fast'): ManagerState {
   return Object.freeze({
-    tier, network, pressure: 'none', current: null, displayed: null, outgoing: null, solved: null, heading: null, armed: false, gesturing: false, camera: null,
+    tier, network, pressure: 'none', current: null, displayed: null, outgoing: null, displayedTier: null, outgoingTier: null, solved: null, solvedWithHalo: false, heading: null, armed: false, gesturing: false, camera: null,
     lastMotionMs: 0, loader: null, sheets: new Map(), seq: 0, nextRequestId: 1,
   });
 }
@@ -166,7 +183,8 @@ function assertNever(x: never): never { throw new Error(`Unhandled ${JSON.string
 /** A mutable working copy of the state; frozen again on the way out. */
 interface Draft {
   tier: ExploreDeviceTier; network: NetworkClass; pressure: MemoryPressure;
-  current: SheetCode | null; displayed: SheetCode | null; outgoing: SheetCode | null; solved: SheetCode | null;
+  current: SheetCode | null; displayed: SheetCode | null; outgoing: SheetCode | null; displayedTier: ExploreDeviceTier | null;
+  outgoingTier: ExploreDeviceTier | null; solved: SheetCode | null; solvedWithHalo: boolean;
   heading: Direction | null; armed: boolean; gesturing: boolean; camera: { lon: number; lat: number } | null; lastMotionMs: number;
   loader: { sheet: SheetCode; sinceMs: number; phase: LoaderPhase } | null;
   sheets: Map<SheetCode, SheetEntry>; seq: number; nextRequestId: number;
@@ -189,7 +207,7 @@ const isResident = (e: LevelEntry): boolean => e.status === 'ready' || e.status 
 function touch(d: Draft, code: SheetCode): void {
   d.seq += 1;
   const e = levelOf(d, code, 'lod0');
-  if (e.status === 'ready') put(d, code, 'lod0', { ...e, usedSeq: d.seq });
+  if (e.status === 'ready') put(d, code, 'lod0', { ...e, usedSeq: d.seq, speculative: false });
 }
 
 /** Every (sheet, level) that is loading, with its entry. */
@@ -212,11 +230,20 @@ function inFlight(d: Draft): Array<{ sheet: SheetCode; level: Level; entry: Extr
  */
 export function gpuMB(cfg: ManagerConfig, s: ManagerState | Draft): number {
   const b = cfg.budgets[s.tier];
-  let mb = b.baselineMB;
-  for (const code of new Set([s.displayed, s.outgoing])) if (code !== null) mb += lod0MeshMB(s.tier, cfg.topology.buildings(code));
+  let mb = b.baselineMB + meshesMB(cfg, s);
   for (const [, e] of s.sheets) if (isResident(e.lod1)) mb += b.lod1MeshMB;
   return mb;
 }
+
+/** The merged LOD0 meshes that exist: the displayed one and the outgoing one, each at the cost of the tier it was built at. */
+function meshesMB(cfg: ManagerConfig, s: ManagerState | Draft): number {
+  let mb = 0;
+  if (s.displayed !== null) mb += lod0MeshMB(s.displayedTier ?? s.tier, cfg.topology.buildings(s.displayed));
+  if (s.outgoing !== null && s.outgoing !== s.displayed) mb += lod0MeshMB(s.outgoingTier ?? s.tier, cfg.topology.buildings(s.outgoing));
+  return mb;
+}
+
+const TIER_RANK: Readonly<Record<ExploreDeviceTier, number>> = { low: 0, balanced: 1, full: 2 };
 
 interface Limits { readonly maxLod0: number; readonly ring: 'ring8' | 'edge4' | 'none'; readonly prefetch: boolean }
 
@@ -258,7 +285,7 @@ function wantedLevels(cfg: ManagerConfig, d: Draft, now: number): Want[] {
   const b = cfg.budgets[d.tier];
 
   if (limits.ring !== 'none') {
-    const meshMB = [...new Set([d.displayed, d.outgoing])].reduce<number>((mb, code) => mb + (code === null ? 0 : lod0MeshMB(d.tier, cfg.topology.buildings(code))), 0);
+    const meshMB = meshesMB(cfg, d);
     const room = Math.max(0, Math.floor((b.gpuCeilingMB - b.baselineMB - meshMB) / b.lod1MeshMB));
     const ring: Want[] = [];
     for (const dir of ringOrder(limits.ring, d.heading)) {
@@ -270,9 +297,16 @@ function wantedLevels(cfg: ManagerConfig, d: Draft, now: number): Want[] {
 
   if (limits.prefetch && d.heading !== null) {
     const fan = headingFan(d.heading).map((dir) => cfg.topology.neighbour(cur, dir)).filter((c): c is SheetCode => c !== null);
-    const resident = [...d.sheets.values()].filter((e) => isResident(e.lod0)).length;
+    /* Slots a prefetch must not take: pinned sheets, loads in flight, and earlier guesses. Sheets the user has VISITED do not
+       count, or two visits would fill a balanced device for good and the heading prefetch would never run again (audit
+       S4): the LRU makes room by dropping the oldest visited bundle. */
+    const pinnedNow = new Set<SheetCode>([cur, d.displayed, d.outgoing].filter((c): c is SheetCode => c !== null));
+    let held = 0;
+    for (const [sheet, e] of d.sheets) {
+      if (e.lod0.status === 'loading' || pinnedNow.has(sheet) && isResident(e.lod0) || e.lod0.status === 'ready' && e.lod0.speculative === true) held += 1;
+    }
     const flying = fan.find((c) => levelOf(d, c, 'lod0').status === 'loading');
-    const next = flying ?? (resident < limits.maxLod0 ? fan.find((c) => retryable(levelOf(d, c, 'lod0'), now)) : undefined);
+    const next = flying ?? (held < limits.maxLod0 ? fan.find((c) => retryable(levelOf(d, c, 'lod0'), now)) : undefined);
     if (next !== undefined) wants.push({ sheet: next, level: 'lod0', priority: 'low' }, { sheet: next, level: 'halo', priority: 'low' });
   }
   /* A halo asset travels with its lod0: any other sheet that holds (or is fetching) a bundle holds its halo too, so a
@@ -331,15 +365,18 @@ function reconcile(cfg: ManagerConfig, d: Draft, now: number, out: ManagerComman
     if (victim === undefined) break;
     evict(victim, 'lod1', 'budget');
   }
-  const lod0Entries: LruEntry[] = [];
-  for (const [sheet, e] of d.sheets) {
-    if (isResident(e.lod0)) {
-      lod0Entries.push({ key: sheet, bytes: 0, usedSeq: e.lod0.status === 'ready' ? e.lod0.usedSeq : Infinity, pinned: pinned.has(sheet) || e.lod0.status === 'loading' });
+  const enforceLru = (): void => {
+    const lod0Entries: LruEntry[] = [];
+    for (const [sheet, e] of d.sheets) {
+      if (isResident(e.lod0)) {
+        lod0Entries.push({ key: sheet, bytes: 0, usedSeq: e.lod0.status === 'ready' ? e.lod0.usedSeq : Infinity, pinned: pinned.has(sheet) || e.lod0.status === 'loading' });
+      }
     }
-  }
-  for (const sheet of lruVictims(lod0Entries, { maxEntries: limits.maxLod0, maxBytes: Infinity })) {
-    evict(sheet as SheetCode, 'lod0', hint ?? (d.pressure !== 'none' ? 'pressure' : 'lru'));
-  }
+    for (const sheet of lruVictims(lod0Entries, { maxEntries: limits.maxLod0, maxBytes: Infinity })) {
+      evict(sheet as SheetCode, 'lod0', hint ?? (d.pressure !== 'none' ? 'pressure' : 'lru'));
+    }
+  };
+  enforceLru();
   for (const [sheet, e] of [...d.sheets]) {                                  // a halo outlives neither its lod0 nor a switch away
     if (!isResident(levelOf(d, sheet, 'lod0')) && sheet !== d.current) {
       if (e.halo.status === 'loading') { out.push({ type: 'cancel', requestId: e.halo.requestId, sheet, level: 'halo' }); put(d, sheet, 'halo', ABSENT); }
@@ -347,13 +384,16 @@ function reconcile(cfg: ManagerConfig, d: Draft, now: number, out: ManagerComman
     }
   }
 
-  // 3. solve once the displayed sheet has its halo, or has certainly lost it
-  if (cur !== null && d.displayed === cur && d.solved !== cur) {
+  // 3. solve once the displayed sheet has its halo or its halo has failed (edge rule: do not wait out the retry backoff for
+  //    it), and solve AGAIN if the halo turns up after an edge-rule solve
+  if (cur !== null && d.displayed === cur) {
     const halo = levelOf(d, cur, 'halo');
-    const haloGone = halo.status === 'failed' && halo.attempts >= MAX_ATTEMPTS;
-    if (halo.status === 'ready' || haloGone) {
-      d.solved = cur;
-      out.push({ type: 'solve', sheet: cur, haloLoaded: halo.status === 'ready',
+    const ready = halo.status === 'ready';
+    const first = d.solved !== cur && (ready || halo.status === 'failed');
+    const upgrade = d.solved === cur && !d.solvedWithHalo && ready;
+    if (first || upgrade) {
+      d.solved = cur; d.solvedWithHalo = ready;
+      out.push({ type: 'solve', sheet: cur, haloLoaded: ready, upgrade,
         neighbours: DIRECTIONS.map((dir) => ({ dir, sheet: cfg.topology.neighbour(cur, dir) })) });
     }
   }
@@ -371,6 +411,7 @@ function reconcile(cfg: ManagerConfig, d: Draft, now: number, out: ManagerComman
     put(d, w.sheet, w.level, { status: 'loading', requestId, priority: w.priority, sinceMs: now, attempts });
     out.push({ type: 'load', requestId, sheet: w.sheet, level: w.level, priority: w.priority });
   }
+  enforceLru();                                                               // a prefetch just took a slot: the oldest visited bundle makes room
 
 }
 
@@ -379,15 +420,17 @@ function swapIfReady(cfg: ManagerConfig, d: Draft, out: ManagerCommand[]): void 
   const cur = d.current;
   if (cur === null || cur === d.displayed || levelOf(d, cur, 'lod0').status !== 'ready') return;
   if (d.outgoing !== null) out.push({ type: 'dispose-mesh', sheet: d.outgoing });         // a hand-over that never finished
-  const previous = d.displayed;
+  const previous = d.displayed, previousTier = d.displayedTier;
   d.displayed = cur;
+  d.displayedTier = d.tier;
   d.outgoing = null;
+  d.outgoingTier = null;
   let outgoingMesh: 'none' | 'keep-until-handover' | 'dispose-now' = 'none';
   if (previous !== null) {
-    const both = { ...d, outgoing: previous };
+    const both = { ...d, outgoing: previous, outgoingTier: previousTier };
     const keep = cfg.budgets[d.tier].crossFade && gpuMB(cfg, both) <= cfg.budgets[d.tier].gpuCeilingMB;
     outgoingMesh = keep ? 'keep-until-handover' : 'dispose-now';
-    if (keep) d.outgoing = previous;
+    if (keep) { d.outgoing = previous; d.outgoingTier = previousTier; }
   }
   out.push({ type: 'make-current', sheet: cur, outgoing: previous, outgoingMesh });
   touch(d, cur);
@@ -418,6 +461,14 @@ function beginSwitch(d: Draft, target: SheetCode, cameraIsThere: boolean): void 
   d.current = target;
   d.armed = cameraIsThere;
   d.solved = null;
+  d.solvedWithHalo = false;
+  /* ARRIVING IS A NEW ASK. A level that failed for good while the user was elsewhere would otherwise sit 'failed' with
+     nothing to load and nothing to report, and the loading plate would stay up for ever (audit B2). Reset it to absent so
+     the arrival fetches it afresh with a full set of attempts; if the network is still down it fails, and `failure`
+     is emitted again, on the same terms as the first time. */
+  for (const level of ['lod0', 'halo'] as const) {
+    if (levelOf(d, target, level).status === 'failed') put(d, target, level, ABSENT);
+  }
   touch(d, target);
 }
 
@@ -449,7 +500,8 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
   switch (event.type) {
     case 'start':
       if (!cfg.topology.has(event.sheet)) { out.push({ type: 'refuse', sheet: event.sheet, reason: 'unknown-sheet' }); break; }
-      d.current = null; d.displayed = null; d.outgoing = null; d.solved = null; d.loader = null;
+      for (const mesh of new Set([d.displayed, d.outgoing])) if (mesh !== null) out.push({ type: 'dispose-mesh', sheet: mesh });   // N1: no leaked mesh
+      d.current = null; d.displayed = null; d.outgoing = null; d.displayedTier = null; d.outgoingTier = null; d.solved = null; d.solvedWithHalo = false; d.loader = null;
       d.lastMotionMs = now;
       beginSwitch(d, event.sheet, false);
       break;
@@ -459,7 +511,7 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
       break;
     case 'camera': {
       const prev = d.camera;
-      const movedM = prev === null ? Infinity : Math.hypot((event.lon - prev.lon) * 67_977, (event.lat - prev.lat) * 110_540);
+      const movedM = prev === null ? Infinity : cfg.topology.distanceM(prev.lon, prev.lat, event.lon, event.lat);
       d.camera = { lon: event.lon, lat: event.lat };
       const wasGesturing = d.gesturing;                                   // the moment a gesture ends is motion too
       d.gesturing = event.gesturing;
@@ -480,10 +532,9 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
       if (hit === undefined) break;                                         // a cancelled or unknown request: stale, ignored
       if (event.type === 'load-finished') {
         d.seq += 1;
-        /* A bundle nobody has stood in yet (a prefetch) ranks below every visited one: if room is needed, the guess goes
-           before the sheet the user may walk back to. It earns a real rank when it becomes current (`touch`). */
-        const speculative = hit.level === 'lod0' && hit.sheet !== d.current;
-        put(d, hit.sheet, hit.level, { status: 'ready', usedSeq: speculative ? 0 : d.seq, sinceMs: now });
+        /* A prefetch deliberately takes the slot of the oldest VISITED bundle (audit S4), so it ranks as newest; `speculative`
+           keeps it counting against the prefetch slots until the user stands in it (`touch`). */
+        put(d, hit.sheet, hit.level, { status: 'ready', usedSeq: d.seq, sinceMs: now, speculative: hit.level === 'lod0' && hit.sheet !== d.current });
       } else {
         put(d, hit.sheet, hit.level, { status: 'failed', attempts: hit.entry.attempts, atMs: now });
         if (hit.sheet === d.current && hit.entry.attempts >= MAX_ATTEMPTS) {
@@ -501,7 +552,14 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
       break;
     case 'tier-changed': {
       d.tier = event.tier;
-      if (d.outgoing !== null && !cfg.budgets[d.tier].crossFade) { out.push({ type: 'dispose-mesh', sheet: d.outgoing }); d.outgoing = null; }
+      const rank = TIER_RANK[event.tier];
+      if (d.outgoing !== null && (!cfg.budgets[d.tier].crossFade || rank < TIER_RANK[d.outgoingTier ?? event.tier])) {
+        out.push({ type: 'dispose-mesh', sheet: d.outgoing }); d.outgoing = null; d.outgoingTier = null;
+      }
+      if (d.displayed !== null && d.displayedTier !== null && rank < TIER_RANK[d.displayedTier]) {   // a demotion: rebuild cheaper
+        out.push({ type: 'rebuild-mesh', sheet: d.displayed, tier: event.tier });
+        d.displayedTier = event.tier;
+      }
       break;
     }
     case 'network-changed': d.network = event.network; break;
@@ -520,14 +578,15 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
 export function nextWakeMs(cfg: ManagerConfig, state: ManagerState, nowMs: number): number | null {
   const d = draftOf(state);
   const due: number[] = [];
+  const wanted = new Set(wantedLevels(cfg, d, nowMs).map((w) => `${w.sheet}/${w.level}`));    // N2: only retries somebody wants
   if (d.loader !== null) {
     if (d.loader.phase === 'quiet') due.push(d.loader.sinceMs + SKIP_FAST_MS);
     if (d.loader.phase !== 'plate') due.push(d.loader.sinceMs + PLATE_AFTER_MS);
   }
-  for (const [, e] of d.sheets) {
+  for (const [sheet, e] of d.sheets) {
     for (const level of ['lod0', 'halo', 'lod1'] as const) {
       const entry = e[level];
-      if (entry.status === 'failed' && entry.attempts < MAX_ATTEMPTS) due.push(entry.atMs + RETRY_BACKOFF_MS[entry.attempts - 1]!);
+      if (entry.status === 'failed' && entry.attempts < MAX_ATTEMPTS && wanted.has(`${sheet}/${level}`)) due.push(entry.atMs + RETRY_BACKOFF_MS[entry.attempts - 1]!);
     }
   }
   const crossing = pendingCrossing(cfg, d);

@@ -74,6 +74,8 @@ export interface SheetTopology {
   locate(lon: number, lat: number): LatticeCell;
   /** Metres from the point to the nearest edge of cell (i, j), in the frame's metres; negative outside the cell. */
   depthInto(i: number, j: number, lon: number, lat: number): number;
+  /** Distance in the frame's metres between two points (the lattice's own metres per degree, in one place). */
+  distanceM(lonA: number, latA: number, lonB: number, latB: number): number;
 }
 
 const LON0 = L.anchor.centre.lon;
@@ -110,6 +112,8 @@ export function createTopology(
       i: Math.floor((lon - LON0) / L.dLon + 0.5),
       j: Math.floor((lat - LAT0) / L.dLat + 0.5),
     }),
+    distanceM: (lonA: number, latA: number, lonB: number, latB: number): number =>
+      Math.hypot((lonB - lonA) * L.mPerDegLon, (latB - latA) * L.mPerDegLat),
     depthInto: (i: number, j: number, lon: number, lat: number): number => {
       const west = LON0 + (i - 0.5) * L.dLon, east = LON0 + (i + 0.5) * L.dLon;
       const south = LAT0 + (j - 0.5) * L.dLat, north = LAT0 + (j + 0.5) * L.dLat;

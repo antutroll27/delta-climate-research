@@ -12,9 +12,13 @@
  * WHAT THE MESH COST IS. P0 section 2b/3: E4's merged building mesh is 128.0 vertices per building today (bevelled) and
  * 58.0 without the bevel; a vertex is 56 B with today's 8 attributes, 48 B without `uv` (the shader reads none), 32 B
  * with the compact packing. That gives 153 MB / 59.4 MB / 39.6 MB for E4, which is what `lod0MeshMB` returns for it.
- * The CPU copy of those arrays is NOT in the numbers: P0 section 3 found three.js keeps it after upload (182 MB at E4)
- * and `releaseCpuCopyAfterUpload` (explore/gpu-resident.ts, on the feat/ams-followups line) frees it, so the budget
- * assumes the release. A tier that cannot release has to subtract that copy from its ceiling.
+ * THE CPU ROW. P0 section 3 found three.js keeps a CPU copy of every vertex array after upload: ArrayBuffers were 181.6 MB
+ * (bevelled), 98 MB (no bevel) and 88 MB (no `uv`) at E4, the same bytes as the GL buffers plus ~29 MB of other arrays.
+ * `releaseCpuCopyAfterUpload` (explore/gpu-resident.ts) frees it. Every tier here REQUIRES the release (`releasesCpuCopy`);
+ * `tabMeshMB` is what a tab holds with or without it, and a test shows `low` cannot meet its ceiling without it.
+ *
+ * Every field carries a `source` so nobody mistakes a guess for a measurement: 'P0' (measured), 'plan' (PLAN.md 3.2, a
+ * proposal the real-phone check replaces) or 'estimate' (unmeasured; P3b replaces it).
  */
 import type { ExploreDeviceTier } from '../explore/runtime-budget.ts';
 
@@ -35,12 +39,15 @@ export interface MeshCostModel {
   readonly bytesPerVertex: number;
 }
 
+export type Source = 'P0' | 'plan' | 'estimate';
+
 export interface TierBudget {
   /** The whole page's GPU ceiling, MapLibre included, in MB (PLAN 3.2). */
   readonly gpuCeilingMB: number;
-  /** Everything on the GPU that is not a sheet mesh: MapLibre buffers and tiles, heat/AO/terrain textures, the 504 solver
-   *  textures. MEASURED 36 MB on desktop and ~21 MB at a phone viewport (P0 section 3); +8 for the 504-cell GPU solver's two
-   *  float textures on `full` (ESTIMATE, 504 x 504 x 16 B x 2). */
+  /** Everything on the GPU that is not a sheet mesh: MapLibre buffers and tiles, heat/AO/terrain textures. P0 section 3
+   *  measured 36 MB on desktop (7.6 buffers + 28 textures) and ~21 MB at a phone viewport (6.5 + 14); the CPU-solver tiers
+   *  use the phone figure. `full` adds 8 MB for the 504-cell GPU solver's two float textures (504 x 504 x 16 B x 2, an
+   *  ESTIMATE), so its 44 is part measured, part estimate and is marked 'estimate'. */
   readonly baselineMB: number;
   /** LOD0 mesh model of this tier (bevelled on `full`, no bevel and no `uv` on `balanced`, compact packing on `low`). */
   readonly lod0: MeshCostModel;
@@ -52,9 +59,12 @@ export interface TierBudget {
   /** The old and the new sheet's meshes coexist for a cross-fade (PLAN 3.2; `full` only, and only if the ceiling allows). */
   readonly crossFade: boolean;
   readonly prefetch: PrefetchPolicy;
-  /** Bytes of fetched sheet files held before they are parsed, MB. Basis: E4's artefacts are 2.7 MB raw
-   *  (MEASURED: ward 1.83 + roads 0.20 + surface 0.14 + trees 0.34 + water 0.13 + terrain 0.05) + the halo asset, per sheet. */
-  readonly fetchCacheMB: number;
+  /** The tier frees the CPU copy of every uploaded vertex array (gpu-resident.ts). Required: see the CPU row above. */
+  readonly releasesCpuCopy: boolean;
+  /** Where each number above comes from. */
+  readonly sources: Readonly<{
+    gpuCeilingMB: Source; baselineMB: Source; lod0: Source; lod1MeshMB: Source; maxLod0Sheets: Source;
+  }>;
 }
 
 /** MEASURED: bytes per vertex of today's 8-attribute bevelled mesh, the no-`uv` mesh, and the compact packing (P0 2b). */
@@ -65,17 +75,20 @@ const FLAT_PACKED: MeshCostModel = { verticesPerBuilding: 58, bytesPerVertex: 32
 export const SHEET_BUDGETS: Readonly<Record<ExploreDeviceTier, TierBudget>> = Object.freeze({
   full: {
     gpuCeilingMB: 500, baselineMB: 44, lod0: BEVELLED, lod1MeshMB: 4, maxLod0Sheets: 3,
-    ring: 'ring8', crossFade: true, prefetch: 'heading-lod0', fetchCacheMB: 10,
+    ring: 'ring8', crossFade: true, prefetch: 'heading-lod0', releasesCpuCopy: true,
+    sources: { gpuCeilingMB: 'plan', baselineMB: 'estimate', lod0: 'P0', lod1MeshMB: 'estimate', maxLod0Sheets: 'plan' },
   },
   balanced: {
-    gpuCeilingMB: 250, baselineMB: 24, lod0: FLAT, lod1MeshMB: 4, maxLod0Sheets: 2,
-    ring: 'ring8', crossFade: false, prefetch: 'heading-lod0', fetchCacheMB: 6,
+    gpuCeilingMB: 250, baselineMB: 21, lod0: FLAT, lod1MeshMB: 4, maxLod0Sheets: 2,
+    ring: 'ring8', crossFade: false, prefetch: 'heading-lod0', releasesCpuCopy: true,
+    sources: { gpuCeilingMB: 'plan', baselineMB: 'P0', lod0: 'P0', lod1MeshMB: 'estimate', maxLod0Sheets: 'plan' },
   },
   low: {
     /* "LOD1 on demand" in PLAN 3.2 is read here as: the four edge neighbours' massing, fetched after the current sheet is
        ready. Nothing of LOD0 is fetched ahead. */
-    gpuCeilingMB: 150, baselineMB: 24, lod0: FLAT_PACKED, lod1MeshMB: 4, maxLod0Sheets: 1,
-    ring: 'edge4', crossFade: false, prefetch: 'none', fetchCacheMB: 3,
+    gpuCeilingMB: 150, baselineMB: 21, lod0: FLAT_PACKED, lod1MeshMB: 4, maxLod0Sheets: 1,
+    ring: 'edge4', crossFade: false, prefetch: 'none', releasesCpuCopy: true,
+    sources: { gpuCeilingMB: 'plan', baselineMB: 'P0', lod0: 'P0', lod1MeshMB: 'estimate', maxLod0Sheets: 'plan' },
   },
 });
 
@@ -85,6 +98,15 @@ const BYTES_PER_MB = 1_000_000;
 export function lod0MeshMB(tier: ExploreDeviceTier, buildings: number): number {
   const { verticesPerBuilding, bytesPerVertex } = SHEET_BUDGETS[tier].lod0;
   return (buildings * verticesPerBuilding * bytesPerVertex) / BYTES_PER_MB;
+}
+
+/**
+ * Megabytes a tab holds for one sheet's merged mesh: the GL buffers, plus the CPU typed-array copy unless the tier releases
+ * it. P0: E4 held 181.6 MB of ArrayBuffers beside 152 MB of GL buffers on the bevelled build.
+ */
+export function tabMeshMB(tier: ExploreDeviceTier, buildings: number): number {
+  const gl = lod0MeshMB(tier, buildings);
+  return SHEET_BUDGETS[tier].releasesCpuCopy ? gl : 2 * gl;
 }
 
 /** The camera-crossing trigger's numbers (PLAN 5.1 item 4). */

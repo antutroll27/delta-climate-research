@@ -26,6 +26,10 @@ class Host {
   }
   send(event) {
     const cmds = this.m.dispatch({ ...event, atMs: this.t });
+    if ((event.type === 'load-finished' || event.type === 'load-failed') && this.finished) {   // the answer lands BEFORE the commands it provoked
+      const key = `${this.finished.sheet}/${this.finished.level}`;
+      if (event.type === 'load-finished') this.shadow.set(key, 'ready'); else this.shadow.delete(key);
+    }
     for (const c of cmds) {
       this.log.push(c);
       const key = `${c.sheet}/${c.level}`;
@@ -36,10 +40,6 @@ class Host {
       if (c.type === 'cancel') { assert.equal(this.shadow.get(key), 'loading', `cancel of ${key}`); this.pending.delete(c.requestId); this.shadow.delete(key); }
       if (c.type === 'evict') { assert.equal(this.shadow.get(key), 'ready', `evict of ${key}`); this.shadow.delete(key); }
       if (c.type === 'reprioritise') assert.equal(this.shadow.get(key), 'loading');
-    }
-    if (event.type === 'load-finished' || event.type === 'load-failed') {
-      const done = this.finished;
-      if (done) { this.shadow.set(`${done.sheet}/${done.level}`, event.type === 'load-finished' ? 'ready' : 'failed'); if (event.type === 'load-failed') this.shadow.delete(`${done.sheet}/${done.level}`); }
     }
     return cmds;
   }
@@ -357,18 +357,22 @@ test('the LRU keeps the tier cap of bundles: the least recently used goes, its h
   assert.ok(h.find('E4', 'lod0'), 'an evicted sheet is fetched again');
 });
 
-test('a prefetched bundle nobody has visited is evicted before a visited one', () => {
-  const h = settled('E4', 'full');                             // cap 3
-  h.select('D4'); h.drain(); h.send({ type: 'handover-done' });   // E4 and D4 visited
-  h.camera(at(...Object.values(cellOf('D4'))), false, 90);      // heading east from D4: prefetch E4? no, it is resident; the fan continues
-  h.drain();
-  const guessed = [...h.state().sheets].filter(([c, e]) => e.lod0.status === 'ready' && c !== 'D4' && c !== 'E4').map(([c]) => c);
-  assert.equal(guessed.length, 1, 'one speculative bundle');
+test('prefetch keeps working on balanced after the first move: it takes the oldest visited slot, never a pinned one (audit S4)', () => {
+  const h = settled('E4', 'balanced');                           // cap 2
+  h.select('F4'); h.drain();                                      // E4 and F4 visited: both slots are 'full'
+  const fAt = at(...Object.values(cellOf('F4')));
   const mark = h.log.length;
-  h.select('C4'); h.drain();                                   // a cold move that needs a slot
-  const gone = h.since(mark).filter((c) => c.type === 'evict' && c.level === 'lod0').map((c) => c.sheet);
-  assert.ok(gone.includes(guessed[0]), 'the guess goes first');
-  assert.ok(!gone.includes('E4'), 'the sheet the user visited stays');
+  h.camera(fAt, false, 90);                                       // heading east from F4
+  const cmds = h.since(mark);
+  assert.deepEqual(cmds.filter((c) => c.type === 'load').map((c) => [c.sheet, c.level]), [['G4', 'lod0'], ['G4', 'halo']]);
+  assert.deepEqual(cmds.filter((c) => c.type === 'evict' && c.level === 'lod0').map((c) => c.sheet), ['E4'], 'the oldest visited bundle makes the room');
+  h.drain();
+  assert.equal(levelOf(h.state(), 'F4', 'lod0').status, 'ready', 'the sheet we are in is never the victim');
+  assert.equal(levelOf(h.state(), 'G4', 'lod0').status, 'ready');
+  // the guess now counts as a held slot: no second prefetch evicts it
+  const more = h.camera(fAt, false, 135);
+  assert.ok(!more.some((c) => c.type === 'load' && c.level === 'lod0'), 'one guess at a time on a two-slot device');
+  assert.ok(!more.some((c) => c.type === 'evict' && c.sheet === 'G4'));
 });
 
 test('the current sheet and the outgoing mesh are never evicted, even over the cap', () => {
@@ -532,6 +536,103 @@ test('gpuMB follows the model: baseline + displayed mesh + massing', () => {
 /** A tiny seeded generator, so a failing walk can be replayed. */
 function rng(seed) { let s = seed >>> 0; return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 2 ** 32); }
 
+test('B2: arriving at a sheet that failed for good while the user was away fetches it afresh, instead of leaving the plate up', () => {
+  const h = settled('E4');
+  h.select('F4');
+  for (let k = 0; k < MAX_ATTEMPTS; k++) {                       // F4's lod0 fails every time, until it is reported
+    h.fail('F4', 'lod0');
+    if (k < MAX_ATTEMPTS - 1) h.advance(RETRY_BACKOFF_MS[k]).tick();
+  }
+  assert.equal(h.of('failure').length, 1);
+  h.select('E4');                                               // the user gives up and goes back
+  h.advance(1000);
+  assert.equal(h.state().displayed, 'E4');
+  const mark = h.log.length;
+  h.select('F4');                                               // and tries again
+  const loads = h.since(mark).filter((c) => c.type === 'load');
+  assert.deepEqual(loads.map((c) => [c.sheet, c.level, c.priority]), [['F4', 'lod0', 'high'], ['F4', 'halo', 'high']], 'a fresh fetch, not a silent plate');
+  // if the network is still down it ends as before: three attempts, then a second report, never a plate with nothing behind it
+  for (let k = 0; k < MAX_ATTEMPTS; k++) {
+    h.fail('F4', 'lod0');
+    if (k < MAX_ATTEMPTS - 1) h.advance(RETRY_BACKOFF_MS[k]).tick();
+  }
+  assert.equal(h.of('failure').length, 2);
+  assert.equal(h.m.nextWakeMs(h.t + 100_000), null);
+});
+
+test('S1: a demotion rebuilds the on-screen mesh at the new tier, and the model prices what is really there', () => {
+  const h = settled('E4', 'full');
+  assert.ok(gpuMB(DEFAULT_CONFIG, h.state()) > 150, 'the bevelled E4 mesh is on screen (153 MB)');
+  const cmds = h.send({ type: 'tier-changed', tier: 'low' });
+  assert.deepEqual(cmds.filter((c) => c.type === 'rebuild-mesh'), [{ type: 'rebuild-mesh', sheet: 'E4', tier: 'low' }]);
+  assert.equal(h.state().displayedTier, 'low');
+  assert.ok(gpuMB(DEFAULT_CONFIG, h.state()) <= SHEET_BUDGETS.low.gpuCeilingMB);
+  // a promotion keeps the cheaper mesh: nothing to rebuild, nothing over the ceiling
+  const up = h.send({ type: 'tier-changed', tier: 'full' });
+  assert.equal(up.filter((c) => c.type === 'rebuild-mesh').length, 0);
+  assert.equal(h.state().displayedTier, 'low');
+  // a mesh built at a tier stays priced at that tier even if the ceiling moves under it
+  h.select('F4'); h.finish('F4', 'lod0');
+  assert.equal(h.state().displayedTier, 'full', 'new meshes are built at the current tier');
+});
+
+test('S1: a demotion in the middle of a cross-fade drops the outgoing mesh built at the old tier', () => {
+  const h = settled('E4', 'full');
+  h.select('F4'); h.finish('F4', 'lod0');
+  assert.equal(h.state().outgoing, 'E4');
+  const cmds = h.send({ type: 'tier-changed', tier: 'balanced' });
+  assert.deepEqual(cmds.filter((c) => c.type === 'dispose-mesh'), [{ type: 'dispose-mesh', sheet: 'E4' }]);
+  assert.deepEqual(cmds.filter((c) => c.type === 'rebuild-mesh').map((c) => c.sheet), ['F4']);
+});
+
+test('S2: a transient halo failure does not hold the first solve back; the halo arriving later re-solves', () => {
+  const h = new Host('full');
+  h.start('E4');
+  h.finish('E4', 'lod0');
+  const first = h.fail('E4', 'halo');                            // one failure: no waiting out 2 s + 8 s of backoff
+  const solve = first.find((c) => c.type === 'solve');
+  assert.ok(solve && solve.haloLoaded === false && solve.upgrade === false);
+  h.advance(RETRY_BACKOFF_MS[0]).tick();                         // the automatic retry
+  const arrived = h.finish('E4', 'halo');
+  const again = arrived.filter((c) => c.type === 'solve');
+  assert.equal(again.length, 1);
+  assert.ok(again[0].haloLoaded === true && again[0].upgrade === true);
+  assert.equal(h.of('solve').length, 2);
+  h.advance(10);
+  assert.equal(h.tick().filter((c) => c.type === 'solve').length, 0, 'and no third');
+});
+
+test('S2: a halo that is simply slow is waited for; a solve with the halo is never "upgraded"', () => {
+  const h = new Host('full');
+  h.start('E4'); h.finish('E4', 'lod0');
+  assert.equal(h.of('solve').length, 0);
+  h.finish('E4', 'halo');
+  assert.equal(h.of('solve').length, 1);
+  assert.equal(h.of('solve')[0].upgrade, false);
+});
+
+test('N1: a second start disposes the meshes the first one left on screen', () => {
+  const h = settled('E4', 'full');
+  h.select('F4'); h.finish('F4', 'lod0');                       // E4 outgoing, F4 displayed
+  const cmds = h.start('D4');
+  assert.deepEqual(cmds.filter((c) => c.type === 'dispose-mesh').map((c) => c.sheet).sort(), ['E4', 'F4']);
+  assert.equal(h.state().displayed, null);
+});
+
+test('N2: no wake for the retry of a level nobody wants any more', () => {
+  const h = new Host('full');
+  h.start('E4'); h.finish('E4', 'lod0'); h.finish('E4', 'halo');
+  const ring = [...h.pending.values()].find((c) => c.level === 'lod1');
+  const t0 = h.t;
+  h.fail(ring.sheet, 'lod1');
+  assert.equal(h.m.nextWakeMs(t0), t0 + RETRY_BACKOFF_MS[0], 'wanted while it is a neighbour of the current sheet');
+  h.select('B3');                                               // far away: that neighbour is not in B3's ring
+  h.drain();
+  assert.equal(levelOf(h.state(), ring.sheet, 'lod1').status, 'failed', 'the failure is still on record');
+  assert.equal(h.t, t0);
+  assert.equal(h.m.nextWakeMs(h.t), null, 'but nobody wants it, so nothing is due');
+});
+
 test('a random walk of 3,000 events on every tier keeps every invariant', () => {
   for (const [seed, tier] of [[1, 'full'], [2, 'balanced'], [3, 'low'], [4, 'full'], [5, 'balanced']]) {
     const rand = rng(seed);
@@ -574,6 +675,9 @@ test('a random walk of 3,000 events on every tier keeps every invariant', () => 
       const pinned = new Set([s.current, s.displayed, s.outgoing].filter(Boolean)).size;
       const held = [...s.sheets.values()].filter((e) => e.lod0.status === 'ready' || e.lod0.status === 'loading').length;
       assert.ok(held <= Math.max(cap, pinned) + 1, `seed ${seed} step ${step}: ${held} bundles held, cap ${cap}, pinned ${pinned}`);
+      // the GPU model never exceeds the tier's ceiling, tier changes included (audit S1)
+      const ceiling = SHEET_BUDGETS[s.tier].gpuCeilingMB;
+      assert.ok(gpuMB(DEFAULT_CONFIG, s) <= ceiling, `seed ${seed} step ${step}: model ${gpuMB(DEFAULT_CONFIG, s)} MB over the ${s.tier} ceiling ${ceiling}`);
       // wake times, when there are any, lie ahead
       const wake = nextWakeMs(DEFAULT_CONFIG, s, h.t);
       assert.ok(wake === null || wake > h.t);
