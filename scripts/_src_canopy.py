@@ -79,8 +79,13 @@ def chm_path(area: Area, rule: KolkataRule) -> str:
     return f"/vsis3/{rule.bucket}/{rule.prefix}/chm/{keys.pop()}.tif"
 
 
-def read_chm_metre(area: Area, path: str) -> F32:
-    """The square at 1 m (size x size), north-up, metres. One windowed read of the COG."""
+def read_chm_metre(area: Area, path: str, boundless: bool = True) -> F32:
+    """The square at 1 m (size x size), north-up, metres. One windowed read of the COG.
+
+    `boundless=True` is how Canal Ring's shipped canopy was read, and it is BIASED HIGH when the window is decimated (here 3,839 source
+    pixels to 2,800): measured on Canal Ring's own window, native-resolution mean 2.66 m, `boundless=False` 2.657 m, `boundless=True`
+    3.276 m (+0.62 m, 23 %), because rasterio's boundless path resamples through a wrapper VRT. A sheet reads `boundless=False`
+    (its window always lies inside the mosaic); Canal Ring's file keeps the old read until the founder decides."""
     import rasterio
     from rasterio.enums import Resampling
     from rasterio.warp import transform_bounds
@@ -93,7 +98,7 @@ def read_chm_metre(area: Area, path: str) -> F32:
         l, b, r, t = transform_bounds("EPSG:4326", src.crs, west, south, east, north)
         win = from_bounds(l, b, r, t, src.transform)
         arr = src.read(1, window=win, out_dtype="float32", out_shape=(n, n),
-                       boundless=True, fill_value=0.0, resampling=Resampling.average)
+                       boundless=boundless, fill_value=0.0 if boundless else None, resampling=Resampling.average)
     out = np.asarray(arr, dtype=np.float32)
     out[~np.isfinite(out)] = 0.0
     np.clip(out, 0.0, None, out=out)
@@ -173,10 +178,13 @@ def drop_in_buildings(trees: list[CityTree], bdoc: CityBuildingsFile) -> tuple[l
     return [t for i, t in enumerate(trees) if i not in gone], len(gone)
 
 
-def build_canopy(area: Area, ctx: CityContextFile, bdoc: CityBuildingsFile) -> tuple[CityCanopyFile, str]:
+def build_canopy(area: Area, ctx: CityContextFile, bdoc: CityBuildingsFile, chm_override: str | None = None,
+                 boundless: bool | None = None) -> tuple[CityCanopyFile, str]:
+    """`chm_override` is a raster path that already holds the whole box (a VRT over both cached CHM COGs, audit S3); without
+    it the one tile that holds the square is read over /vsis3, and a box that straddles two tiles is refused."""
     rule = kolkata_rule()
-    path = chm_path(area, rule)
-    chm = read_chm_metre(area, path)
+    path = chm_path(area, rule) if chm_override is None else chm_override
+    chm = read_chm_metre(area, path, boundless if boundless is not None else chm_override is None)
     cover = float((chm >= COVER_H).mean())
     grid = block_mean(chm, CELL_M)
     draw = area.species_draw()

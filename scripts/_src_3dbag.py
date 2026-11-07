@@ -28,6 +28,7 @@ are recorded in the output's `heightNote`.
 """
 from __future__ import annotations
 
+import dataclasses
 import gzip
 import hashlib
 import json
@@ -37,10 +38,15 @@ import sqlite3
 import struct
 import time
 from dataclasses import dataclass
-from typing import Final, Iterator, NamedTuple, TypedDict, cast
+from collections.abc import Sequence
+from typing import Final, Iterator, Literal, NamedTuple, TypedDict, cast
 
+import numpy as np
+import numpy.typing as npt
 import requests
 import shapely
+from rasterio.transform import Affine
+from scipy.spatial import cKDTree
 from pyproj import Transformer
 from pyproj.transformer import AreaOfInterest, TransformerGroup
 from shapely.geometry import MultiPolygon, Polygon
@@ -98,6 +104,7 @@ class RawBuilding:
     pc_source: str | None                # b3_pw_bron, e.g. "ahn5"
     pc_year: int | None                  # b3_pw_datum
     build_year: int | None = None        # oorspronkelijkbouwjaar (BAG): when it was first built
+    ground_fixed: bool = False           # `ground_nap` was replaced by the AHN4 ring p5 (`repair_grounds`); sheets only
 
 
 class BuildStats(NamedTuple):
@@ -253,7 +260,7 @@ def _roof_height(b: RawBuilding, part: Part | None) -> tuple[float, HSource]:
     roof = part.roof_nap if part is not None else None
     if b.insufficient or roof is None or b.ground_nap is None:
         return (float(_city.FILL_HEIGHT_M), "fill")
-    return (roof - b.ground_nap, "3dbag-p70")
+    return (roof - b.ground_nap, "3dbag-p70-ahn4-ground" if b.ground_fixed else "3dbag-p70")
 
 
 def _local_ring(area: Area, tr: Transformer, ring: shapely.LinearRing | shapely.LineString,
@@ -301,7 +308,10 @@ def _row(area: Area, tr: Transformer, poly: Polygon, src_id: str, h: float, hsrc
 
 
 def build_rows(area: Area, raws: Iterator[RawBuilding]) -> tuple[list[CityBuilding], BuildStats, dict[str, int]]:
-    """Clip to the square by CENTROID, convert, apply the height rule. Returns rows + stats + point-cloud mix."""
+    """Clip to the square by CENTROID, convert, apply the height rule. Returns rows + stats + point-cloud mix.
+
+    The clip is the closed local-frame square, except for a sheet (`area.box` set): its half-open lon/lat lattice cell, so a
+    centroid on a seam belongs to exactly one sheet."""
     tr, _, _ = rd_transformer()
     half = area.size_m / 2.0
     seen: set[str] = set()
@@ -315,9 +325,14 @@ def build_rows(area: Area, raws: Iterator[RawBuilding]) -> tuple[list[CityBuildi
         n_raw += 1
         c = b.footprint.centroid
         lon, lat = tr.transform(c.x, c.y)
-        cx, cy = _city.to_local(area, lon, lat)
-        if abs(cx) > half or abs(cy) > half:
-            continue
+        if area.box is not None:                              # a SHEET: the lattice's half-open box, the one G9a partitions by
+            w, s, e, n = _city.bounds(area)
+            if not (w <= lon < e and s <= lat < n):
+                continue
+        else:
+            cx, cy = _city.to_local(area, lon, lat)
+            if abs(cx) > half or abs(cy) > half:
+                continue
         n_in += 1
         holes += len(b.footprint.interiors)
         key = f"{b.pc_source or 'none'}-{b.pc_year or 'none'}"
@@ -372,3 +387,130 @@ def height_note(op_desc: str, op_accuracy: float) -> str:
             f"clipped by centroid. Null heights or b3_pw_onvoldoende take the shared "
             f"{float(_city.FILL_HEIGHT_M)} m fill (hSource 'fill'). RD New to WGS84 via pyproj operation "
             f"'{op_desc}' (stated accuracy {op_accuracy:g} m). {LICENCE_CREDIT}; modified as stated.")
+
+
+# ── ground plausibility (city-streaming P2b; sheets only, Canal Ring's shipped file is unchanged) ──────────────────────────
+
+#: A ground this far below its reference is implausible. NOT an absolute NAP floor: Amsterdam's polders really do lie below -5 m, and
+#: a building whose neighbours and AHN ring are at -5.3 m with its own ground at -5.5 m is fine.
+GROUND_DROP_M: Final = 3.0
+#: The neighbour reference: median `b3_h_maaiveld` of other buildings whose centroid is within this radius (at least `GROUND_MIN_NEIGHBOURS`).
+GROUND_NEIGHBOUR_R_M: Final = 75.0
+GROUND_MIN_NEIGHBOURS: Final = 5
+#: The AHN4 ground ring, outside the footprint (the DTM has no data under a roof): inner and outer offset, and the cells it needs.
+RING_INNER_M: Final = 0.5
+RING_OUTER_M: Final = 4.0
+#: A building packed into a block (the canal ring) may have fewer than RING_MIN_CELLS DTM cells within RING_OUTER_M, because the
+#: neighbouring roofs are nodata. The ring is then WIDENED, step by step, to the first outer radius that has enough ground cells;
+#: the verdict still uses the first ring that has any evidence, and the rule is unchanged.
+RING_OUTER_STEPS_M: Final = (4.0, 8.0, 15.0, 25.0)
+RING_MIN_CELLS: Final = 4
+
+GroundVerdict = Literal["ok", "neighbours", "ring", "both"]
+
+
+def ground_verdict(own: float, neighbours: Sequence[float], ring: Sequence[float]) -> GroundVerdict:
+    """Is 3D BAG's ground for one building implausible? Evidence, in the audit's two forms (AMS-FOLLOWUPS-AUDIT.md):
+    the ground is more than `GROUND_DROP_M` below the MEDIAN ground of the buildings within `GROUND_NEIGHBOUR_R_M` (needs at
+    least `GROUND_MIN_NEIGHBOURS` of them), and/or more than `GROUND_DROP_M` below the MEDIAN of the AHN4 DTM ring around the
+    footprint (needs at least `RING_MIN_CELLS` cells). A test without enough evidence says nothing; both silent is "ok"."""
+    by_neighbours = len(neighbours) >= GROUND_MIN_NEIGHBOURS and own < float(np.median(neighbours)) - GROUND_DROP_M
+    by_ring = len(ring) >= RING_MIN_CELLS and own < float(np.median(ring)) - GROUND_DROP_M
+    return "both" if by_neighbours and by_ring else "neighbours" if by_neighbours else "ring" if by_ring else "ok"
+
+
+def ring_cells(footprint: Polygon, dtm: npt.NDArray[np.float32], tf: Affine, outer: float = RING_OUTER_M) -> npt.NDArray[np.float64]:
+    """AHN4 DTM values (NAP m) in the ring RING_INNER_M..`outer` outside a footprint (RD, same CRS as `dtm`); nodata dropped."""
+    x0, y0, x1, y1 = footprint.bounds
+    c0 = max(0, int(np.floor((x0 - outer - tf.c) / tf.a)))
+    c1 = min(dtm.shape[1], int(np.ceil((x1 + outer - tf.c) / tf.a)) + 1)
+    r0 = max(0, int(np.floor((tf.f - (y1 + outer)) / -tf.e)))
+    r1 = min(dtm.shape[0], int(np.ceil((tf.f - (y0 - outer)) / -tf.e)) + 1)
+    if c1 <= c0 or r1 <= r0:
+        return np.empty(0, dtype=np.float64)
+    cols, rows = np.meshgrid(np.arange(c0, c1), np.arange(r0, r1))
+    xs, ys = tf.c + (cols + 0.5) * tf.a, tf.f + (rows + 0.5) * tf.e
+    inside = shapely.contains_xy(footprint.buffer(outer), xs, ys) & ~shapely.contains_xy(footprint.buffer(RING_INNER_M), xs, ys)
+    vals = dtm[rows[inside], cols[inside]].astype(np.float64)
+    finite: npt.NDArray[np.float64] = vals[np.isfinite(vals)]
+    return finite
+
+
+class GroundReport(NamedTuple):
+    buildings: int
+    checked_ring: int            # buildings the DTM covered (a ring test was possible)
+    flagged: int
+    by_neighbours: int
+    by_ring: int
+    repaired: int                # flagged and given the ring p5
+    unrepairable: int            # flagged, but even the widest ring had too few cells to take a p5 from
+    widened: int                 # repaired from a ring wider than RING_OUTER_M
+    max_drop_m: float            # largest (new ground - old ground) in metres, i.e. how much taller a building was served
+    changes: tuple[tuple[str, float, float], ...]    # (id, old ground, new ground)
+
+
+def repair_grounds(raws: Sequence[RawBuilding], dtm: npt.NDArray[np.float32], tf: Affine) -> tuple[list[RawBuilding], GroundReport]:
+    """Replace an implausible `ground_nap` by the AHN4 DTM ring's 5th percentile (the statistic 3D BAG itself uses for ground).
+
+    Buildings whose ground fails `ground_verdict` and whose ring has `RING_MIN_CELLS` cells are rewritten with `ground_fixed`
+    set, which tags their rows `3dbag-p70-ahn4-ground`; everything else is returned untouched. Neighbours are looked up among
+    ALL the given buildings (a tile's worth, so a building on a sheet's edge has its neighbours), the ring only where the DTM
+    covers the building. A flagged building with no usable ring keeps its ground and is counted in `unrepairable`."""
+    out = list(raws)
+    ok_idx = [k for k, b in enumerate(raws) if b.ground_nap is not None]
+    cent = np.array([[raws[k].footprint.centroid.x, raws[k].footprint.centroid.y] for k in ok_idx], dtype=np.float64)
+    ground = np.array([raws[k].ground_nap for k in ok_idx], dtype=np.float64)
+    tree = cKDTree(cent) if len(ok_idx) else None
+    minx, maxy = tf.c, tf.f
+    maxx, miny = tf.c + dtm.shape[1] * tf.a, tf.f + dtm.shape[0] * tf.e
+    checked = flagged = n_nb = n_ring = repaired = unrep = widened = 0
+    drop = 0.0
+    changes: list[tuple[str, float, float]] = []
+    for n, k in enumerate(ok_idx):
+        b = raws[k]
+        own = float(ground[n])
+        assert tree is not None
+        nb = [j for j in tree.query_ball_point(cent[n], GROUND_NEIGHBOUR_R_M) if j != n]
+        x0, y0, x1, y1 = b.footprint.bounds
+        covered = x0 - RING_OUTER_M > minx and x1 + RING_OUTER_M < maxx and y0 - RING_OUTER_M > miny and y1 + RING_OUTER_M < maxy
+        ring = ring_cells(b.footprint, dtm, tf) if covered else np.empty(0, dtype=np.float64)
+        checked += covered
+        verdict = ground_verdict(own, ground[nb].tolist(), ring.tolist())
+        if verdict == "ok":
+            continue
+        flagged += 1
+        n_nb += verdict in ("neighbours", "both")
+        n_ring += verdict in ("ring", "both")
+        if len(ring) < RING_MIN_CELLS:
+            for outer in RING_OUTER_STEPS_M[1:]:
+                ring = ring_cells(b.footprint, dtm, tf, outer) if covered else ring
+                if len(ring) >= RING_MIN_CELLS:
+                    widened += 1
+                    break
+        if len(ring) < RING_MIN_CELLS:
+            unrep += 1
+            continue
+        fixed = float(np.percentile(ring, 5))
+        out[k] = dataclasses.replace(b, ground_nap=fixed, ground_fixed=True)
+        repaired += 1
+        drop = max(drop, fixed - own)
+        changes.append((b.src_id, own, fixed))
+    return out, GroundReport(len(raws), checked, flagged, n_nb, n_ring, repaired, unrep, widened, drop, tuple(changes))
+
+
+def make_buildings_doc(area: Area, rows: list[CityBuilding], st: BuildStats, mix: dict[str, int], retrieved: str,
+                       cross_check: str = "AHN nDSM cross-check not yet run (guard G5, Task A9)") -> _city.CityBuildingsFile:
+    """The `<area>-buildings.json` document (the one `fetch-city.py --layer buildings` writes), as data."""
+    _, op_desc, _op_acc = rd_transformer()
+    tiers: dict[str, int] = {}
+    for r in rows:
+        tiers[r["hSource"]] = tiers.get(r["hSource"], 0) + 1
+    return _city.CityBuildingsFile(
+        city=area.city, area=area.id, name=area.name, centre=[area.centre.lat, area.centre.lon],
+        sizeM=float(area.size_m), release=f"3D BAG {RELEASE}", retrieved=retrieved, count=len(rows),
+        source=(f"3D BAG (tudelft3d + 3DGI), {RELEASE}, BAG footprints; heights from the AHN point clouds "
+                "(AHN5 © Het Waterschapshuis, CC BY 4.0; AHN4 and AHN3, CC0), CC BY 4.0"),
+        heightSource="3D BAG LoD1.2 roof 70th percentile minus ground level (NAP)",
+        heightNote=height_note(op_desc, _op_acc),
+        fillFraction=round(st.fill_rows / max(1, len(rows)), 4), heightTiers=tiers, pointCloudMix=mix,
+        crossCheck=cross_check, b=rows)

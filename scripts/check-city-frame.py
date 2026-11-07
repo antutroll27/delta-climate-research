@@ -114,6 +114,21 @@ class FrameGuardFile(TypedDict):
     waterLevel: dict[str, Any]
 
 
+#: Where the guards read and write when they are not run on the committed Canal Ring files. A SHEET build (scripts/_sheet_build.py)
+#: points them at its own directories; None = the committed locations, so `--city amsterdam` behaves exactly as it always has.
+DATA_DIR: str | None = None
+PUBLIC_DIR: str | None = None
+AHN_DIR: str | None = None
+
+
+def data_root(area: Area) -> str:
+    return DATA_DIR if DATA_DIR is not None else _city.data_dir(area.city)
+
+
+def public_root() -> str:
+    return PUBLIC_DIR if PUBLIC_DIR is not None else _city.PUBLIC
+
+
 def sha256_of(path: str) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -123,7 +138,7 @@ def sha256_of(path: str) -> str:
 
 
 def doc_path(area: Area, layer: str) -> str:
-    return os.path.join(_city.data_dir(area.city), f"{area.id}-{layer}.json")
+    return os.path.join(data_root(area), f"{area.id}-{layer}.json")
 
 
 def load(area: Area, layer: str) -> Any:
@@ -316,6 +331,8 @@ class Grid(NamedTuple):
 
 
 def ahn_raw() -> str:
+    if AHN_DIR is not None:
+        return AHN_DIR
     return os.path.join(os.path.expanduser("~"), ".cache", "delta-climate", "cities", "amsterdam", "raw", "ahn")
 
 
@@ -471,7 +488,7 @@ def water_level_evidence(area: Area, ctx: CityContextFile) -> dict[str, Any]:
 
 def read_surface(area: Area) -> npt.NDArray[np.float64]:
     from PIL import Image
-    path = os.path.join(_city.PUBLIC, f"{area.id}-surface.png")
+    path = os.path.join(public_root(), f"{area.id}-surface.png")
     if not os.path.isfile(path):
         raise SystemExit(f"{path} is missing: run scripts/export-surface-rasters.py --ward {area.id}")
     rgb = np.asarray(Image.open(path).convert("RGB"), dtype=np.float64)
@@ -507,7 +524,7 @@ def g7_surface(area: Area, ctx: CityContextFile) -> GuardRecord:
 # ── G8: export orientation ─────────────────────────────────────────────────
 
 def g8_export(area: Area, terrain: CityTerrainFile) -> GuardRecord:
-    path = os.path.join(_city.PUBLIC, f"{area.id}-terrain.json")
+    path = os.path.join(public_root(), f"{area.id}-terrain.json")
     if not os.path.isfile(path):
         return record("G8", "export orientation", "the exported public terrain (row 0 = NORTH) vs the data file (row 0 = SOUTH)",
                       "exact equality after one flip", "equal; the unflipped compare must differ", "pending", None, None,
@@ -539,7 +556,10 @@ def input_hashes(area: Area) -> dict[str, str]:
 
 
 def frame_guard_path(area: Area) -> str:
-    return os.path.join(_city.data_dir(area.city), "frame-guard.json")
+    """Canal Ring's record stays where it is; a sheet's lives beside its own artefacts, `<id>/frame-guard.json` (PLAN 6.1)."""
+    if area.box is not None and area.id != "canal-ring":
+        return os.path.join(data_root(area), area.id, "frame-guard.json")
+    return os.path.join(data_root(area), "frame-guard.json")
 
 
 def run_committed_guards(area: Area) -> list[GuardRecord]:
