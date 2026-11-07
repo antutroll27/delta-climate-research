@@ -44,7 +44,6 @@ from typing import Any, Final, Literal, NamedTuple, TypedDict, cast
 import numpy as np
 import numpy.typing as npt
 import shapely
-import shapely.affinity
 from shapely.geometry import Polygon, box
 from shapely.strtree import STRtree
 
@@ -368,12 +367,15 @@ def to_crs_xy(area: Area, xy_local: npt.NDArray[np.float64]) -> npt.NDArray[np.f
 
 
 def crs_polygons(area: Area, polys: list[Polygon]) -> list[Polygon]:
-    out: list[Polygon] = []
-    for p in polys:
-        if p.is_empty:
-            continue
-        out.append(Polygon(to_crs_xy(area, np.asarray(p.exterior.coords))))
-    return out
+    """Polygons (exteriors) from the local frame into the source CRS. ONE pyproj call for all the vertices: the guards project tens of
+    thousands of rings several times (the controls), and a call per ring was minutes."""
+    live = [p for p in polys if not p.is_empty]
+    if not live:
+        return []
+    rings = [np.asarray(p.exterior.coords) for p in live]
+    xy = to_crs_xy(area, np.concatenate(rings))
+    cuts = np.cumsum([len(r) for r in rings])[:-1]
+    return [Polygon(part) for part in np.split(xy, cuts)]
 
 
 def burn(shapes: list[tuple[Polygon, int]], grid: Grid) -> npt.NDArray[np.int32]:
@@ -651,23 +653,31 @@ def _water_polys_v2(ctx: CityContextFile, rows: list[CityBuilding]) -> list[Poly
 
 
 def g3_v2(area: Area, rows: list[CityBuilding], ctx: CityContextFile) -> GuardRecord:
+    """On a 1 m raster in the LOCAL frame (the controls are local transforms; a shift of 10 or 20 m is 10 or 20 whole pixels), which is also two
+    orders of magnitude cheaper than 40 polygon intersections against a city-sized water union."""
+    from rasterio.features import rasterize
+    from rasterio.transform import from_origin
+    from shapely.geometry import mapping
     wat = _water_polys_v2(ctx, rows)
     dropped = len(water_polys(ctx, False)) - len(wat)
     if len(wat) < G3V2_MIN_WATER:
         return record("G3", "buildings vs water (v2 rule)", "-", "-", "-", "pending", None, None, note=f"{len(wat)} water polygons: no evidence")
-    union, tree = shapely.union_all(wat), STRtree(wat)
+    pad = 40
+    n = int(area.size_m) + 2 * pad
+    tf = from_origin(-area.size_m / 2.0 - pad, area.size_m / 2.0 + pad, 1.0, 1.0)
+    wmask = rasterize([(mapping(w), 1) for w in wat], out_shape=(n, n), transform=tf, fill=0, dtype="uint8").astype(bool)
 
-    def share(polys: Sequence[Polygon]) -> float:
-        arr = np.asarray(polys, dtype=object)
-        total = float(shapely.area(arr).sum())
-        hit = np.unique(tree.query(arr, predicate="intersects")[0])
-        return float(shapely.area(shapely.intersection(arr[hit], union)).sum()) / total if hit.size and total else 0.0
+    def bmask(fn: Xform) -> npt.NDArray[np.bool_]:
+        return rasterize([(mapping(p), 1) for p in _polys(rows, fn) if not p.is_empty], out_shape=(n, n), transform=tf, fill=0, dtype="uint8").astype(bool)
+
+    def share(b: npt.NDArray[np.bool_]) -> float:
+        return float((b & wmask).sum() / max(1, b.sum()))
 
     def stats(fn: Xform) -> tuple[float, float, float, bool]:
-        base = _polys(rows, fn)
-        s0 = share(base)
-        ss = [share(list(shapely.affinity.translate(g, dx, dy) for g in base)) for dx, dy in G3V2_SHIFTS_M]
-        mir = share(_polys(rows, lambda a: MIRROR(fn(a))))
+        b = bmask(fn)
+        s0 = share(b)
+        ss = [share(np.roll(np.roll(b, int(-dy), axis=0), int(dx), axis=1)) for dx, dy in G3V2_SHIFTS_M]       # +x east = +col, +y north = -row
+        mir = share(bmask(lambda a: MIRROR(fn(a))))
         return s0, min(ss), mir, g3v2_ok(s0, ss, mir)
 
     n0, nmin, nmir, nok = stats(IDENTITY)
@@ -675,7 +685,7 @@ def g3_v2(area: Area, rows: list[CityBuilding], ctx: CityContextFile) -> GuardRe
     # GATING controls: mirror and rot180 (a 3-degree turn keeps most buildings off the water, so it passes the 1 % branch: recorded, not gated)
     ok = nok and not controls["mirror"][3] and not controls["rot180"][3]
     return record("G3", "buildings vs water (v2 rule)", "Overture water polygons without footprint-coincident ones (OSM; independent of BAG)",
-                  "share of footprint area on water; north-up, its +-10/20 m shifts and its mirrored copy",
+                  "share of footprint area on water at 1 m; north-up, its +-10/20 m shifts and its mirrored copy",
                   f"north <= {G3V2_MAX_SHARE:.0%} or below 0.95x every shift, and mirrored >= {G3V2_MIRROR_RATIO}x; the mirrored and 180-degree candidates must FAIL the same rule (rot3deg is recorded)",
                   "pass" if ok else "fail", n0, nmir, minShift=round(nmin, 4), candidatePasses=nok, waterPolygons=len(wat), footprintCoincidentDropped=dropped,
                   controls={k: {"share": round(v[0], 4), "minShift": round(v[1], 4), "itsMirror": round(v[2], 4), "passesRule": v[3]} for k, v in controls.items()})
