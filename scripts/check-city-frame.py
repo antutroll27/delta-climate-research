@@ -580,6 +580,18 @@ ROT3: Final[Xform] = lambda a: a @ _ROT3                                        
 SHIFT10E: Final[Xform] = lambda a: a + np.array([10.0, 0.0])                            # noqa: E731
 SHIFT20E: Final[Xform] = lambda a: a + np.array([20.0, 0.0])                            # noqa: E731
 
+
+def shift_xform(dx: float, dy: float) -> Xform:
+    return lambda a: a + np.array([dx, dy])
+
+
+def turn_xform(deg: float) -> Xform:
+    """A turn of `deg` degrees about the centre (the sign convention of ROT3, which is turn_xform(3))."""
+    t = np.deg2rad(deg)
+    r = np.array([[np.cos(t), np.sin(t)], [-np.sin(t), np.cos(t)]])
+    return lambda a: a @ r
+
+
 G3V2_SHIFTS_M: Final = ((10.0, 0.0), (-10.0, 0.0), (0.0, 10.0), (0.0, -10.0), (20.0, 0.0), (-20.0, 0.0), (0.0, 20.0), (0.0, -20.0))
 G3V2_MAX_SHARE: Final = 0.01
 G3V2_SHIFT_MARGIN: Final = 0.95
@@ -591,10 +603,26 @@ G5V2_MIN_RHO: Final = 0.8
 G5V2_MIN_SHARE: Final = 0.6
 G5V2_WITHIN_M: Final = 2.0
 G6V2_MIN_KAPPA: Final = 0.5
-G6V2_CONTROL_MAX_KAPPA: Final = 0.2
+#: THE FACTOR IS 2 AND MUST STAY 2. The tightest real sheet is H3 (north kappa 0.927 against a mirrored 0.323, ratio 2.87): its mirrored score is the
+#: north-south symmetry of the IJmeer water lobe, not a misplacement (buildings-only mirrored kappa -0.009; Opus audit, CANAL-RING-FIX-AUDIT.md part B).
+#: A factor of 3 would FAIL H3 (0.927 < 3 x 0.323 = 0.969); the old absolute ceiling (mirrored <= 0.2) failed H3 and H7 for the same reason.
+#: Next tightest: H7 at 3.5, then 7+ for every other sheet.
+G6V2_RATIO: Final = 2.0
+#: The mirrored and 180-degree kappa are floored at this before the ratio, so a candidate is not failed for beating a control that is ~0.
+G6V2_CONTROL_FLOOR: Final = 0.1
+#: The candidate must be its OWN LOCAL OPTIMUM: strictly better than the same data shifted 10 or 20 m east or north (either sign) or turned 3 degrees
+#: either way. This is what lets the guard see 10-20 m and 2-3 degree registration errors that the kappa LEVEL cannot (a 2 m mask of dense blocks keeps
+#: kappa 0.6-0.7 under them), and what makes a shifted or turned copy handed in AS the sheet fail.
+G6V2_TURNS_DEG: Final = (3.0, -3.0)
 G7V2_MIN_WATER_SHARE: Final = 0.01
 G7V2_MIN_R: Final = 0.2
 G7V2_RATIO: Final = 1.5
+
+
+def g6v2_ok(north: float, mirror: float, rot180: float, perturbed: Sequence[float]) -> bool:
+    """G6's rule: kappa >= 0.5; at least 2x the larger of the mirrored and 180-degree kappa (floored at 0.1); and above every shifted and turned copy."""
+    return (north >= G6V2_MIN_KAPPA and north >= G6V2_RATIO * max(mirror, rot180, G6V2_CONTROL_FLOOR)
+            and all(north > p for p in perturbed))
 
 
 def g3v2_ok(north: float, shifted: Sequence[float], mirrored: float) -> bool:
@@ -736,16 +764,18 @@ def g6_v2(area: Area, rows: list[CityBuilding], ctx: CityContextFile) -> GuardRe
         return kappa(nodata, vec, inside)
 
     north = k(IDENTITY)
-    controls = {name: k(fn) for name, fn in (("mirror", MIRROR), ("rot180", ROT180), ("rot3deg", ROT3), ("shift20E", SHIFT20E))}
-    # GATING controls: mirror and rot180. A 3-degree turn and a 20 m shift are RECORDED but do not gate: a 2 m mask of dense blocks keeps a kappa of
-    # 0.6-0.7 under them (measured on H4: north 0.83, rot3deg 0.61, shift20E 0.68), so this guard cannot see sub-cell registration; G7 and the
-    # surface registration check carry that.
-    ok = north >= G6V2_MIN_KAPPA and max(controls["mirror"], controls["rot180"]) <= G6V2_CONTROL_MAX_KAPPA
+    mirror, rot180 = k(MIRROR), k(ROT180)
+    perturbed = {f"turn{deg:+g}deg": k(turn_xform(deg)) for deg in G6V2_TURNS_DEG}
+    perturbed |= {f"shift{dx:+g}E{dy:+g}N": k(shift_xform(dx, dy)) for dx, dy in G3V2_SHIFTS_M}
+    best = max(perturbed.values())
+    ok = g6v2_ok(north, mirror, rot180, list(perturbed.values()))
     return record("G6", "terrain registration (v2 rule)", "the AHN DTM nodata mask (no ground points under buildings or water)",
                   "Cohen's kappa of the DTM nodata mask vs rasterised footprints + water at 2 m, inside the square",
-                  f"kappa >= {G6V2_MIN_KAPPA}; the mirrored and the 180-degree copies <= {G6V2_CONTROL_MAX_KAPPA} (3 degrees and 20 m are recorded, not gated)",
-                  "pass" if ok else "fail", north, controls["mirror"], nodataShare=round(float(nodata[inside].mean()), 3),
-                  controls={k_: round(v, 3) for k_, v in controls.items()})
+                  f"kappa >= {G6V2_MIN_KAPPA}; >= {G6V2_RATIO:g}x the larger of the mirrored and 180-degree kappa (floored at {G6V2_CONTROL_FLOOR}); "
+                  "and above every copy shifted 10/20 m east or north (either sign) or turned 3 degrees either way (gated)",
+                  "pass" if ok else "fail", north, mirror, nodataShare=round(float(nodata[inside].mean()), 3),
+                  ratio=round(north / max(mirror, rot180, G6V2_CONTROL_FLOOR), 3), optimumMargin=round(north - best, 3),
+                  controls={"mirror": round(mirror, 3), "rot180": round(rot180, 3), **{k_: round(v, 3) for k_, v in perturbed.items()}})
 
 
 def g7_v2(area: Area, ctx: CityContextFile) -> GuardRecord:
@@ -1015,8 +1045,20 @@ def _self_test_sheet_rules() -> None:
             # G6: kappa of the nodata mask
             rec6 = g6_v2(area, rows, ctx)
             assert rec6["status"] == "pass" and rec6["north"] is not None and rec6["north"] > 0.8, rec6
-            for name, fn in (("mirror", MIRROR), ("rot180", ROT180)):
-                assert g6_v2(area, xf(fn), cast(CityContextFile, {**ctx, "water": [{"cls": "canal", "p": fn(ring_xy(w["p"])).ravel().tolist()} for w in water]}))["status"] != "pass", name
+            # EVERY control copy, handed in AS the sheet, must fail the same rule: mirror, 180 degrees, +3 and -2 degrees, 10 m and 20 m east, 15 m north and 6 m
+            # south (the last three are not on the rule's own perturbation lattice, so they test the optimum, not a memorised grid)
+            for name, fn in (("mirror", MIRROR), ("rot180", ROT180), ("+3 degrees", turn_xform(3.0)), ("-2 degrees", turn_xform(-2.0)),
+                             ("10 m east", SHIFT10E), ("20 m east", SHIFT20E), ("15 m north", shift_xform(0.0, 15.0)),
+                             ("6 m south", shift_xform(0.0, -6.0))):
+                got = g6_v2(area, xf(fn), cast(CityContextFile, {**ctx, "water": [{"cls": "canal", "p": fn(ring_xy(w["p"])).ravel().tolist()} for w in water]}))
+                assert got["status"] != "pass", f"G6 must fail the {name} copy: {got['north']} {got['detail']}"
+            # the rule itself, on the numbers of the two sheets that broke the old absolute ceiling (H3 and H7), and the factor-3 counterexample
+            assert g6v2_ok(0.927, 0.323, -0.371, [0.791]), "H3 passes: its mirrored 0.323 is water symmetry, ratio 2.87"
+            assert g6v2_ok(0.833, 0.238, 0.054, [0.536]), "H7 passes: ratio 3.5"
+            assert not 0.927 >= 3.0 * 0.323, "a factor of 3 would fail H3 (0.927 < 0.969): the factor stays 2"
+            assert not g6v2_ok(0.927, 0.323, -0.371, [0.95]), "a copy that beats the candidate means the candidate is not at its optimum"
+            assert not g6v2_ok(0.49, 0.0, 0.0, []) and not g6v2_ok(0.6, 0.35, 0.0, []), "below 0.5, or under 2x the mirrored kappa: fail"
+            assert g6v2_ok(0.6, 0.0, -0.4, []) and not g6v2_ok(0.15, 0.0, 0.0, []), "the 0.1 floor: a control at ~0 is compared as 0.1"
             # G7: the water mask against -albedo; the mirrored image handed in as the surface fails
             assert g7_v2(area, ctx)["status"] == "pass"
             os.replace(os.path.join(td, "synthetic-guards-surface.png"), os.path.join(td, "keep.png"))
@@ -1024,7 +1066,7 @@ def _self_test_sheet_rules() -> None:
             assert g7_v2(area, ctx)["status"] != "pass", "G7 must fail a mirrored surface"
         finally:
             DATA_DIR, PUBLIC_DIR, AHN_DIR = saved
-    print("  sheet rules: G3/G5/G6/G7 pass the synthetic sheet and FAIL its mirrored, turned and shifted copies")
+    print("  sheet rules: G3/G5/G6/G7 pass the synthetic sheet and FAIL its mirrored, turned and shifted copies (G6: eight control copies)")
 
 
 if __name__ == "__main__":
