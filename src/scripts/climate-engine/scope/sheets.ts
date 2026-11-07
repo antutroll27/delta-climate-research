@@ -141,7 +141,7 @@ export interface SheetIndex {
 export function sheetIndex(from: AreaKey): SheetIndex | null {
   if (!isTiledCity(from)) return null;
   const current = sheetOf(from);
-  const near = new Set(current === null ? [] : neighbours(current.code).map((s) => s.code));
+  const near = new Set<string>(current === null ? [] : neighbours(current.code).map((s) => s.code));
   const cells: SheetIndexCell[] = [];
   for (let row = 0; row < L.rows; row++) {
     for (let col = 0; col < L.columns.length; col++) {
