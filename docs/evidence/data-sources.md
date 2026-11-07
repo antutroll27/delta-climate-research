@@ -815,9 +815,9 @@ catalogue record of the registry ("In de Registratie gebieden worden de Amsterda
 `5l2csm77flzgya`, saved in `2026-11-07-amsterdam-stadsdelen-licence/kernregistratie-gebieden-ckan-record.json`); the Maps Data terms independently
 allow commercial reuse with attribution not required. The API schema for wijken states no licence of its own, the same position as the stadsdelen
 (`2026-11-07-amsterdam-stadsdelen-licence.md`), so nothing stricter than CC0 applies and nothing is flagged · **role:** the neighbourhood name of each
-shipping area in the area picker (`data/cities/amsterdam/area-names.json`, written by `scripts/build-area-names.py`): the wijk with the largest
-overlap inside the area's municipal part, "A / B" when the second covers more than 35 %, a compass qualifier where two areas would share a name, E4
-stays "Canal Ring". Only names and overlap shares are kept, no geometry. **Credit line (not required, kept):** "Gemeente Amsterdam, Kernregistratie
+shipping area in the area picker (`data/cities/amsterdam/area-names.json`, written by `scripts/build-area-names.py`): the wijk holding the largest
+number of the area's DRAWN buildings (centroid in the wijk; weighted by buildings, not polygon area, because wijk polygons include water and port basins),
+"A & B" when the second holds more than 35 %, a compass qualifier where two areas would share a name, E4 stays "Canal Ring". Only names and building shares are kept, no geometry. **Credit line (not required, kept):** "Gemeente Amsterdam, Kernregistratie
 gebieden (CC0 1.0): wijk names". Do not imply the Gemeente endorses the product.
 
 ### Ruled out (with the reason)

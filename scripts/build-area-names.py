@@ -1,16 +1,20 @@
 """Name every shipping Amsterdam area after a neighbourhood (wijk): writes data/cities/amsterdam/area-names.json.
 
 WHY. The area picker repeated the stadsdeel ("Nieuw-West" seven times). A reader choosing where to go needs a name that
-tells two areas apart, so each area is named after the wijk that covers most of the area's MUNICIPAL part (the area's box
-intersected with the union of the nine stadsdelen). If a second wijk covers more than 35 % of that part the name is
-"A / B". E4 stays "Canal Ring" (it is the hand-named anchor, and its name is the product's).
+tells two areas apart, so each area is named after the wijk that holds most of the area's DRAWN BUILDINGS (a building counts
+for the wijk its centroid is in). If a second wijk holds more than 35 % of them the name is "A & B". E4 stays "Canal Ring" (it is
+the hand-named anchor, and its name is the product's).
+
+WHY BUILDINGS, NOT AREA. Wijk polygons include water and port basins, so an area-weighted overlap names an area after the
+biggest stretch of water in it (F4 came out "Oostelijk Havengebied"). Buildings are what the area draws and what the reader sees.
 
 SOURCE. Gemeente Amsterdam, Kernregistratie gebieden, wijken (https://api.data.amsterdam.nl/v1/gebieden/wijken/). The same
 registry as the stadsdelen the sheet table already uses: CC0 1.0 on the catalogue record, and the Maps Data terms allow
 commercial reuse with no attribution duty (docs/evidence/2026-11-07-amsterdam-stadsdelen-licence.md; the wijken entry is in
 docs/evidence/data-sources.md). Only NAMES and overlap shares are kept; no geometry is redistributed.
 
-    python3 scripts/build-area-names.py                       # fetch (once) and write the file for the committed table
+    python3 scripts/build-area-names.py --buildings DIR       # fetch (once) and write the file; DIR holds ams-*-buildings.json
+                                                              # (the data branch's data/cities/amsterdam; E4 reads canal-ring-buildings.json)
     python3 scripts/build-area-names.py --table PATH          # name the shipping sheets of another sheets.json
     python3 scripts/build-area-names.py --check               # the committed file covers every shipping sheet, with names
 
@@ -26,6 +30,9 @@ import sys
 from dataclasses import dataclass
 from typing import Final, NewType, TypedDict, cast
 
+import numpy as np
+import shapely
+from pyproj import Transformer
 from shapely.geometry import shape
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
@@ -41,7 +48,9 @@ WIJKEN_FILE: Final = "wijken.json"
 WIJKEN_URL: Final = "https://api.data.amsterdam.nl/v1/gebieden/wijken/?_format=json&_pageSize=200"
 STADSDELEN_FILE: Final = "stadsdelen.json"
 OUT_REL: Final = os.path.join("data", "cities", "amsterdam", "area-names.json")
-#: A second wijk makes the name "A / B" when it covers MORE than this share of the area's municipal part.
+#: Joins the two wijken of a two-wijk name.
+JOIN: Final = " & "
+#: A second wijk makes the name "A & B" when it covers MORE than this share of the area's municipal part.
 SECOND_WIJK_SHARE: Final = 0.35
 #: How many wijken an entry records, for the reader who wants to see why a name was chosen.
 KEEP_WIJKEN: Final = 3
@@ -51,15 +60,16 @@ CREDIT: Final = "Gemeente Amsterdam, Kernregistratie gebieden (CC0 1.0): wijk na
 #: Two areas must never share a name, so a name two areas would share gets a compass qualifier: "Waterland (west)".
 QUALIFIERS: Final = {2: ("{lo}", "{hi}"), 3: ("{lo}", "centre", "{hi}")}
 RULE: Final = (
-    "name = the wijk with the largest overlap inside the area's municipal part (the area's box intersected with the union "
-    f"of the nine stadsdelen); if the second wijk covers more than {SECOND_WIJK_SHARE:.0%} of that part, 'A / B'; E4 stays 'Canal Ring'; "
+    "name = the wijk holding the most of the area's drawn buildings (a building counts for the wijk its centroid lies in; weighting by "
+    "building count, not by polygon area, because wijk polygons include water and port basins); if the second wijk holds more than "
+    f"{SECOND_WIJK_SHARE:.0%} of them, 'A{JOIN}B'; E4 stays 'Canal Ring'; "
     "a name two areas would share gets a compass qualifier, '(west)' / '(east)' or '(north)' / '(south)', so every name is unique"
 )
 
 
 @dataclass(frozen=True, slots=True)
 class WijkShare:
-    """One wijk's share of an area's municipal part."""
+    """One wijk's share of an area's drawn buildings that lie in any wijk."""
     name: WijkName
     share: float
 
@@ -87,13 +97,13 @@ class AreaNamesFile(TypedDict):
 # ── pure rules (the unit-testable part) ────────────────────────────────────
 
 def name_from_shares(shares: list[WijkShare]) -> str:
-    """The area's name from its wijk shares, largest first. 'A / B' when the second covers more than SECOND_WIJK_SHARE."""
+    """The area's name from its wijk shares, largest first. 'A & B' when the second covers more than SECOND_WIJK_SHARE."""
     if not shares:
         raise ValueError("an area with no wijk overlap cannot be named")
     ranked = sorted(shares, key=lambda s: (-s.share, s.name))
     first = ranked[0]
     if len(ranked) > 1 and ranked[1].share > SECOND_WIJK_SHARE:
-        return f"{first.name} / {ranked[1].name}"
+        return f"{first.name}{JOIN}{ranked[1].name}"
     return str(first.name)
 
 
@@ -151,29 +161,49 @@ def read_wijken(path: str) -> dict[WijkName, BaseGeometry]:
     return out
 
 
-def shares_in_area(i: int, j: int, municipality: BaseGeometry, wijken: dict[WijkName, BaseGeometry]) -> tuple[list[WijkShare], float]:
-    """Each wijk's share of the area's municipal part, largest first, and the part's share the wijken cover at all."""
-    part = _sheets.rd_polygon(i, j).intersection(municipality)
-    if part.is_empty or part.area <= 0.0:
-        raise SystemExit(f"cell ({i}, {j}) has no municipal part")
-    out = [WijkShare(n, g.intersection(part).area / part.area) for n, g in wijken.items()]
-    out = sorted((s for s in out if s.share > 0.0), key=lambda s: (-s.share, s.name))
-    return out, sum(s.share for s in out)
+def building_centroids_rd(path: str) -> tuple[F64, F64]:
+    """RD centroids (vertex mean of the footprint ring) of every drawn building in one ams-*-buildings.json / canal-ring-buildings.json."""
+    with open(path, encoding="utf-8") as fh:
+        doc = cast("dict[str, list[dict[str, list[list[float]]]]]", json.load(fh))
+    rows = doc["b"]
+    lon = np.array([sum(p[0] for p in r["lonlat"]) / len(r["lonlat"]) for r in rows], dtype=np.float64)
+    lat = np.array([sum(p[1] for p in r["lonlat"]) / len(r["lonlat"]) for r in rows], dtype=np.float64)
+    x, y = Transformer.from_crs(4326, 28992, always_xy=True).transform(lon, lat)
+    return np.asarray(x, dtype=np.float64), np.asarray(y, dtype=np.float64)
+
+
+def shares_of_buildings(x: F64, y: F64, wijken: dict[WijkName, BaseGeometry]) -> tuple[list[WijkShare], int]:
+    """Each wijk's share of the buildings that lie in ANY wijk (outside the municipality they count for nobody), largest first,
+    and how many buildings that is."""
+    counts = {n: int(shapely.contains_xy(g, x, y).sum()) for n, g in wijken.items()}
+    total = sum(counts.values())
+    if total == 0:
+        raise SystemExit("no drawn building lies in any wijk")
+    out = sorted((WijkShare(n, c / total) for n, c in counts.items() if c > 0), key=lambda s: (-s.share, s.name))
+    return out, total
 
 
 # ── build and check ────────────────────────────────────────────────────────
 
-def build(table: _sheets.SheetTable, raw_dir: str = RAW_DIR) -> tuple[AreaNamesFile, dict[str, float]]:
+F64 = np.ndarray[tuple[int], np.dtype[np.float64]]
+
+
+def buildings_path(buildings_dir: str, code: str, area_id: str) -> str:
+    """The drawn-buildings file of an area: `<id>-buildings.json` (E4's id is canal-ring)."""
+    return os.path.join(buildings_dir, f"{area_id}-buildings.json")
+
+
+def build(table: _sheets.SheetTable, buildings_dir: str, raw_dir: str = RAW_DIR) -> tuple[AreaNamesFile, dict[str, int]]:
     os.makedirs(raw_dir, exist_ok=True)
     fetch_if_absent(WIJKEN_URL, os.path.join(raw_dir, WIJKEN_FILE))
     fetch_if_absent(_sheets.STADSDELEN_URL, os.path.join(raw_dir, STADSDELEN_FILE))
     wijken = read_wijken(os.path.join(raw_dir, WIJKEN_FILE))
-    municipality = _sheets.municipality_of(_sheets.read_districts(os.path.join(raw_dir, STADSDELEN_FILE)))
     areas: dict[str, AreaNameJson] = {}
-    coverage: dict[str, float] = {}
+    coverage: dict[str, int] = {}
     shares_of: dict[str, list[WijkShare]] = {}
     for row in table["sheets"]:
-        shares_of[row["code"]], coverage[row["code"]] = shares_in_area(row["i"], row["j"], municipality, wijken)
+        x, y = building_centroids_rd(buildings_path(buildings_dir, row["code"], row["id"]))
+        shares_of[row["code"]], coverage[row["code"]] = shares_of_buildings(x, y, wijken)
     names = disambiguate(
         {r["code"]: area_name(r["code"], shares_of[r["code"]]) for r in table["sheets"]},
         {r["code"]: (r["i"], r["j"]) for r in table["sheets"]},
@@ -219,6 +249,7 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--table", default=os.path.join(_city.ROOT, _sheets.JSON_REL), help="the sheets.json to name (default: the repo's)")
     ap.add_argument("--raw", default=RAW_DIR)
+    ap.add_argument("--buildings", default=os.path.join(_city.ROOT, "data", "cities", "amsterdam"), help="the folder with the areas' *-buildings.json")
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args(argv)
     with open(args.table, encoding="utf-8") as fh:
@@ -231,7 +262,11 @@ def main(argv: list[str]) -> int:
             print("FAIL", p)
         print(f"area-names: {len(table['sheets'])} shipping sheets, {len(problems)} problems")
         return 1 if problems else 0
-    doc, coverage = build(table, args.raw)
+    previous: dict[str, str] = {}
+    if os.path.exists(out_path):
+        with open(out_path, encoding="utf-8") as fh:
+            previous = {c: e["name"] for c, e in cast("AreaNamesFile", json.load(fh))["areas"].items()}
+    doc, coverage = build(table, args.buildings, args.raw)
     problems = check(doc, table)
     if problems:
         raise SystemExit("\n".join(problems))
@@ -239,7 +274,8 @@ def main(argv: list[str]) -> int:
         json.dump(doc, fh, ensure_ascii=False, indent=1)
         fh.write("\n")
     for code, e in doc["areas"].items():
-        print(f"{code:3} {e['name']:42} {e['stadsdeel']:11} wijken cover {coverage[code]:.0%}")
+        old = previous.get(code)
+        print(f"{code:3} {e['name']:50} {e['stadsdeel']:11} {coverage[code]:6} buildings in wijken" + (f"   (was: {old})" if old not in (None, e["name"]) else ""))
     return 0
 
 
