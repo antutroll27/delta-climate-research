@@ -2,6 +2,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { renderableWardById } from '../../../data/wards.ts';
+import { byCity } from '../../../data/city-credits.ts';
+import { splitKey, type AreaKey } from '../scope/registry.ts';
 
 export interface AreaFacts { readonly kind: 'polygon' | 'square'; readonly areaHa: number; readonly path: string; readonly viewBox: string }
 
@@ -28,4 +30,16 @@ export function areaFacts(id: string): AreaFacts | null {
     return { kind: 'polygon', areaHa: mask.areaM2 / 1e4, path, viewBox };
   }
   return { kind: 'square', areaHa: (ward.footprintM * ward.footprintM) / 1e4, path: 'M0 0H100V100H0Z', viewBox: '0 0 100 100' };
+}
+
+/**
+ * Whether a city's title card prints a stamp of the area's footprint when the area has no measured boundary (`kind: 'square'`).
+ * Kolkata and Bengaluru always have (a plain study-square stamp beside the figure) and keep it unchanged. Amsterdam's canal ring has no
+ * boundary polygon in the repo and no new source is taken for one, so a square would be a grey box that says nothing a reader can use;
+ * a city with no row prints none. A measured boundary (`kind: 'polygon'`) is always drawn, in every city.
+ */
+export const STUDY_SQUARE_STAMP: Readonly<Record<string, boolean>> = byCity<boolean>({ kolkata: true, bengaluru: true }, false);
+
+export function showsAreaStamp(key: AreaKey, facts: AreaFacts): boolean {
+  return facts.kind === 'polygon' || STUDY_SQUARE_STAMP[splitKey(key).city] === true;
 }
