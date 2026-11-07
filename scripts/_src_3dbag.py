@@ -291,8 +291,9 @@ def _row(area: Area, tr: Transformer, poly: Polygon, src_id: str, h: float, hsrc
         flat += [round(x, 2), round(y, 2)]
         ll = back.get((round(x, 3), round(y, 3)))
         if ll is None:                                        # a vertex the simplifier created (buffer(0) only)
-            lon_c = area.centre.lon + x / _city.m_per_deg(area.centre.lat)[0]
-            lat_c = area.centre.lat + y / _city.m_per_deg(area.centre.lat)[1]
+            mx, my = _city.frame_m_per_deg(area)
+            lon_c = area.centre.lon + x / mx
+            lat_c = area.centre.lat + y / my
             ll = (lon_c, lat_c)
         lonlat.append([round(ll[0], 7), round(ll[1], 7)])
     return CityBuilding(src_id=src_id, p=flat, lonlat=lonlat, h=round(max(h, 0.0), 2), hSource=hsrc,

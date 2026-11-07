@@ -93,7 +93,7 @@ def compare(current: Golden, pinned: Golden) -> list[str]:
             bad.append(f"{key}: pinned but no longer produced")
             continue
         for field in ("mPerDeg", "bounds", "local", "boundsLocalCrs"):
-            if current[key][field] != pinned[key][field]:                          # type: ignore[literal-required]
+            if current[key][field] != pinned[key][field]:                       
                 bad.append(f"{key}: {field} is not bit-identical to the pinned frame")
     return bad
 

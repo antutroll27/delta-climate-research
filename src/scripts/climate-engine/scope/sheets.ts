@@ -105,6 +105,15 @@ export function neighbours(code: string): readonly SheetRow[] {
   return out;
 }
 
+/**
+ * A sheet's frame origin, in the shape `wardLatLon`, `wardBbox` and `wardMercatorScale` read: its centre, and the ONE
+ * standard parallel every sheet shares (E4's latitude). Two sheets' frames differ by an exact translation of
+ * (2800 di, 2800 dj) metres; `tests/unit/frame-lat-default.test.mjs` proves it at the seams.
+ */
+export function sheetFrameOrigin(sheet: SheetRow): { readonly lat: number; readonly lon: number; readonly frameLat: number } {
+  return { lat: sheet.centre.lat, lon: sheet.centre.lon, frameLat: L.frameLat };
+}
+
 export interface SheetIndexCell {
   /** "F4" */
   readonly code: string;

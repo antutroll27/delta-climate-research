@@ -41,8 +41,9 @@ const M_PER_DEG_LAT = 110_540;
  *  and the order every OGC / GeoJSON bbox uses. */
 export type Bbox = readonly [number, number, number, number];
 
-export function wardBbox(w: Pick<Ward, 'lat' | 'lon' | 'footprintM'>): Bbox {
-  const mx = M_PER_DEG_LON_EQUATOR * Math.cos((w.lat * Math.PI) / 180);
+export function wardBbox(w: Pick<Ward, 'lat' | 'lon' | 'footprintM' | 'frameLat'>): Bbox {
+  /* east scale at the frame's standard parallel (absent = the ward's own latitude: the same arithmetic as ever) */
+  const mx = M_PER_DEG_LON_EQUATOR * Math.cos(((w.frameLat ?? w.lat) * Math.PI) / 180);
   const my = M_PER_DEG_LAT;
   const half = w.footprintM / 2;
   return [w.lon - half / mx, w.lat - half / my, w.lon + half / mx, w.lat + half / my];

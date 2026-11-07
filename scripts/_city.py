@@ -120,6 +120,17 @@ class Area:
     min_sun_elevation_deg: Degrees | None = None
     #: Set only to override the Koppen-derived draw (needed for Koppen B and E).
     tree_species: tuple[Species, ...] | None = None
+    #: The frame's STANDARD PARALLEL: the latitude whose cosine scales the east axis (111_320 cos(frame_lat) m/deg).
+    #: None = the area's own latitude, which is every area before whole-city streaming: Canal Ring, Kolkata and
+    #: Bengaluru keep their frames to the last bit (`check-frame-lat.py` pins it against a golden written before this
+    #: field existed). The sheets of a tiled city all set it to the anchor sheet's latitude, so two sheets' frames
+    #: differ by an exact translation and a shared seam is one meridian. NORTH is not affected: 110_540 m/deg is
+    #: latitude-independent here. See scripts/_sheets.py.
+    frame_lat: Degrees | None = None
+
+    def frame_parallel(self) -> float:
+        """The latitude the east scale is taken at: `frame_lat` if set, else the area's own centre latitude."""
+        return self.centre.lat if self.frame_lat is None else float(self.frame_lat)
 
     def species_draw(self) -> tuple[Species, ...]:
         """The weighted tuple `place_trees` indexes with its hash: explicit if set, else from `koppen`."""
@@ -159,9 +170,16 @@ def m_per_deg(lat: float) -> tuple[float, float]:
     return (111_320.0 * math.cos(math.radians(lat)), 110_540.0)
 
 
+def frame_m_per_deg(a: Area) -> tuple[float, float]:
+    """(east, north) metres per degree OF THIS AREA'S FRAME: east at its standard parallel, north as always.
+
+    For an area with no `frame_lat` this is exactly `m_per_deg(a.centre.lat)`, the same two floats."""
+    return (m_per_deg(a.frame_parallel())[0], m_per_deg(a.centre.lat)[1])
+
+
 def bounds(a: Area, pad_m: float = 0.0) -> tuple[float, float, float, float]:
     """(west, south, east, north) in EPSG:4326 -- rasterio's `from_bounds` order."""
-    mx, my = m_per_deg(a.centre.lat)
+    mx, my = frame_m_per_deg(a)
     half = a.size_m / 2.0 + pad_m
     return (a.centre.lon - half / mx, a.centre.lat - half / my,
             a.centre.lon + half / mx, a.centre.lat + half / my)
@@ -169,7 +187,7 @@ def bounds(a: Area, pad_m: float = 0.0) -> tuple[float, float, float, float]:
 
 def to_local(a: Area, lon: float, lat: float) -> tuple[float, float]:
     """Degrees -> area-local metres. +x east, +y NORTH."""
-    mx, my = m_per_deg(a.centre.lat)
+    mx, my = frame_m_per_deg(a)
     return ((lon - a.centre.lon) * mx, (lat - a.centre.lat) * my)
 
 
@@ -401,6 +419,17 @@ def _self_test() -> None:
         assert mnx < x < mxx and mny < y < mxy
         # the envelope of a 2.8 km box is wider than 2.8 km (rotated quadrilateral), but not by much
         assert a.size_m <= (mxx - mnx) < a.size_m * 1.02, (mxx - mnx)
+
+    # (f) frame_lat: unset = the area's own latitude, to the bit; set = the east scale moves, the north scale and the origin do not.
+    for a in AREAS.values():
+        assert a.frame_lat is None and a.frame_parallel() == a.centre.lat
+        assert frame_m_per_deg(a) == m_per_deg(a.centre.lat)
+    base = AREAS["canal-ring"]
+    off = Area("off", "amsterdam", "Off", LatLon(base.centre.lat + 0.05, base.centre.lon), 2800, 28992, "Cfb", frame_lat=Degrees(base.centre.lat))
+    assert frame_m_per_deg(off) == (m_per_deg(base.centre.lat)[0], 110_540.0)
+    assert to_local(off, off.centre.lon, off.centre.lat) == (0.0, 0.0)
+    w_, s_, e_, n_ = bounds(off)
+    assert abs((e_ - w_) * frame_m_per_deg(off)[0] - 2800) < 1e-6 and abs((n_ - s_) * 110_540.0 - 2800) < 1e-6
 
     # (c) CRS names resolve to what the plan says they are.
     assert CRS.from_epsg(28992).name == "Amersfoort / RD New"

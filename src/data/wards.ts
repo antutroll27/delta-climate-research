@@ -155,11 +155,14 @@ export const WARD_MAP: Readonly<Record<string, Ward>> =
  * edge. The number is the more faithful of the two.
  */
 export function wardLatLon(
-  origin: { readonly lat: number; readonly lon: number }, x: number, y: number,
+  origin: { readonly lat: number; readonly lon: number; readonly frameLat?: number }, x: number, y: number,
 ): { lat: number; lon: number } {
+  /* `frameLat` is the frame's standard parallel (Area.frame_lat in scripts/_city.py); absent = the origin's own
+     latitude, which is every ward before whole-city streaming, and then this is the same arithmetic as before. */
+  const parallel = origin.frameLat ?? origin.lat;
   return {
     lat: origin.lat + y / 110_540,
-    lon: origin.lon + x / (111_320 * Math.cos((origin.lat * Math.PI) / 180)),
+    lon: origin.lon + x / (111_320 * Math.cos((parallel * Math.PI) / 180)),
   };
 }
 

@@ -53,10 +53,18 @@ export interface WardFrame {
   readonly up: number;
 }
 
-export function wardMercatorScale(latDeg: number): WardFrame {
+/**
+ * @param latDeg the ward's centre latitude: where the NORTH scale (Mercator's local secant) and `up` are taken.
+ * @param frameLatDeg the frame's STANDARD PARALLEL: where the EAST scale is taken (111_320 cos(frameLat) m/deg), the
+ *   TS twin of `Area.frame_lat` in scripts/_city.py. OMITTED = the ward's own latitude, which is every ward before
+ *   whole-city streaming, and then the result is the same floats as before (tests/unit/frame-lat-default.test.mjs).
+ *   The sheets of a tiled city all pass E4's latitude, so their frames differ by an exact translation.
+ */
+export function wardMercatorScale(latDeg: number, frameLatDeg: number = latDeg): WardFrame {
   const cosLat = Math.cos((latDeg * Math.PI) / 180);
+  const cosFrame = frameLatDeg === latDeg ? cosLat : Math.cos((frameLatDeg * Math.PI) / 180);
   return {
-    east: 1 / (360 * M_PER_DEG_LON_EQUATOR * cosLat),
+    east: 1 / (360 * M_PER_DEG_LON_EQUATOR * cosFrame),
     north: 1 / (360 * M_PER_DEG_LAT * cosLat),
     up: 1 / (2 * Math.PI * MERCATOR_MEAN_RADIUS_M * cosLat),
   };

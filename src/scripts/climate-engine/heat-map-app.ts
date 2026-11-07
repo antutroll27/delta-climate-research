@@ -2682,7 +2682,7 @@ export function mountHeatMap(): () => void {
       wardId: w.id,
       wardData: d, roads: b.roads, water: b.water, terrain: b.terrain,
       mercatorOrigin: { x: mc.x, y: mc.y, z: mc.z ?? 0 },
-      frame: wardMercatorScale(w.lat),
+      frame: wardMercatorScale(w.lat, w.frameLat),
       veg: b.trees,
       boundary: wardMask,
     };

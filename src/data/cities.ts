@@ -34,6 +34,13 @@ export interface WardRecord {
   readonly lat: number;
   readonly lon: number;
   /**
+   * The frame's STANDARD PARALLEL, degrees: the latitude whose cosine scales the east axis (Area.frame_lat in
+   * scripts/_city.py). ABSENT = this ward's own `lat`, which is every ward that existed before whole-city streaming
+   * (their frames are bit-identical, tests/unit/frame-lat-default.test.mjs). The sheets of a tiled city set it to
+   * the anchor sheet's latitude so neighbouring frames differ by an exact translation.
+   */
+  readonly frameLat?: number;
+  /**
    * Nominal vegetation fraction — and it does NOT mean the same thing in both
    * cities, so it cannot be described in one clause. Bengaluru's rows carry
    * MEASURED Sentinel-2 fractional vegetation cover. Kolkata's carry the

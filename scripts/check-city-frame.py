@@ -171,7 +171,12 @@ def record(gid: str, name: str, evidence: str, statistic: str, rule: str, status
 # ── G1: the frame itself ───────────────────────────────────────────────────
 
 def g1_frame_parity(area: Area) -> GuardRecord:
-    bw = blr.Ward(area.id, area.name, blr.LatLon(area.centre.lat, area.centre.lon), float(area.size_m))
+    # The oracle ward sits at the area's STANDARD PARALLEL, so its east scale is the area's (frame_lat); its north
+    # scale is latitude-independent, and `shift` moves its origin back to the area's own centre latitude. With no
+    # frame_lat the parallel IS the centre latitude, `shift` is exactly 0.0, and this is the oracle as it always was.
+    fp = area.frame_parallel()
+    bw = blr.Ward(area.id, area.name, blr.LatLon(fp, area.centre.lon), float(area.size_m))
+    shift = (fp - area.centre.lat) * blr.m_per_deg(fp)[1]
     worst = 0.0
     dlon, dlat = 0.0125, 0.0125
     for i in range(-5, 6):
@@ -179,7 +184,7 @@ def g1_frame_parity(area: Area) -> GuardRecord:
             lon, lat = area.centre.lon + i * dlon / 5, area.centre.lat + j * dlat / 5
             ax, ay = _city.to_local(area, lon, lat)
             bx, by = blr.to_local(bw, lon, lat)
-            worst = max(worst, abs(ax - bx), abs(ay - by))
+            worst = max(worst, abs(ax - bx), abs(ay - (by + shift)))
     # SIGN: a point 1 km north of the centre must have y ≈ +1000.
     _, y_north = _city.to_local(area, area.centre.lon, area.centre.lat + 1000.0 / 110_540.0)
     ok = worst < G1_MAX_DIFF_M and abs(y_north - 1000.0) < 1e-6
@@ -336,7 +341,7 @@ def _transformer(area: Area) -> Any:
 
 def to_crs_xy(area: Area, xy_local: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """local metres -> source-CRS metres, through lon/lat (the frame IS degrees times a constant)."""
-    mx, my = _city.m_per_deg(area.centre.lat)
+    mx, my = _city.frame_m_per_deg(area)
     lon = area.centre.lon + xy_local[:, 0] / mx
     lat = area.centre.lat + xy_local[:, 1] / my
     x, y = _transformer(area).transform(lon, lat)
@@ -647,6 +652,22 @@ def _self_test() -> None:
     # G4's north-up tolerance must stay tight enough to fail a 180-degree rotation (109.9 m measured for the Royal Palace)
     # and must stay far below the mirrored side, or the guard stops discriminating.
     assert G4_NORTH_MAX_M == 15.0 and G4_NORTH_MAX_M < 109.9 / 5 and G4_NORTH_MAX_M * 5 < G4_MIRROR_MIN_M
+    # G1 with a standard parallel: a SHEET far from E4's latitude (frame_lat = E4's) passes the parity oracle, and the oracle
+    # DISCRIMINATES -- the same area with `frame_lat` ignored (east scale at its own latitude) fails it.
+    import dataclasses
+    from _city import Degrees, LatLon
+    e4 = _city.AREAS["canal-ring"]
+    sheet = dataclasses.replace(e4, id="ams-a1-selftest", centre=LatLon(e4.centre.lat + 3 * 0.025330197, e4.centre.lon - 4 * 0.041190547),
+                                frame_lat=Degrees(e4.centre.lat))
+    assert g1_frame_parity(sheet)["status"] == "pass"
+    ignored = dataclasses.replace(sheet, frame_lat=None)
+    assert g1_frame_parity(ignored)["status"] == "pass", "an area with no frame_lat is checked against its own latitude"
+    real = _city.frame_m_per_deg
+    _city.frame_m_per_deg = lambda a: _city.m_per_deg(a.centre.lat)          # a frame that drops frame_lat
+    try:
+        assert g1_frame_parity(sheet)["status"] == "fail", "G1 must catch a frame that ignores frame_lat"
+    finally:
+        _city.frame_m_per_deg = real
     print("check-city-frame self-test: ok")
 
 
