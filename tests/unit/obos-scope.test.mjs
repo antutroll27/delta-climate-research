@@ -24,12 +24,12 @@ test('every registered area produces a key', () => {
   assert.ok(AREA_KEYS.includes('in/bengaluru/mg-road'));
   assert.ok(AREA_KEYS.includes('ae/dubai/al-quoz'));
   assert.ok(AREA_KEYS.includes('nl/amsterdam/canal-ring'));
-  /* FORTY-FIVE: Kolkata's three, Bengaluru's three, Dubai's three, Amsterdam's 36 sheets (Canal Ring is sheet E4 and the
-     other 35 are registered non-drawable by the city-streaming sheet table). Bengaluru is
+  /* FORTY: Kolkata's three, Bengaluru's three, Dubai's three, Amsterdam's 31 sheets (Canal Ring is sheet E4 and the
+     other 30 are registered non-drawable by the city-streaming sheet table). Bengaluru is
      registered but does not ship the catalogue's artefacts — see `drawable` in
      registry.ts. Registration is what makes an area NAMEABLE; shipsData is what
-     makes it published. tests/unit/amsterdam-sheets.test.mjs pins the 36. */
-  assert.equal(AREA_KEYS.length, 45);
+     makes it published. tests/unit/amsterdam-sheets.test.mjs pins the 31. */
+  assert.equal(AREA_KEYS.length, 40);
 });
 
 test('isAreaKey rejects anything not registered', () => {
@@ -295,11 +295,11 @@ test('an area outside the ward table carries its own name and says what it is', 
 });
 
 test('every registered key resolves', () => {
-  // The module resolves all FORTY-FIVE eagerly at load, so this is really a check that
+  // The module resolves all FORTY eagerly at load, so this is really a check that
   // nothing in the walk is unreachable -- and that the count has not silently
-  // shrunk, which would make the loop pass while covering less. Forty-five since the
-  // sheet table: three Kolkata, three Bengaluru, three Dubai, 36 Amsterdam sheets.
-  assert.equal(AREA_KEYS.length, 45);
+  // shrunk, which would make the loop pass while covering less. Forty since the
+  // sheet table: three Kolkata, three Bengaluru, three Dubai, 31 Amsterdam sheets.
+  assert.equal(AREA_KEYS.length, 40);
   for (const key of AREA_KEYS) assert.equal(resolve(key).key, key);
 });
 

@@ -13,8 +13,9 @@
  * paired comparison all see exactly what they saw before. `sheetIndex()` below is the model the later index
  * plate and bottom sheet (phase P5) will draw from; nothing imports it yet.
  *
- * THE BUILDING FIELD IS AN ESTIMATE (`buildingsEst`), spread by area over each 3D BAG tile. Do not print it as a
- * count; phase P2 replaces it with exact per-sheet numbers.
+ * THE BUILDING COUNTS ARE EXACT (phase P2a): `buildings` = every 3D BAG building whose centroid is in the sheet's half-open
+ * box; `municipalBuildings` = those also inside the municipality, the number the ship rule reads. They count the buildings
+ * of the source, not the rows a sheet will emit after the ingest's own sliver drop.
  */
 import { AMSTERDAM_SHEETS, AMSTERDAM_SKIPPED_SHEETS, AMSTERDAM_SHEET_LATTICE } from '../../../data/sheets/amsterdam.ts';
 import { AREA_KEYS, splitKey, type AreaKey } from './registry.ts';
@@ -129,7 +130,10 @@ export interface SheetIndexCell {
   /** "F4 · Oost"; null unless the cell ships */
   readonly label: string | null;
   readonly kind: SheetKind | null;
-  readonly buildingsEst: number;
+  /** exact: 3D BAG buildings with their centroid in the sheet's box */
+  readonly buildings: number;
+  /** exact: the same, also inside the municipality (what the ship rule reads) */
+  readonly municipalBuildings: number;
   readonly municipalShare: number;
   readonly current: boolean;
   /** one of the eight shipping neighbours of the current sheet */
@@ -168,7 +172,8 @@ export function sheetIndex(from: AreaKey): SheetIndex | null {
         key: sheet === undefined ? null : sheetKey(sheet),
         label: sheet?.label ?? null,
         kind: sheet?.kind ?? null,
-        buildingsEst: sheet?.buildingsEst ?? skipped?.buildingsEst ?? 0,
+        buildings: sheet?.buildings ?? skipped?.buildings ?? 0,
+        municipalBuildings: sheet?.municipalBuildings ?? skipped?.municipalBuildings ?? 0,
         municipalShare: sheet?.municipalShare ?? skipped?.municipalShare ?? 0,
         current: current !== null && current.code === code,
         neighbour: near.has(code),

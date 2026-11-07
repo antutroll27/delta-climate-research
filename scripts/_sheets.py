@@ -30,25 +30,27 @@ Python emits, TypeScript reads, and a test pins the two (the instrument-and-labo
 
     python3 scripts/_sheets.py --self-test      # pure maths, no data
     python3 scripts/_sheets.py --check          # committed table: shape, rule, G9b lattice, E4 == Canal Ring, TS == JSON
-    python3 scripts/_sheets.py --g9a            # G9a partition against the downloaded 3D BAG tiles (local only)
+    python3 scripts/_sheets.py --g9a            # G9a partition against the downloaded 3D BAG tiles (local only);
+                                                # also requires the recorded exact counts to equal the recount
     taskpolicy -b python3 scripts/_sheets.py --emit [--fetch]
-                                                # local: rebuild both files from the raw cache
+                                                # local: rebuild both files from the raw cache (exact counts)
 
 ADDRESSING. Code = column letter A-J (west to east) + row 1-7 (north to south), as on a
 topographic sheet index. Area id = `ams-<code>` ("ams-f4"); E4 keeps `canal-ring`.
 
-THE BUILDING COUNT IS AN ESTIMATE, and is named `buildingsEst` so nobody reads it as exact. It is
-the 3D BAG v20250903 tile index's `gpkg_nr_building` per tile, spread over each tile by AREA (a
-uniform density inside a tile) and restricted to the municipal part of the sheet. Calibrated: it
-gives 21,264 for E4 against the 21,342 Canal Ring ships (that figure also counts buildings
-outside the municipality inside the box). The per-sheet exporter in phase P2 assigns each
-building to one sheet by its WGS84 centroid in half-open boxes (G9a) and replaces these numbers with exact ones.
+THE BUILDING COUNTS ARE EXACT (phase P2a; P1's `buildingsEst` was a tile-index estimate and is gone). Every
+3D BAG v20250903 building in the 227 downloaded city tiles is assigned, once (a building listed by two tiles
+counts once, as in ingest), to the sheet whose HALF-OPEN WGS84 box holds its footprint centroid (the same
+pyproj operation as ingest, G9a). Two numbers per sheet:
 
-SHIP RULE (founder D1: every sheet that passes, not a fixed number): at least 500 estimated municipal
-buildings AND at least 10 % of the sheet's area inside the municipality. CORE = at least 2,000
-buildings, else EDGE. The decisions are taken on the ROUNDED numbers the table records, so `--check` can
-re-derive them. The ship rule is applied to P2's EXACT counts once they exist; a sheet near 500 is inside the
-estimate's noise.
+    buildings           every building whose centroid is in the box: what the sheet carries (D9: those outside
+                        the municipality are drawn dimmed, as context)
+    municipalBuildings  those whose centroid is ALSO inside the municipality (the union of the nine current
+                        stadsdelen): the number the ship rule reads
+
+SHIP RULE (founder D1: every sheet that passes, not a fixed number): at least 500 MUNICIPAL buildings AND at
+least 10 % of the sheet's area inside the municipality. CORE = at least 2,000 municipal buildings, else EDGE.
+The decisions are taken on the numbers the table records, so `--check` re-derives them without any raw data.
 
 STADSDEEL. The name beside the code is the stadsdeel holding the largest share of the sheet's
 municipal area. Gemeente Amsterdam's Kernregistratie gebieden is CC0 1.0 (see
@@ -65,8 +67,9 @@ import os
 import shutil
 import sqlite3
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final, Literal, NewType, TypedDict, cast
+from typing import Final, Literal, NamedTuple, NewType, TypedDict, cast
 
 import numpy as np
 import requests
@@ -102,6 +105,15 @@ _HALF_LON: Final = (SIZE_M / 2.0) / M_PER_DEG_LON
 _HALF_LAT: Final = (SIZE_M / 2.0) / M_PER_DEG_LAT
 D_LON: Final = 2.0 * _HALF_LON
 D_LAT: Final = 2.0 * _HALF_LAT
+#: The solver grid of one sheet (the admitted pair 384 over 2,800 m) and the halo P0 chose (60 cells = 437.5 m, a 4x margin at
+#: the production calm floor): the solve grid is 384 + 2 x 60 = 504 over 3,675 m. G9d works on exactly these cells.
+GRID_N: Final = 384
+HALO_CELLS: Final = 60
+CELL_M: Final = SIZE_M / GRID_N
+#: G9c: two frames' images of one seam point differ by exactly one sheet, within a millimetre; G9d: matching cell corners, degrees.
+G9C_POINTS: Final = 1000
+G9C_TOLERANCE_M: Final = 1e-3
+G9D_TOLERANCE_DEG: Final = 1e-9
 COLUMNS: Final = "ABCDEFGHIJ"
 ROWS: Final = 7
 #: Lattice index of column A and of row 1. Canal Ring (E4) is (0, 0) by construction.
@@ -118,13 +130,14 @@ CORE_MIN_BUILDINGS: Final = 2000
 JSON_REL: Final = os.path.join("data", "cities", CITY, "sheets.json")
 TS_REL: Final = os.path.join("src", "data", "sheets", f"{CITY}.ts")
 RELEASE: Final = "v20250903"
-MUNICIPALITY_TILES: Final = f"tiles-{RELEASE}-{CITY}-municipality.json"
 STADSDELEN_FILE: Final = "stadsdelen.json"
 STADSDELEN_URL: Final = "https://api.data.amsterdam.nl/v1/gebieden/stadsdelen/?_format=json&_pageSize=100"
 #: Densification of a sheet's edges when it is projected into RD to intersect the municipality (points per side).
 RD_EDGE_POINTS: Final = 16
 #: The downloaded 3D BAG tiles of the whole municipality (local cache, never committed).
 BAG_CITY_DIR: Final = os.path.join(os.path.expanduser("~"), ".cache", "delta-climate", "cities", CITY, "raw", "city", "3dbag")
+#: The centroid table read from those tiles (ids + RD centroids), cached so a recount takes seconds, not minutes.
+CENTROID_CACHE: Final = os.path.join(os.path.dirname(BAG_CITY_DIR), f"centroids-{RELEASE}.npz")
 USER_AGENT: Final = "obos-pipeline/1.0 (+https://deltaclimate.earth)"
 
 
@@ -243,7 +256,8 @@ class SheetRow(TypedDict):
     i: int
     j: int
     kind: Kind
-    buildingsEst: int
+    buildings: int
+    municipalBuildings: int
     municipalShare: float
     stadsdeel: str
     label: str
@@ -256,7 +270,8 @@ class SkippedRow(TypedDict):
     code: str
     i: int
     j: int
-    buildingsEst: int
+    buildings: int
+    municipalBuildings: int
     municipalShare: float
     reason: SkipReason
 
@@ -266,9 +281,10 @@ class Totals(TypedDict):
     core: int
     edge: int
     skipped: int
-    buildingsEstShipping: int
-    buildingsEstSkipped: int
-    buildingsEstMunicipal: int
+    buildingsShipping: int
+    municipalBuildingsShipping: int
+    municipalBuildingsSkipped: int
+    municipalBuildingsCity: int
 
 
 class SheetTable(TypedDict):
@@ -288,6 +304,7 @@ class Candidate:
     i: int
     j: int
     buildings: int
+    municipal: int
     share: float
     stadsdeel: str
 
@@ -296,16 +313,43 @@ def label_of(code: SheetCode, stadsdeel: str) -> str:
     return f"{code} · {ANCHOR_NAME if code == ANCHOR_CODE else stadsdeel}"
 
 
-def estimate_buildings(tiles: list[tuple[BaseGeometry, int]], region: BaseGeometry) -> float:
-    """Sum over tiles of count x (tile AND region area) / tile area: a uniform density inside a tile."""
-    total = 0.0
-    for geom, count in tiles:
-        if geom.area > 0.0 and geom.intersects(region):
-            total += count * geom.intersection(region).area / geom.area
-    return total
+class CellCount(NamedTuple):
+    """Exact counts for one lattice cell: every building with its centroid in the box, and those also municipal."""
+    buildings: int
+    municipal: int
 
 
-def candidates(tiles: list[tuple[BaseGeometry, int]], districts: dict[str, BaseGeometry]) -> list[Candidate]:
+F64 = np.ndarray[tuple[int], np.dtype[np.float64]]
+I64 = np.ndarray[tuple[int], np.dtype[np.int64]]
+BoolArr = np.ndarray[tuple[int], np.dtype[np.bool_]]
+F64x4 = np.ndarray[tuple[int, int, int, int], np.dtype[np.float64]]
+
+
+def cells_of(lon: F64, lat: F64) -> tuple[I64, I64]:
+    """Vectorised `cell_of_point`: the (i, j) of each point's half-open box. The same formula, the same float
+    operations, then corrected against the edges, so it agrees with the scalar function bit for bit."""
+    i = np.floor((lon - lon_edge(0)) / D_LON).astype(np.int64)
+    j = np.floor((lat - lat_edge(0)) / D_LAT).astype(np.int64)
+    for _ in range(4):
+        i = np.where(lon < LON0 + (i - 0.5) * D_LON, i - 1, i)
+        i = np.where(lon >= LON0 + (i + 0.5) * D_LON, i + 1, i)
+        j = np.where(lat < FRAME_LAT + (j - 0.5) * D_LAT, j - 1, j)
+        j = np.where(lat >= FRAME_LAT + (j + 0.5) * D_LAT, j + 1, j)
+    return i, j
+
+
+def count_cells(lon: F64, lat: F64, municipal: BoolArr) -> dict[tuple[int, int], CellCount]:
+    """Exact per-cell counts: each point lands in exactly one half-open box."""
+    i, j = cells_of(lon, lat)
+    keys, inverse = np.unique(np.column_stack([i, j]), axis=0, return_inverse=True)
+    inverse = inverse.reshape(-1)
+    total = np.bincount(inverse, minlength=len(keys))
+    muni = np.bincount(inverse, weights=municipal.astype(np.float64), minlength=len(keys))
+    return {(int(k[0]), int(k[1])): CellCount(int(t), int(round(m))) for k, t, m in zip(keys, total, muni, strict=True)}
+
+
+def candidates(counts: dict[tuple[int, int], CellCount], districts: dict[str, BaseGeometry]) -> list[Candidate]:
+    """The lattice cells that touch the municipality, with their exact counts, municipal share and stadsdeel."""
     municipality = unary_union(list(districts.values()))
     out: list[Candidate] = []
     for j in range(J_ROW_1, J_ROW_1 - ROWS, -1):
@@ -315,8 +359,9 @@ def candidates(tiles: list[tuple[BaseGeometry, int]], districts: dict[str, BaseG
             if inside.area <= 0.0:
                 continue
             shares = {name: sheet.intersection(g).area for name, g in districts.items()}
-            out.append(Candidate(i, j, round(estimate_buildings(tiles, inside)),
-                                 round(inside.area / sheet.area, 3), max(shares, key=lambda n: shares[n])))
+            c = counts.get((i, j), CellCount(0, 0))
+            out.append(Candidate(i, j, c.buildings, c.municipal, round(inside.area / sheet.area, 3),
+                                 max(shares, key=lambda n: shares[n])))
     return out
 
 
@@ -333,15 +378,15 @@ def build_table(cands: list[Candidate]) -> SheetTable:
     skipped: list[SkippedRow] = []
     for c in cands:
         code = code_of(c.i, c.j)
-        reason = skip_reason(c.buildings, c.share)
+        reason = skip_reason(c.municipal, c.share)
         if reason is not None:
-            skipped.append(SkippedRow(code=code, i=c.i, j=c.j, buildingsEst=c.buildings,
+            skipped.append(SkippedRow(code=code, i=c.i, j=c.j, buildings=c.buildings, municipalBuildings=c.municipal,
                                       municipalShare=c.share, reason=reason))
             continue
         lat, lon = centre_lat_lon(c.i, c.j)
         sheets.append(SheetRow(
-            id=id_of(code), code=code, i=c.i, j=c.j, kind=kind_of(c.buildings),
-            buildingsEst=c.buildings, municipalShare=c.share, stadsdeel=c.stadsdeel,
+            id=id_of(code), code=code, i=c.i, j=c.j, kind=kind_of(c.municipal),
+            buildings=c.buildings, municipalBuildings=c.municipal, municipalShare=c.share, stadsdeel=c.stadsdeel,
             label=label_of(code, c.stadsdeel), wgs84Bounds=list(geo_bounds(c.i, c.j)),
             rdQuad=rd_quad(c.i, c.j), centre=Centre(lat=lat, lon=lon)))
     core = sum(1 for s in sheets if s["kind"] == "core")
@@ -350,19 +395,21 @@ def build_table(cands: list[Candidate]) -> SheetTable:
         lattice=lattice_dict(),
         shipRule={"minBuildings": SHIP_MIN_BUILDINGS, "minMunicipalShare": SHIP_MIN_SHARE,
                   "coreMinBuildings": CORE_MIN_BUILDINGS},
-        method=("buildingsEst = 3D BAG " + RELEASE + " tile-index gpkg_nr_building per tile, spread by area "
-                "(uniform density inside a tile) over the municipal part of the sheet; an ESTIMATE, "
-                "replaced by exact WGS84-centroid counts in half-open boxes in phase P2. municipalShare = share of "
-                "the sheet inside the union of the nine current stadsdelen. stadsdeel = largest share of the sheet. "
+        method=("buildings = EXACT count of unique 3D BAG " + RELEASE + " buildings whose footprint centroid (RD, "
+                "projected to WGS84 as ingest does) lies in the sheet's half-open lon/lat box; municipalBuildings = "
+                "those also inside the union of the nine current stadsdelen, the number the ship rule reads. "
+                "municipalShare = share of "
+                "the sheet inside that union. stadsdeel = largest share of the sheet. "
                 "wgs84Bounds = the sheet's own lon/lat box (Canal Ring's, repeated); rdQuad = its four corners in "
                 "RD New, informational."),
         sources=["3D BAG " + RELEASE + " BAG3D:tiles (CC BY 4.0, 3DBAG by tudelft3d and 3DGI)",
                  "Gemeente Amsterdam, Kernregistratie gebieden, stadsdelen (CC0 1.0)"],
         sheets=sheets, skipped=skipped,
         totals=Totals(shipping=len(sheets), core=core, edge=len(sheets) - core, skipped=len(skipped),
-                      buildingsEstShipping=sum(s["buildingsEst"] for s in sheets),
-                      buildingsEstSkipped=sum(s["buildingsEst"] for s in skipped),
-                      buildingsEstMunicipal=sum(c.buildings for c in cands)))
+                      buildingsShipping=sum(s["buildings"] for s in sheets),
+                      municipalBuildingsShipping=sum(s["municipalBuildings"] for s in sheets),
+                      municipalBuildingsSkipped=sum(s["municipalBuildings"] for s in skipped),
+                      municipalBuildingsCity=sum(c.municipal for c in cands)))
 
 
 # ── rendering (deterministic: the check compares bytes) ────────────────────
@@ -408,7 +455,7 @@ def render_ts(t: SheetTable) -> str:
     for s in t["sheets"]:
         out.append(
             f"  {{ id: {_q(s['id'])}, code: {_q(s['code'])}, i: {s['i']}, j: {s['j']}, kind: {_q(s['kind'])}, "
-            f"buildingsEst: {s['buildingsEst']}, municipalShare: {s['municipalShare']}, "
+            f"buildings: {s['buildings']}, municipalBuildings: {s['municipalBuildings']}, municipalShare: {s['municipalShare']}, "
             f"stadsdeel: {_q(s['stadsdeel'])}, label: {_q(s['label'])}, wgs84Bounds: {_row(s['wgs84Bounds'])}, "
             f"rdQuad: {_row(s['rdQuad'])}, centre: {{ lat: {s['centre']['lat']}, lon: {s['centre']['lon']} }} }},")
     out += ["] as const;", "",
@@ -417,8 +464,8 @@ def render_ts(t: SheetTable) -> str:
             "/** Lattice cells that touch the municipality but do not ship, with the rule each failed. */",
             "export const AMSTERDAM_SKIPPED_SHEETS = ["]
     for k in t["skipped"]:
-        out.append(f"  {{ code: {_q(k['code'])}, i: {k['i']}, j: {k['j']}, buildingsEst: {k['buildingsEst']}, "
-                   f"municipalShare: {k['municipalShare']}, reason: {_q(k['reason'])} }},")
+        out.append(f"  {{ code: {_q(k['code'])}, i: {k['i']}, j: {k['j']}, buildings: {k['buildings']}, "
+                   f"municipalBuildings: {k['municipalBuildings']}, municipalShare: {k['municipalShare']}, reason: {_q(k['reason'])} }},")
     out += [
         "] as const;", "",
         "/* The registry's area entries for every sheet EXCEPT E4, which is `canal-ring` and is written by hand in",
@@ -493,21 +540,25 @@ def check_table(t: SheetTable, root: str = _city.ROOT) -> list[str]:
         need(len(s["rdQuad"]) == 8 and all(abs(a - b) <= 0.2 for a, b in zip(s["rdQuad"], rd_quad(s["i"], s["j"]), strict=True)),
              f"{tag}: rdQuad is not the projected box (0.2 m)")
         need((s["centre"]["lat"], s["centre"]["lon"]) == centre_lat_lon(s["i"], s["j"]), f"{tag}: centre is not the sheet centre")
-        need(skip_reason(s["buildingsEst"], s["municipalShare"]) is None, f"{tag}: ships but fails the ship rule")
-        need(s["kind"] == kind_of(s["buildingsEst"]), f"{tag}: kind {s['kind']!r} disagrees with the core rule")
+        need(skip_reason(s["municipalBuildings"], s["municipalShare"]) is None, f"{tag}: ships but fails the ship rule")
+        need(s["kind"] == kind_of(s["municipalBuildings"]), f"{tag}: kind {s['kind']!r} disagrees with the core rule")
+        need(0 <= s["municipalBuildings"] <= s["buildings"], f"{tag}: municipal buildings exceed the buildings in the box")
         need(s["label"] == label_of(SheetCode(s["code"]), s["stadsdeel"]), f"{tag}: label is not code + stadsdeel")
     for k in skipped:
         need(ij_of(k["code"]) == (k["i"], k["j"]), f"{k['code']}: skipped code and (i, j) disagree")
-        need(skip_reason(k["buildingsEst"], k["municipalShare"]) == k["reason"], f"{k['code']}: skip reason is not the rule's")
+        need(skip_reason(k["municipalBuildings"], k["municipalShare"]) == k["reason"], f"{k['code']}: skip reason is not the rule's")
+        need(0 <= k["municipalBuildings"] <= k["buildings"], f"{k['code']}: municipal buildings exceed the buildings in the box")
     core = sum(1 for s in sheets if s["kind"] == "core")
     need(t["totals"] == Totals(
         shipping=len(sheets), core=core, edge=len(sheets) - core, skipped=len(skipped),
-        buildingsEstShipping=sum(s["buildingsEst"] for s in sheets),
-        buildingsEstSkipped=sum(s["buildingsEst"] for s in skipped),
-        buildingsEstMunicipal=sum(s["buildingsEst"] for s in sheets) + sum(s["buildingsEst"] for s in skipped)),
+        buildingsShipping=sum(s["buildings"] for s in sheets),
+        municipalBuildingsShipping=sum(s["municipalBuildings"] for s in sheets),
+        municipalBuildingsSkipped=sum(s["municipalBuildings"] for s in skipped),
+        municipalBuildingsCity=sum(s["municipalBuildings"] for s in sheets) + sum(s["municipalBuildings"] for s in skipped)),
         "totals do not add up")
     # E4's centre is Canal Ring's own, from the pipeline's Area: the anchor is the area's, not a copy of it.
     need((_ANCHOR_AREA.centre.lat, _ANCHOR_AREA.centre.lon) == (FRAME_LAT, LON0), "frame latitude is not Canal Ring's centre latitude")
+    bad += check_frames(t)[0]
     with open(os.path.join(root, JSON_REL), encoding="utf-8") as fh:
         need(fh.read() == render_json(t), f"{JSON_REL} is not in the generator's canonical form")
     try:
@@ -516,6 +567,133 @@ def check_table(t: SheetTable, root: str = _city.ROOT) -> list[str]:
     except FileNotFoundError:
         bad.append(f"{TS_REL} is missing")
     return bad
+
+
+# ── G9c / G9d: the frames and the cells (pure maths: these run in --check, on CI) ─────
+
+FrameFactory = Callable[[int, int], _city.Area]
+
+
+def sheet_area(i: int, j: int) -> _city.Area:
+    """The pipeline Area whose frame sheet (i, j) is cut and solved in: its centre, and the ONE standard parallel
+    (E4's latitude) every sheet shares. E4's is Canal Ring's own area, field for field in the frame."""
+    code = code_of(i, j)
+    lat, lon = centre_lat_lon(i, j)
+    return _city.Area(id_of(code), CITY, ANCHOR_NAME if code == ANCHOR_CODE else code, _city.LatLon(lat, lon), SIZE_M,
+                      _ANCHOR_AREA.local_crs, _ANCHOR_AREA.koppen, _ANCHOR_AREA.min_sun_elevation_deg,
+                      frame_lat=_city.Degrees(FRAME_LAT))
+
+
+class FrameReport(NamedTuple):
+    """What G9c and G9d measured: the worst deviations, so the gate prints a number and not just 'ok'."""
+    pairs: int
+    seam_points: int
+    worst_translation_m: float
+    cells: int
+    worst_corner_deg: float
+
+
+def _seam_points(a: tuple[int, int], b: tuple[int, int]) -> list[tuple[float, float]]:
+    """G9C_POINTS points along the seam between adjacent cells a and b (an edge: evenly along it; a diagonal pair: its
+    one shared corner), in lon/lat, taken from the lattice's own shared edges."""
+    (i, j), (k, m) = a, b
+    if i != k and j != m:                                       # diagonal: the shared corner
+        return [(lon_edge(max(i, k)), lat_edge(max(j, m)))]
+    if i != k:                                                  # east-west neighbours: the shared meridian
+        lon = lon_edge(max(i, k))
+        return [(lon, lat_edge(j) + (lat_edge(j + 1) - lat_edge(j)) * n / (G9C_POINTS - 1)) for n in range(G9C_POINTS)]
+    lat = lat_edge(max(j, m))                                   # north-south neighbours: the shared parallel
+    return [(lon_edge(i) + (lon_edge(i + 1) - lon_edge(i)) * n / (G9C_POINTS - 1), lat) for n in range(G9C_POINTS)]
+
+
+def check_seam_frames(pairs: list[tuple[tuple[int, int], tuple[int, int]]], factory: FrameFactory) -> tuple[list[str], int, float]:
+    """G9c. Every seam point maps through BOTH sheets' frames to coordinates exactly one sheet apart: (+-2800, 0) or
+    (0, +-2800) or (+-2800, +-2800) at a corner, within a millimetre; and every frame's standard parallel is E4's."""
+    bad: list[str] = []
+    worst = 0.0
+    points = 0
+    for a, b in pairs:
+        fa, fb = factory(*a), factory(*b)
+        for tag, f in ((a, fa), (b, fb)):
+            if f.frame_parallel() != FRAME_LAT:
+                bad.append(f"G9c {code_of(*tag)}: frame_lat {f.frame_parallel()} is not E4's {FRAME_LAT}")
+        want = ((b[0] - a[0]) * SIZE_M, (b[1] - a[1]) * SIZE_M)        # b's origin, in a's frame
+        for lon, lat in _seam_points(a, b):
+            ax, ay = _city.to_local(fa, lon, lat)
+            bx, by = _city.to_local(fb, lon, lat)
+            err = max(abs((ax - bx) - want[0]), abs((ay - by) - want[1]))
+            worst = max(worst, err)
+            points += 1
+            if err > G9C_TOLERANCE_M:
+                bad.append(f"G9c {code_of(*a)} | {code_of(*b)}: a seam point is {err:.6f} m off an exact "
+                           f"({want[0]:+.0f}, {want[1]:+.0f}) m translation (lon {lon!r}, lat {lat!r})")
+                break
+    return bad, points, worst
+
+
+def _cell_corners(f: _city.Area, rows: range, cols: range) -> F64x4:
+    """Lon/lat of the four corners of cells (r, c) of sheet frame `f`: shape (len(rows), len(cols), 4, 2). r counts north
+    from the south edge, c east from the west edge; indices outside 0..GRID_N-1 are the cells of the halo."""
+    mx, my = _city.frame_m_per_deg(f)
+    r = np.asarray(list(rows), dtype=np.float64)[:, None]
+    c = np.asarray(list(cols), dtype=np.float64)[None, :]
+    out = np.empty((len(rows), len(cols), 4, 2), dtype=np.float64)
+    for k, (dx, dy) in enumerate(((0, 0), (1, 0), (1, 1), (0, 1))):
+        x = -SIZE_M / 2.0 + (c + dx) * CELL_M + 0.0 * r
+        y = -SIZE_M / 2.0 + (r + dy) * CELL_M + 0.0 * c
+        out[:, :, k, 0] = f.centre.lon + x / mx
+        out[:, :, k, 1] = f.centre.lat + y / my
+    return out
+
+
+def check_halo_cells(pairs: list[tuple[tuple[int, int], tuple[int, int]]], factory: FrameFactory) -> tuple[list[str], int, float]:
+    """G9d. Cell (r, c) of sheet B and the cell of sheet A it is the halo of have the same lon/lat corners to 1e-9 degrees.
+    For each ordered pair the block of A's HALO_CELLS-deep halo that lies over B is compared with B's own cells."""
+    bad: list[str] = []
+    worst = 0.0
+    cells = 0
+    n, h = GRID_N, HALO_CELLS
+    for a, b in pairs:
+        di, dj = b[0] - a[0], b[1] - a[1]
+        # A's halo over B: columns n..n+h-1 for an east neighbour, -h..-1 for a west one, the whole span otherwise (and rows alike)
+        cols_a = range(n, n + h) if di == 1 else range(-h, 0) if di == -1 else range(n)
+        rows_a = range(n, n + h) if dj == 1 else range(-h, 0) if dj == -1 else range(n)
+        cols_b = range(cols_a.start - di * n, cols_a.stop - di * n)
+        rows_b = range(rows_a.start - dj * n, rows_a.stop - dj * n)
+        ca = _cell_corners(factory(*a), rows_a, cols_a)
+        cb = _cell_corners(factory(*b), rows_b, cols_b)
+        err = float(np.abs(ca - cb).max())
+        worst = max(worst, err)
+        cells += ca.shape[0] * ca.shape[1]
+        if err > G9D_TOLERANCE_DEG:
+            bad.append(f"G9d {code_of(*a)}'s halo over {code_of(*b)}: matching cell corners differ by {err:.3e} degrees "
+                       f"(limit {G9D_TOLERANCE_DEG:g})")
+    return bad, cells, worst
+
+
+def adjacent_pairs(cells: list[tuple[int, int]]) -> list[tuple[tuple[int, int], tuple[int, int]]]:
+    """Every ordered-once pair of shipping cells that touch, edge or corner (a halo reaches the diagonal neighbour too)."""
+    have = set(cells)
+    out: list[tuple[tuple[int, int], tuple[int, int]]] = []
+    for (i, j) in sorted(cells):
+        for di, dj in ((1, 0), (0, 1), (1, 1), (1, -1)):
+            if (i + di, j + dj) in have:
+                out.append(((i, j), (i + di, j + dj)))
+    return out
+
+
+def check_frames(t: SheetTable, factory: FrameFactory = sheet_area) -> tuple[list[str], FrameReport]:
+    """G9c + G9d over the committed table's shipping sheets (and E4's frame IS Canal Ring's)."""
+    cells = [(s["i"], s["j"]) for s in t["sheets"]]
+    pairs = adjacent_pairs(cells)
+    bad_c, points, worst_m = check_seam_frames(pairs, factory)
+    # each direction on its own: A's halo extended over B, and B's halo extended over A
+    bad_d, n_cells, worst_deg = check_halo_cells([*pairs, *[(b, a) for a, b in pairs]], factory)
+    bad = [*bad_c, *bad_d]
+    e4 = factory(0, 0)
+    if _city.frame_m_per_deg(e4) != _city.frame_m_per_deg(_ANCHOR_AREA) or _city.bounds(e4) != _city.bounds(_ANCHOR_AREA):
+        bad.append("G9c E4's frame is not Canal Ring's own (m/deg or bounds differ)")
+    return bad, FrameReport(len(pairs), points, worst_m, n_cells, worst_deg)
 
 
 # ── raw inputs (local only) ────────────────────────────────────────────────
@@ -544,64 +722,21 @@ def read_districts(path: str) -> dict[str, BaseGeometry]:
     return out
 
 
-def read_tiles(path: str) -> list[tuple[BaseGeometry, int]]:
-    with open(path, encoding="utf-8") as fh:
-        doc = cast("dict[str, list[dict[str, dict[str, object]]]]", json.load(fh))
-    return [(shape(f["geometry"]), cast(int, f["properties"]["gpkg_nr_building"])) for f in doc["features"]]
+def municipality_of(districts: dict[str, BaseGeometry]) -> BaseGeometry:
+    return unary_union(list(districts.values()))
 
 
-def emit(fetch: bool) -> None:
-    web = _raw_web()
-    tiles_path, sd_path = os.path.join(web, MUNICIPALITY_TILES), os.path.join(web, STADSDELEN_FILE)
-    if fetch and not os.path.isfile(sd_path):
-        _get(STADSDELEN_URL, None, sd_path)
-    districts = read_districts(sd_path)
-    if fetch and not os.path.isfile(tiles_path):
-        minx, miny, maxx, maxy = unary_union(list(districts.values())).bounds
-        _get("https://data.3dbag.nl/api/BAG3D/wfs", {
-            "service": "WFS", "version": "2.0.0", "request": "GetFeature", "typeNames": "BAG3D:tiles",
-            "outputFormat": "json",
-            "bbox": f"{minx - 50:.1f},{miny - 50:.1f},{maxx + 50:.1f},{maxy + 50:.1f},urn:ogc:def:crs:EPSG::28992"},
-            tiles_path)
-    table = build_table(candidates(read_tiles(tiles_path), districts))
-    problems = check_lattice(table)
-    if problems:
-        raise SystemExit("\n".join(problems))
-    for rel, text in ((JSON_REL, render_json(table)), (TS_REL, render_ts(table))):
-        os.makedirs(os.path.dirname(os.path.join(_city.ROOT, rel)), exist_ok=True)
-        with open(os.path.join(_city.ROOT, rel), "w", encoding="utf-8") as fh:
-            fh.write(text)
-    t = table["totals"]
-    print(f"wrote {JSON_REL} and {TS_REL}: {t['shipping']} sheets ({t['core']} core, {t['edge']} edge), "
-          f"{t['buildingsEstShipping']} of {t['buildingsEstMunicipal']} estimated municipal buildings")
+@dataclass(frozen=True, slots=True)
+class CityBuildings:
+    """Every unique 3D BAG building of the downloaded city tiles: id, the tile that listed it first, centroid in RD."""
+    ids: list[str]
+    tile: np.ndarray[tuple[int], np.dtype[np.int32]]
+    tiles: list[str]
+    x: F64
+    y: F64
 
 
-# ── G9a: the partition (local only: needs the downloaded 3D BAG tiles) ─────
-
-class PartitionReport(TypedDict):
-    buildings: int
-    inIndex: int
-    outsideIndex: int
-    multiCell: int
-    perSheet: dict[str, int]
-    inSkippedCells: dict[str, int]
-    inNoSheetCells: int
-    e4Box: int
-    e4Shipped: int
-    e4OnlyInBox: list[str]
-    e4OnlyShipped: list[str]
-    #: of the box-only ids: (read by the ingest, kept by its local-frame clip, rows it emits). Rows must be 0.
-    e4BoxOnlyIngest: tuple[int, int, int]
-
-
-def _holds(i: int, j: int, lon: float, lat: float) -> bool:
-    """Is the point in the sheet's HALF-OPEN box [west, east) x [south, north)?"""
-    w, so, e, n = geo_bounds(i, j)
-    return w <= lon < e and so <= lat < n
-
-
-def _read_centroids(gz_path: str, scratch: str) -> tuple[list[str], np.ndarray[tuple[int], np.dtype[np.float64]],
-                                                         np.ndarray[tuple[int], np.dtype[np.float64]]]:
+def _read_centroids(gz_path: str, scratch: str) -> tuple[list[str], F64, F64]:
     """(ids, centroid x, centroid y in RD) of every `pand` in one tile. Only what the partition needs."""
     os.makedirs(scratch, exist_ok=True)
     db_path = os.path.join(scratch, os.path.basename(gz_path)[:-3])
@@ -623,50 +758,163 @@ def _read_centroids(gz_path: str, scratch: str) -> tuple[list[str], np.ndarray[t
     return ids, shapely.get_x(cen), shapely.get_y(cen)
 
 
-def partition(raw3d: str, scratch: str, shipped_ids: set[str], t: SheetTable) -> PartitionReport:
+def read_city_buildings(raw3d: str, scratch: str, cache: str | None = CENTROID_CACHE) -> CityBuildings:
+    """Read every tile (sorted by name) and keep each building once, from the first tile that lists it, as ingest does.
+    The result is cached beside the tiles, keyed by the tile names and sizes, so a recount takes seconds."""
+    names = sorted(f for f in os.listdir(raw3d) if f.endswith(".gpkg.gz"))
+    key = json.dumps([[n, os.path.getsize(os.path.join(raw3d, n))] for n in names])
+    if cache is not None and os.path.isfile(cache):
+        z = np.load(cache, allow_pickle=False)
+        if str(z["key"]) == key:
+            return CityBuildings(ids=[str(v) for v in z["ids"]], tile=z["tile"], tiles=names, x=z["x"], y=z["y"])
+    seen: set[str] = set()
+    ids: list[str] = []
+    tile: list[int] = []
+    xs: list[F64] = []
+    ys: list[F64] = []
+    for t_index, name in enumerate(names):
+        tid, tx, ty = _read_centroids(os.path.join(raw3d, name), scratch)
+        keep = np.zeros(len(tid), dtype=bool)
+        for n_, sid in enumerate(tid):                      # first listing wins; a repeat inside one tile counts once too
+            if sid not in seen:
+                seen.add(sid)
+                keep[n_] = True
+        ids += [sid for sid, k in zip(tid, keep, strict=True) if k]
+        tile += [t_index] * int(keep.sum())
+        xs.append(tx[keep])
+        ys.append(ty[keep])
+    out = CityBuildings(ids=ids, tile=np.array(tile, dtype=np.int32), tiles=names,
+                        x=np.concatenate(xs).astype(np.float64), y=np.concatenate(ys).astype(np.float64))
+    if cache is not None:
+        np.savez(cache, key=np.array(key), ids=np.array(ids), tile=out.tile, x=out.x, y=out.y)
+    return out
+
+
+def city_lonlat(b: CityBuildings) -> tuple[F64, F64]:
+    """The centroids in WGS84, through the same pyproj transformer ingest uses."""
+    lons, lats = bag.rd_transformer()[0].transform(b.x, b.y)
+    return np.asarray(lons, dtype=np.float64), np.asarray(lats, dtype=np.float64)
+
+
+def municipal_mask(b: CityBuildings, municipality: BaseGeometry) -> BoolArr:
+    return np.asarray(shapely.contains_xy(municipality, b.x, b.y), dtype=np.bool_)
+
+
+def exact_counts(b: CityBuildings, municipality: BaseGeometry) -> dict[tuple[int, int], CellCount]:
+    lon, lat = city_lonlat(b)
+    return count_cells(lon, lat, municipal_mask(b, municipality))
+
+
+def emit(fetch: bool) -> None:
+    web = _raw_web()
+    sd_path = os.path.join(web, STADSDELEN_FILE)
+    if fetch and not os.path.isfile(sd_path):
+        _get(STADSDELEN_URL, None, sd_path)
+    districts = read_districts(sd_path)
+    if not os.path.isdir(BAG_CITY_DIR):
+        raise SystemExit(f"exact counts need the downloaded city tiles; {BAG_CITY_DIR} is absent (fetch-city first)")
+    buildings = read_city_buildings(BAG_CITY_DIR, os.path.join(BAG_CITY_DIR, "scratch"))
+    try:
+        os.rmdir(os.path.join(BAG_CITY_DIR, "scratch"))
+    except OSError:
+        pass
+    counts = exact_counts(buildings, municipality_of(districts))
+    table = build_table(candidates(counts, districts))
+    city_municipal = sum(c.municipal for c in counts.values())
+    if table["totals"]["municipalBuildingsCity"] != city_municipal:
+        raise SystemExit(f"municipal buildings in cells that touch the municipality ({table['totals']['municipalBuildingsCity']}) "
+                         f"differ from all municipal buildings ({city_municipal}): a candidate cell is missing")
+    problems = check_lattice(table)
+    if problems:
+        raise SystemExit("\n".join(problems))
+    for rel, text in ((JSON_REL, render_json(table)), (TS_REL, render_ts(table))):
+        os.makedirs(os.path.dirname(os.path.join(_city.ROOT, rel)), exist_ok=True)
+        with open(os.path.join(_city.ROOT, rel), "w", encoding="utf-8") as fh:
+            fh.write(text)
+    t = table["totals"]
+    print(f"wrote {JSON_REL} and {TS_REL}: {t['shipping']} sheets ({t['core']} core, {t['edge']} edge), "
+          f"{t['municipalBuildingsShipping']} of {t['municipalBuildingsCity']} municipal buildings "
+          f"({len(buildings.ids)} unique 3D BAG buildings in the city tiles)")
+
+
+# ── G9a: the partition (local only: needs the downloaded 3D BAG tiles) ─────
+
+class PartitionReport(TypedDict):
+    buildings: int
+    inIndex: int
+    outsideIndex: int
+    multiCell: int
+    perSheet: dict[str, int]
+    inSkippedCells: dict[str, int]
+    inNoSheetCells: int
+    #: code -> (buildings in the box, municipal ones) for EVERY cell of the index that holds a building
+    perCell: dict[str, CellCount]
+    e4Box: int
+    e4Shipped: int
+    e4OnlyInBox: list[str]
+    e4OnlyShipped: list[str]
+    #: of the box-only ids: (read by the ingest, kept by its local-frame clip, rows it emits). Rows must be 0.
+    e4BoxOnlyIngest: tuple[int, int, int]
+
+
+def _holds(i: int, j: int, lon: float, lat: float) -> bool:
+    """Is the point in the sheet's HALF-OPEN box [west, east) x [south, north)?"""
+    w, so, e, n = geo_bounds(i, j)
+    return w <= lon < e and so <= lat < n
+
+
+def multi_cell_points(lon: F64, lat: F64) -> int:
+    """How many points are held by other than EXACTLY one half-open box: each point's own cell must hold it, and none
+    of the eight around it may. (The partition property G9b's bit-equal edges are supposed to buy, tested on data.)"""
+    i, j = cells_of(lon, lat)
+    bad = np.zeros(len(lon), dtype=bool)
+    for di in (-1, 0, 1):
+        for dj in (-1, 0, 1):
+            ii, jj = i + di, j + dj
+            holds = ((lon >= LON0 + (ii - 0.5) * D_LON) & (lon < LON0 + (ii + 0.5) * D_LON)
+                     & (lat >= FRAME_LAT + (jj - 0.5) * D_LAT) & (lat < FRAME_LAT + (jj + 0.5) * D_LAT))
+            bad |= holds != (di == 0 and dj == 0)
+    return int(bad.sum())
+
+
+def partition(raw3d: str, scratch: str, shipped_ids: set[str], t: SheetTable, municipality: BaseGeometry | None) -> PartitionReport:
     """Assign every unique 3D BAG building to the sheet whose half-open WGS84 box holds its centroid (the same
     pyproj operation as ingest) and prove each lands in exactly one cell."""
-    tr = bag.rd_transformer()[0]
+    b = read_city_buildings(raw3d, scratch)
+    lon, lat = city_lonlat(b)
+    muni = municipal_mask(b, municipality) if municipality is not None else np.zeros(len(lon), dtype=np.bool_)
     shipping = {(s["i"], s["j"]): s["code"] for s in t["sheets"]}
     skipped = {(k["i"], k["j"]): k["code"] for k in t["skipped"]}
-    seen: set[str] = set()
+    multi = multi_cell_points(lon, lat)
     per_sheet: dict[str, int] = {}
     in_skipped: dict[str, int] = {}
-    in_none = outside = multi = total = 0
-    e4_box: dict[str, str] = {}
-    for name in sorted(f for f in os.listdir(raw3d) if f.endswith(".gpkg.gz")):
-        ids, xs, ys = _read_centroids(os.path.join(raw3d, name), scratch)
-        lons, lats = tr.transform(xs, ys)
-        for sid, lon, lat in zip(ids, lons, lats, strict=True):
-            if sid in seen:                      # a building listed by two tiles counts once, as in ingest
-                continue
-            seen.add(sid)
-            total += 1
-            i, j = cell_of_point(float(lon), float(lat))
-            holders = [(a, b) for a in (i - 1, i, i + 1) for b in (j - 1, j, j + 1) if _holds(a, b, lon, lat)]
-            if len(holders) != 1 or holders[0] != (i, j):
-                multi += 1
-            try:
-                code = code_of(i, j)
-            except ValueError:
-                outside += 1
-                continue
-            if (i, j) in shipping:
-                per_sheet[code] = per_sheet.get(code, 0) + 1
-                if (i, j) == (0, 0):
-                    e4_box[sid] = name
-            elif (i, j) in skipped:
-                in_skipped[code] = in_skipped.get(code, 0) + 1
-            else:
-                in_none += 1
+    per_cell: dict[str, CellCount] = {}
+    in_none = outside = 0
+    for (i, j), c in count_cells(lon, lat, muni).items():
+        try:
+            code = code_of(i, j)
+        except ValueError:
+            outside += c.buildings
+            continue
+        per_cell[code] = c
+        if (i, j) in shipping:
+            per_sheet[code] = c.buildings
+        elif (i, j) in skipped:
+            in_skipped[code] = c.buildings
+        else:
+            in_none += c.buildings
+    ci, cj = cells_of(lon, lat)
+    in_e4 = (ci == 0) & (cj == 0)
+    e4_box = {b.ids[n]: b.tiles[int(b.tile[n])] for n in np.flatnonzero(in_e4)}
     only_box = sorted(set(e4_box) - shipped_ids)
     wanted = set(only_box)
     raws = [rb for name in sorted({e4_box[i] for i in only_box})
             for rb in bag.read_tile(os.path.join(raw3d, name), scratch) if rb.src_id in wanted]
     _, st, _ = bag.build_rows(_ANCHOR_AREA, iter(raws))
+    total = len(b.ids)
     return PartitionReport(
         buildings=total, inIndex=total - outside, outsideIndex=outside, multiCell=multi, perSheet=per_sheet,
-        inSkippedCells=in_skipped, inNoSheetCells=in_none, e4Box=len(e4_box), e4Shipped=len(shipped_ids),
+        inSkippedCells=in_skipped, inNoSheetCells=in_none, perCell=per_cell, e4Box=len(e4_box), e4Shipped=len(shipped_ids),
         e4OnlyInBox=only_box, e4OnlyShipped=sorted(shipped_ids - set(e4_box)),
         e4BoxOnlyIngest=(st.raw_buildings, st.inside_square, st.rows))
 
@@ -678,12 +926,26 @@ def shipped_canal_ring_ids() -> set[str]:
     return {cast(str, b["src_id"]).split("#")[0] for b in doc["b"]}
 
 
+def recorded_count_problems(rep: PartitionReport, t: SheetTable, municipal_known: bool) -> list[str]:
+    """The table's exact counts must equal a fresh recount of the downloaded tiles, cell for cell."""
+    bad: list[str] = []
+    for row in [*t["sheets"], *t["skipped"]]:
+        got = rep["perCell"].get(row["code"], CellCount(0, 0))
+        if got.buildings != row["buildings"]:
+            bad.append(f"G9a {row['code']}: table says {row['buildings']} buildings, the tiles hold {got.buildings}")
+        if municipal_known and got.municipal != row["municipalBuildings"]:
+            bad.append(f"G9a {row['code']}: table says {row['municipalBuildings']} municipal buildings, the tiles hold {got.municipal}")
+    return bad
+
+
 def run_g9a(raw3d: str) -> list[str]:
     if not os.path.isdir(raw3d):
         raise SystemExit(f"G9a needs the downloaded 3D BAG tiles; {raw3d} is absent (not an error on CI: pass no --g9a)")
     scratch = os.path.join(raw3d, "scratch")
     t = load_table()
-    rep = partition(raw3d, scratch, shipped_canal_ring_ids(), t)
+    sd_path = os.path.join(_raw_web(), STADSDELEN_FILE)
+    municipality = municipality_of(read_districts(sd_path)) if os.path.isfile(sd_path) else None
+    rep = partition(raw3d, scratch, shipped_canal_ring_ids(), t, municipality)
     try:
         os.rmdir(scratch)
     except OSError:
@@ -712,7 +974,11 @@ def run_g9a(raw3d: str) -> list[str]:
                    f"({rows} rows emitted), e.g. {rep['e4OnlyInBox'][:3]}")
     print(f"     E4 box ids minus the ingest's sliver drops == Canal Ring's shipped ids: "
           f"{not rep['e4OnlyShipped'] and rows == 0 and read == len(rep['e4OnlyInBox'])}")
-    return bad
+    recount = recorded_count_problems(rep, t, municipality is not None)
+    print(f"     the table's exact counts equal this recount for all {len(t['sheets']) + len(t['skipped'])} cells"
+          f"{' (municipal counts too)' if municipality is not None else ' (buildings only: no stadsdelen file for the municipal ones)'}: "
+          f"{not recount}")
+    return bad + recount
 
 
 # ── self-test: pure maths, no data ─────────────────────────────────────────
@@ -756,29 +1022,68 @@ def _self_test() -> None:
     # the rule
     assert skip_reason(499, 1.0) == "under-500-buildings" and skip_reason(500, 0.099) == "under-10-percent-municipal"
     assert skip_reason(500, 0.1) is None and kind_of(1999) == "edge" and kind_of(2000) == "core"
-    # the estimate: whole tile, half tile, none
-    tile = box(0, 0, 100, 100)
-    assert estimate_buildings([(tile, 80)], box(-50, -50, 150, 150)) == 80.0
-    assert estimate_buildings([(tile, 80)], box(0, 0, 50, 100)) == 40.0
-    assert estimate_buildings([(tile, 80)], box(200, 200, 300, 300)) == 0.0
-    # a toy city end to end: one district, one tile, E4 only
+    # exact counts: the vectorised cell lookup equals the scalar one bit for bit, edges and corners included
+    rng = np.random.default_rng(7)
+    gl, gt = np.meshgrid(np.array([lon_edge(k) for k in range(-4, 7)]), np.array([lat_edge(k) for k in range(-3, 5)]))
+    lons = np.concatenate([rng.uniform(lon_edge(-5), lon_edge(7), 400), gl.ravel()])        # random points + every edge crossing
+    lats = np.concatenate([rng.uniform(lat_edge(-4), lat_edge(5), 400), gt.ravel()])
+    ci, cj = cells_of(lons, lats)
+    for k in range(len(lons)):
+        assert (int(ci[k]), int(cj[k])) == cell_of_point(float(lons[k]), float(lats[k])), (k, lons[k], lats[k])
+    assert multi_cell_points(lons, lats) == 0, "every point, edges included, is held by exactly one half-open box"
+    # count_cells: three in E4 (two municipal), one in F4, one on E4/F4's shared meridian (belongs to F4: half-open)
+    cl = np.array([LON0, LON0 + 0.001, LON0 - 0.001, LON0 + D_LON, lon_edge(1)])
+    ct = np.array([FRAME_LAT, FRAME_LAT + 0.001, FRAME_LAT - 0.001, FRAME_LAT, FRAME_LAT + 0.01])
+    cm = np.array([True, True, False, True, False])
+    got = count_cells(cl, ct, cm)
+    assert got == {(0, 0): CellCount(3, 2), (1, 0): CellCount(2, 1)}, got
+    # a toy city end to end: one district, E4 only, exact counts
     district: Polygon = rd_polygon(0, 0)
-    toy = build_table(candidates([(rd_polygon(0, 0), 3000)], {"Toy": district}))
+    toy = build_table(candidates({(0, 0): CellCount(3200, 3000)}, {"Toy": district}))
     assert [s["id"] for s in toy["sheets"]] == ["canal-ring"] and toy["sheets"][0]["label"] == "E4 · Canal Ring"
-    assert toy["sheets"][0]["kind"] == "core" and toy["totals"]["shipping"] == 1
+    assert toy["sheets"][0]["kind"] == "core" and toy["totals"]["shipping"] == 1 and toy["sheets"][0]["buildings"] == 3200
     assert check_lattice(toy) == []
     assert render_json(toy) == render_json(cast("SheetTable", json.loads(render_json(toy))))
     assert render_ts(toy) == render_ts(cast("SheetTable", json.loads(render_json(toy))))
+    # the ship rule is read off the MUNICIPAL count: 5000 buildings in the box but 499 municipal does not ship
+    assert build_table(candidates({(0, 0): CellCount(5000, 499)}, {"Toy": district}))["totals"]["shipping"] == 0
     # G9b catches a seam that is off by one ulp, and an E4 that is not Canal Ring's box
     skew = cast("SheetTable", json.loads(render_json(build_table(candidates(
-        [(rd_polygon(0, 0), 3000), (rd_polygon(1, 0), 3000)], {"Toy": unary_union([rd_polygon(0, 0), rd_polygon(1, 0)])})))))
+        {(0, 0): CellCount(3000, 3000), (1, 0): CellCount(3000, 3000)}, {"Toy": unary_union([rd_polygon(0, 0), rd_polygon(1, 0)])})))))
     assert len(skew["sheets"]) == 2 and check_lattice(skew) == []
     skew["sheets"][1]["wgs84Bounds"][0] = math.nextafter(skew["sheets"][1]["wgs84Bounds"][0], 0.0)
     assert any("bit-equal" in p or "formula" in p for p in check_lattice(skew))
     skew["sheets"][0]["wgs84Bounds"][2] = math.nextafter(skew["sheets"][0]["wgs84Bounds"][2], 0.0)
     assert any("Canal Ring" in p for p in check_lattice(skew))
+    # G9c / G9d on a 3 x 3 block (edges, corners, both diagonals), and their NEGATIVES: each broken frame must be caught
+    import dataclasses
+    block = [(i, j) for i in (-1, 0, 1) for j in (-1, 0, 1)]
+    block_union = unary_union([rd_polygon(i, j) for i, j in block])
+    nine = build_table(candidates({c: CellCount(3000, 3000) for c in block}, {"Toy": block_union}))
+    assert len(nine["sheets"]) == 9
+    ok, rep = check_frames(nine)
+    assert ok == [] and rep.pairs == 20 and rep.seam_points == 12 * G9C_POINTS + 8 and rep.worst_translation_m < 1e-6 and rep.worst_corner_deg < 1e-12, (ok[:2], rep)
+
+    def shifted(cell: tuple[int, int], dlon: float, dlat: float) -> FrameFactory:
+        def f(i: int, j: int) -> _city.Area:
+            a = sheet_area(i, j)
+            return dataclasses.replace(a, centre=_city.LatLon(a.centre.lat + dlat, a.centre.lon + dlon)) if (i, j) == cell else a
+        return f
+    own_lat: FrameFactory = lambda i, j: dataclasses.replace(sheet_area(i, j), frame_lat=None)           # noqa: E731
+    bad_own = check_frames(nine, own_lat)[0]
+    assert any(m.startswith("G9c") and "frame_lat" in m for m in bad_own) and any("m off an exact" in m for m in bad_own), \
+        "G9c must catch sheets that each use their own latitude"
+    assert any(m.startswith("G9d") for m in check_frames(nine, own_lat)[0]), "G9d must catch it too (cells do not line up across a latitude change)"
+    one_cell = check_frames(nine, shifted((0, 1), 0.0, CELL_M / M_PER_DEG_LAT))[0]
+    assert any(m.startswith("G9c") for m in one_cell) and any(m.startswith("G9d") for m in one_cell), "a one-cell slip is caught by both"
+    micro = check_frames(nine, shifted((1, 0), 1e-8, 0.0))[0]                                            # 0.7 mm of east-west slip
+    assert micro and all(m.startswith("G9d") for m in micro), f"0.7 mm passes G9c's millimetre and must fail G9d's 1e-9 degrees: {micro[:2]}"
+    sub_nano = check_frames(nine, shifted((1, 0), 4e-10, 0.0))[0]                                         # 4e-10 deg: inside both limits
+    assert sub_nano == [], "a slip inside both tolerances is not a failure"
+    wrong_e4 = check_frames(nine, shifted((0, 0), 0.0, 3e-9))[0]
+    assert any("Canal Ring's own" in m for m in wrong_e4), "E4's frame must be Canal Ring's, bit for bit"
     print("scripts/_sheets.py: self-test passed (70-cell index bijection, E4 == Canal Ring's box, shared edges, "
-          "half-open rule, rule edges, estimate, toy city, G9b negatives)")
+          "half-open rule, rule edges, exact counts and the vectorised cell lookup, toy city, G9b/G9c/G9d negatives)")
 
 
 def main() -> None:
@@ -805,9 +1110,14 @@ def main() -> None:
             for p in problems:
                 print("FAIL", p)
             raise SystemExit(1)
-        t = load_table()["totals"]
+        table = load_table()
+        t = table["totals"]
+        fr = check_frames(table)[1]
         print(f"scripts/_sheets.py --check: {t['shipping']} sheets ({t['core']} core, {t['edge']} edge), "
-              f"G9b lattice (shared edges bit-equal, E4 box bit-equal to Canal Ring's), JSON canonical, TS == JSON")
+              f"G9b lattice (shared edges bit-equal, E4 box bit-equal to Canal Ring's), "
+              f"G9c frames ({fr.pairs} neighbour pairs, {fr.seam_points} seam points, worst {fr.worst_translation_m:.2e} m off an exact "
+              f"sheet translation, limit {G9C_TOLERANCE_M:g}), G9d cells ({fr.cells} halo cells, worst corner {fr.worst_corner_deg:.2e} deg, "
+              f"limit {G9D_TOLERANCE_DEG:g}), JSON canonical, TS == JSON")
     else:
         _self_test()
 
