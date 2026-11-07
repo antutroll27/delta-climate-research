@@ -22,14 +22,17 @@
  */
 import {
   AMSTERDAM_INDEX_TABLES, activate, announceCurrent, announceLoading, announceMiss, announceRefusal, buildIndexModel, cellLabel, cellReadout,
-  formatCount, isArrow, keyAction, selectable, type IndexCell, type IndexModel, type IndexViewState, type KeyAction,
+  formatCount, isArrow, type IndexExtras, keyAction, selectable, type IndexCell, type IndexModel, type IndexViewState, type KeyAction,
 } from '../streaming/sheet-index.ts';
+import { loadIndexExtras } from './sheet-index-data.ts';
 
 export interface SheetIndexOptions {
   /** The manager's `select`. Called with a shipping sheet code, never with a skipped or outside one. */
   readonly onSelect: (code: string) => void;
   /** Defaults to the committed Amsterdam table. */
   readonly model?: IndexModel;
+  /** Names (and drawn counts) for the default model. Defaults to the files `sheet-index-data.ts` finds. */
+  readonly extras?: IndexExtras;
   /** Default `document`. `false` binds no global Shift + arrow; an element scopes it. */
   readonly shiftArrows?: Document | HTMLElement | false;
   /** The name in the dialog and grid labels. */
@@ -74,7 +77,8 @@ const isEditable = (t: EventTarget | null): boolean => {
 };
 
 export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): SheetIndexHandle {
-  const model = opts.model ?? buildIndexModel(AMSTERDAM_INDEX_TABLES);
+  const extras = opts.extras ?? loadIndexExtras();
+  const model = opts.model ?? buildIndexModel(AMSTERDAM_INDEX_TABLES, extras);
   const city = opts.cityName ?? 'Amsterdam';
   const uid = `si${++serial}`;
   const mq = window.matchMedia(PHONE_QUERY);

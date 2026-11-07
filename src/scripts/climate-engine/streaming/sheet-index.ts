@@ -6,10 +6,11 @@
  * ship rule: shown, dimmed, never selectable) or OUTSIDE (does not touch it: empty). Everything here is DERIVED from the
  * generated sheet table (`SHEETS`, `SKIPPED_SHEETS`, the lattice), so a change in how many sheets ship needs no code change.
  *
- * WHERE THE NAMES COME FROM. A shipping sheet's visible name is the text after "CODE · " in the table's own `label`
- * ("E2 · Noord" -> "Noord"; E4's label is "E4 · Canal Ring" -> "Canal Ring"), which is the stadsdeel name, or the hand-named
- * area for E4. A row without such a label falls back to its `stadsdeel`, and a skipped cell, which carries neither, to its
- * sheet code. Grouping (phone list, ScopeSwitcher) is by the row's `stadsdeel`, never by the display name, so E4 groups under Centrum.
+ * WHERE THE NAMES COME FROM. An area's visible name is, in order: (1) `data/cities/amsterdam/area-names.json`, the wijk
+ * (neighbourhood) the area is mostly in, written by scripts/build-area-names.py from the City of Amsterdam's Kernregistratie
+ * gebieden (CC0 1.0); (2) the text after "CODE · " in the sheet table's own `label` (the stadsdeel, or "Canal Ring" for E4);
+ * (3) the row's `stadsdeel`; (4) the code. A skipped cell carries no name and is named by its code. Grouping (phone list,
+ * ScopeSwitcher) is by the table row's `stadsdeel`, never by the display name, so E4 groups under Centrum.
  *
  * THE MANAGER CONTRACT. The UI emits the manager's `select` event: `{ type: 'select', atMs, sheet: <code> }` (see
  * `selectEventOf`), and reads the manager's state through `indexStateOf` (current sheet and the sheet being loaded). It never
@@ -55,6 +56,30 @@ export interface SkippedRowInput {
   readonly municipalBuildings: number;
   readonly reason: string;
 }
+/** One entry of area-names.json: only what the UI reads. */
+export interface AreaNameEntry {
+  readonly name: string;
+  readonly stadsdeel: string;
+}
+/** Optional inputs the table does not carry. Absent = the table's own labels. */
+export interface IndexExtras {
+  readonly names?: ReadonlyMap<string, AreaNameEntry> | null;
+}
+
+/** area-names.json, read defensively: an entry without a non-empty string name is skipped, anything else yields an empty map. */
+export function parseAreaNames(doc: unknown): ReadonlyMap<string, AreaNameEntry> {
+  const out = new Map<string, AreaNameEntry>();
+  if (typeof doc !== 'object' || doc === null) return out;
+  const areas = (doc as { areas?: unknown }).areas;
+  if (typeof areas !== 'object' || areas === null) return out;
+  for (const [code, e] of Object.entries(areas)) {
+    if (typeof e !== 'object' || e === null) continue;
+    const { name, stadsdeel } = e as { name?: unknown; stadsdeel?: unknown };
+    if (typeof name === 'string' && name.trim() !== '') out.set(code, { name: name.trim(), stadsdeel: typeof stadsdeel === 'string' ? stadsdeel : '' });
+  }
+  return out;
+}
+
 export interface IndexTables {
   readonly lattice: IndexLattice;
   readonly sheets: readonly ShippingRowInput[];
@@ -134,7 +159,8 @@ function labelName(code: string, label: string): string | null {
   return rest === '' ? null : rest;
 }
 
-export function buildIndexModel(tables: IndexTables = AMSTERDAM_INDEX_TABLES): IndexModel {
+export function buildIndexModel(tables: IndexTables = AMSTERDAM_INDEX_TABLES, extras: IndexExtras = {}): IndexModel {
+  const names = extras.names ?? null;
   const { lattice: L } = tables;
   const ships = new Map(tables.sheets.map((s) => [`${s.i},${s.j}`, s]));
   const skips = new Map(tables.skipped.map((s) => [`${s.i},${s.j}`, s]));
@@ -149,7 +175,7 @@ export function buildIndexModel(tables: IndexTables = AMSTERDAM_INDEX_TABLES): I
       if (ship !== undefined) {
         cells.push(Object.freeze({
           code, i, j, col, row, state: ship.kind, available: true, areaId: ship.id,
-          name: labelName(ship.code, ship.label) ?? (ship.stadsdeel !== '' ? ship.stadsdeel : code),
+          name: names?.get(ship.code)?.name ?? labelName(ship.code, ship.label) ?? (ship.stadsdeel !== '' ? ship.stadsdeel : code),
           stadsdeel: ship.stadsdeel, buildings: ship.buildings, municipalBuildings: ship.municipalBuildings, reason: null,
         }));
       } else if (skip !== undefined) {

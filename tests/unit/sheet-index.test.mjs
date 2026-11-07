@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
   AMSTERDAM_INDEX_TABLES as REAL, activate, buildIndexModel, cellLabel, cellReadout, groupByStadsdeel, indexStateOf, keyAction,
-  announceCurrent, reasonText, selectEventOf, selectable, stepFrom,
+  announceCurrent, parseAreaNames, reasonText, selectEventOf, selectable, stepFrom,
 } from '../../src/scripts/climate-engine/streaming/sheet-index.ts';
 import { AMSTERDAM_TOPOLOGY as T } from '../../src/scripts/climate-engine/streaming/sheet-topology.ts';
 import { createSheetManager } from '../../src/scripts/climate-engine/streaming/sheet-manager.ts';
@@ -201,4 +202,33 @@ test('the manager seam: a select event, and the view state read back from the ma
   assert.ok(m.dispatch(selectEventOf(skipped.code, 200)).some((c) => c.type === 'refuse'));
   // every shipping cell is a code the manager's topology knows, so no emitted select can be refused
   for (const c of M.shipping) assert.ok(T.has(c.code), c.code);
+});
+
+test('neighbourhood names: the committed file names every shipping area uniquely, and the UI prefers them', () => {
+  const doc = JSON.parse(readFileSync(new URL('../../data/cities/amsterdam/area-names.json', import.meta.url), 'utf8'));
+  const names = parseAreaNames(doc);
+  const named = buildIndexModel(REAL, { names });
+  for (const c of named.shipping) {
+    const e = names.get(c.code);
+    assert.ok(e, `${c.code} has an entry in area-names.json`);
+    assert.equal(c.name, e.name, c.code);
+    assert.equal(c.stadsdeel, REAL.sheets.find((s) => s.code === c.code).stadsdeel, 'grouping still follows the table stadsdeel');
+    assert.equal(doc.areas[c.code].stadsdeel, c.stadsdeel, 'the names file agrees with the table');
+    assert.ok(doc.areas[c.code].source.length > 0, `${c.code} records its source`);
+  }
+  const shown = named.shipping.map((c) => c.name);
+  assert.equal(new Set(shown).size, shown.length, 'no two areas share a name');
+  assert.equal(named.byCode.get('E4').name, 'Canal Ring');
+  assert.deepEqual(named.groups.map((g) => [g.stadsdeel, g.cells.length]), M.groups.map((g) => [g.stadsdeel, g.cells.length]), 'names do not move any area between groups');
+  // an area missing from the file falls back to the table label, and a malformed file changes nothing
+  const partial = buildIndexModel(REAL, { names: new Map([['F4', { name: 'Test Wijk', stadsdeel: 'Oost' }]]) });
+  assert.equal(partial.byCode.get('F4').name, 'Test Wijk');
+  assert.equal(partial.byCode.get('G4').name, M.byCode.get('G4').name);
+  for (const bad of [null, undefined, 3, 'x', {}, { areas: null }, { areas: { F4: { name: '' } } }, { areas: { F4: 7 } }]) {
+    assert.equal(parseAreaNames(bad).size, 0, JSON.stringify(bad));
+  }
+  assert.equal(buildIndexModel(REAL, { names: parseAreaNames(null) }).byCode.get('F4').name, M.byCode.get('F4').name);
+  // the label and the announcements carry the neighbourhood
+  assert.ok(cellLabel(partial.byCode.get('F4')).startsWith('F4, Test Wijk, '));
+  assert.ok(announceCurrent(partial.byCode.get('F4')).includes('F4, Test Wijk'));
 });
