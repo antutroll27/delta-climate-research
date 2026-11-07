@@ -50,6 +50,7 @@
  *    raw names and keys the result by what three.js will actually produce.
  */
 import * as THREE from 'three';
+import type { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { MODEL_WARDS, modelPath } from '../scope/paths.ts';
 
 /** glTF node-name prefix marking a published landmark. The dot does NOT survive
@@ -208,36 +209,50 @@ function bakeWardLocal(root: THREE.Object3D): void {
 interface GltfNodeJson { name?: string; extras?: Record<string, unknown> }
 
 /**
- * Fetch and decode `<ward>.glb`, or return null so the caller extrudes instead.
- *
- * EVERY FAILURE RETURNS NULL. A ward with no model, an offline fetch, a corrupt
- * buffer, a missing Draco decoder — all of them must land on the extrusion path
- * that Kolkata already renders, never on an exception that leaves the map empty.
+ * Fetch `<ward>.glb` as bytes, or null. The bytes are the compressed model (about 0.3 MB), and the
+ * caller keeps them: a lost WebGL context empties the decoded geometry (gpu-resident.ts), and
+ * decoding the kept bytes again needs no network.
  */
-export async function loadBuildingModel(
+export async function fetchBuildingModelBytes(
   ward: string, signal?: AbortSignal,
-): Promise<BuildingModel | null> {
+): Promise<ArrayBuffer | null> {
   if (!hasBuildingModel(ward)) return null;
   try {
     const url = modelPath(ward);
     if (url === null) return null;
     const response = await fetch(url, { signal });
     if (!response.ok) return null;
-    const buffer = await response.arrayBuffer();
+    return await response.arrayBuffer();
+  } catch {
+    return null;
+  }
+}
+
+/** One Draco decoder for the page, kept alive. It holds the fetched decoder (JS and wasm), so a
+ *  re-decode after a context loss needs no network either; one worker, because a ward is one pass. */
+let draco: DRACOLoader | null = null;
+
+/**
+ * Decode the bytes of `<ward>.glb`, or return null so the caller extrudes instead. The bytes are
+ * only read, never consumed, so the same buffer decodes again.
+ *
+ * EVERY FAILURE RETURNS NULL. A corrupt buffer or a missing Draco decoder must land on the
+ * extrusion path that Kolkata already renders, never on an exception that leaves the map empty.
+ */
+export async function decodeBuildingModel(bytes: ArrayBuffer): Promise<BuildingModel | null> {
+  try {
     /* Loaded at use, not at import: a Kolkata ward never downloads the glTF or
        Draco chunks, and the relief bundle does not grow for a path it skips. */
-    const [{ GLTFLoader }, { DRACOLoader }] = await Promise.all([
+    const [{ GLTFLoader }, { DRACOLoader: Draco }] = await Promise.all([
       import('three/examples/jsm/loaders/GLTFLoader.js'),
       import('three/examples/jsm/loaders/DRACOLoader.js'),
     ]);
     const loader = new GLTFLoader();
     /* The same decoder asset river-scene.ts already streams — a separate,
        cacheable file fetched only when something is actually decoded. */
-    const draco = new DRACOLoader();
-    draco.setDecoderPath('/draco/');
+    if (!draco) { draco = new Draco(); draco.setDecoderPath('/draco/'); draco.setWorkerLimit(1); }
     loader.setDRACOLoader(draco);
-    const gltf = await loader.parseAsync(buffer, '');
-    draco.dispose();
+    const gltf = await loader.parseAsync(bytes, '');
 
     const nodes = ((gltf.parser.json as { nodes?: GltfNodeJson[] }).nodes ?? []);
     const rawByLoaded = landmarkNamesByLoadedName(
@@ -272,6 +287,8 @@ export async function loadBuildingModel(
     }
     return { buildings, landmarks };
   } catch {
+    /* a decoder that failed to start is a rejected promise inside the loader, for good: start afresh next time */
+    draco?.dispose(); draco = null;
     return null;
   }
 }

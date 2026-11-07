@@ -119,7 +119,7 @@ export default defineConfig({
        and reported timeouts, which reads as a slow machine.
 
        The name says the tier now, so the gap cannot be re-opened by accident. */
-    { name: 'chromium-tier0', testIgnore: ['**/._*', '**/obos-v2-*.spec.ts', '**/cbam-perf.spec.ts'], use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium-tier0', testIgnore: ['**/._*', '**/obos-v2-*.spec.ts', '**/cbam-perf.spec.ts', '**/heat-map-free-mesh.spec.ts'], use: { ...devices['Desktop Chrome'] } },
 
     /* THE RELIEF PATH, on a real GPU. `--use-angle=metal` gets Apple Silicon's
        Metal backend instead of SwiftShader, which lifts render-quality.ts to tier 2
@@ -133,7 +133,7 @@ export default defineConfig({
       name: 'chromium-relief',
       /* The ward-switch spec too: it clicks 3D Relief, so it also runs in the
          default project on SwiftShader, and here it runs on the real GPU path. */
-      testMatch: ['**/heat-map-tiers.spec.ts', '**/heat-map-ward-switch.spec.ts'],
+      testMatch: ['**/heat-map-tiers.spec.ts', '**/heat-map-ward-switch.spec.ts', '**/heat-map-free-mesh.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
