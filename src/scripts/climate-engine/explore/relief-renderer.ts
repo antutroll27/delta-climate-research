@@ -28,6 +28,7 @@ import { buildRibbonMesh } from '../road-ribbon.ts';
 import { densifyRing } from '../ward-mask.ts';
 import { displayColor, HAZE_GLSL, makeContactAO, srgbLinear } from './look-shading.ts';
 import { hasBuildingModel, loadBuildingModel, type LandmarkNode } from './building-model.ts';
+import { releaseCpuCopyAfterUpload } from './gpu-resident.ts';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './building-pick.ts';
 import {
   createLandmarkLayer,
@@ -104,6 +105,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private ward: ReliefWardBundle | null = null;
   private registry: BuildingMeta[] = [];
   private disposed = false;
+  /** The canvas whose context events `onGlLost` / `onGlRestored` watch, and whether it is lost now. */
+  private glCanvas: HTMLCanvasElement | null = null;
+  private glLost = false;
   private fieldDirty = false;
   private keyBase = 2.1;
   private hemiBase = 1.05;
@@ -416,6 +420,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     if (this.disposed) return;
     this.disposed = true;
     this.unwatchPhone();
+    this.glCanvas?.removeEventListener('webglcontextlost', this.onGlLost);
+    this.glCanvas?.removeEventListener('webglcontextrestored', this.onGlRestored);
+    this.glCanvas = null;
     this.clearBuildings();
     this.ready.resolve();
     for (const cached of this.modelCache.values()) {
@@ -460,6 +467,13 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.camera = new THREE.Camera();
     this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl as WebGL2RenderingContext, antialias: true });
     this.renderer.autoClear = false;
+    /* three re-uploads from `attribute.array` when the context comes back, and the building
+       meshes no longer keep one (gpu-resident.ts). three's own restore handler was added by
+       the constructor above, so it runs first; ours then rebuilds the buildings from the ward
+       data before any frame can draw them. */
+    this.glCanvas = map.getCanvas();
+    this.glCanvas.addEventListener('webglcontextlost', this.onGlLost);
+    this.glCanvas.addEventListener('webglcontextrestored', this.onGlRestored);
     this.overlay = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1, this.options.terrainGridSize - 1, this.options.terrainGridSize - 1),
       CLASSIC ? new THREE.ShaderMaterial({
@@ -483,7 +497,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   }
 
   private render(matrix: ArrayLike<number>): void {
-    if (!this.scene || !this.modelTransform || this.disposed) return;
+    if (!this.scene || !this.modelTransform || this.disposed || this.glLost) return;
     const transform = this.modelTransform;
     const frame = transform.frame;
     const local = new THREE.Matrix4()
@@ -587,6 +601,31 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.applyLayerState();
   }
 
+  private onGlLost = (): void => { this.glLost = true; };
+
+  /**
+   * The context is back: three has reset its GL state, but the building meshes have no CPU
+   * arrays left to re-upload (gpu-resident.ts), so build them again from the ward data, the
+   * way `rebuildWard` does. The model cache is emptied for the same reason: its geometries
+   * are GPU-only too, and the next `installModel` re-decodes the GLB. Nothing else here
+   * needs it; every other layer, texture and the overlay still hold their own arrays.
+   */
+  private onGlRestored = (): void => {
+    this.glLost = false;
+    const bundle = this.ward;
+    if (!bundle || !this.scene || this.disposed) return;
+    for (const cached of this.modelCache.values()) {
+      cached.buildings.traverse((object) => { (object as THREE.Mesh).geometry?.dispose?.(); });
+    }
+    this.modelCache.clear();
+    const token = ++this.wardToken;
+    this.clearBuildings();
+    if (this.landmarkLayer) { this.landmarkLayer.dispose(); this.landmarkLayer = null; }
+    if (hasBuildingModel(bundle.wardId)) void this.installModel(bundle, token);
+    else { this.installExtrusion(bundle); this.applyLayerState(); }
+    this.options.map.triggerRepaint();
+  };
+
   /** Drop whatever city is on screen, by either path. */
   private clearBuildings(): void {
     if (this.city) { this.scene?.remove(this.city); this.city.geometry.dispose(); this.city = null; }
@@ -627,6 +666,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
         (object.material as THREE.Material | undefined)?.dispose?.();
         object.material = facade;
         seatOnGround(object.geometry, bundle.terrain);
+        /* position, normal and aGround are final here: the facade shader reads them on the
+           GPU only (heat and selection ride uniforms), and no picking touches the mesh. */
+        releaseCpuCopyAfterUpload(object.geometry);
       });
       cached = { buildings: model.buildings, landmarks: model.landmarks };
       this.modelCache.set(bundle.wardId, cached);
@@ -692,6 +734,11 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     }
     const merged = mergeGeometries(geometries, false);
     geometries.forEach((geometry) => geometry.dispose());
+    /* All eight attributes (position, normal, uv, aDelay, aH, aCtr, aG, aIn) are written once,
+       above, and read only by the GPU: grow and heat tint come from uniforms and the field
+       texture, the selection from a centroid uniform, and a click is hit-tested against the
+       ward's own rings (building-pick.ts). So all of them go after upload. */
+    if (merged) releaseCpuCopyAfterUpload(merged);
     return merged;
   }
 
