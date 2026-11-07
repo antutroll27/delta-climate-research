@@ -80,6 +80,10 @@ export interface ManagerState {
   readonly displayed: SheetCode | null;
   /** The previous mesh, kept for a cross-fade until `handover-done`. */
   readonly outgoing: SheetCode | null;
+  /** TWO-PHASE OPEN (P3b audit S3). `make-current` asks the page to open a sheet; the page does it asynchronously (worker mesh,
+   *  then its own commit), and `displayed` changes only when it answers `opened`. Until then the manager and the page agree
+   *  that the OLD sheet is on screen, so nothing (the solve, the halo supply, an eviction) acts on the new one. */
+  readonly opening: { readonly sheet: SheetCode; readonly keepOutgoing: boolean } | null;
   /** The tier each mesh was BUILT at: a demotion leaves the old mesh at the old cost until it is rebuilt, and the GPU
    *  model prices what is really there (audit S1). */
   readonly displayedTier: ExploreDeviceTier | null;
@@ -117,6 +121,10 @@ export type ManagerEvent =
   | { readonly type: 'load-failed'; readonly atMs: number; readonly requestId: number; readonly reason: string }
   | { readonly type: 'retry'; readonly atMs: number; readonly sheet: SheetCode; readonly level: Level }
   | { readonly type: 'handover-done'; readonly atMs: number }
+  /** The page has committed `sheet` as its open ward (the answer to `make-current`). */
+  | { readonly type: 'opened'; readonly atMs: number; readonly sheet: SheetCode }
+  /** The page could not open `sheet`: the old sheet is still on screen. */
+  | { readonly type: 'open-failed'; readonly atMs: number; readonly sheet: SheetCode }
   | { readonly type: 'tier-changed'; readonly atMs: number; readonly tier: ExploreDeviceTier }
   | { readonly type: 'network-changed'; readonly atMs: number; readonly network: NetworkClass }
   | { readonly type: 'memory-pressure'; readonly atMs: number; readonly level: MemoryPressure };
@@ -168,7 +176,7 @@ export const DEFAULT_CONFIG: ManagerConfig = Object.freeze({
 
 export function initialState(tier: ExploreDeviceTier, network: NetworkClass = 'fast'): ManagerState {
   return Object.freeze({
-    tier, network, pressure: 'none', current: null, displayed: null, outgoing: null, displayedTier: null, outgoingTier: null, solved: null, solvedWithHalo: false, heading: null, armed: false, gesturing: false, camera: null,
+    tier, network, pressure: 'none', current: null, displayed: null, outgoing: null, opening: null, displayedTier: null, outgoingTier: null, solved: null, solvedWithHalo: false, heading: null, armed: false, gesturing: false, camera: null,
     lastMotionMs: 0, loader: null, sheets: new Map(), seq: 0, nextRequestId: 1,
   });
 }
@@ -183,7 +191,7 @@ function assertNever(x: never): never { throw new Error(`Unhandled ${JSON.string
 /** A mutable working copy of the state; frozen again on the way out. */
 interface Draft {
   tier: ExploreDeviceTier; network: NetworkClass; pressure: MemoryPressure;
-  current: SheetCode | null; displayed: SheetCode | null; outgoing: SheetCode | null; displayedTier: ExploreDeviceTier | null;
+  current: SheetCode | null; displayed: SheetCode | null; outgoing: SheetCode | null; opening: { sheet: SheetCode; keepOutgoing: boolean } | null; displayedTier: ExploreDeviceTier | null;
   outgoingTier: ExploreDeviceTier | null; solved: SheetCode | null; solvedWithHalo: boolean;
   heading: Direction | null; armed: boolean; gesturing: boolean; camera: { lon: number; lat: number } | null; lastMotionMs: number;
   loader: { sheet: SheetCode; sinceMs: number; phase: LoaderPhase } | null;
@@ -417,24 +425,30 @@ function reconcile(cfg: ManagerConfig, d: Draft, now: number, out: ManagerComman
 
 }
 
-/** Show the new mesh once its lod0 is ready. */
+/** Ask the page to open the target once its lod0 is ready. `displayed` does NOT change here: see `opening`. */
 function swapIfReady(cfg: ManagerConfig, d: Draft, out: ManagerCommand[]): void {
   const cur = d.current;
-  if (cur === null || cur === d.displayed || levelOf(d, cur, 'lod0').status !== 'ready') return;
-  if (d.outgoing !== null) out.push({ type: 'dispose-mesh', sheet: d.outgoing });         // a hand-over that never finished
-  const previous = d.displayed, previousTier = d.displayedTier;
-  d.displayed = cur;
-  d.displayedTier = d.tier;
-  d.outgoing = null;
-  d.outgoingTier = null;
+  if (cur === null || cur === d.displayed || levelOf(d, cur, 'lod0').status !== 'ready' || d.opening?.sheet === cur) return;
+  const previous = d.displayed;
   let outgoingMesh: 'none' | 'keep-until-handover' | 'dispose-now' = 'none';
+  let keep = false;
   if (previous !== null) {
-    const both = { ...d, outgoing: previous, outgoingTier: previousTier };
-    const keep = cfg.budgets[d.tier].crossFade && gpuMB(cfg, both) <= cfg.budgets[d.tier].gpuCeilingMB;
+    const both = { ...d, displayed: cur, displayedTier: d.tier, outgoing: previous, outgoingTier: d.displayedTier };
+    keep = cfg.budgets[d.tier].crossFade && gpuMB(cfg, both) <= cfg.budgets[d.tier].gpuCeilingMB;
     outgoingMesh = keep ? 'keep-until-handover' : 'dispose-now';
-    if (keep) { d.outgoing = previous; d.outgoingTier = previousTier; }
   }
+  d.opening = { sheet: cur, keepOutgoing: keep };
   out.push({ type: 'make-current', sheet: cur, outgoing: previous, outgoingMesh });
+}
+
+/** The page answered `opened`: now, and only now, the sheet is the displayed one. */
+function commitOpen(d: Draft, out: ManagerCommand[]): void {
+  const open = d.opening, cur = d.current;
+  if (open === null || cur === null || open.sheet !== cur) return;
+  if (d.outgoing !== null) out.push({ type: 'dispose-mesh', sheet: d.outgoing });           // a hand-over that never finished
+  const previous = d.displayed, previousTier = d.displayedTier;
+  d.displayed = cur; d.displayedTier = d.tier; d.outgoing = null; d.outgoingTier = null; d.opening = null;
+  if (open.keepOutgoing && previous !== null) { d.outgoing = previous; d.outgoingTier = previousTier; }
   touch(d, cur);
 }
 
@@ -461,6 +475,7 @@ function runLoader(d: Draft, now: number, out: ManagerCommand[]): void {
 function beginSwitch(d: Draft, target: SheetCode, cameraIsThere: boolean): void {
   if (d.current === target) return;
   d.current = target;
+  d.opening = null;                                  // an open in flight for another sheet is abandoned: its answer is ignored
   d.armed = cameraIsThere;
   d.solved = null;
   d.solvedWithHalo = false;
@@ -503,7 +518,7 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
     case 'start':
       if (!cfg.topology.has(event.sheet)) { out.push({ type: 'refuse', sheet: event.sheet, reason: 'unknown-sheet' }); break; }
       for (const mesh of new Set([d.displayed, d.outgoing])) if (mesh !== null) out.push({ type: 'dispose-mesh', sheet: mesh });   // N1: no leaked mesh
-      d.current = null; d.displayed = null; d.outgoing = null; d.displayedTier = null; d.outgoingTier = null; d.solved = null; d.solvedWithHalo = false; d.loader = null;
+      d.current = null; d.displayed = null; d.outgoing = null; d.opening = null; d.displayedTier = null; d.outgoingTier = null; d.solved = null; d.solvedWithHalo = false; d.loader = null;
       d.lastMotionMs = now;
       beginSwitch(d, event.sheet, false);
       break;
@@ -549,6 +564,18 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
       if (levelOf(d, event.sheet, event.level).status === 'failed') put(d, event.sheet, event.level, ABSENT);
       break;
     }
+    case 'opened':
+      commitOpen(d, out);
+      break;
+    case 'open-failed':
+      /* The page is still on `displayed`. Say so: the intent goes back to it, and the camera must be seen inside it again
+         before another crossing can fire, so a sheet that cannot open is not retried in a loop. */
+      if (d.opening?.sheet === event.sheet && d.current === event.sheet) {
+        d.opening = null;
+        out.push({ type: 'failure', sheet: event.sheet, level: 'lod0', attempts: 0 });
+        d.current = d.displayed; d.armed = false; d.solved = null; d.solvedWithHalo = false;
+      }
+      break;
     case 'handover-done':
       if (d.outgoing !== null) { out.push({ type: 'dispose-mesh', sheet: d.outgoing }); d.outgoing = null; }
       break;

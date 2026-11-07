@@ -9,7 +9,7 @@ import { createSheetManager } from '../../src/scripts/climate-engine/streaming/s
 
 class Fake {
   constructor(tier = 'full') {
-    this.t = 0; this.log = []; this.loads = new Map(); this.timers = []; this.errors = [];
+    this.autoOpen = true; this.t = 0; this.log = []; this.loads = new Map(); this.timers = []; this.errors = [];
     this.manager = createSheetManager(tier, 'fast');
     const rec = (name) => (c) => { this.log.push(name + ':' + (c.sheet ?? '') + (c.level ? '/' + c.level : '') + (c.phase ? '/' + c.phase : '')); };
     this.ports = {
@@ -20,7 +20,8 @@ class Fake {
         this.loads.set(job.requestId, { job, resolve, reject });
         job.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
       }),
-      reprioritise: rec('reprioritise'), evict: rec('evict'), makeCurrent: rec('make-current'), disposeMesh: rec('dispose-mesh'),
+      reprioritise: rec('reprioritise'), evict: rec('evict'),
+      makeCurrent: (c) => { rec('make-current')(c); if (this.autoOpen) queueMicrotask(() => this.exec.send({ type: 'opened', sheet: c.sheet })); }, disposeMesh: rec('dispose-mesh'),
       rebuildMesh: rec('rebuild-mesh'), loader: rec('loader'), solve: rec('solve'), failure: rec('failure'), refuse: rec('refuse'),
       onError: (e) => this.errors.push(e),
     };
@@ -99,14 +100,15 @@ test('a synchronous port that re-enters send does not interleave the batch', asy
   assert.equal(f.log[i + 1], 'after-nested-send', 'the nested event waits for the batch to finish');
 });
 
-test('a throwing port is reported and the rest of the batch still runs', async () => {
+test('a throwing port is reported and the rest of the batch still runs; a make-current that throws is an open-failed', async () => {
   const f = new Fake();
   f.ports.makeCurrent = () => { throw new Error('gl'); };
   f.exec.send({ type: 'start', sheet: 'E4' });
   await f.finish('E4', 'lod0');
-  await f.finish('E4', 'halo');
+  await f.settle();
   assert.equal(f.errors.length, 1);
-  assert.ok(f.log.some((l) => l.startsWith('solve:E4')));
+  assert.ok(f.log.some((l) => l.startsWith('failure:E4')), 'reported as a failure, the plate does not stay up');
+  assert.ok(!f.log.some((l) => l.startsWith('solve:E4')), 'and nothing is solved for a sheet that never opened');
 });
 
 test('a load that throws synchronously becomes load-failed', async () => {

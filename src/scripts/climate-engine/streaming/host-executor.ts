@@ -63,6 +63,8 @@ export type PageEvent =
   | { readonly type: 'select'; readonly sheet: string }
   | { readonly type: 'camera'; readonly lon: number; readonly lat: number; readonly gesturing: boolean; readonly headingDeg: number | null }
   | { readonly type: 'retry'; readonly sheet: SheetCode; readonly level: Level }
+  | { readonly type: 'opened'; readonly sheet: SheetCode }
+  | { readonly type: 'open-failed'; readonly sheet: SheetCode }
   | { readonly type: 'handover-done' }
   | { readonly type: 'tier-changed'; readonly tier: ExploreDeviceTier }
   | { readonly type: 'network-changed'; readonly network: 'fast' | 'constrained' }
@@ -119,7 +121,10 @@ export function createExecutor(manager: SheetManager, ports: ExecutorPorts): She
       case 'cancel': controllers.get(command.requestId)?.abort(); controllers.delete(command.requestId); break;
       case 'reprioritise': guard(command, () => ports.reprioritise(command)); break;
       case 'evict': guard(command, () => ports.evict(command)); break;
-      case 'make-current': guard(command, () => ports.makeCurrent(command)); break;
+      case 'make-current':                                     // a port that cannot even start the open has failed it
+        try { ports.makeCurrent(command); }
+        catch (error) { warn(error, command); queue.push({ type: 'open-failed', atMs: ports.now(), sheet: command.sheet }); }
+        break;
       case 'dispose-mesh': guard(command, () => ports.disposeMesh(command)); break;
       case 'rebuild-mesh': guard(command, () => ports.rebuildMesh(command)); break;
       case 'loader': guard(command, () => ports.loader(command)); break;

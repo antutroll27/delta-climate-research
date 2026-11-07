@@ -264,7 +264,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
 
   const ports: ExecutorPorts = {
     now,
-    schedule: (ms, fn) => { const id = window.setTimeout(fn, ms); return () => window.clearTimeout(id); },
+    schedule: (ms, fn) => { const id = setTimeout(fn, ms); return () => clearTimeout(id); },
     load: (job) => {
       switch (job.level) {
         case 'lod0': return loadLod0(job);
@@ -305,12 +305,18 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
           timings.massing.push(Math.round(massed.ms));
           pendingMesh.set(previous, massed.mesh); massingBytes.set(previous, meshBytes(massed.mesh)); massingResident.add(previous);
         }
-        const asset = halos.get(c.sheet);
-        hooks.setHaloSupply(asset === undefined ? null : () => neighboursOf(asset));
-        await hooks.showSheet(c.sheet, built.mesh, built.ao, first, () => { open = c.sheet; switches++; syncNeighbours(); syncSeams(); });
+        /* The halo supply swaps INSIDE the page's synchronous commit, so the sim never sees one sheet's ring on another's
+           ward, and a failed open leaves the old supply with the old sheet (audit S3). */
+        await hooks.showSheet(c.sheet, built.mesh, built.ao, first, () => {
+          open = c.sheet; switches++;
+          const asset = halos.get(c.sheet);
+          hooks.setHaloSupply(asset === undefined ? null : () => neighboursOf(asset));
+          syncNeighbours(); syncSeams();
+        });
+        if (token === switchToken && !disposed) executor.send({ type: 'opened', sheet: c.sheet });
       })().catch((error) => {
         hooks.warn(`could not open sheet ${c.sheet}`, error);
-        if (token === switchToken) hooks.failure(c.sheet, error instanceof Error ? error.message : String(error));
+        if (token === switchToken && !disposed) { executor.send({ type: 'open-failed', sheet: c.sheet }); hooks.failure(c.sheet, error instanceof Error ? error.message : String(error)); }
       });
     },
     disposeMesh: () => undefined,                        // the renderer replaces its city inside setWard; there is no kept mesh (cross-fade is off)
@@ -329,6 +335,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
       if (c.upgrade) hooks.resolve();
     },
     failure: (c) => hooks.failure(c.sheet, `${c.level} failed after ${c.attempts} attempts`),
+      if (open !== c.sheet) return;                      // the page has not opened it (yet): nothing to solve, no supply to swap
     refuse: (c) => hooks.warn(`refused ${c.sheet}: ${c.reason}`),
     onError: (error, command) => hooks.warn(`${command.type} failed`, error),
   };

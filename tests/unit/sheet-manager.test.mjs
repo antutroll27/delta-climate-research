@@ -22,15 +22,22 @@ class Host {
     this.t = 0;
     this.log = [];                         // every command, in order
     this.pending = new Map();              // requestId -> { sheet, level, priority }
-    this.shadow = new Map();               // 'F4/lod0' -> 'loading' | 'ready': what the host believes it holds
+    this.shadow = new Map();
+    this.autoOpen = true;                  // answer every make-current with `opened`
+    this.opens = [];               // 'F4/lod0' -> 'loading' | 'ready': what the host believes it holds
   }
   send(event) {
-    const cmds = this.m.dispatch({ ...event, atMs: this.t });
+    let cmds = this.m.dispatch({ ...event, atMs: this.t });
     if ((event.type === 'load-finished' || event.type === 'load-failed') && this.finished) {   // the answer lands BEFORE the commands it provoked
       const key = `${this.finished.sheet}/${this.finished.level}`;
       if (event.type === 'load-finished') this.shadow.set(key, 'ready'); else this.shadow.delete(key);
     }
-    for (const c of cmds) {
+    for (let i = 0; i < cmds.length; i++) {
+      const c = cmds[i];
+      if (c.type === 'make-current' && this.autoOpen) {            // the page answers at once, unless a test holds it back
+        this.opens.push(c.sheet);
+        cmds = [...cmds, ...this.m.dispatch({ type: 'opened', sheet: c.sheet, atMs: this.t })];
+      }
       this.log.push(c);
       const key = `${c.sheet}/${c.level}`;
       if (c.type === 'load') {
@@ -98,10 +105,12 @@ test('arrival: swap, then the ring as low-priority massing two at a time, then t
   const afterHalo = h.finish('E4', 'halo');
   assert.deepEqual(afterHalo, [], 'the halo alone changes nothing: the solve needs the displayed sheet');
   const cmds = h.finish('E4', 'lod0');
-  assert.deepEqual(cmds.slice(0, 2).map((c) => c.type), ['make-current', 'solve']);
+  assert.equal(cmds[0].type, 'make-current');
+  assert.ok(cmds.some((c) => c.type === 'solve'), 'the solve follows the page\'s `opened`');
   assert.deepEqual(cmds[0], { type: 'make-current', sheet: 'E4', outgoing: null, outgoingMesh: 'none' });
-  assert.equal(cmds[1].haloLoaded, true);
-  assert.deepEqual(cmds[1].neighbours.map((n) => n.dir), [...DIRECTIONS]);
+  const solve = cmds.find((c) => c.type === 'solve');
+  assert.equal(solve.haloLoaded, true);
+  assert.deepEqual(solve.neighbours.map((n) => n.dir), [...DIRECTIONS]);
   const loads = cmds.filter((c) => c.type === 'load');
   assert.equal(loads.length, 2, 'the low-priority lane holds two at a time');
   assert.ok(loads.every((c) => c.level === 'lod1' && c.priority === 'low'));
@@ -690,4 +699,51 @@ test('a random walk of 3,000 events on every tier keeps every invariant', () => 
       assert.ok(wake === null || wake > h.t);
     }
   }
+});
+
+/* S3 (P3b audit): the manager changes `displayed` only when the page answers `opened`. */
+test('S3: make-current alone changes nothing the page can see: displayed, solve and the old sheet\'s bundle stay as they were', () => {
+  const h = settled('E4', 'balanced');
+  h.autoOpen = false;
+  const solvesBefore = h.of('solve').length;
+  h.select('F4');
+  const cmds = h.finish('F4', 'lod0');
+  assert.ok(cmds.some((c) => c.type === 'make-current' && c.sheet === 'F4'));
+  const s = h.state();
+  assert.equal(s.displayed, 'E4', 'the page still shows E4');
+  assert.equal(s.opening.sheet, 'F4');
+  assert.equal(cmds.filter((c) => c.type === 'solve').length, 0, 'no solve for a sheet that is not open');
+  assert.equal(cmds.filter((c) => c.type === 'evict' && c.sheet === 'E4' && c.level === 'lod0').length, 0, 'the bundle of the ward on screen is not evicted');
+  assert.equal(h.of('solve').length, solvesBefore);
+  h.send({ type: 'tick' });
+  assert.equal(h.of('make-current').filter((c) => c.sheet === 'F4').length, 1, 'asked once, not every event');
+  const done = h.send({ type: 'opened', sheet: 'F4' });
+  assert.equal(h.state().displayed, 'F4');
+  assert.ok(done.some((c) => c.type === 'solve' && c.sheet === 'F4'));
+});
+
+test('S3: an `opened` for a sheet the user has since left is ignored', () => {
+  const h = settled('E4', 'balanced');
+  h.autoOpen = false;
+  h.select('F4'); h.finish('F4', 'lod0');
+  h.select('D4');                                                // the user moved on while F4 was opening
+  h.send({ type: 'opened', sheet: 'F4' });
+  assert.equal(h.state().displayed, 'E4');
+  assert.equal(h.state().opening, null);
+});
+
+test('S3: a failed open leaves the manager and the page agreeing on the old sheet, and does not retry in a loop', () => {
+  const h = settled('E4', 'balanced');
+  h.autoOpen = false;
+  h.select('F4'); h.finish('F4', 'lod0');
+  const cmds = h.send({ type: 'open-failed', sheet: 'F4' });
+  const s = h.state();
+  assert.equal(s.current, 'E4'); assert.equal(s.displayed, 'E4'); assert.equal(s.opening, null);
+  assert.ok(cmds.some((c) => c.type === 'failure' && c.sheet === 'F4'));
+  assert.equal(cmds.filter((c) => c.type === 'evict' && c.sheet === 'E4').length, 0);
+  assert.equal(s.loader, null, 'no plate left up');
+  // the camera is still over F4: it must be seen inside E4 again before F4 can be crossed into
+  const over = { lon: T.cell('F4') && at(1, 0, 0, 0).lon, lat: at(1, 0, 0, 0).lat };
+  h.advance(5_000); h.camera(over); h.advance(1_000); h.tick();
+  assert.equal(h.of('make-current').filter((c) => c.sheet === 'F4').length, 1, 'no second attempt while the camera has not come back');
 });
