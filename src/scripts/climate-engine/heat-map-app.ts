@@ -2348,7 +2348,7 @@ export function mountHeatMap(): () => void {
            `resetSim` after the ward loads, while this runs off `capsReady` directly.
            Passing the value measured ZERO `.hdr` requests on a tier-2 machine. */
         deviceTier: () => runtimeTier,
-        ...(STREAM_DEV ? { streamed: { onNeighboursLost: () => console.warn('streaming: the WebGL context was lost; the neighbour massing is gone until the next move') } } : {}),
+        ...(STREAM_DEV ? { streamed: { onContextRestored: () => streamControl?.contextRestored() } } : {}),
       });
       relief = instance;
       attachReliefLayer();

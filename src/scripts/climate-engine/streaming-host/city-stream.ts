@@ -85,6 +85,8 @@ export interface CityStream {
   networkChanged(network: NetworkClass): void;
   /** The renderer exists now (or was rebuilt): send it the neighbours and the seam flags again. */
   reliefReady(): void;
+  /** The WebGL context was restored: every mesh is gone. Rebuild the open sheet at the current tier and the ring, in the worker. */
+  contextRestored(): void;
   /** Dev read-out for the smoke test and the status line. */
   report(): StreamReport;
   dispose(): void;
@@ -138,6 +140,15 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
   const massingBytes = new Map<SheetCode, number>();
   const timings = { prepare: [] as number[], mesh: [] as number[], massing: [] as number[] };
   let open: SheetCode | null = null;
+  /** Whose halo the page's sim host is using right now (null = the edge rule), so an unchanged supply is not sent again. */
+  let supplied: { sheet: SheetCode; halo: boolean } | null = null;
+  const supply = (sheet: SheetCode, halo: HaloAsset | undefined): boolean => {
+    const has = halo !== undefined;
+    if (supplied?.sheet === sheet && supplied.halo === has) return false;
+    supplied = { sheet, halo: has };
+    hooks.setHaloSupply(has ? () => neighboursOf(halo) : null);
+    return true;
+  };
   let switches = 0;
   let switchToken = 0;
   let disposed = false;
@@ -262,6 +273,16 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
 
   // ── the ports ───────────────────────────────────────────────────────────────
 
+  /** Build the open sheet's mesh again in the worker at `tier` and show it through the page's own commit. */
+  function rebuildOpen(code: SheetCode, tier: ExploreDeviceTier): void {
+    void (async () => {
+      const t = await getTexts(code, { priority: 'high' });
+      const built = await worker.mesh(code, t.ward, tier, await loadedTerrain(code), AO_REQUEST);
+      if (disposed || open !== code) return;
+      await hooks.showSheet(code, built.mesh, built.ao, false, () => { syncNeighbours(); syncSeams(); });
+    })().catch((error) => hooks.warn(`could not rebuild sheet ${code}`, error));
+  }
+
   const ports: ExecutorPorts = {
     now,
     schedule: (ms, fn) => { const id = setTimeout(fn, ms); return () => clearTimeout(id); },
@@ -309,8 +330,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
            ward, and a failed open leaves the old supply with the old sheet (audit S3). */
         await hooks.showSheet(c.sheet, built.mesh, built.ao, first, () => {
           open = c.sheet; switches++;
-          const asset = halos.get(c.sheet);
-          hooks.setHaloSupply(asset === undefined ? null : () => neighboursOf(asset));
+          supply(c.sheet, halos.get(c.sheet));
           syncNeighbours(); syncSeams();
         });
         if (token === switchToken && !disposed) executor.send({ type: 'opened', sheet: c.sheet });
@@ -320,22 +340,14 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
       });
     },
     disposeMesh: () => undefined,                        // the renderer replaces its city inside setWard; there is no kept mesh (cross-fade is off)
-    rebuildMesh: (c) => {
-      void (async () => {
-        const t = await getTexts(c.sheet, { priority: 'high' });
-        const built = await worker.mesh(c.sheet, t.ward, c.tier, await loadedTerrain(c.sheet), AO_REQUEST);
-        if (disposed || open !== c.sheet) return;
-        await hooks.showSheet(c.sheet, built.mesh, built.ao, false, () => { syncNeighbours(); syncSeams(); });
-      })().catch((error) => hooks.warn(`could not rebuild sheet ${c.sheet}`, error));
-    },
+    rebuildMesh: (c) => rebuildOpen(c.sheet, c.tier),
     loader: (c) => hooks.loader(c.sheet, c.phase),
     solve: (c) => {
-      const asset = halos.get(c.sheet);
-      hooks.setHaloSupply(c.haloLoaded && asset !== undefined ? () => neighboursOf(asset) : null);
-      if (c.upgrade) hooks.resolve();
+      if (open !== c.sheet) return;                      // the page has not opened it (yet): nothing to solve, no supply to swap
+      const asset = c.haloLoaded ? halos.get(c.sheet) : undefined;
+      if (supply(c.sheet, asset) && c.upgrade) hooks.resolve();
     },
     failure: (c) => hooks.failure(c.sheet, `${c.level} failed after ${c.attempts} attempts`),
-      if (open !== c.sheet) return;                      // the page has not opened it (yet): nothing to solve, no supply to swap
     refuse: (c) => hooks.warn(`refused ${c.sheet}: ${c.reason}`),
     onError: (error, command) => hooks.warn(`${command.type} failed`, error),
   };
@@ -372,6 +384,15 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
     tierChanged: (tier) => send({ type: 'tier-changed', tier }),
     networkChanged: (network) => send({ type: 'network-changed', network }),
     reliefReady() { syncNeighbours(); syncSeams(); },
+    contextRestored() {
+      if (open !== null) rebuildOpen(open, hooks.tier());
+      for (const code of [...massingResident]) {                 // the grey neighbours were GPU-only too: build each again
+        void getTexts(code, { priority: 'low' }).then((t) => worker.massing(code, t.ward)).then(({ mesh }) => {
+          if (disposed || !massingResident.has(code)) return;
+          pendingMesh.set(code, mesh); massingBytes.set(code, meshBytes(mesh)); syncNeighbours();
+        }).catch((error) => hooks.warn(`could not rebuild the massing of ${code}`, error));
+      }
+    },
     report(): StreamReport {
       const state: ManagerState = manager.state();
       let halo = 0;

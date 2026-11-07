@@ -170,7 +170,8 @@ export interface ReliefRendererOptions {
    * per-side edge fade. Absent = the renderer every other city has.
    */
   streamed?: {
-    /** The WebGL context came back and the neighbour meshes (GPU-only, like the city's) are gone: send them again. */
-    onNeighboursLost(): void;
+    /** The WebGL context came back and every mesh (the city's and the neighbours', GPU-only) is gone. The renderer does NOT
+     *  rebuild a streamed city itself (that would be the main-thread bevel, whatever the tier): the page asks its worker. */
+    onContextRestored(): void;
   };
 }

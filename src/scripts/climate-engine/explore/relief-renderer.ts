@@ -653,7 +653,12 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.ready.resolve();
     this.ready = readyLatch(false);
     if (this.restoreTimer !== null) clearTimeout(this.restoreTimer);
-    if (this.neighbours.size > 0) { this.setNeighbours([]); this.options.streamed?.onNeighboursLost(); }
+    if (this.neighbours.size > 0) this.setNeighbours([]);
+    if (this.options.streamed) {                       // a streamed city is rebuilt by the page's worker, at the CURRENT tier
+      this.options.streamed.onContextRestored();
+      this.options.map.triggerRepaint();
+      return;
+    }
     this.restoreTimer = setTimeout(() => {
       this.restoreTimer = null;
       if (this.disposed || token !== this.wardToken || !this.scene) return;
