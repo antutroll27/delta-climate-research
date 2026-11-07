@@ -1,0 +1,111 @@
+/* src/styles/obos-v2/screens/sheet-index.css — the sheet index (city-streaming P5): a chip that opens the INDEX PLATE on a desktop and a
+   BOTTOM SHEET on a phone. The markup is src/scripts/climate-engine/streaming/sheet-index-view.ts; this file is only the look.
+   NO HEX HERE (tokens.css owns them) and no new colour: every value is a v2 token. The heat ramp is for temperature only, so the cells
+   are neutral: CURRENT is the inverted ink fill (the same as a pressed .place), CORE is a filled well, EDGE an outline, NOT AVAILABLE a dashed,
+   dimmed outline.
+   MOTION: only transform and opacity ever animate. A hover or press is a ::before veil whose OPACITY fades (a colour transition would repaint).
+   Reduced motion removes every transition and animation (atoms.css does it globally; the block at the end repeats it so this file stands alone).
+   TO LOAD IT: add `@import './screens/sheet-index.css';` to screens.css (one line; deliberately not done in this phase, so no flag-off page changes). */
+
+html[data-ui="v2"] .obos-v2 .si { position: relative; display: inline-block; font-family: var(--sans); }
+html[data-ui="v2"] .obos-v2 .si .si-chip { height: 34px; padding: 0 12px 0 13px; gap: 8px; font-size: 12.5px; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .si .si-chip-code { font-weight: 700; letter-spacing: 0.03em; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .si .si-chip-name { font-weight: 400; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .si .si-chip-name:empty { display: none; }
+html[data-ui="v2"] .obos-v2 .si .si-chev { transition: transform .24s var(--ease); color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .si[data-open="true"] .si-chev { transform: rotate(180deg); }
+html[data-ui="v2"] .obos-v2 .si[data-pending] .si-chip-code { animation: si-pulse 1.1s ease-in-out infinite; }
+
+/* ── the panel: a popover under the chip on a desktop ── */
+html[data-ui="v2"] .obos-v2 .si .si-panel { position: absolute; z-index: 30; top: calc(100% + 8px); left: 0; width: 600px; max-width: calc(100vw - 32px); padding: 14px 16px 14px;
+  opacity: 0; transform: translateY(-6px); transform-origin: 0 0; transition: opacity .2s var(--ease), transform .26s var(--ease); }
+html[data-ui="v2"] .obos-v2 .si[data-open="true"] .si-panel { opacity: 1; transform: none; }
+html[data-ui="v2"] .obos-v2 .si .si-panel[hidden], html[data-ui="v2"] .obos-v2 .si .si-scrim[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .si .si-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+html[data-ui="v2"] .obos-v2 .si .si-grip { display: none; }
+html[data-ui="v2"] .obos-v2 .si .si-title { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .si .si-sub { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .si .si-close { margin-left: auto; align-self: center; width: 30px; height: 30px; border: 0; border-radius: 99px; background: transparent; color: var(--ink-2); font: 400 20px/1 var(--sans); cursor: pointer; }
+html[data-ui="v2"] .obos-v2 .si .si-close:hover { background: var(--well); }
+
+/* ── the grid: 10 columns x 7 rows, one cell per lattice square, north up ── */
+html[data-ui="v2"] .obos-v2 .si .si-grid { display: flex; flex-direction: column; gap: 3px; }
+html[data-ui="v2"] .obos-v2 .si .si-row { display: grid; grid-template-columns: repeat(var(--si-cols, 10), minmax(0, 1fr)); gap: 3px; }
+html[data-ui="v2"] .obos-v2 .si .si-cell { position: relative; isolation: isolate; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; height: 44px; padding: 5px 4px 4px 5px;
+  border-radius: 7px; border: 1px solid transparent; color: var(--ink-1); cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+html[data-ui="v2"] .obos-v2 .si .si-cell::before { content: ""; position: absolute; inset: -1px; z-index: -1; border-radius: inherit; background: var(--ink-1); opacity: 0; transition: opacity .18s var(--ease); }
+html[data-ui="v2"] .obos-v2 .si .si-cell.is-core { background: var(--well-2); }
+html[data-ui="v2"] .obos-v2 .si .si-cell.is-edge { background: transparent; border-color: var(--line); }
+html[data-ui="v2"] .obos-v2 .si .si-cell.is-skipped { background: transparent; border: 1px dashed var(--line); color: var(--ink-3); cursor: not-allowed; opacity: .55; }
+html[data-ui="v2"] .obos-v2 .si .si-cell.is-outside { visibility: hidden; pointer-events: none; }
+html[data-ui="v2"] .obos-v2 .si .si-cell.is-core:hover::before, html[data-ui="v2"] .obos-v2 .si .si-cell.is-edge:hover::before { opacity: .1; }
+html[data-ui="v2"] .obos-v2 .si .si-cell.is-skipped:hover::before { opacity: .04; }
+html[data-ui="v2"] .obos-v2 .si .si-cell:active::before { opacity: .16; }
+html[data-ui="v2"] .obos-v2 .si .si-cell.is-current { background: var(--ink-1); color: var(--on-ink); border-color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .si .si-cell.is-current::before { background: var(--on-ink); }
+html[data-ui="v2"] .obos-v2 .si .si-cell.is-pending { animation: si-pulse 1.1s ease-in-out infinite; }
+html[data-ui="v2"] .obos-v2 .si .si-cell:focus-visible { z-index: 2; outline-offset: 1px; border-radius: 7px; }
+html[data-ui="v2"] .obos-v2 .si .si-code { font-size: 12.5px; font-weight: 700; letter-spacing: 0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .si .si-name { font-size: 9.5px; font-weight: 400; line-height: 1.08; color: var(--ink-2); overflow-wrap: normal; hyphens: manual; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+html[data-ui="v2"] .obos-v2 .si .si-cell.is-current .si-name { color: color-mix(in oklch, var(--on-ink) 82%, transparent); }
+
+html[data-ui="v2"] .obos-v2 .si .si-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 12px 0 0; padding: 0; list-style: none; font-size: 11px; color: var(--ink-3); }
+html[data-ui="v2"] .obos-v2 .si .si-legend li { display: inline-flex; align-items: center; gap: 6px; }
+html[data-ui="v2"] .obos-v2 .si .si-key { width: 14px; height: 10px; border-radius: 3px; border: 1px solid transparent; }
+html[data-ui="v2"] .obos-v2 .si .si-key.is-current { background: var(--ink-1); border-color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .si .si-key.is-core { background: var(--well-2); }
+html[data-ui="v2"] .obos-v2 .si .si-key.is-edge { border-color: var(--line); }
+html[data-ui="v2"] .obos-v2 .si .si-key.is-skipped { border: 1px dashed var(--line); opacity: .7; }
+html[data-ui="v2"] .obos-v2 .si .si-readout { display: flex; flex-direction: column; gap: 1px; min-height: 36px; margin: 10px 0 0; padding-top: 9px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .si .si-ro-title { font-weight: 600; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .si .si-ro-detail { font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .si .si-list { display: none; }
+
+@keyframes si-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* ── a phone (and a phone on its side): the panel is a bottom sheet over a scrim; the list joins the grid ── */
+@media (max-width: 699px), (pointer: coarse) and (max-height: 560px) {
+  html[data-ui="v2"] .obos-v2 .si .si-chip { height: 40px; }
+  html[data-ui="v2"] .obos-v2 .si .si-scrim { position: fixed; inset: 0; z-index: 29; background: var(--scrim-drawer); opacity: 0; transition: opacity .26s var(--ease); }
+  html[data-ui="v2"] .obos-v2 .si[data-open="true"] .si-scrim { opacity: 1; }
+  html[data-ui="v2"] .obos-v2 .si .si-panel { position: fixed; z-index: 30; top: auto; left: 0; right: 0; bottom: 0; width: auto; max-width: none; max-height: 86%; overflow-y: auto; overscroll-behavior: contain;
+    padding: 0 14px calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 28px 28px 0 0; border-bottom: 0; opacity: 1; transform: translateY(100%); transform-origin: 50% 100%;
+    transition: transform .34s var(--ease); scrollbar-width: none; }
+  html[data-ui="v2"] .obos-v2 .si .si-panel::-webkit-scrollbar { display: none; }
+  html[data-ui="v2"] .obos-v2 .si[data-open="true"] .si-panel { transform: none; }
+  html[data-ui="v2"] .obos-v2 .si .si-head { position: sticky; top: 0; z-index: 3; flex-wrap: wrap; align-items: center; margin: 0 -14px 6px; padding: 0 14px 4px; background: inherit; border-radius: 28px 28px 0 0; }
+  html[data-ui="v2"] .obos-v2 .si .si-grip { display: block; flex: 0 0 100%; width: 44px; height: 5px; margin: 9px auto 7px; border-radius: 4px; background: var(--well-2); }
+  html[data-ui="v2"] .obos-v2 .si .si-title { font-size: 15px; }
+  html[data-ui="v2"] .obos-v2 .si .si-close { width: 44px; height: 44px; margin-right: -10px; }
+  /* 34 px cells cannot carry a legible name: the grid shows the code, the readout and the list below carry the names */
+  html[data-ui="v2"] .obos-v2 .si .si-grid, html[data-ui="v2"] .obos-v2 .si .si-row { gap: 2px; }
+  html[data-ui="v2"] .obos-v2 .si .si-cell { height: 40px; padding: 5px 4px 4px; border-radius: 6px; justify-content: center; align-items: center; }
+  html[data-ui="v2"] .obos-v2 .si .si-code { font-size: 11.5px; letter-spacing: 0.01em; }
+  html[data-ui="v2"] .obos-v2 .si .si-name { display: none; }
+  html[data-ui="v2"] .obos-v2 .si .si-readout { min-height: 40px; font-size: 13px; }
+  html[data-ui="v2"] .obos-v2 .si .si-list { display: block; margin-top: 14px; }
+  html[data-ui="v2"] .obos-v2 .si .si-group { margin-top: 10px; }
+  html[data-ui="v2"] .obos-v2 .si .si-group-h { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 4px; padding: 0 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+  html[data-ui="v2"] .obos-v2 .si .si-group-h small { font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+  html[data-ui="v2"] .obos-v2 .si .si-items { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+  html[data-ui="v2"] .obos-v2 .si .si-items li + li { border-top: 1px solid var(--line); }
+  html[data-ui="v2"] .obos-v2 .si .si-item { position: relative; isolation: isolate; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--ink-1); font: 400 14px var(--sans); text-align: left; cursor: pointer; }
+  html[data-ui="v2"] .obos-v2 .si .si-item::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--ink-1); opacity: 0; transition: opacity .18s var(--ease); }
+  html[data-ui="v2"] .obos-v2 .si .si-item:active::before { opacity: .1; }
+  html[data-ui="v2"] .obos-v2 .si .si-item.is-current { background: var(--ink-1); color: var(--on-ink); }
+  html[data-ui="v2"] .obos-v2 .si .si-item.is-current::before { background: var(--on-ink); }
+  html[data-ui="v2"] .obos-v2 .si .si-item-code { flex: none; width: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  html[data-ui="v2"] .obos-v2 .si .si-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  html[data-ui="v2"] .obos-v2 .si .si-item-n { flex: none; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  html[data-ui="v2"] .obos-v2 .si .si-item.is-current .si-item-n { color: color-mix(in oklch, var(--on-ink) 75%, transparent); }
+  html[data-ui="v2"] .obos-v2 .si .si-item.is-pending { animation: si-pulse 1.1s ease-in-out infinite; }
+  html[data-ui="v2"] .obos-v2 .si .si-item:focus-visible { outline-offset: -2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui="v2"] .obos-v2 .si :is(*, *::before, *::after) { animation: none !important; transition: none !important; }
+}
+@media (forced-colors: active) {
+  html[data-ui="v2"] .obos-v2 .si .si-cell.is-current, html[data-ui="v2"] .obos-v2 .si .si-item.is-current { outline: 2px solid CanvasText; }
+  html[data-ui="v2"] .obos-v2 .si .si-cell.is-skipped { opacity: 1; color: GrayText; }
+}

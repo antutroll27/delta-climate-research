@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en" data-ui="v2">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sheet index harness (dev only)</title>
+</head>
+<body>
+  <!-- DEV ONLY. Lives outside src/pages, so `astro build` never sees it. Run: npx vite --config dev/sheet-index/vite.config.mjs -->
+  <div class="obos-v2" id="root" data-theme="dark" data-cards="glass" data-glass="live">
+    <div id="mlmap" class="fake-map" aria-hidden="true"></div>
+    <div class="harness-chrome">
+      <div id="mount"></div>
+      <p class="harness-note" id="note">harness: a real sheet manager answers every select after a short fake load</p>
+    </div>
+  </div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

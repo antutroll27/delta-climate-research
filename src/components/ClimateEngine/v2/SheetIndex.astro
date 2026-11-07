@@ -1,0 +1,19 @@
+---
+/**
+ * SheetIndex.astro: the mount point for the sheet index (city-streaming P5). Renders ONE empty host; the chip, the index plate (desktop)
+ * and the bottom sheet (phone) are built by src/scripts/climate-engine/streaming/sheet-index-view.ts from the generated sheet table,
+ * so a change in how many sheets ship changes nothing here.
+ *
+ * NOT RENDERED BY ANY PAGE YET (phase P5 adds a surface, not a wiring). To wire it (P3b), place `<SheetIndex />` in the stage chrome for a
+ * tiled city only, add `@import './screens/sheet-index.css';` to src/styles/obos-v2/screens.css, and in the page script:
+ *
+ *   import { mountSheetIndex } from '.../streaming/sheet-index-view.ts';
+ *   import { indexStateOf, selectEventOf } from '.../streaming/sheet-index.ts';
+ *   const ui = mountSheetIndex(document.querySelector('[data-sheet-index]')!, {
+ *     onSelect: (code) => carryOut(manager.dispatch(selectEventOf(code, performance.now()))),
+ *   });
+ *   // after EVERY dispatch (and once after `start`):
+ *   ui.update(indexStateOf(manager.state()));
+ */
+---
+<div class="si-host" data-sheet-index></div>
