@@ -15,13 +15,15 @@
  * it in Python, and tests/unit/halo-solve.test.mjs proves this file's index arithmetic against the same lon/lat corners.
  *
  * THE EDGE RULE (a neighbour with nothing to give). Where a neighbour is absent (a skipped or outside lattice cell, a
- * halo asset that failed to load), each halo cell takes the value of the NEAREST CELL OF THIS SHEET'S OWN CORE: the
- * layers are replicated outward. That is the simplest rule that does not invent ground: it adds no building, tree or
- * water that is not in the sheet, and it reproduces today's behaviour at a city edge, where the solver's border is a
- * zero-flux wall (edge-replicated temperature). With layers replicated outward the halo cells settle at the edge cell's own
- * equilibrium, so the flux through the core's edge is zero in steady state, the same wall by a different route. It is
- * labelled, not hidden: `missing` lists the directions that used it. A better rule needs data nobody has (the halo-only
- * bake of the skipped neighbours, P2b, supplies real ground for those cells before this rule is ever reached).
+ * halo asset that failed to load), the core is REFLECTED across the missing edge: halo cell -k takes core cell k-1 (and
+ * N-1+k takes N-k), a corner reflects on both axes. That is the solver's own border made explicit. sim-ts.ts clamps the
+ * neighbour index, so a border cell sees ITSELF as its outside neighbour (cell-centred zero flux); a mirror ghost layer
+ * at -1 is that same cell, and the further mirror cells keep the field symmetric about the edge, so the wall sits where
+ * today's wall sits. Replicating the nearest core cell outward instead (the first version of this file) is a different
+ * problem: each edge cell's forcing is stretched over 437 m and pins the edge toward its own local equilibrium. Audit
+ * P3A B1 measured it 2.3-2.9 K away from today's wall solve at the calm floor; reflection is 0.01 K away. It adds no
+ * ground that is not in the sheet. `missing` lists the directions that used it; real ground (the halo-only bake of the
+ * skipped neighbours, P2b) replaces it wherever it exists.
  *
  * STATS ARE CORE-ONLY. `coreStats` reads the 384 x 384 window and nothing else. `HeatSim.stats()` averages the whole 504
  * grid and would count every ring cell twice across the seam, so a halo solve must never call it.
@@ -72,6 +74,11 @@ export function haloCellSource(g: HaloGeometry, R: number, C: number): HaloSourc
   return { dir: directionOfStep(di, dj), r: r - dj * g.coreN, c: c - di * g.coreN };
 }
 
+/** Mirror an index about the edges of 0..n-1 (cell -k <-> k-1, cell n-1+k <-> n-k). Needs the ring no deeper than the core. */
+function reflect(i: number, n: number): number {
+  return i < 0 ? -i - 1 : i >= n ? 2 * n - 1 - i : i;
+}
+
 /** Neighbour ground by direction. A direction with no entry uses the edge rule above. */
 export type NeighbourLayers = Readonly<Partial<Record<Direction, SimLayers>>>;
 
@@ -94,6 +101,7 @@ function checkLayers(name: string, l: SimLayers, count: number): void {
  * touched. Every layer is assembled the same way, so albedo, vegetation, built and water cannot drift apart.
  */
 export function assembleHaloLayers(g: HaloGeometry, core: SimLayers, neighbours: NeighbourLayers): HaloAssembly {
+  if (g.haloCells > g.coreN) throw new RangeError('The halo cannot be deeper than the core it reflects.');
   const count = g.coreN * g.coreN;
   checkLayers('core', core, count);
   for (const dir of DIRECTIONS) {
@@ -104,15 +112,14 @@ export function assembleHaloLayers(g: HaloGeometry, core: SimLayers, neighbours:
   const out: SimLayers = {
     albedo: new Float32Array(N * N), veg: new Float32Array(N * N), built: new Float32Array(N * N), water: new Float32Array(N * N),
   };
-  const last = g.coreN - 1;
   for (let R = 0; R < N; R++) {
     for (let C = 0; C < N; C++) {
       const src = haloCellSource(g, R, C);
       const real = src.dir === null ? core : neighbours[src.dir];
       let r = src.r, c = src.c;
-      if (real === undefined) {                                    // the edge rule: the nearest cell of this sheet's own core
-        r = Math.min(last, Math.max(0, R - g.haloCells));
-        c = Math.min(last, Math.max(0, C - g.haloCells));
+      if (real === undefined) {                                    // the edge rule: reflect this sheet's own core across the edge
+        r = reflect(R - g.haloCells, g.coreN);
+        c = reflect(C - g.haloCells, g.coreN);
       }
       const from = (real ?? core), at = r * g.coreN + c, to = R * N + C;
       for (const k of LAYER_NAMES) out[k][to] = from[k][at];

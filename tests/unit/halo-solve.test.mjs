@@ -110,15 +110,17 @@ test('assembly lays the core in the middle and each neighbour into its block, in
   assert.equal(layers.albedo[n * n - 1], TAG.ne * 1e5 + (H - 1) * 400 + (H - 1), 'and the NE corner is the NE neighbour\'s (H-1, H-1)');
 });
 
-test('with no neighbours the edge rule replicates this sheet\'s own nearest core cell outward, and says so', () => {
+test('with no neighbours the edge rule REFLECTS this sheet\'s own core across each edge (corners on both axes), and says so', () => {
   const core = tagged(TAG.core);
   const { layers, missing } = assembleHaloLayers(SHEET_HALO, core, {});
   assert.deepEqual(missing, [...DIRECTIONS]);
   const n = haloN(SHEET_HALO);
-  const at = (r, c) => core.albedo[Math.min(N - 1, Math.max(0, r)) * N + Math.min(N - 1, Math.max(0, c))];
-  for (let R = 0; R < n; R += 5) for (let C = 0; C < n; C += 5) assert.equal(layers.albedo[R * n + C], at(R - H, C - H));
-  assert.equal(layers.albedo[0], core.albedo[0], 'the SW corner is core (0, 0)');
-  assert.equal(layers.albedo[(n - 1) * n + (n - 1)], core.albedo[N * N - 1]);
+  const mirror = (i) => (i < 0 ? -i - 1 : i >= N ? 2 * N - 1 - i : i);
+  for (let R = 0; R < n; R += 5) for (let C = 0; C < n; C += 5) assert.equal(layers.albedo[R * n + C], core.albedo[mirror(R - H) * N + mirror(C - H)], `(${R}, ${C})`);
+  assert.equal(layers.albedo[(H - 1) * n + H], core.albedo[0 * N + 0], 'halo cell -1 is core cell 0: the ghost layer is the edge cell itself');
+  assert.equal(layers.albedo[(H - 2) * n + H], core.albedo[1 * N + 0], 'halo cell -2 is core cell 1');
+  assert.equal(layers.albedo[0], core.albedo[(H - 1) * N + (H - 1)], 'the SW corner reflects on both axes');
+  assert.equal(layers.albedo[(n - 1) * n + (n - 1)], core.albedo[(N - H) * N + (N - H)]);
 });
 
 test('a missing neighbour uses the edge rule on its own block only; the others stay real', () => {
@@ -129,7 +131,11 @@ test('a missing neighbour uses the edge rule on its own block only; the others s
   const n = haloN(SHEET_HALO);
   assert.equal(layers.albedo[(H + 10) * n + (H + N + 5)], TAG.e * 1e5 + 10 * 400 + 5, 'east block is the east neighbour');
   assert.equal(layers.albedo[(H + N + 5) * n + (H + 10)], TAG.n * 1e5 + 5 * 400 + 10, 'north block is the north neighbour');
-  assert.equal(layers.albedo[(H + N + 5) * n + (H + N + 5)], core.albedo[(N - 1) * N + (N - 1)], 'the NE corner replicates core (N-1, N-1), not either neighbour');
+  assert.equal(layers.albedo[(H + N + 5) * n + (H + N + 5)], core.albedo[(N - 1 - 5) * N + (N - 1 - 5)], 'the NE corner reflects core (N-1-5, N-1-5), not either neighbour');
+});
+
+test('the halo depth may not exceed the core it reflects', () => {
+  assert.throws(() => assembleHaloLayers({ coreN: 8, haloCells: 9 }, tagged(0, 8), {}), RangeError);
 });
 
 test('assembly copies, refuses wrong-sized layers, and leaves its inputs alone', () => {
@@ -248,4 +254,55 @@ test('a sheet solved on its 60-cell halo matches the contiguous solve to well un
   assert.ok(Math.abs(withHalo.stats.meanC - truthStats.meanC) < 0.05);
   assert.ok(Math.abs(withHalo.stats.peakC - truthStats.peakC) < 0.05);
   assert.equal(withHalo.core.length, coreN * coreN);
+});
+
+// ── the edge rule against the solver's own wall ────────────────────────────────────────────────────────────────
+
+function seededWorld3(coreN, seed) {
+  let s = seed;
+  const rand = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 2 ** 32);
+  const n = coreN * 3, B = 12, b = Math.ceil(n / B);
+  const pick = (p, v) => Float32Array.from({ length: b * b }, () => (rand() < p ? v : 0));
+  const built = pick(0.5, 0.8), veg = pick(0.35, 0.6), alb = Float32Array.from({ length: b * b }, () => 0.1 + rand() * 0.25);
+  const layer = (src) => Float32Array.from({ length: n * n }, (_, i) => src[Math.floor(Math.floor(i / n) / B) * b + Math.floor((i % n) / B)]);
+  return { n, layers: { albedo: layer(alb), veg: layer(veg), built: layer(built), water: new Float32Array(n * n) } };
+}
+
+const maxAbs = (a, b) => { let m = 0; for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(a[i] - b[i])); return m; };
+const CALM = { ...DEFAULT_PARAMS, D: SIM_D, wind: 0.3 };
+
+test('with every neighbour missing the halo solve is today\'s walled solve (within 0.02 K): reflection IS the solver\'s border', () => {
+  const coreN = 96, g = { coreN, haloCells: 60 };
+  for (const seed of [99, 7, 12345]) {
+    const core = slice(seededWorld3(coreN, seed), coreN, 1, 1);
+    const hard = solveSheetWithHalo(new TsHeatSim(), CALM, { coreN, haloCells: 0 }, core, {}, 3000, 1).core;
+    const reflected = solveSheetWithHalo(new TsHeatSim(), CALM, g, core, {}, 3000, 1);
+    assert.deepEqual(reflected.missing, [...DIRECTIONS]);
+    const err = maxAbs(reflected.core, hard);
+    assert.ok(err <= 0.02, `seed ${seed}: all-missing differs from the walled solve by ${err} K (replicating the edge cell gave 2.3-2.9 K, audit B1)`);
+  }
+});
+
+test('one missing corner adds no artefact: where the corner ground is the core\'s reflection the solve equals the contiguous one (<= 0.02 K)', () => {
+  const coreN = 96, g = { coreN, haloCells: 60 };
+  for (const seed of [99, 7]) {
+    const w = seededWorld3(coreN, seed);
+    /* make the NE neighbour the double mirror image of the core, so the reflected corner is the truth; the n and e sheets stay real */
+    for (const k of ['albedo', 'veg', 'built', 'water']) {
+      for (let r = 0; r < coreN; r++) for (let c = 0; c < coreN; c++) {
+        w.layers[k][(2 * coreN + r) * w.n + 2 * coreN + c] = w.layers[k][(coreN + (coreN - 1 - r)) * w.n + coreN + (coreN - 1 - c)];
+      }
+    }
+    const whole = new TsHeatSim();
+    whole.reset({ n: w.n, cellMeters: CELL_M }, w.layers, CALM);
+    whole.step(1, 3000);
+    const want = new Float32Array(coreN * coreN);
+    for (let r = 0; r < coreN; r++) for (let c = 0; c < coreN; c++) want[r * coreN + c] = whole.temperature()[(coreN + r) * w.n + coreN + c];
+    const neighbours = {};
+    for (const dir of DIRECTIONS) { const [di, dj] = DIRECTION_STEP[dir]; if (dir !== 'ne') neighbours[dir] = slice(w, coreN, 1 + di, 1 + dj); }
+    const got = solveSheetWithHalo(new TsHeatSim(), CALM, g, slice(w, coreN, 1, 1), neighbours, 3000, 1);
+    assert.deepEqual(got.missing, ['ne']);
+    const err = maxAbs(got.core, want);
+    assert.ok(err <= 0.02, `seed ${seed}: a missing corner leaves ${err} K`);
+  }
 });
