@@ -10,8 +10,13 @@
  *   // after every dispatch, and once after `start`:
  *   ui.update(indexStateOf(manager.state()));
  *
+ * BUILDING COUNTS are the DRAWN counts (what the loader shows), never the lattice count, which includes slivers the loader drops.
+ * They come from `sheets-build.json` (field `sheets[].buildings`, read by name; the file may be absent, then no count is shown) and
+ * from `ui.setDrawnCount(code, n)`, which P3b should call with the loaded bundle's own count, in particular for E4 (Canal Ring), which the
+ * build record does not list because its committed files are frozen.
+ *
  * `onSelect` receives a SHIPPING sheet code only (a skipped or outside cell never reaches it) and is the manager's `select`.
- * `update` is idempotent. Shift + arrow is bound on `document` in the capture phase by default (`shiftArrows`), because the
+ * Names: `area-names.json` (see sheet-index.ts). `update` is idempotent. Shift + arrow is bound on `document` in the capture phase by default (`shiftArrows`), because the
  * founder wants it anywhere on the page; it stops the event, which also stops MapLibre's own Shift + arrow (rotate 15 deg /
  * pitch 10 deg) from firing. Pass `shiftArrows: false` to bind nothing, or `shiftArrows: el` to scope it to one element.
  *
@@ -22,7 +27,7 @@
  */
 import {
   AMSTERDAM_INDEX_TABLES, activate, announceCurrent, announceLoading, announceMiss, announceRefusal, buildIndexModel, cellLabel, cellReadout,
-  formatCount, isArrow, type IndexExtras, keyAction, selectable, type IndexCell, type IndexModel, type IndexViewState, type KeyAction,
+  formatCount, isArrow, withDrawnCounts, type IndexExtras, keyAction, selectable, type IndexCell, type IndexModel, type IndexViewState, type KeyAction,
 } from '../streaming/sheet-index.ts';
 import { loadIndexExtras } from './sheet-index-data.ts';
 
@@ -41,6 +46,8 @@ export interface SheetIndexOptions {
 
 export interface SheetIndexHandle {
   update(state: IndexViewState): void;
+  /** The number of buildings an area DREW, once known (the loader's count). Overrides the build record's. */
+  setDrawnCount(code: string, count: number): void;
   open(): void;
   close(): void;
   readonly isOpen: boolean;
@@ -71,6 +78,9 @@ function chevron(): SVGSVGElement {
   return svg;
 }
 
+/** "21,342 buildings", or empty when the drawn count is not known (the lattice count is never shown). */
+const countText = (c: IndexCell): string => (c.buildings === null ? '' : `${formatCount(c.buildings)} buildings`);
+
 const isEditable = (t: EventTarget | null): boolean => {
   if (!(t instanceof HTMLElement)) return false;
   return t.isContentEditable || t.matches('input, textarea, select, [role="textbox"], [role="combobox"]');
@@ -78,7 +88,7 @@ const isEditable = (t: EventTarget | null): boolean => {
 
 export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): SheetIndexHandle {
   const extras = opts.extras ?? loadIndexExtras();
-  const model = opts.model ?? buildIndexModel(AMSTERDAM_INDEX_TABLES, extras);
+  let model = opts.model ?? buildIndexModel(AMSTERDAM_INDEX_TABLES, extras);
   const city = opts.cityName ?? 'Amsterdam';
   const uid = `si${++serial}`;
   const mq = window.matchMedia(PHONE_QUERY);
@@ -172,6 +182,7 @@ export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): She
   // the grouped list: the phone's second way in, and a screen reader's flat one
   const list = el('div', 'si-list', body);
   const itemEl = new Map<string, HTMLButtonElement>();
+  const itemN = new Map<string, HTMLElement>();
   for (const g of model.groups) {
     const sec = el('section', 'si-group', list);
     const h = el('h3', 'si-group-h', sec);
@@ -185,7 +196,7 @@ export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): She
       b.dataset.code = c.code;
       el('b', 'si-item-code', b, c.code);
       el('span', 'si-item-name', b, c.name);
-      el('small', 'si-item-n', b, `${formatCount(c.buildings ?? 0)} buildings`);
+      itemN.set(c.code, el('small', 'si-item-n', b, countText(c)));
       itemEl.set(c.code, b);
     }
   }
@@ -240,6 +251,7 @@ export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): She
       b.classList.toggle('is-pending', code === state.pending);
       if (isCur) b.setAttribute('aria-current', 'location'); else b.removeAttribute('aria-current');
       b.setAttribute('aria-label', cellLabel(model.byCode.get(code)!, state.current));
+      itemN.get(code)!.textContent = countText(model.byCode.get(code)!);
     }
     showReadout(null);
   }
@@ -257,6 +269,13 @@ export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): She
     }
     lastPending = state.pending;
     if (state.pending === null) lastCurrent = state.current;
+  }
+
+  /** A loaded bundle knows what it drew; the build record may not list the area (E4). Overrides the record's count. */
+  function setDrawnCount(code: string, n: number): void {
+    if (!Number.isInteger(n) || n < 0 || !model.byCode.has(code)) return;
+    model = withDrawnCounts(model, new Map([[code, n]]));
+    paint();
   }
 
   // ── open / close ──
@@ -367,6 +386,7 @@ export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): She
 
   return {
     update,
+    setDrawnCount,
     open: () => setOpen(true, false),
     close: () => setOpen(false, false),
     get isOpen() { return open; },

@@ -33,4 +33,6 @@ run(manager.dispatch({ type: 'start', atMs: now(), sheet: (q.get('sheet') ?? 'E4
 setInterval(() => run(manager.dispatch({ type: 'tick', atMs: now() })), 250);
 
 Object.assign(window, { __si: { ui, manager, selects } });
+/* What P3b does when a bundle loads: tell the picker what was drawn. Canal Ring is not in the build record, so its own file supplies the count. */
+import('../../data/cities/amsterdam/canal-ring-buildings.json').then((m: { default: { count: number } }) => ui.setDrawnCount('E4', m.default.count)).catch(() => undefined);
 if (q.get('open') === '1') ui.open();

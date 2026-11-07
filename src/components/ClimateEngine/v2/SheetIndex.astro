@@ -14,6 +14,8 @@
  *   });
  *   // after EVERY dispatch (and once after `start`):
  *   ui.update(indexStateOf(manager.state()));
+ *   // when an area's bundle has loaded, tell the picker what was DRAWN (the picker never shows the lattice count; with no count it shows none):
+ *   ui.setDrawnCount(code, bundle.wardData.b.length);   // E4 is not in sheets-build.json, so Canal Ring's bundle must supply its own
  */
 ---
 <div class="si-host" data-sheet-index></div>

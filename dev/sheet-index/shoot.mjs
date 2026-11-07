@@ -64,7 +64,12 @@ for (const [name, viewport] of Object.entries(sizes)) {
   const cells = await page.$$eval('.si-cell[tabindex]', (n) => n.map((x) => ({ code: x.dataset.code, ti: x.getAttribute('tabindex'), dis: x.getAttribute('aria-disabled'), label: x.getAttribute('aria-label') })));
   assert.equal(cells.filter((c) => c.ti === '0').length, 1, `${name}: exactly one cell is in the tab order`);
   assert.equal(cells.find((c) => c.ti === '0').code, 'F4', `${name}: and it is the current sheet`);
-  assert.ok(cells.every((c) => /buildings/.test(c.label)), `${name}: every label carries a building count`);
+  // counts are the DRAWN ones from sheets-build.json (copy it next to the other data to see them); with no record there are none, never the lattice's
+  const counted = cells.filter((c) => c.dis !== 'true' && /[\d,]+ buildings/.test(c.label));
+  assert.ok(counted.length === 0 || counted.length === cells.filter((c) => c.dis !== 'true').length, `${name}: counts on every available area or on none`);
+  await page.waitForTimeout(400);
+  const e4 = await page.locator('.si-cell[data-code="E4"]').getAttribute('aria-label');
+  assert.ok(!e4.includes('21,348'), `${name}: the lattice count is never shown (${e4})`);
   assert.equal(await page.evaluate(() => document.activeElement?.dataset.code), 'F4', `${name}: focus lands on the current cell`);
   const skippedCodes = cells.filter((c) => c.dis === 'true').map((c) => c.code);
   assert.ok(skippedCodes.length > 0);

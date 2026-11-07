@@ -73,7 +73,7 @@ html[data-ui="v2"] .obos-v2 .si .si-list { display: none; }
     transition: transform .34s var(--ease); scrollbar-width: none; }
   html[data-ui="v2"] .obos-v2 .si .si-panel::-webkit-scrollbar { display: none; }
   html[data-ui="v2"] .obos-v2 .si[data-open="true"] .si-panel { transform: none; }
-  html[data-ui="v2"] .obos-v2 .si .si-head { position: sticky; top: 0; z-index: 3; flex-wrap: wrap; align-items: center; margin: 0 -14px 6px; padding: 0 14px 4px; background: inherit; border-radius: 28px 28px 0 0; }
+  html[data-ui="v2"] .obos-v2 .si .si-head { position: sticky; top: 0; z-index: 3; flex-wrap: wrap; align-items: center; margin: 0 -14px 6px; padding: 0 14px 4px; background: var(--card); border-radius: 28px 28px 0 0; }   /* opaque: the list scrolls under it */
   html[data-ui="v2"] .obos-v2 .si .si-grip { display: block; flex: 0 0 100%; width: 44px; height: 5px; margin: 9px auto 7px; border-radius: 4px; background: var(--well-2); }
   html[data-ui="v2"] .obos-v2 .si .si-title { font-size: 15px; }
   html[data-ui="v2"] .obos-v2 .si .si-close { width: 44px; height: 44px; margin-right: -10px; }

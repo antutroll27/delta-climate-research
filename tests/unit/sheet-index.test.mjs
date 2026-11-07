@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import {
   AMSTERDAM_INDEX_TABLES as REAL, activate, buildIndexModel, cellLabel, cellReadout, groupByStadsdeel, indexStateOf, keyAction,
-  announceCurrent, parseAreaNames, reasonText, selectEventOf, selectable, stepFrom,
+  announceCurrent, countPhrase, parseAreaNames, parseDrawnCounts, reasonText, withDrawnCounts, selectEventOf, selectable, stepFrom,
 } from '../../src/scripts/climate-engine/streaming/sheet-index.ts';
 import { AMSTERDAM_TOPOLOGY as T } from '../../src/scripts/climate-engine/streaming/sheet-topology.ts';
 import { createSheetManager } from '../../src/scripts/climate-engine/streaming/sheet-manager.ts';
@@ -63,7 +63,6 @@ test('derived grouping: every shipping sheet once, by stadsdeel, alphabetical, r
   for (const g of M.groups) {
     const order = g.cells.map((c) => c.row * 100 + c.col);
     assert.deepEqual(order, [...order].sort((a, b) => a - b), `${g.stadsdeel} in reading order`);
-    assert.equal(g.buildings, g.cells.reduce((n, c) => n + c.buildings, 0));
     for (const c of g.cells) assert.equal(c.stadsdeel, g.stadsdeel);
   }
   assert.equal(M.groups.find((g) => g.stadsdeel === 'Centrum').cells[0].code, 'E4');
@@ -173,18 +172,54 @@ test('synthetic lattice: a skipped cell between two sheets is jumped; a trailing
   assert.equal(m.byCode.get('B2').reason, 'under 500 municipal buildings');
 });
 
-test('labels carry the building count; the readout and announcements say what the cell is', () => {
-  for (const c of M.cells.filter((x) => x.state !== 'outside')) {
+/** A build record shaped like sheets-build.json, with counts that cannot be mistaken for the lattice's. */
+const recordFor = (codes) => ({ city: 'x', sheets: codes.map((code, n) => ({ code, id: `id-${code}`, buildings: 7000 + n, trees: 1 })) });
+
+test('labels carry the DRAWN building count; without one they carry none, and never the lattice count', () => {
+  const drawn = parseDrawnCounts(recordFor(M.shipping.map((c) => c.code)));
+  const withCounts = buildIndexModel(REAL, { drawn });
+  const fmt = new Intl.NumberFormat('en-GB');
+  for (const [n, c] of withCounts.shipping.entries()) {
+    assert.equal(c.buildings, 7000 + n, c.code);
     const label = cellLabel(c, 'E4');
-    assert.ok(label.includes(new Intl.NumberFormat('en-GB').format(c.buildings)), `${c.code}: ${label}`);
-    assert.ok(label.startsWith(c.code));
-    if (!c.available) assert.ok(label.includes('not available'));
-    assert.ok(cellReadout(c).detail.includes(new Intl.NumberFormat('en-GB').format(c.buildings)));
+    assert.ok(label.includes(`${fmt.format(7000 + n)} buildings`), `${c.code}: ${label}`);
+    assert.ok(cellReadout(c).detail.includes(fmt.format(7000 + n)));
+    const lattice = REAL.sheets.find((s) => s.code === c.code).buildings;
+    assert.ok(!label.includes(fmt.format(lattice)) && !cellReadout(c).detail.includes(fmt.format(lattice)), `${c.code}: the lattice count ${lattice} is not shown`);
   }
+  for (const c of withCounts.cells.filter((x) => !x.available)) assert.equal(c.buildings, null, 'a skipped or outside cell is not drawn: no count');
+  for (const c of M.cells.filter((x) => x.state !== 'outside')) {            // M: no build record at all
+    assert.equal(c.buildings, null, `${c.code}: absent record, no count`);
+    const label = cellLabel(c, 'E4');
+    assert.ok(label.startsWith(c.code), label);
+    if (c.available) {
+      assert.ok(!/buildings/.test(label), label);
+      assert.ok(!/\d/.test(cellReadout(c).detail), `${c.code}: no figure in the readout`);
+    } else assert.ok(label.includes('not available'));
+  }
+  assert.equal(countPhrase(M.byCode.get('E4')), '');
   assert.ok(cellLabel(M.byCode.get('E4'), 'E4').includes('current area'));
   assert.ok(!cellLabel(M.byCode.get('E4'), 'D4').includes('current area'));
-  assert.equal(announceCurrent(M.byCode.get('E4')), 'Current area E4, Canal Ring. 21,348 buildings.');
+  assert.equal(announceCurrent(M.byCode.get('E4')), 'Current area E4, Canal Ring.');
+  assert.equal(announceCurrent(withCounts.byCode.get('E4')), `Current area E4, Canal Ring. ${fmt.format(7000 + withCounts.shipping.findIndex((c) => c.code === 'E4'))} buildings.`);
   assert.equal(reasonText('something-new-here'), 'something new here');
+});
+
+test('drawn counts are read by field name, defensively; a loaded bundle can override them', () => {
+  assert.deepEqual([...parseDrawnCounts({ sheets: [{ code: 'E2', buildings: 12342, trees: 9 }, { code: 'F2', buildings: -1 }, { code: 'G2', buildings: 1.5 }, { code: 'H2', buildings: '9' }, { code: 7, buildings: 3 }, null, { buildings: 5 }] })], [['E2', 12342]]);
+  for (const bad of [null, undefined, 3, 'x', [], {}, { sheets: 'x' }, { sheets: {} }]) assert.equal(parseDrawnCounts(bad).size, 0, JSON.stringify(bad));
+  // a renamed field means no count, not a wrong one
+  assert.equal(parseDrawnCounts({ sheets: [{ code: 'E2', buildingCount: 12342 }] }).size, 0);
+  const m = buildIndexModel(REAL, { drawn: parseDrawnCounts({ sheets: [{ code: 'E2', buildings: 12342 }] }) });
+  assert.equal(m.byCode.get('E2').buildings, 12342);
+  assert.equal(m.byCode.get('F2').buildings, null, 'an area the record omits has no count');
+  const m2 = withDrawnCounts(m, new Map([['E4', 21342], ['A1', 5], ['F7', 9]]));
+  assert.equal(m2.byCode.get('E4').buildings, 21342, 'E4 is not in the build record: the loader supplies it');
+  assert.equal(m2.byCode.get('E2').buildings, 12342, 'others are kept');
+  assert.equal(m2.byCode.get('A1').buildings, null, 'a skipped cell never gets a count');
+  assert.equal(m2.shipping.find((c) => c.code === 'E4').buildings, 21342);
+  assert.equal(m.byCode.get('E4').buildings, null, 'the original model is not mutated');
+  assert.ok(cellLabel(m2.byCode.get('E4')).includes('21,342 buildings'));
 });
 
 test('the manager seam: a select event, and the view state read back from the manager', () => {

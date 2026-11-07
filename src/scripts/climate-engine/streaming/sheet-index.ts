@@ -43,8 +43,6 @@ export interface ShippingRowInput {
   readonly i: number;
   readonly j: number;
   readonly kind: 'core' | 'edge';
-  readonly buildings: number;
-  readonly municipalBuildings: number;
   readonly stadsdeel: string;
   readonly label: string;
 }
@@ -52,8 +50,6 @@ export interface SkippedRowInput {
   readonly code: string;
   readonly i: number;
   readonly j: number;
-  readonly buildings: number;
-  readonly municipalBuildings: number;
   readonly reason: string;
 }
 /** One entry of area-names.json: only what the UI reads. */
@@ -64,6 +60,8 @@ export interface AreaNameEntry {
 /** Optional inputs the table does not carry. Absent = the table's own labels. */
 export interface IndexExtras {
   readonly names?: ReadonlyMap<string, AreaNameEntry> | null;
+  /** drawn building counts by area code (`parseDrawnCounts`). Absent = no count is shown. */
+  readonly drawn?: ReadonlyMap<string, number> | null;
 }
 
 /** area-names.json, read defensively: an entry without a non-empty string name is skipped, anything else yields an empty map. */
@@ -76,6 +74,24 @@ export function parseAreaNames(doc: unknown): ReadonlyMap<string, AreaNameEntry>
     if (typeof e !== 'object' || e === null) continue;
     const { name, stadsdeel } = e as { name?: unknown; stadsdeel?: unknown };
     if (typeof name === 'string' && name.trim() !== '') out.set(code, { name: name.trim(), stadsdeel: typeof stadsdeel === 'string' ? stadsdeel : '' });
+  }
+  return out;
+}
+
+/**
+ * The DRAWN building count per area from the build record (`data/cities/amsterdam/sheets-build.json`), read by field name:
+ * `sheets[].code` and `sheets[].buildings`. An entry whose count is not a non-negative integer is skipped, and anything that is
+ * not that shape yields an empty map, so a missing or malformed file shows no counts rather than the wrong ones.
+ */
+export function parseDrawnCounts(doc: unknown): ReadonlyMap<string, number> {
+  const out = new Map<string, number>();
+  if (typeof doc !== 'object' || doc === null) return out;
+  const sheets = (doc as { sheets?: unknown }).sheets;
+  if (!Array.isArray(sheets)) return out;
+  for (const e of sheets) {
+    if (typeof e !== 'object' || e === null) continue;
+    const { code, buildings } = e as { code?: unknown; buildings?: unknown };
+    if (typeof code === 'string' && typeof buildings === 'number' && Number.isInteger(buildings) && buildings >= 0) out.set(code, buildings);
   }
   return out;
 }
@@ -113,9 +129,9 @@ export interface IndexCell {
   /** the visible name: see the header. Equals `code` for a cell with no name. */
   readonly name: string;
   readonly stadsdeel: string | null;
-  /** exact 3D BAG buildings with their centroid in the sheet's box; null for an outside cell */
+  /** the buildings DRAWN for this area: the build record's count (`drawnCounts`), or null when it is not known. Never the lattice
+   *  count, which includes slivers the loader drops (E4: 21,348 in the lattice, 21,342 drawn). */
   readonly buildings: number | null;
-  readonly municipalBuildings: number | null;
   /** why a skipped cell does not ship, in words; null otherwise */
   readonly reason: string | null;
 }
@@ -124,7 +140,6 @@ export interface SheetGroup {
   readonly stadsdeel: string;
   /** shipping cells only, reading order */
   readonly cells: readonly IndexCell[];
-  readonly buildings: number;
 }
 
 export interface IndexModel {
@@ -161,6 +176,7 @@ function labelName(code: string, label: string): string | null {
 
 export function buildIndexModel(tables: IndexTables = AMSTERDAM_INDEX_TABLES, extras: IndexExtras = {}): IndexModel {
   const names = extras.names ?? null;
+  const drawn = extras.drawn ?? null;
   const { lattice: L } = tables;
   const ships = new Map(tables.sheets.map((s) => [`${s.i},${s.j}`, s]));
   const skips = new Map(tables.skipped.map((s) => [`${s.i},${s.j}`, s]));
@@ -176,17 +192,17 @@ export function buildIndexModel(tables: IndexTables = AMSTERDAM_INDEX_TABLES, ex
         cells.push(Object.freeze({
           code, i, j, col, row, state: ship.kind, available: true, areaId: ship.id,
           name: names?.get(ship.code)?.name ?? labelName(ship.code, ship.label) ?? (ship.stadsdeel !== '' ? ship.stadsdeel : code),
-          stadsdeel: ship.stadsdeel, buildings: ship.buildings, municipalBuildings: ship.municipalBuildings, reason: null,
+          stadsdeel: ship.stadsdeel, buildings: drawn?.get(ship.code) ?? null, reason: null,
         }));
       } else if (skip !== undefined) {
         cells.push(Object.freeze({
           code, i, j, col, row, state: 'skipped', available: false, areaId: null, name: code,
-          stadsdeel: null, buildings: skip.buildings, municipalBuildings: skip.municipalBuildings, reason: reasonText(skip.reason),
+          stadsdeel: null, buildings: null, reason: reasonText(skip.reason),
         }));
       } else {
         cells.push(Object.freeze({
           code, i, j, col, row, state: 'outside', available: false, areaId: null, name: code,
-          stadsdeel: null, buildings: null, municipalBuildings: null, reason: null,
+          stadsdeel: null, buildings: null, reason: null,
         }));
       }
     }
@@ -203,6 +219,22 @@ export function buildIndexModel(tables: IndexTables = AMSTERDAM_INDEX_TABLES, ex
   });
 }
 
+/** The same model with these drawn counts laid over its own (a loaded bundle knows what it drew; E4 is not in the build record). */
+export function withDrawnCounts(model: IndexModel, counts: ReadonlyMap<string, number>): IndexModel {
+  const cells = model.cells.map((c) => {
+    const n = counts.get(c.code);
+    return c.available && n !== undefined && n !== c.buildings ? Object.freeze({ ...c, buildings: n }) : c;
+  });
+  const shipping = cells.filter((c) => c.available);
+  return Object.freeze({
+    ...model,
+    cells: Object.freeze(cells),
+    byCode: new Map(cells.map((c) => [c.code, c])),
+    shipping: Object.freeze(shipping),
+    groups: groupByStadsdeel(shipping),
+  });
+}
+
 /** Shipping cells grouped by stadsdeel: groups alphabetical (Dutch collation), cells in reading order inside each. */
 export function groupByStadsdeel(shipping: readonly IndexCell[]): readonly SheetGroup[] {
   const by = new Map<string, IndexCell[]>();
@@ -214,7 +246,7 @@ export function groupByStadsdeel(shipping: readonly IndexCell[]): readonly Sheet
   }
   return Object.freeze([...by.keys()].sort((a, b) => a.localeCompare(b, 'nl')).map((stadsdeel) => {
     const cells = by.get(stadsdeel)!;
-    return Object.freeze({ stadsdeel, cells: Object.freeze(cells), buildings: cells.reduce((n, c) => n + (c.buildings ?? 0), 0) });
+    return Object.freeze({ stadsdeel, cells: Object.freeze(cells) });
   }));
 }
 
@@ -316,28 +348,32 @@ export function keyAction(model: IndexModel, from: string | null, e: KeyInput): 
 
 const DIRECTION_WORD: Readonly<Record<Arrow, string>> = Object.freeze({ ArrowLeft: 'west', ArrowRight: 'east', ArrowUp: 'north', ArrowDown: 'south' });
 
-/** The accessible name of a cell: always carries the building count when it has one. */
+/** ", 21,342 buildings", or nothing when the drawn count is not known: a count we cannot vouch for is left out, never guessed. */
+export function countPhrase(c: IndexCell): string {
+  return c.buildings === null ? '' : `, ${formatCount(c.buildings)} buildings`;
+}
+
+/** The accessible name of a cell: carries the DRAWN building count when it is known. */
 export function cellLabel(c: IndexCell, current: string | null = null): string {
   if (c.state === 'outside') return `${c.code}, outside the city`;
-  if (c.state === 'skipped') return `${c.code}, not available, ${c.reason ?? 'no data'}, ${formatCount(c.buildings ?? 0)} buildings`;
+  if (c.state === 'skipped') return `${c.code}, not available, ${c.reason ?? 'no data'}`;
   const kind = c.state === 'core' ? 'core area' : 'edge area';
   const here = current === c.code ? ', current area' : '';
   const name = c.name === c.code ? '' : `, ${c.name}`;
-  return `${c.code}${name}, ${kind}, ${formatCount(c.buildings ?? 0)} buildings${here}`;
+  return `${c.code}${name}, ${kind}${countPhrase(c)}${here}`;
 }
 
 /** The two lines the plate prints on hover and focus. */
 export function cellReadout(c: IndexCell): { readonly title: string; readonly detail: string } {
   if (c.state === 'outside') return { title: c.code, detail: 'Outside the city' };
-  if (c.state === 'skipped') return { title: `${c.code} · not available`, detail: `${c.reason ?? 'no data'} · ${formatCount(c.buildings ?? 0)} buildings in the box` };
+  if (c.state === 'skipped') return { title: `${c.code} · not available`, detail: c.reason ?? 'no data' };
   const kind = c.state === 'core' ? 'Core area' : 'Edge area';
-  const muni = c.municipalBuildings !== null && c.municipalBuildings !== c.buildings ? ` · ${formatCount(c.municipalBuildings)} inside the municipality` : '';
-  return { title: c.name === c.code ? c.code : `${c.code} · ${c.name}`, detail: `${formatCount(c.buildings ?? 0)} buildings · ${kind}${muni}` };
+  return { title: c.name === c.code ? c.code : `${c.code} · ${c.name}`, detail: c.buildings === null ? kind : `${formatCount(c.buildings)} buildings · ${kind}` };
 }
 
 /** The live-region text for a sheet becoming current. */
 export function announceCurrent(c: IndexCell): string {
-  return `Current area ${c.code}${c.name === c.code ? '' : `, ${c.name}`}. ${formatCount(c.buildings ?? 0)} buildings.`;
+  return `Current area ${c.code}${c.name === c.code ? '' : `, ${c.name}`}.${c.buildings === null ? '' : ` ${formatCount(c.buildings)} buildings.`}`;
 }
 export function announceLoading(c: IndexCell): string {
   return `Loading area ${c.code}${c.name === c.code ? '' : `, ${c.name}`}.`;
