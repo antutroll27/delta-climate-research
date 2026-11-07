@@ -118,13 +118,42 @@ test('the window is ninety days: a city 89 days old is still announced, 91 days 
      day after arrival for D = 1, 90 or 90_000 alike, so every value passes and the
      ninety is pinned by nothing. Two literal days either side pin the number and
      the comparison at once. */
+  /* THE READER STANDS IN AMSTERDAM, the newer city: the open city is never announced,
+     so Bengaluru is the only candidate and its own window is what is measured. From
+     Kolkata the same dates would announce Amsterdam, which arrived 52 days after it. */
   const store = fakeStore();
-  assert.equal(newCityToAnnounce('kolkata', new Date(ARRIVED + 89 * DAY), store)?.id, 'bengaluru',
+  assert.equal(newCityToAnnounce('amsterdam', new Date(ARRIVED + 89 * DAY), store)?.id, 'bengaluru',
     'a city 89 days old is inside a ninety-day window');
-  assert.equal(newCityToAnnounce('kolkata', new Date(ARRIVED + 91 * DAY), store), null,
+  assert.equal(newCityToAnnounce('amsterdam', new Date(ARRIVED + 91 * DAY), store), null,
     'a city 91 days old is outside it, and the badge retires itself');
   assert.equal(NEW_CITY_DAYS, 90,
     'the two day counts above are written against a ninety-day window');
+});
+
+/* AMSTERDAM'S RELEASE (plan A13): the newest arrival takes the card. */
+const AMS_ARRIVED = Date.parse('2026-11-07T00:00:00Z');
+
+test('Amsterdam declares its arrival and showcase, and the card announces it instead of Bengaluru', () => {
+  assert.equal(CITIES.amsterdam.since, '2026-11-07');
+  assert.equal(CITIES.amsterdam.showcase, 'canal-ring');
+  const found = newCityToAnnounce('kolkata', new Date(AMS_ARRIVED + DAY), fakeStore());
+  assert.equal(found?.id, 'amsterdam', 'Bengaluru is still inside its window, but Amsterdam is newer');
+  assert.equal(found?.name, 'Amsterdam');
+  assert.equal(found?.href, '/heat-map/nl/amsterdam/canal-ring/');
+  assert.equal(found?.since, '2026-11-07');
+});
+
+test('a reader in Amsterdam is told about Bengaluru while it is in window, and Amsterdam retires after ninety days', () => {
+  assert.equal(newCityToAnnounce('amsterdam', new Date(AMS_ARRIVED + DAY), fakeStore())?.id, 'bengaluru');
+  assert.equal(newCityToAnnounce('kolkata', new Date(AMS_ARRIVED + 89 * DAY), fakeStore())?.id, 'amsterdam');
+  assert.equal(newCityToAnnounce('kolkata', new Date(AMS_ARRIVED + 91 * DAY), fakeStore()), null);
+});
+
+test('dismissing Amsterdam drops it from the candidates, so the card falls to Bengaluru while that is in window', () => {
+  const store = fakeStore();
+  rememberDismissed('amsterdam', store);
+  assert.equal(newCityToAnnounce('kolkata', new Date(AMS_ARRIVED + DAY), store)?.id, 'bengaluru',
+    'a dismissed city drops out of the candidates; Bengaluru, still in window and not dismissed, is next');
 });
 
 test('a city is not announced before it arrives', () => {

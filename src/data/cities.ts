@@ -137,9 +137,9 @@ const BENGALURU_WARDS: readonly WardRecord[] = [
  * (api.data.amsterdam.nl, retrieved 2026-11-06): Centrum 46.3 %, Zuid 33.0 %,
  * West 20.6 %, Oost 0.1 %. See data/cities/amsterdam/sources.json.
  *
- * NOT drawable and NOT published: registry.ts says so, and `since` / `showcase`
- * are absent until the release commit (plan A13), because adding `since` changes
- * what the new-city badge test means.
+ * DRAWABLE, announced and NOT indexed (release commit, plan A13): `since` / `showcase`
+ * make the NEW CITY card announce Amsterdam; `shipsData` stays false in registry.ts, so
+ * the page is noindex and out of the sitemap exactly as Bengaluru's was at its launch.
  */
 const AMSTERDAM_WARDS: readonly WardRecord[] = [
   { id: 'canal-ring', name: 'Canal <em>Ring</em>', zone: 'Canal Belt · Vondelpark',
@@ -171,7 +171,8 @@ export const CITIES: Record<string, CityRecord> = {
     cellMeters: declaredCellMeters(BENGALURU_WARDS), wards: BENGALURU_WARDS,
     since: '2026-09-16', showcase: 'mg-road' },
   amsterdam: { id: 'amsterdam', name: 'Amsterdam', country: 'Netherlands',
-    cellMeters: declaredCellMeters(AMSTERDAM_WARDS), wards: AMSTERDAM_WARDS },
+    cellMeters: declaredCellMeters(AMSTERDAM_WARDS), wards: AMSTERDAM_WARDS,
+    since: '2026-11-07', showcase: 'canal-ring' },
 };
 
 export const CITY_OF: Record<string, string> = Object.fromEntries(

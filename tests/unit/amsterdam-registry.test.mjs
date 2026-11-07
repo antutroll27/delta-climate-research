@@ -39,15 +39,16 @@ test('the registry entry says what is known: Cfb, geometry tier, Europe/Amsterda
   assertRegistryLogic();
 });
 
-test('it is drawable (A12) but not published: noindex, out of the sitemap, no catalogue record', () => {
+test('it is drawable (A12) and released (A13) but not published: noindex, out of the sitemap, no catalogue record', () => {
   const area = city.areas['canal-ring'];
   assert.equal(area.shipsData, false);
   assert.equal(area.drawable, true);
   assert.ok(RENDERABLE_CITIES.includes('amsterdam'));
   assert.ok(RENDERABLE_WARDS.some((w) => w.id === 'canal-ring'));
   assert.ok(!WARDS.some((w) => w.id === 'canal-ring'), 'the CATALOGUE (WARDS) does not list it: it publishes nothing');
-  assert.equal(CITIES.amsterdam.since, undefined, '`since` belongs in the release commit only (plan A13)');
-  assert.equal(CITIES.amsterdam.showcase, undefined);
+  assert.equal(CITIES.amsterdam.since, '2026-11-07', 'released by the A13 commit');
+  assert.equal(CITIES.amsterdam.showcase, 'canal-ring');
+  assert.equal(area.shipsData, false, 'released and announced, but not indexed: the same rule Bengaluru launched under');
 });
 
 test('the area names itself ONCE: the temporary registry name and descriptor are gone', () => {
