@@ -2068,6 +2068,8 @@ export function mountHeatMap(): () => void {
   /** The sheet being opened by the stream controller, for the span of its commit; null otherwise. */
   let streamCommit: StreamOpen | null = null;
   let simReady: Promise<void> | null = null;
+  /** Dev streaming: change the device tier AND tell the controller (set once the controller exists). */
+  let setStreamTier: ((tier: ExploreDeviceTier) => void) | null = null;
   let simGeneration = 0;
   let simAnimate = !reduceMotion;
   /* THE REQUEST NAMES ITS WARD. A snapshot is drawn only for the ward it was
@@ -2129,6 +2131,7 @@ export function mountHeatMap(): () => void {
     if (simHost.backend === 'ts-main') simAnimate = false;
     else if (wrapHost) simHost = wrapHost(simHost);
     setSimBackend(simHost.backend === 'ts-worker' ? 'CPU SIM' : 'CPU STATIC');
+    if (STREAM_DEV && previous === 'gpu-webgl2' && runtimeTier === 'full') setStreamTier?.('balanced');   // a lost GPU solver is a demotion for the mesh budget too
     return true;
   }
   /* Colour-ramp bounds for the CURRENT forcing. Recomputed whenever the phase,
@@ -4471,8 +4474,10 @@ export function mountHeatMap(): () => void {
     const keyOf = (code: SheetCode): AreaKey => sheetKey(sheetByCode(code)!);
     const labelOf = (code: SheetCode): string => sheetByCode(code)!.label;
     const hooks: CityStreamHooks = {
-      tier: () => (CLASSIC ? 'full' : runtimeTier),         // the packed facade exists for the editorial look only
+      tier: () => runtimeTier,                              // the device's, in either look (the classic facade has a packed variant too)
       network: () => {
+    const conn = (navigator as Navigator & { connection?: EventTarget & PrefetchConnection }).connection;
+    conn?.addEventListener?.('change', () => stream.networkChanged(hooks.network()));
         const c = (navigator as Navigator & { connection?: PrefetchConnection }).connection;
         return c?.saveData || c?.effectiveType === '2g' || c?.effectiveType === 'slow-2g' ? 'constrained' : 'fast';
       },
@@ -4505,6 +4510,7 @@ export function mountHeatMap(): () => void {
     let pointerDown = false, last = map.getCenter(), lastZoom = map.getZoom();
     const sendCamera = (final: boolean): void => {
       const c = map.getCenter(), z = map.getZoom();
+    setStreamTier = (next) => { if (next !== runtimeTier) { runtimeTier = next; stream.tierChanged(next); } };
       const moved = Math.hypot((c.lng - last.lng) * 67_977, (c.lat - last.lat) * 110_540) > 0.5 || z !== lastZoom;
       last = c; lastZoom = z;
       stream.camera(c.lng, c.lat, !final && (pointerDown || moved), null);

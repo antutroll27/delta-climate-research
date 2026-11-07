@@ -125,3 +125,18 @@ test('dispose terminates the worker, empties the neighbours and leaves nothing r
   assert.equal(JSON.stringify([r.calls.mesh, r.calls.massing, r.calls.show, r.calls.supply, r.calls.neighbours.length, r.calls.resolve]), before);
   r.restore();
 });
+
+test('S6: a tier change reaches the manager: a demotion rebuilds the open sheet in the worker at the new tier', async () => {
+  const r = rig({ tier: 'full' });
+  try {
+    r.stream.start('E4');
+    await until(() => r.stream.report().open === 'E4', 'E4 open');
+    assert.equal(r.calls.mesh.at(-1)[1], 'full');
+    r.state.tier = 'balanced';
+    r.stream.tierChanged('balanced');
+    await until(() => r.calls.mesh.length >= 2, 'the rebuild');
+    assert.deepEqual(r.calls.mesh.at(-1), ['E4', 'balanced']);
+    assert.equal(r.stream.report().tier, 'balanced');
+    await until(() => r.calls.show.at(-1)[1] === 'packed', 'the packed mesh shown');
+  } finally { r.stream.dispose(); r.restore(); }
+});

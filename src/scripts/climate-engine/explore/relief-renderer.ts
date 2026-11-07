@@ -1153,10 +1153,19 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     return CLASSIC ? this.makeFacadeClassic(kind) : this.makeEditorialFacade(kind);
   }
 
-  /** STREAMED CITIES: the editorial facade reading the packed aH / aG attributes (the page sends bevelled meshes under
-   *  `?look=classic`, so there is no classic packed variant). */
+  /** STREAMED CITIES: the facade reading the packed aH / aG attributes, in either look. */
   private makePackedFacade(): THREE.MeshStandardMaterial {
-    return this.makeEditorialFacade('extruded', true);
+    if (!CLASSIC) return this.makeEditorialFacade('extruded', true);
+    /* The classic facade's own shader text is pinned byte for byte, so its packed variant is made from it at compile time. */
+    const material = this.makeFacadeClassic('extruded');
+    const compile = material.onBeforeCompile;
+    material.onBeforeCompile = (shader, renderer) => {
+      compile.call(material, shader, renderer);
+      shader.vertexShader = shader.vertexShader
+        .replace('attribute float aH;', 'attribute float aHn;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>\nfloat aH=aHn*${H_RANGE_M.toFixed(1)};`);
+    };
+    return material;
   }
 
   /** The facade shipped until 2026-10-02, kept unchanged for `?look=classic`. */
