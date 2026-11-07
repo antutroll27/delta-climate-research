@@ -7,7 +7,7 @@ import { SKIP_FAST_MS, STAGE_WEIGHTS } from '../../src/scripts/climate-engine/lo
 import {
   FIRST_ENTRY_MIN_MS, QUICK_RISE_MS, REVEAL_DELAY_MS, RISE_MS, STAGE_OF_LEVEL, TILE_STAGES,
   createLoaderModel, initialLoaderState, isVisible, nextLoaderWakeMs, progressOf, reduceLoader, retryEventOf, riseValue,
-  sheetLabel, sheetParts, showsPlate, showsRise, showsSweep, stagesOf,
+  areaLabel, areaParts, areaDetail, parseAreaNames, stageValue, showsPlate, showsRise, showsSweep, stagesOf,
 } from '../../src/scripts/climate-engine/streaming/loader-model.ts';
 
 /* THE LOADER IS A PURE MODEL OVER THE MANAGER'S COMMANDS. Most tests feed it literal command sequences; `City` below plays
@@ -63,7 +63,7 @@ test('the plate arrives with the manager plate phase, at once, on top of the ris
 test('a plate command straight from idle (a retarget into a long wait) is visible immediately', () => {
   const s = run(inCity(), cmd(2000, loader('G4', 'plate')));
   assert.equal(isVisible(s, 2000), true);
-  assert.equal(run(s, { type: 'tick', atMs: 2000 }).status.text, `Loading ${sheetLabel('G4')}.`);
+  assert.equal(run(s, { type: 'tick', atMs: 2000 }).status.text, `Loading ${areaLabel('G4')}.`);
 });
 
 test('progress is the real stage weights, monotonic, and stages seen in the quiet phase are not lost', () => {
@@ -108,7 +108,7 @@ test('CANCELLED LOAD: a retarget follows the new sheet, a cancel drops the aband
   s = run(s, cmd(700, loader('D4', 'rise')));                                  // the manager retargets
   assert.equal(s.sheet, 'D4');
   assert.equal(s.mode, 'rise');
-  assert.equal(s.status.text, `Loading ${sheetLabel('D4')}.`, 'the new sheet is announced');
+  assert.equal(s.status.text, `Loading ${areaLabel('D4')}.`, 'the new sheet is announced');
   s = run(s, cmd(700, { type: 'cancel', requestId: 7, sheet: 'F4', level: 'lod0' }));
   assert.deepEqual(stagesOf(s, 'F4'), [], 'an abandoned load does not keep its progress');
   assert.equal(progressOf(s), 0, 'the bar now follows D4');
@@ -299,9 +299,9 @@ test('the wrapper keeps state and the labels are the sheet table labels', () => 
   m.dispatch(cmd(400, loader('E4', 'rise')));
   assert.equal(m.state().mode, 'rise');
   assert.equal(m.nextWakeMs(400), 400 + REVEAL_DELAY_MS);
-  assert.equal(sheetLabel('E4'), 'E4 · Canal Ring');
-  assert.deepEqual(sheetParts('E4'), { code: 'E4', name: 'Canal Ring' });
-  assert.equal(sheetLabel(null), '');
+  assert.equal(areaLabel('E4'), 'E4 · Canal Ring');
+  assert.deepEqual(areaParts('E4'), { code: 'E4', name: 'Canal Ring', stadsdeel: '' });
+  assert.equal(areaLabel(null), '');
 });
 
 test('the level-to-stage map covers the levels the manager loads', () => {
@@ -451,4 +451,39 @@ test('a user who goes elsewhere after a failure and comes back is not left on a 
   assert.equal(c.state.mode, 'failed');
   c.at(c.t + 1000).event({ type: 'select', sheet: 'E4' });
   assert.equal(c.state.mode, 'idle', 'the manager ended the loader when the user went home');
+});
+
+// ── area names and the drawn count ─────────────────────────────────────────────────────────────────────────────
+
+test('AREA NAMES: read from the names table when present, else the table label; the words never say "sheet"', () => {
+  const names = parseAreaNames({ E4: { name: 'Grachtengordel', stadsdeel: 'Centrum' }, F4: { name: '' }, G4: 7 });
+  assert.deepEqual(names, { E4: { name: 'Grachtengordel', stadsdeel: 'Centrum' } }, 'malformed entries are dropped');
+  assert.equal(areaLabel('E4', names), 'E4 · Grachtengordel');
+  assert.equal(areaLabel('F4', names), areaLabel('F4'), 'no entry: the table label');
+  assert.deepEqual(areaParts('E4', names), { code: 'E4', name: 'Grachtengordel', stadsdeel: 'Centrum' });
+  assert.equal(areaDetail(areaParts('E4', names)), 'Grachtengordel · Centrum');
+  assert.equal(areaDetail({ name: 'Oost', stadsdeel: 'Oost' }), 'Oost');
+  assert.deepEqual(parseAreaNames([{ code: 'D4', name: 'Sloterdijk', stadsdeel: 'Nieuw-West' }]), { D4: { name: 'Sloterdijk', stadsdeel: 'Nieuw-West' } });
+  assert.deepEqual(parseAreaNames({ areas: { D4: { name: 'X' } } }), { D4: { name: 'X' } });
+  assert.deepEqual(parseAreaNames(null), {});
+  assert.deepEqual(parseAreaNames('nope'), {});
+  let s = run(inCity(), { type: 'names', atMs: 0, names }, cmd(400, loader('E4', 'rise')), { type: 'tick', atMs: 600 });
+  assert.equal(s.status.text, 'Loading E4 · Grachtengordel.');
+  s = run(s, cmd(700, { type: 'failure', sheet: 'E4', level: 'lod0', attempts: 3 }));
+  assert.equal(s.status.text, 'E4 · Grachtengordel could not be loaded. Retry is available.');
+  s = run(s, { type: 'retry', atMs: 800 }, cmd(900, loader('E4', 'end')));
+  assert.equal(s.status.text, 'E4 · Grachtengordel is ready.');
+  for (const text of ['Loading', 'could not', 'ready']) assert.ok(!/sheet/i.test(s.status.text), text);
+});
+
+test('FOOTPRINTS: only the count the host passes is shown; with none the row is empty, never the lattice count', () => {
+  assert.equal(stageValue('ward', undefined), '');
+  assert.equal(stageValue('ward', {}), '');
+  assert.equal(stageValue('ward', { buildings: 21_281 }), '21,281');
+  const lattice = [21_348, 21_342, '21,348', '21,342'];
+  for (const v of [stageValue('ward', undefined), stageValue('ward', {}), stageValue('surface', {}), stageValue('vector', {})]) {
+    for (const n of lattice) assert.notEqual(v, String(n));
+  }
+  assert.equal(stageValue('surface', { surfaceScenes: 6 }), 'Sentinel-2 · 6');
+  assert.equal(stageValue('vector', { trees: 18400 }), '18,400 trees');
 });

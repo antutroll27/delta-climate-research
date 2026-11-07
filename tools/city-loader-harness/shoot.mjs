@@ -20,6 +20,8 @@ const STATES = [
   ['7-light-plate-45', 'plate-45', '&theme=light', false],
 ];
 
+const ONLY = process.env.OBOS_SHOT_ONLY?.split(',');
+const only = (stem) => !ONLY || ONLY.includes(stem);
 mkdirSync(OUT, { recursive: true });
 const server = spawn('npx', ['vite', '--config', 'tools/city-loader-harness/vite.config.ts', '--port', PORT, '--host', '127.0.0.1', '--strictPort'], { stdio: ['ignore', 'pipe', 'pipe'] });
 const kill = () => { try { server.kill('SIGTERM'); } catch { /* gone */ } };
@@ -39,6 +41,7 @@ try {
   const browser = await chromium.launch({ headless: true });
   for (const [vpName, viewport] of VIEWPORTS) {
     for (const [stem, scene, query, reduced] of STATES) {
+      if (!only(stem)) continue;
       const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, reducedMotion: reduced ? 'reduce' : 'no-preference', hasTouch: viewport.width < 700 });
       const page = await ctx.newPage();
       const errors = [];

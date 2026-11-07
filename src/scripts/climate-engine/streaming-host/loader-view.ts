@@ -15,7 +15,8 @@
  *   // the building rise: each frame of the page's grow timeline
  *   growProgress = loader.riseValue(performance.now());       // 0..1, already 1 under reduced motion
  *   // optional extras
- *   loader.setFrame(screenQuad | null);  loader.setFacts(sheet, { buildings, ... });  loader.setSurvey(sheet, points);
+ *   loader.setFrame(screenQuad | null);  loader.setFacts(sheet, { buildings: drawnCount, ... });  loader.setSurvey(sheet, points);
+ *   loader.setAreaNames(areaNamesJson);  // data/cities/amsterdam/area-names.json from P5, optional (falls back to the table label)
  *   loader.reset(true);                  // a new city: the next load is the first-entry sweep (design C)
  *
  * Nothing here touches the map, the renderer or the manager. The rise is the renderer's EXISTING `grow` uniform
@@ -30,9 +31,9 @@ import type { Level, ManagerCommand } from '../streaming/sheet-manager.ts';
 import { SHEETS, type SheetCode } from '../scope/sheets.ts';
 import { AMSTERDAM_SHEET_LATTICE as LATTICE } from '../../../data/sheets/amsterdam.ts';
 import {
-  STAGE_LABEL, TILE_STAGES, createLoaderModel, nextLoaderWakeMs, progressOf, retryEventOf, riseValue, sheetLabel, sheetParts,
+  STAGE_LABEL, TILE_STAGES, createLoaderModel, nextLoaderWakeMs, progressOf, retryEventOf, riseValue, areaLabel, areaParts, areaDetail, stageValue, parseAreaNames,
   showsPlate, showsRise, showsSweep, stagesOf,
-  type LoaderOptions, type LoaderState, type RisePlan, type SheetFacts, type TileStage,
+  type AreaNames, type LoaderOptions, type LoaderState, type RisePlan, type SheetFacts, type TileStage,
 } from '../streaming/loader-model.ts';
 
 export interface LoaderClock {
@@ -80,7 +81,10 @@ export interface LoaderView {
   command(command: ManagerCommand): void;
   /** A real stage finished for `sheet` (safe before the loader is shown). */
   stage(sheet: SheetCode, stage: TileStage): void;
+  /** DRAWN building count etc. for `sheet` (what the host extruded, never the lattice count). */
   setFacts(sheet: SheetCode, facts: SheetFacts): void;
+  /** Area names from data/cities/amsterdam/area-names.json (P5), parsed JSON in; without it the area table labels are used. */
+  setAreaNames(raw: unknown): void;
   setFrame(quad: ScreenQuad | null): void;
   setSurvey(sheet: SheetCode, points: SurveyPoints): void;
   /** A new city (or a restart). `firstEntry` true = the next load plays the sweep. */
@@ -123,18 +127,6 @@ function toggle(node: Element, cls: string, on: boolean): void {
 }
 
 const fmt = (n: number): string => n.toLocaleString('en-GB');
-
-/** The value printed beside a stage on the plate, from facts that really arrived; '' when there is none to show. */
-export function stageValue(stage: TileStage, facts: SheetFacts | undefined): string {
-  if (facts === undefined) return stage === 'sim' ? 'first burst' : '';
-  switch (stage) {
-    case 'ward': return facts.buildings === undefined ? '' : fmt(facts.buildings);
-    case 'surface': return facts.surfaceScenes === undefined ? '' : `Sentinel-2 · ${facts.surfaceScenes}`;
-    case 'vector': return facts.trees === undefined ? '' : `${fmt(facts.trees)} trees`;
-    case 'sim': return 'first burst';
-    default: return '';
-  }
-}
 
 // ── the view ───────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -182,7 +174,7 @@ export function createLoaderView(options: LoaderViewOptions): LoaderView {
   const plate = el(doc, 'section', 'cl-plate', root);
   plate.setAttribute('aria-hidden', 'true');
   const left = el(doc, 'div', '', plate);
-  el(doc, 'div', 'cl-micro', left, 'Sheet');
+  el(doc, 'div', 'cl-micro', left, 'Area');
   const codeEl = el(doc, 'div', 'cl-code', left);
   const nameEl = el(doc, 'div', 'cl-name', left);
   const indexSvg = doc.createElementNS(SVG_NS, 'svg');
@@ -298,7 +290,7 @@ export function createLoaderView(options: LoaderViewOptions): LoaderView {
     const sheet = state.sheet;
     if (sheet === null) return;
     const f = state.facts.get(sheet);
-    const parts = sheetParts(sheet);
+    const parts = areaParts(sheet, state.names);
     const lines = [
       `${parts.code} · ${parts.name.toUpperCase()}`,
       `POINTS ${survey !== null && survey.sheet === sheet ? `${fmt(sweepCount())} / ${fmt(survey.total)}` : '—'}`,
@@ -323,7 +315,7 @@ export function createLoaderView(options: LoaderViewOptions): LoaderView {
     root.setAttribute('data-reduced', state.reducedMotion ? '1' : '0');
 
     // design A furniture
-    const label = sheetLabel(sheet);
+    const label = areaLabel(sheet, state.names);
     if (sheet !== null) setText(chip, `Entering ${label}`);
     if (sheet !== null) setText(tag, label);
     toggle(chip, 'on', rise);
@@ -345,11 +337,13 @@ export function createLoaderView(options: LoaderViewOptions): LoaderView {
     /* Only the failure plate is in the accessibility tree: loading progress is spoken by the status region, not read twice. */
     if (failed) { plate.removeAttribute('aria-hidden'); plate.setAttribute('role', 'group'); plate.setAttribute('aria-label', `${label} could not be loaded`); }
     else { plate.setAttribute('aria-hidden', 'true'); plate.removeAttribute('role'); plate.removeAttribute('aria-label'); }
+    if (sheet !== null) {
+      const parts = areaParts(sheet, state.names);
+      setText(codeEl, parts.code);
+      setText(nameEl, areaDetail(parts));
+    }
     if (sheet !== null && shownTarget !== sheet) {
       shownTarget = sheet;
-      const parts = sheetParts(sheet);
-      setText(codeEl, parts.code);
-      setText(nameEl, parts.name);
       for (const [code, rect] of indexRects) rect.setAttribute('class', code === sheet ? 'target' : 'ship');
     }
 
@@ -373,7 +367,7 @@ export function createLoaderView(options: LoaderViewOptions): LoaderView {
     // the failure body and focus
     if (failed) {
       setText(failTitle, `${label} could not be loaded`);
-      setText(failBody, 'Check your connection and try again. You can also choose another sheet.');
+      setText(failBody, 'Check your connection and try again. You can also choose another area.');
       if (!(doc.activeElement === retryBtn)) {
         if (lastFocus === null) lastFocus = doc.activeElement;
         retryBtn.focus({ preventScroll: true });
@@ -420,6 +414,8 @@ export function createLoaderView(options: LoaderViewOptions): LoaderView {
   return {
     command(command) { model.dispatch({ type: 'command', atMs: nowMs(), command }); after(); },
     stage(sheet, stage) { model.dispatch({ type: 'stage', atMs: nowMs(), sheet, stage }); after(); },
+    /** The parsed area-names.json (see parseAreaNames); safe to call at any time, and with anything. */
+    setAreaNames(raw) { model.dispatch({ type: 'names', atMs: nowMs(), names: parseAreaNames(raw) }); after(); },
     setFacts(sheet, facts) { model.dispatch({ type: 'facts', atMs: nowMs(), sheet, facts }); after(); },
     setFrame(quad) {
       if (quad === null || quad.length < 3) { framePoints = ''; framePath.removeAttribute('d'); render(); return; }

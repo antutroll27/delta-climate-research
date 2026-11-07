@@ -255,7 +255,7 @@ async function boot(): Promise<void> {
         sim.script = name === 'failure' ? { latency: () => 20, failing: (s, l) => s === 'E4' && l === 'lod0' } : slowE4(4000);
         sim.send({ type: 'select', sheet: 'E4' });
         view.stage('E4' as SheetCode, 'massing');                          // E4's grey massing was on screen as a neighbour
-        view.setFacts('E4' as SheetCode, { buildings: 21_342, surfaceScenes: 6, trees: 18_400 });
+        view.setFacts('E4' as SheetCode, { buildings: buildings.length, surfaceScenes: 6, trees: 18_400 });
         if (name === 'waiting') { mc.advance(900); break; }                  // past the 400 ms rise, before the 1.2 s plate: massing only, 25 %
         if (name === 'plate-45') { mc.advance(1700); break; }                // the footprints landed at 1.6 s: massing + ward = 45 %
         if (name === 'failure') { mc.advance(60_000); break; }
@@ -266,7 +266,7 @@ async function boot(): Promise<void> {
       case 'first-entry': {
         sim.script = slowE4(5000);
         sim.send({ type: 'start', sheet: 'E4' as SheetCode });
-        view.setFacts('E4' as SheetCode, { buildings: 21_342 });
+        view.setFacts('E4' as SheetCode, { buildings: buildings.length });
         mc.advance(700);
         view.setSurvey('E4' as SheetCode, survey);
         mc.advance(1500);

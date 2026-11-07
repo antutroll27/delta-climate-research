@@ -52,13 +52,39 @@ export const STAGE_LABEL: Readonly<Record<TileStage, string>> = Object.freeze({
   massing: 'Massing', ward: 'Footprints', surface: 'Surface', vector: 'Roads · water · trees', sim: 'Heat solve',
 });
 
-/** Facts that arrive with the data, shown beside their stage on the plate. Every field optional: a row without one shows a tick. */
+/** Facts that arrive with the data, shown beside their stage on the plate. `buildings` is the DRAWN count (what the host extruded). Every field optional: a row without one shows a tick. */
 export interface SheetFacts {
   readonly buildings?: number;
   readonly terrainMinM?: number;
   readonly terrainMaxM?: number;
   readonly surfaceScenes?: number;
   readonly trees?: number;
+}
+
+/** Area names from data/cities/amsterdam/area-names.json (P5), keyed by area code. Optional: without an entry the area's
+ *  table label ("E4 · Canal Ring", "F4 · Oost") is used. The host loads the file and passes it in; this module never fetches. */
+export interface AreaName {
+  readonly name: string;
+  readonly stadsdeel?: string;
+}
+export type AreaNames = Readonly<Record<string, AreaName>>;
+
+/** Accepts the file's parsed JSON in the shapes it may take (an object keyed by code, `{ areas: {...} }`, or an array of
+ *  `{ code, name, stadsdeel }`) and keeps only well-formed entries. Anything else gives no names, never a throw. */
+export function parseAreaNames(raw: unknown): AreaNames {
+  const out: Record<string, AreaName> = {};
+  const take = (code: unknown, v: unknown): void => {
+    if (typeof code !== 'string' || typeof v !== 'object' || v === null) return;
+    const { name, stadsdeel } = v as { name?: unknown; stadsdeel?: unknown };
+    if (typeof name !== 'string' || name.trim() === '') return;
+    out[code] = typeof stadsdeel === 'string' && stadsdeel.trim() !== '' ? { name: name.trim(), stadsdeel: stadsdeel.trim() } : { name: name.trim() };
+  };
+  if (Array.isArray(raw)) { for (const row of raw) take((row as { code?: unknown } | null)?.code, row); return Object.freeze(out); }
+  if (typeof raw !== 'object' || raw === null) return Object.freeze(out);
+  const obj = raw as Record<string, unknown>;
+  const table = typeof obj.areas === 'object' && obj.areas !== null ? (obj.areas as Record<string, unknown>) : obj;
+  for (const [code, v] of Object.entries(table)) take(code, v);
+  return Object.freeze(out);
 }
 
 // ── state ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -108,6 +134,7 @@ export interface LoaderState {
   readonly failure: LoaderFailure | null;
   readonly stages: ReadonlyMap<SheetCode, readonly TileStage[]>;
   readonly facts: ReadonlyMap<SheetCode, SheetFacts>;
+  readonly names: AreaNames;
   readonly status: LoaderStatus;
   readonly rise: RisePlan | null;
   /** the last `end`: when, and whether the loader had been visible */
@@ -124,7 +151,7 @@ export function initialLoaderState(options: LoaderOptions = {}): LoaderState {
   return Object.freeze({
     mode: 'idle', sheet: null, design: 'A', sinceMs: null, visibleAtMs: null, announced: false, endPending: false, holdUntilMs: null,
     entered: options.firstEntry === false, reducedMotion: options.reducedMotion === true, failure: null,
-    stages: new Map(), facts: new Map(), status: Object.freeze({ text: '', kind: 'polite', seq: 0 }), rise: null, lastEnd: null,
+    stages: new Map(), facts: new Map(), names: Object.freeze({}), status: Object.freeze({ text: '', kind: 'polite', seq: 0 }), rise: null, lastEnd: null,
   });
 }
 
@@ -136,6 +163,7 @@ export type LoaderEvent =
   /** A real stage finished for `sheet`. Safe to send before the loader is shown (the quiet phase) and for any sheet. */
   | { readonly type: 'stage'; readonly atMs: number; readonly sheet: SheetCode; readonly stage: TileStage }
   | { readonly type: 'facts'; readonly atMs: number; readonly sheet: SheetCode; readonly facts: SheetFacts }
+  | { readonly type: 'names'; readonly atMs: number; readonly names: AreaNames }
   /** The person pressed Retry. The host then sends the manager's `retry` event (see `retryEventOf`). */
   | { readonly type: 'retry'; readonly atMs: number }
   | { readonly type: 'tick'; readonly atMs: number }
@@ -145,16 +173,39 @@ export type LoaderEvent =
 
 // ── helpers ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** "E4 · Canal Ring". An unknown code (should not happen) falls back to the code itself. */
-export function sheetLabel(code: SheetCode | null): string {
+/** "E4 · Canal Ring": the area's name from area-names.json when there is one, else the area table's own label. An unknown
+ *  code (should not happen) falls back to the code itself. */
+export function areaLabel(code: SheetCode | null, names: AreaNames = {}): string {
   if (code === null) return '';
+  const n = names[code];
+  if (n !== undefined) return `${code} · ${n.name}`;
   return sheetByCode(code)?.label ?? code;
 }
-/** "E4" and "Canal Ring" apart, for the plate's big code and its name line. */
-export function sheetParts(code: SheetCode): { readonly code: string; readonly name: string } {
-  const label = sheetLabel(code);
+/** The code, the name and the stadsdeel apart, for the plate's big code and its detail line. */
+export function areaParts(code: SheetCode, names: AreaNames = {}): { readonly code: string; readonly name: string; readonly stadsdeel: string } {
+  const n = names[code];
+  if (n !== undefined) return { code, name: n.name, stadsdeel: n.stadsdeel ?? '' };
+  const label = sheetByCode(code)?.label ?? code;
   const dot = label.indexOf(' · ');
-  return dot < 0 ? { code, name: '' } : { code: label.slice(0, dot), name: label.slice(dot + 3) };
+  return dot < 0 ? { code, name: '', stadsdeel: '' } : { code: label.slice(0, dot), name: label.slice(dot + 3), stadsdeel: '' };
+}
+/** "Canal Ring" or "Canal Ring · Centrum": the plate's detail line (the stadsdeel only when it adds something). */
+export function areaDetail(parts: { readonly name: string; readonly stadsdeel: string }): string {
+  return parts.stadsdeel === '' || parts.stadsdeel === parts.name ? parts.name : `${parts.name} · ${parts.stadsdeel}`;
+}
+
+/** The value printed beside a stage on the plate, from facts the HOST passed (`setFacts`). The building count is the DRAWN
+ *  count, never the lattice count (the lattice includes undrawn slivers): with no fact, a row shows nothing. */
+export function stageValue(stage: TileStage, facts: SheetFacts | undefined): string {
+  const fmt = (n: number): string => n.toLocaleString('en-GB');
+  if (facts === undefined) return stage === 'sim' ? 'first burst' : '';
+  switch (stage) {
+    case 'ward': return facts.buildings === undefined ? '' : fmt(facts.buildings);
+    case 'surface': return facts.surfaceScenes === undefined ? '' : `Sentinel-2 · ${facts.surfaceScenes}`;
+    case 'vector': return facts.trees === undefined ? '' : `${fmt(facts.trees)} trees`;
+    case 'sim': return 'first burst';
+    default: return '';
+  }
 }
 
 /** Real progress, 0..1, monotonic for a given set of stages (loader-progress.ts). Nothing here is ever printed as a percentage. */
@@ -225,8 +276,8 @@ function setStages(d: Draft, sheet: SheetCode, next: readonly TileStage[] | null
 function settle(d: Draft, now: number): void {
   if (d.mode !== 'idle' && !d.announced && d.visibleAtMs !== null && now >= d.visibleAtMs) {
     d.announced = true;
-    if (d.mode === 'failed') say(d, `${sheetLabel(d.sheet)} could not be loaded. Retry is available.`, 'assertive');
-    else say(d, `Loading ${sheetLabel(d.sheet)}.`);
+    if (d.mode === 'failed') say(d, `${areaLabel(d.sheet, d.names)} could not be loaded. Retry is available.`, 'assertive');
+    else say(d, `Loading ${areaLabel(d.sheet, d.names)}.`);
   }
   if (d.endPending && d.holdUntilMs !== null && now >= d.holdUntilMs) finish(d, now);
 }
@@ -234,7 +285,7 @@ function settle(d: Draft, now: number): void {
 /** The loader is over. Said aloud only if it was ever on screen: a fast path stays silent as well as invisible. */
 function finish(d: Draft, now: number): void {
   const shown = d.announced;
-  if (shown && d.mode !== 'failed') say(d, `${sheetLabel(d.sheet)} is ready.`);
+  if (shown && d.mode !== 'failed') say(d, `${areaLabel(d.sheet, d.names)} is ready.`);
   if (d.sheet !== null) setStages(d, d.sheet, null);
   d.lastEnd = { atMs: now, shown };
   d.mode = 'idle'; d.sinceMs = null; d.visibleAtMs = null; d.announced = false; d.endPending = false; d.holdUntilMs = null; d.failure = null;
@@ -320,6 +371,7 @@ export function reduceLoader(state: LoaderState, event: LoaderEvent): LoaderStat
       d.mode = 'plate'; d.failure = null; d.sinceMs = now; d.visibleAtMs = now; d.announced = false;   // the manager's loader is still in its plate phase
       break;
     }
+    case 'names': d.names = event.names; break;
     case 'tick': break;
     case 'reset': {
       const keepReduced = d.reducedMotion;
