@@ -6,7 +6,7 @@
  * THE SOURCE RULE: the chip and the solid/outlined mark come from `weatherSource()`, i.e. from whether the app is holding a fresh airport report.
  */
 import { decodeRows, rainMemory, wardTime, weatherSource } from './weather-panel.ts';
-import { describeWeather, METAR_STALE_MIN, type ObservedNow } from '../../../lib/weather/observed.ts';
+import { describeWeather, METAR_STALE_MIN, placeWords, type ObservedNow } from '../../../lib/weather/observed.ts';
 import type { Metar } from '../../../lib/weather/metar.ts';
 import { METAR_STATIONS } from '../../../data/metar-stations.ts';
 import { resolve as resolveScope } from '../scope/resolve.ts';
@@ -52,6 +52,9 @@ export function bindWeather(ctx: ShellCtx): void {
     const area = root.dataset.area ?? '';
     const tz = isAreaKey(area) ? resolveScope(area).city.tz : 'UTC';
     /* the app sets #liveT before it paints this line, so a held reading is already readable here */
+    /* The place the card describes: "the ward" in Kolkata and Bengaluru, the area's own name elsewhere (the Canal Ring spans three stadsdelen). */
+    const place = isAreaKey(area) ? placeWords(splitKey(area).city, resolveScope(area).area.name) : placeWords('', 'area');
+    set('over', place.over);
     const hasReading = !['', '—'].includes(textOf('liveT'));
     const src = weatherSource(observed !== null, hasReading);
     setSource(src);
@@ -74,7 +77,7 @@ export function bindWeather(ctx: ShellCtx): void {
       return;
     }
     const m = observed.latest;
-    set('where', `${observed.station.name}, ${Math.round(observed.km)} km from the ward`);
+    set('where', `${observed.station.name}, ${Math.round(observed.km)} km from ${place.centre}`);
     set('when', `Report of ${wardTime(m.time, tz)}`);
     set('tfoot', 'Whole degrees, as the report carries them.');
     /* the app fills a missing dew point or wind from Met Norway (humidity, wind m/s): say so rather than leave them under the OBSERVED chip unmarked */

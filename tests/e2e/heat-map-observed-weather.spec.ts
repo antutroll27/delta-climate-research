@@ -158,7 +158,8 @@ test.describe('observed weather', () => {
     await expect(page.locator('#liveSrc')).toHaveText('Air now · Schiphol airport (8 km)', { timeout: 90_000 });
     await expect(page.locator('#liveT')).toHaveText('7');
     await expect(page.locator('#wxLine')).toContainText('Mostly cloudy at Schiphol airport (8 km) at 15:55 CET');
-    await expect(page.locator('#wxLine')).toContainText('may differ over the ward');
+    await expect(page.locator('#wxLine')).toContainText('may differ over the Canal Ring');
+    await expect(page.locator('#wxLine')).not.toContainText('the ward');
   });
 
   test('Amsterdam in a drizzle (3 Nov, -DZRA): the airport\'s rain is said and applied', async ({ page }) => {

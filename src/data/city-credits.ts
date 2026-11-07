@@ -122,6 +122,14 @@ const AMSTERDAM_STACK: readonly CreditEntry[] = Object.freeze([
   /* knmi.nl/copyright (read 2026-11-06): "…onder naamsvermelding "bron: KNMI", maar u dient bij het citeren van de inhoud aan te geven dat het
      KNMI niet betrokken is bij het afgeleide werk en de strekking daarvan niet noodzakelijkerwijs onderschrijft." BOTH halves are required. */
   line(['Air-temperature normals, Schiphol 1991–2020 (bron: KNMI). KNMI is not involved in this derived product and does not necessarily endorse its purport.']),
+  /* WHO MAKES SCHIPHOL'S METAR: KNMI. It is the Netherlands' aviation meteorological service, "produceert luchtvaartmeteorologische
+     waarnemingen voor civiele luchthavens" (knmi.nl/nederland-nu/luchtvaart/luchtvaartmeteorologische-informatie, read 2026-11-07); at Schiphol
+     an on-site observer completes the instrument report (KNMI's own METAR notes), and LVNL, the air-traffic controller, is named there only
+     as a flight-preparation link. KNMI publishes the same METARs on its Data Platform under CC BY 4.0 (dataplatform.knmi.nl/dataset/metar-1-0).
+     OBOS reads them through NOAA's Aviation Weather Center, so the line names both, and carries KNMI's no-endorsement half as the normals line does.
+     (LVNL's eAIP GEN 3.5, which the search snippet says gives KNMI the Schiphol observing role, answered HTTP 403 here and was not read.) */
+  line(['Airport observations (METAR), Schiphol: bron: KNMI, relayed by the NOAA Aviation Weather Center. KNMI is not involved in this derived product and does not necessarily endorse its purport.'],
+    CC_BY_4),
   WEATHER,
 ]);
 

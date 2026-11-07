@@ -20,7 +20,7 @@ import {
   parseMetar, cloudFraction, rainingAtStation, rainedRecently, thunderAtStation, convectiveCloud,
 } from '../../src/lib/weather/metar.ts';
 import {
-  observedNow, rainEpisodes, rankStations, describeWeather, METAR_STALE_MIN,
+  observedNow, rainEpisodes, rankStations, describeWeather, METAR_STALE_MIN, placeWords, fixed,
 } from '../../src/lib/weather/observed.ts';
 import { METAR_STATIONS, ALL_METAR_ICAO } from '../../src/data/metar-stations.ts';
 import { CITIES } from '../../src/data/cities.ts';
@@ -279,6 +279,69 @@ test('snow and hail are named (a real 7 Nov report with its weather group swappe
   assert.equal(o.ambient.observed.wet, 0);
   const h = parseMetar(base.replace('-SN', 'GR'), REF);
   assert.equal(describeWeather(observedNow({ EHAM: [h] }, rankedAms(), at, {})).text, 'Moderate hail');
+});
+
+const word = (raw, ranked = rankedAms(), icao = 'EHAM') => {
+  const m = parseMetar(raw, REF);
+  return describeWeather(observedNow({ [icao]: [m] }, ranked, Date.parse(m.time) + 3 * MIN, {}));
+};
+const BASE = 'METAR EHAM 071455Z 12004KT 9999 BKN035 07/04 Q1022 NOSIG';
+
+test('VC groups are named for what they are: only VCSH is showers (VCFG fog, others plain weather, VCTS thunderstorm)', () => {
+  assert.equal(word(BASE.replace('9999 BKN035', '9999 VCSH BKN035')).text, 'Mostly cloudy · showers nearby');
+  assert.equal(word(BASE.replace('9999 BKN035', '9999 VCFG BKN035')).text, 'Mostly cloudy · fog nearby');
+  assert.equal(word(BASE.replace('9999 BKN035', '9999 VCTS BKN035')).text, 'Mostly cloudy · thunderstorm nearby');
+  assert.equal(word(BASE.replace('9999 BKN035', '9999 VCSS BKN035')).text, 'Mostly cloudy · weather nearby');
+  assert.equal(word(BASE.replace('9999 BKN035', '9999 -SN VCFG BKN035')).text, 'Light snow · fog nearby');
+});
+
+test('blowing and drifting snow are not snowfall; falling snow is; ice pellets and small hail say what they are', () => {
+  for (const g of ['BLSN', 'DRSN', '-BLSN']) assert.equal(word(BASE.replace('9999 BKN035', `9999 ${g} BKN035`)).text, 'Mostly cloudy', g);
+  assert.equal(word(BASE.replace('9999 BKN035', '9999 -SHSN BKN035')).text, 'Light snow');
+  assert.equal(word(BASE.replace('9999 BKN035', '9999 SG BKN035')).text, 'Moderate snow');
+  assert.equal(word(BASE.replace('9999 BKN035', '9999 PL BKN035')).text, 'Moderate ice pellets');
+  assert.equal(word(BASE.replace('9999 BKN035', '9999 GS BKN035')).text, 'Moderate small hail');
+  assert.equal(word(BASE.replace('9999 BKN035', '9999 GR BKN035')).text, 'Moderate hail');
+});
+
+test('no "surfaces drying" note while snow or fog is the weather', () => {
+  const rainy = ROWS.map((r) => parseMetar(r.rawOb, REF)).filter((m) => Date.parse(m.time) <= Date.parse('2026-11-03T05:30:00Z'));
+  const dry = parseMetar(BASE.replace('071455Z', '030525Z').replace('9999 BKN035', '9999 -SN BKN035'), REF);
+  const at = Date.parse('2026-11-03T05:30:00Z');
+  const o = observedNow({ EHAM: [...rainy.filter((m) => Date.parse(m.time) < Date.parse(dry.time)), dry] }, rankedAms(), at, {});
+  assert.ok(o.ambient.observed.wet > 0.05, 'the surface is still wet from the morning rain');
+  assert.equal(describeWeather(o).text, 'Light snow');
+  assert.equal(describeWeather(o).effect, '');
+});
+
+test('shallow, patchy and partial fog (MIFG, BCFG, PRFG) keep the sky words; FG and FZFG are fog', () => {
+  for (const g of ['MIFG', 'BCFG', 'PRFG']) assert.notEqual(word(BASE.replace('9999 BKN035', `0800 ${g} BKN035`)).text, 'Fog', g);
+  for (const g of ['FG', 'FZFG']) assert.equal(word(BASE.replace('9999 BKN035', `0400 ${g} BKN035`)).text, 'Fog', g);
+});
+
+test('Kolkata: a fog report now reads Fog (intended), mist and haze keep the sky words (real VECC reports)', () => {
+  const ranked = rankStations('kolkata', 22.5227, 88.3692);
+  const hz = 'METAR VECC 070530Z 06004KT 3200 HZ SCT020 FEW025CB BKN100 32/26 Q1015 TEMPO 2000 RA';
+  assert.equal(word(hz, ranked, 'VECC').text, 'Mostly cloudy, storm clouds');
+  const br = 'METAR VECC 070300Z 11004KT 2400 BR FEW100 30/27 Q1016 NOSIG';
+  assert.equal(word(br, ranked, 'VECC').text, 'A few clouds');
+  // the fixture holds no FG at Dum Dum: this one is SYNTHETIC (a VECC-shaped fog report with the vertical visibility a Kolkata winter dawn gives)
+  const fg = 'METAR VECC 070530Z 06004KT 0600 FG VV001 32/26 Q1015 NOSIG';
+  assert.equal(word(fg, ranked, 'VECC').text, 'Fog');
+});
+
+test('the area\'s own noun: Kolkata and Bengaluru keep "the ward", Amsterdam names the Canal Ring', () => {
+  assert.deepEqual(placeWords('kolkata', 'Ballygunge'), { centre: 'the ward', over: 'the ward' });
+  assert.deepEqual(placeWords('bengaluru', 'Indiranagar'), { centre: 'the ward', over: 'the ward' });
+  assert.deepEqual(placeWords('amsterdam', 'Canal Ring'), { centre: 'the Canal Ring centre', over: 'the Canal Ring' });
+});
+
+test('a reading just below zero prints 0, never -0', () => {
+  assert.equal(fixed(-0.4, 0), '0');
+  assert.equal(fixed(-0.04, 1), '0.0');
+  assert.equal(fixed(-0.6, 0), '-1');
+  assert.equal(fixed(-1.2, 1), '-1.2');
+  assert.equal(fixed(7, 0), '7');
 });
 
 // ---- the page clock --------------------------------------------------------------

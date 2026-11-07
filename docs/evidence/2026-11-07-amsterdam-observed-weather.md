@@ -2,7 +2,11 @@
 
 Extends `2026-10-07-observed-weather.md` to the Canal Ring. The method, the physics and the
 founder's decisions are that document's; nothing in the model changed. Kolkata and Bengaluru
-behave as before (their station table, tests and fixtures are untouched).
+keep their stations, fixtures and the same physics. **One wording change reaches them, and it is intended**: a
+report with fog (`FG`, `FZFG`) at VECC, VOBL or VOBG now reads "Fog" where it used to read sky words
+("Overcast" from `VV001`), and the same for falling snow, which those airports never report. `BR`, `HZ`,
+`FU`, `DU`, `SA` and shallow, patchy or partial fog (`MIFG`, `BCFG`, `PRFG`) keep the sky words
+(unit tests on real VECC `BR` and `HZ` reports; the VECC fixture has no `FG`, so the fog case is a synthetic VECC-shaped report and the test says so).
 
 ## The station, and why
 
@@ -65,12 +69,21 @@ What the 400 contain (counts) and how each is handled:
 1. `signedC` in `src/lib/weather/metar.ts`: `M00` returned **negative zero** (`-Number('00')`),
    which `toLocaleString` prints as "-0". Three real Schiphol reports have it (an air frost reading).
    Fixed with `0 - x`. No Indian report has `M00`; nothing else changes.
-2. `describeWeather` in `src/lib/weather/observed.ts`: a report with snow, snow grains, ice pellets
-   or hail at the station now reads "Light snow" and so on, and one with fog (not the shallow `MI`/`BC`
-   patches) reads "Fog", instead of falling through to "Mostly cloudy". Rain, drizzle and thunder
-   keep priority and their text. Snow is **not** given a wetting term (it does not wet the surface
-   as rain does, and no validation exists). There is no real EHAM snow report in the capture window,
-   so the snow and hail unit tests use a real 7 Nov report with its weather group swapped, and say so.
+2. `describeWeather` in `src/lib/weather/observed.ts`:
+   - Falling snow, snow grains, ice pellets and hail at the station read "Light snow", "Moderate ice pellets",
+     "Moderate small hail" (`GS`) and so on, instead of falling through to "Mostly cloudy". Blowing and drifting
+     snow (`BLSN`, `DRSN`) are not snowfall and keep the sky words. Snow gets no wetting term and no "surfaces drying" note.
+   - Fog (`FG`, `FZFG`) reads "Fog"; shallow `MI`, patchy `BC` and partial `PR` fog keep the sky words.
+   - The "nearby" clause names what is nearby: `VCSH` showers (as before), `VCTS` thunderstorm (as before), `VCFG` fog, any
+     other `VC` group plain "weather". It used to say "showers nearby" for all of them.
+   - There is no real EHAM snow in the capture window, so the snow and hail tests edit one real report and say so.
+3. `placeWords` (same file) and its callers (`weather-v2.ts`, `heat-map-app.ts`, two spans in `WeatherCards.astro`):
+   the card said "8 km from the ward" and "may differ over the ward". The Canal Ring is a 2.8 km square across three
+   stadsdelen, so Amsterdam now reads "8 km from the Canal Ring centre" and "may differ over the Canal Ring" (the same
+   noun pattern as the air panel). Kolkata and Bengaluru keep "the ward" word for word: Kolkata's wards and
+   Bengaluru's GBA wards are wards.
+4. `fixed` (same file): a reading that rounds to zero prints 0 ("-0" came from `(-0.4).toFixed(0)` in the live
+   readout, reachable through met.no or a feels-like just below zero).
 
 Everything else is data: one row in `src/data/metar-stations.ts`.
 
@@ -87,15 +100,21 @@ night is decided by the sun and not by the clock. Verified:
   the Weather card's "observed 14:55 UTC = 15:55 CET".
 - e2e: the line reads `... at 15:55 CET` for the 14:55Z report.
 
-## Credit
+## Credit (founder's decision, 2026-11-07: credit KNMI)
 
-The airport reports are credited once, city-independently, on `/attribution`: "airport observations
-(METAR) from the NOAA Aviation Weather Center, aviationweather.gov (US Government work, public
-domain)". That is the same source for Amsterdam, so no new line is *required*. The area page's credits
-list (`CITY_CREDITS.amsterdam`) already carries "Live weather (c) Met Norway" for the fallback, and the
-Weather card says "Airport reports via aviationweather.gov". KNMI's "bron: KNMI" requirement applies to
-the 1991-2020 Schiphol normals line that is already there; METARs are issued by the aerodrome's
-meteorological service (KNMI for Schiphol), and AWC redistributes them as public domain. **Open question
-for the founder**: if he wants a courtesy line naming KNMI/LVNL as the originator of the Schiphol
-reports on the area page, it is one `line(...)` in `src/data/city-credits.ts`. It is not added here
-because Kolkata and Bengaluru do not carry an equivalent line and the licence does not ask for one.
+Who makes Schiphol's METAR: **KNMI**. Its page says it "produceert luchtvaartmeteorologische waarnemingen voor civiele
+luchthavens in Nederland", METARs for flight planning and international distribution
+(knmi.nl/nederland-nu/luchtvaart/luchtvaartmeteorologische-informatie, read 2026-11-07). At Schiphol the instrument
+report is completed by an on-site observer (visibility, cloud type, weather), while Rotterdam, Groningen, Beek and
+Lelystad are AUTO stations. LVNL (the air-traffic controller) appears on KNMI's page only as a flight-preparation link
+and is not described as an observer. KNMI also publishes the same METARs on its Data Platform under CC BY 4.0
+(dataplatform.knmi.nl/dataset/metar-1-0, which names KNMI as producer and states no attribution wording). **Not settled:**
+LVNL's own eAIP GEN 3.5 (a search snippet says it names KNMI's Schiphol office as the observing provider) answered
+HTTP 403 and was not read, so "LVNL does not observe" rests on KNMI's pages and not on that document.
+
+OBOS reads the reports through NOAA's Aviation Weather Center (public domain), so the credit names both. One line in
+`CITY_CREDITS.amsterdam`: "Airport observations (METAR), Schiphol: bron: KNMI, relayed by the NOAA Aviation Weather Center. KNMI is
+not involved in this derived product and does not necessarily endorse its purport." (CC BY 4.0), carrying both halves of KNMI's
+copyright wording as the normals line beside it does. `/attribution` lists no Amsterdam source (no 3D BAG, no KNMI normals),
+so it has no city section to join; its one airport-observations sentence gained the same KNMI clause. Kolkata and Bengaluru
+are unchanged.

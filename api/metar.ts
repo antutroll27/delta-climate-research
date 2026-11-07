@@ -11,8 +11,8 @@
  * tested from Vercel and not from a home connection.) Probe removed afterwards.
  *
  * USAGE GUIDANCE (aviationweather.gov/data/api): at most 100 requests a minute,
- * a custom User-Agent, and no more often than the product updates. Indian METARs
- * are half-hourly; s-maxage=600 collapses every visitor to one upstream call per
+ * a custom User-Agent, and no more often than the product updates. Indian and Dutch
+ * (Schiphol, xx25 and xx55) METARs are half-hourly; s-maxage=600 collapses every visitor to one upstream call per
  * station set per 10 minutes, and only OBOS's own stations, in one canonical
  * order, are accepted, so the cache cannot be fanned out by query strings.
  *
