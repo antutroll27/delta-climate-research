@@ -298,7 +298,9 @@ function wantedLevels(cfg: ManagerConfig, d: Draft, now: number): Want[] {
     const ring: Want[] = [];
     for (const dir of ringOrder(limits.ring, d.heading)) {
       const n = cfg.topology.neighbour(cur, dir);
-      if (n !== null) ring.push({ sheet: n, level: 'lod1', priority: 'low' });
+      /* Not the sheet that is ON SCREEN: while a switch is being opened it is still `displayed`, its massing would be evicted
+         as `promoted` and wanted again on every event, a fetch/evict cycle for as long as the page takes to open the target. */
+      if (n !== null && n !== d.displayed) ring.push({ sheet: n, level: 'lod1', priority: 'low' });
     }
     wants.push(...ring.slice(0, room));
   }
