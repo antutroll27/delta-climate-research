@@ -199,7 +199,7 @@ export function localPaneHtml(p: LocalAirPayload, place: string, now: Date = new
   let s = `${paneHead(place)}<div class="aqblock">${block(c, '', place)}</div>`;
   if (c.state === 'live' && c.standard === 'nl-lki') {
     s += nlTable(c.readings) + `<p class="pane-h">The five LKI classes</p>${lkiKey()}`
-      + `<p class="pane-note">The LKI is Luchtmeetnet's own published figure for this monitor and hour, shown unaltered. It is the highest of the four substances' index numbers (NO₂, PM10, PM2.5, O₃). If two substances tie for the highest, the index is that number. Luchtmeetnet adds one point only when all the substances share the same number. `
+      + `<p class="pane-note">The LKI is Luchtmeetnet's own published figure for this monitor and hour, shown unaltered. It is the highest of the four substances' index numbers (NO₂, PM10, PM2.5, O₃). When some but not all of the substances tie for the highest, the index is that number. Luchtmeetnet adds one point only when all the substances share the same number. `
       + `Values are unvalidated hourly data and may be corrected later. Air quality is a separate layer: it does not enter the heat model.</p>`;
   } else if (c.state === 'live') {
     s += `<p class="pane-note">Values are the latest provisional hour from the Ministry of the Environment's national stations (国設局) only; other stations belong to local governments and are not shown. `
