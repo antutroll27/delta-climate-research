@@ -29,6 +29,7 @@ import type { NeighbourLayers } from '../streaming/halo-solve.ts';
 import { gpuMB, DEFAULT_CONFIG, createSheetManager, type ManagerState, type SheetManager } from '../streaming/sheet-manager.ts';
 import { AMSTERDAM_TOPOLOGY as TOPOLOGY, DIRECTIONS, type Direction } from '../streaming/sheet-topology.ts';
 import type { NetworkClass } from '../streaming/sheet-budgets.ts';
+import { streamedAreaPaths, type AreaPaths } from '../scope/paths.ts';
 import { sheetByCode, type SheetCode } from '../scope/sheets.ts';
 import type { Prepared, SheetWorker } from './sheet-worker-client.ts';
 import type { MassingMesh } from '../streaming/prism-mesh.ts';
@@ -38,17 +39,12 @@ import { CLAY } from '../explore/look.ts';
 export const SHEET_M = 2_800;
 /** The contact-occlusion bake the renderer wants (1024 texels, the editorial look's near radius), done in the worker. */
 const AO_REQUEST = { n: 1024, nearM: CLAY.aoNearM } as const;
-const DATA = '/heat-map/data/';
 
-export interface SheetUrls { ward: string; terrain: string; water: string; roads: string; trees: string; surface: string }
+export type SheetUrls = Pick<AreaPaths, 'ward' | 'terrain' | 'water' | 'roads' | 'trees' | 'surface'>;
 
-/** The artefact URLs of a sheet (the flat directory, by area id). Not `scope/paths.ts`: a sheet other than E4 is not `drawable`. */
+/** The artefact URLs of a sheet (scope/paths.ts: the flat directory, by area id; a sheet other than E4 is not `drawable`). */
 export function sheetUrls(code: SheetCode): SheetUrls {
-  const id = sheetByCode(code)!.id;
-  return {
-    ward: `${DATA}${id}.json`, terrain: `${DATA}${id}-terrain.json`, water: `${DATA}${id}-water.json`,
-    roads: `${DATA}${id}-roads.json`, trees: `${DATA}${id}-trees.json`, surface: `${DATA}${id}-surface.png`,
-  };
+  return streamedAreaPaths(sheetByCode(code)!.id);
 }
 
 /** Everything the page's own `loadWard` needs for a sheet, so it can open it from cache. */

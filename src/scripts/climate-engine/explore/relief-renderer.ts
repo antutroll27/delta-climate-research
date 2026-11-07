@@ -770,7 +770,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
       geometry.setIndex(new THREE.BufferAttribute(prepared.index, 1));
     }
     releaseCpuCopyAfterUpload(geometry);
-    this.city = new THREE.Mesh(geometry, prepared.kind === 'bevel' ? this.facade : (this.packedFacade ??= this.makeFacade('extruded', true)));
+    this.city = new THREE.Mesh(geometry, prepared.kind === 'bevel' ? this.facade : (this.packedFacade ??= this.makePackedFacade()));
     this.scene.add(this.city);
   }
 
@@ -1144,8 +1144,14 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     });
   }
 
-  private makeFacade(kind: 'extruded' | 'model' = 'extruded', packed = false): THREE.MeshStandardMaterial {
-    return CLASSIC ? this.makeFacadeClassic(kind) : this.makeEditorialFacade(kind, packed);
+  private makeFacade(kind: 'extruded' | 'model' = 'extruded'): THREE.MeshStandardMaterial {
+    return CLASSIC ? this.makeFacadeClassic(kind) : this.makeEditorialFacade(kind);
+  }
+
+  /** STREAMED CITIES: the editorial facade reading the packed aH / aG attributes (the page sends bevelled meshes under
+   *  `?look=classic`, so there is no classic packed variant). */
+  private makePackedFacade(): THREE.MeshStandardMaterial {
+    return this.makeEditorialFacade('extruded', true);
   }
 
   /** The facade shipped until 2026-10-02, kept unchanged for `?look=classic`. */

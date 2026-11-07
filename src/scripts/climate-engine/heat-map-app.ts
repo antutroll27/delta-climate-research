@@ -81,7 +81,7 @@ import { costBasisFor } from './solar-cost.ts';
 import { CITY_MAP_CREDIT, joinMapCredits } from '../../data/city-credits.ts';
 import { wardRoi, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
 import { mountPaybackSheet, type PaybackSheet } from './solar-payback-sheet.ts';
-import { areaPath, paths, cityPaths, wardMaskPath, type AreaPaths } from './scope/paths.ts';
+import { areaPath, paths, cityPaths, streamedAreaPaths, wardMaskPath, type AreaPaths } from './scope/paths.ts';
 import { asWardMask, buildingInWard, fieldHistogram, fieldStats, wardRows, type WardMask } from './ward-mask.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
@@ -2487,8 +2487,8 @@ export function mountHeatMap(): () => void {
        Both were right to refuse and neither said so, so a tab press against such an
        area was indistinguishable from a click that missed: same map, same readings,
        same highlight. `areaRefusal` holds both tests and the sentence for each. */
-    const refusal = stream ? null : areaRefusal(name);
-    if (refusal !== null) {
+    const refusal = areaRefusal(name);
+    if (refusal !== null && !stream) {     // a streamed sheet is not `drawable`, and is opened by the controller regardless
       loadChip.fail(refusal);
       return;
     }
@@ -4459,12 +4459,7 @@ export function mountHeatMap(): () => void {
     && INITIAL_AREA === 'nl/amsterdam/canal-ring'
     && new URLSearchParams(window.location.search).get('stream') === '1';
 
-  /** URLs of a streamed sheet's artefacts: the same flat directory, but `paths()` refuses an area that is not `drawable`. */
-  function streamPaths(key: AreaKey): AreaPaths {
-    const id = splitKey(key).area, d = `/heat-map/data/${id}`;
-    return { ward: `${d}.json`, terrain: `${d}-terrain.json`, water: `${d}-water.json`, roads: `${d}-roads.json`, labels: '',
-      provenance: '', trees: `${d}-trees.json`, surface: `${d}-surface.png`, canopy: '', layers: '', pv: '' };
-  }
+  const streamPaths = (key: AreaKey): AreaPaths => streamedAreaPaths(splitKey(key).area);
 
   async function startStream(): Promise<void> {
     const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }] = await Promise.all([
