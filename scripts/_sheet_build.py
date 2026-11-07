@@ -444,7 +444,7 @@ def build_sheet(area: Area, out: SheetOut, shared: Shared, opt: SheetOptions, to
     return BuildRecord(
         id=area.id, code=code, frameLat=float(area.frame_lat or 0.0), box=list(_city.bounds(area)),
         counts={"buildings": len(rows), "rawBuildings": st.raw_buildings, "inBox": st.inside_square, "droppedSmall": st.dropped_small,
-                "multipart": st.multipart_buildings, "trees": cdoc["count"], "water": len(ctx["water"]),
+                "multipart": st.multipart_buildings, "invalidRepaired": st.invalid_repaired, "trees": cdoc["count"], "water": len(ctx["water"]),
                 "green": len(ctx["green"]), "roads": len(ctx["roads"]), "hCheck": sum(1 for r in rows if r["hCheck"] is not None),
                 "flagged": flagged, "postAhn4Patches": len(patches)},
         bytes=sizes,
@@ -486,6 +486,7 @@ def run_guards(area: Area, cf: Any, b: CityBuildingsFile, ctx: CityContextFile, 
     recs.append(cf.g7_surface(area, ctx) if surface_built and park_cells >= G7_MIN_PARK_SHARE * 280 * 280 else
                 pending("G7", "surface raster", "no surface built" if not surface_built else
                         f"{park_cells} park cells of {280 * 280}: under {G7_MIN_PARK_SHARE:.0%}, too little park to discriminate a mirror"))
+    recs.append(cf.g8_export(area, terrain))
     water_level = cf.water_level_evidence(area, ctx) if n_water >= 3 else {}
     doc = {"city": area.city, "area": area.id, "measuredAt": time.strftime("%Y-%m-%d"),
            "inputs": cf.input_hashes(area), "guards": recs, "waterLevel": water_level, "frameLat": float(area.frame_lat or 0.0)}
@@ -549,6 +550,22 @@ def seam_continuity(data: str, public: str, sheets: list[_sheets.SheetRow]) -> l
     return out
 
 
+def aggregate(table: _sheets.SheetTable, data: str) -> dict[str, object]:
+    """One small committed record of what the batch built: per sheet the counts, output sizes, wall time and guard statuses."""
+    rows: list[dict[str, object]] = []
+    for s in table["sheets"]:
+        rec = _read_build(data, s["id"])
+        if rec is None:
+            continue
+        rows.append({"code": s["code"], "id": s["id"], "kind": s["kind"], "buildings": rec["counts"]["buildings"], "trees": rec["counts"]["trees"],
+                     "groundRepaired": rec["groundRepair"].get("repaired", 0), "wallSeconds": rec["wallSeconds"],
+                     "outputBytes": sum(rec["bytes"].values()), "guards": {g["id"]: g["status"] for g in rec["guards"]}})
+    return {"city": _sheets.CITY, "frameLat": _sheets.FRAME_LAT, "built": len(rows), "of": len(table["sheets"]) - 1,
+            "note": "E4 (Canal Ring) is never built into the repo's data dir: see build-city-sheets.py --e4-identity / --e4-new",
+            "totals": {"wallSeconds": round(sum(float(cast(float, r["wallSeconds"])) for r in rows), 1),
+                       "outputBytes": sum(int(cast(int, r["outputBytes"])) for r in rows)}, "sheets": rows}
+
+
 def cross_checks(table: _sheets.SheetTable) -> int:
     """Everything that needs more than one sheet: G9a on the rows that ingest EMITTED, G9b/c/d on the table, G10-data seams."""
     data, public = _city.data_dir(_sheets.CITY), _city.PUBLIC
@@ -597,6 +614,9 @@ def cross_checks(table: _sheets.SheetTable) -> int:
                       f"max {worst.ratio:.2f} ({worst.pair})")
     for p in problems:
         print("FAIL", p)
+    agg = aggregate(table, data)
+    write_json(os.path.join(data, "sheets-build.json"), agg)
+    print(f"wrote sheets-build.json: {agg['built']} sheets, totals {agg['totals']}")
     return 1 if problems else 0
 
 
@@ -651,6 +671,24 @@ def _self_test() -> None:
             assert seen and all(b == _sheets.geo_bounds(s["i"], s["j"]) for b in seen), (s["code"], seen)
     finally:
         setattr(_city, "bounds", real)
+    # run_guards returns EVERY guard G1-G8, in order, and records what has no evidence as pending (a slice once dropped G8 silently)
+    import tempfile
+    from types import SimpleNamespace
+
+    def rec(gid: str, status: str = "pass") -> dict[str, Any]:
+        return {"id": gid, "name": gid, "status": status, "north": 1.0, "mirrored": 0.0, "detail": {}}
+    with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as td:
+        stub = SimpleNamespace(
+            g1_frame_parity=lambda a: rec("G1"), g2_ring_self_consistency=lambda a, r: rec("G2"), g3_buildings_vs_water=lambda a, r, c: rec("G3"),
+            g4_landmarks=lambda a, r: rec("G4"), g6_terrain=lambda a, r, c: rec("G6"), g7_surface=lambda a, c: rec("G7"),
+            g8_export=lambda a, t: rec("G8"), record=lambda gid, name, ev, st, ru, status, n, m, **d: {**rec(gid, status), "detail": d},
+            park_mask=lambda a, c, n: np.zeros((n, n), dtype=bool), water_level_evidence=lambda a, c: {}, landmarks_path=lambda a: "/nonexistent",
+            frame_guard_path=lambda a: os.path.join(td, "fg.json"), input_hashes=lambda a: {})
+        bare = cast(Any, {"b": [], "retrieved": ""})
+        got = run_guards(_sheets.sheet_area(2, 0), stub, bare, cast(Any, {"water": [], "green": []}), cast(Any, {}), rec("G5"), True)
+        assert [g["id"] for g in got] == ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"], [g["id"] for g in got]
+        assert {g["id"]: g["status"] for g in got} == {"G1": "pass", "G2": "pass", "G3": "pending", "G4": "pending", "G5": "pass", "G6": "pass",
+                                                       "G7": "pending", "G8": "pass"}
     # a padded request (the Overture scan, the tile query, the AHN pad) grows the lattice box by exactly pad / (m per degree), never re-derives it
     for s in table["sheets"]:
         sa = _sheets.sheet_area(s["i"], s["j"])

@@ -117,6 +117,9 @@ class BuildStats(NamedTuple):
     dropped_small: int
     dropped_empty_piece: int
     holes_dropped: int
+    #: Multi-part buildings whose footprint/part intersection raised a GEOS topology error and was redone on `make_valid` copies.
+    #: 0 for every area built before the sheets (a topology error there would have been an exception, not a count).
+    invalid_repaired: int = 0
 
 
 # ── tiles ──────────────────────────────────────────────────────────────────
@@ -317,7 +320,7 @@ def build_rows(area: Area, raws: Iterator[RawBuilding]) -> tuple[list[CityBuildi
     seen: set[str] = set()
     rows: list[CityBuilding] = []
     mix: dict[str, int] = {}
-    n_raw = n_in = multi = fill = clamped = small = empty_piece = holes = 0
+    n_raw = n_in = multi = fill = clamped = small = empty_piece = holes = invalid = 0
     for b in raws:
         if b.src_id in seen:                                  # a building listed by two tiles
             continue
@@ -344,7 +347,11 @@ def build_rows(area: Area, raws: Iterator[RawBuilding]) -> tuple[list[CityBuildi
             multi += 1
             pieces = []
             for bp in b.parts:
-                inter = b.footprint.intersection(bp.geom)
+                try:
+                    inter = b.footprint.intersection(bp.geom)
+                except shapely.errors.GEOSException:       # an invalid (self-touching) BAG or part ring: redo on repaired copies, and count it
+                    inter = shapely.make_valid(b.footprint).intersection(shapely.make_valid(bp.geom))
+                    invalid += 1
                 polys = [inter] if isinstance(inter, Polygon) else (
                     list(inter.geoms) if isinstance(inter, MultiPolygon) else [])
                 polys = [g for g in polys if not g.is_empty]
@@ -362,7 +369,7 @@ def build_rows(area: Area, raws: Iterator[RawBuilding]) -> tuple[list[CityBuildi
                 continue
             fill += hsrc == "fill"
             rows.append(row)
-    stats = BuildStats(n_raw, n_in, len(rows), multi, fill, clamped, small, empty_piece, holes)
+    stats = BuildStats(n_raw, n_in, len(rows), multi, fill, clamped, small, empty_piece, holes, invalid)
     return rows, stats, mix
 
 

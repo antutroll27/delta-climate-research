@@ -258,6 +258,11 @@ def self_test() -> None:
     rows2, st2, _ = bag.build_rows(area, iter([two, out]))
     assert st2.inside_square == 1 and st2.multipart_buildings == 1 and sorted(x["h"] for x in rows2) == [5.0, 20.0], st2
 
+    # An invalid (bow-tie) part ring makes GEOS raise on the intersection; the row is rebuilt on repaired copies and the repair is counted.
+    bow = Polygon([(cx + 100, cy + 100), (cx + 112, cy + 108), (cx + 112, cy + 100), (cx + 100, cy + 108)])
+    tie = bag.RawBuilding("NL.IMBAG.Pand.tie", near, (bag.Part(0, bow, 5.5), bag.Part(1, right, 20.5)), 0.5, True, False, "ahn5", 2023)
+    rows3, st3, _ = bag.build_rows(area, iter([tie]))
+    assert st3.invalid_repaired >= 1 and st3.rows >= 1 and rows3, st3
     # The committed file, when present, passes its own contract.
     path = out_path(area, "buildings")
     note = "no committed buildings file yet"
