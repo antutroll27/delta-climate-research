@@ -56,8 +56,6 @@ SurfaceMode = Literal["reprojected", "none"]
 #: Reflectance bands read for a surface, and the Earth Search item list the city crops were cut from.
 SENTINEL_ITEMS: Final = "stac-selected-items.json"
 MIN_SCENES: Final = 3
-#: G7 compares veg inside parks with outside, mirrored and not: it needs park to compare. Under this share of the sheet it is not run.
-G7_MIN_PARK_SHARE: Final = 0.01
 
 
 def city_raw() -> str:
@@ -246,6 +244,7 @@ class SurfaceResult(NamedTuple):
     albedo: F32
     scenes: int
     png_bytes: int
+    dropped: tuple[tuple[str, str], ...]
 
 
 def local_scene_items() -> list[dict[str, Any]]:
@@ -254,8 +253,9 @@ def local_scene_items() -> list[dict[str, Any]]:
 
 
 def sheet_composite(area: Area, items: Sequence[dict[str, Any]], sentinel_dir: str,
-                    box_reader: Callable[..., Any] | None = None) -> tuple[F32, F32, int]:
-    """Per-cell median NDVI and albedo over the city's cached scenes, each REPROJECTED onto the sheet's own lon/lat grid."""
+                    dropped: list[tuple[str, str]] | None = None) -> tuple[F32, F32, int]:
+    """Per-cell median NDVI and albedo over the city's cached scenes, each REPROJECTED onto the sheet's own lon/lat grid.
+    Every scene that is not used is appended to `dropped` as (scene id, why): unreadable (with the error) or under half valid."""
     require_sheet(area)
     n = _sentinel.grid_for(area.size_m)
     box = _city.bounds(area)
@@ -264,8 +264,12 @@ def sheet_composite(area: Area, items: Sequence[dict[str, Any]], sentinel_dir: s
     for feat in items:
         def href(band: str, _default: str, fid: str = feat["id"]) -> str:
             return os.path.join(sentinel_dir, f"{fid}_{band}.tif")
+        failures = len(_sentinel.READ_FAILURES)
         got = _sentinel.scene_arrays_box(feat, box, n, href)
         if got is None:
+            if dropped is not None:
+                new = _sentinel.READ_FAILURES[failures:]
+                dropped.append((feat["id"], f"unreadable: {new[0][1]}" if new else "under half of the cells valid"))
             continue
         ndvis.append(got[0])
         albedos.append(got[1])
@@ -277,7 +281,8 @@ def sheet_composite(area: Area, items: Sequence[dict[str, Any]], sentinel_dir: s
 def build_surface(area: Area, png_path: str) -> SurfaceResult:
     """The sheet's surface PNG (R = vegetation fraction, G = albedo), at the MEASURED level (no DC-URS scalar to pin to)."""
     es = load_script("export-surface-rasters")
-    ndvi, albedo_raw, scenes = sheet_composite(area, local_scene_items(), os.path.join(city_raw(), "sentinel"))
+    dropped: list[tuple[str, str]] = []
+    ndvi, albedo_raw, scenes = sheet_composite(area, local_scene_items(), os.path.join(city_raw(), "sentinel"), dropped)
     fvc = np.clip((es.fill_gaps(ndvi, _sentinel.NDVI_BARE) - _sentinel.NDVI_BARE) / (_sentinel.NDVI_VEG - _sentinel.NDVI_BARE), 0, 1).astype(np.float32)
     albedo = es.fill_gaps(albedo_raw, es.FALLBACK_ALBEDO)
     if fvc.std() < 1e-3 and albedo.std() < 1e-3:
@@ -285,7 +290,18 @@ def build_surface(area: Area, png_path: str) -> SurfaceResult:
     r, g = es.quantise(fvc, *es.VEG_RANGE), es.quantise(albedo, *es.ALBEDO_RANGE)
     os.makedirs(os.path.dirname(png_path), exist_ok=True)
     Image.fromarray(np.dstack([r, g, np.zeros_like(r)]), mode="RGB").save(png_path, optimize=True)
-    return SurfaceResult(fvc, albedo, scenes, os.path.getsize(png_path))
+    return SurfaceResult(fvc, albedo, scenes, os.path.getsize(png_path), tuple(dropped))
+
+
+def centroids_in_sheet(raws: Sequence[bag.RawBuilding], area: Area) -> list[bool]:
+    """Which raw buildings have their footprint centroid in the sheet's half-open lon/lat box (what `build_rows` keeps)."""
+    if not raws:
+        return []
+    cx = np.array([r.footprint.centroid.x for r in raws])
+    cy = np.array([r.footprint.centroid.y for r in raws])
+    lon, lat = bag.rd_transformer()[0].transform(cx, cy)
+    w, s_, e, n = _city.bounds(area)
+    return [bool(v) for v in ((np.asarray(lon) >= w) & (np.asarray(lon) < e) & (np.asarray(lat) >= s_) & (np.asarray(lat) < n))]
 
 
 def sha256_file(path: str) -> str:
@@ -350,7 +366,7 @@ def build_sheet(area: Area, out: SheetOut, shared: Shared, opt: SheetOptions, to
     t0 = time.time()
     read_mosaic = memo_mosaic(dem.vrt_mosaic({"dtm_05m": shared.vrts.dtm, "dsm_05m": shared.vrts.dsm}))
     dtm, dtm_tf = read_mosaic("dtm_05m", area, clip_dir)
-    read_mosaic("dsm_05m", area, clip_dir)
+    dsm, _dsm_tf = read_mosaic("dsm_05m", area, clip_dir)
     timed("ahn mosaic + clips", t0)
     t0 = time.time()
     scratch_gz = os.path.join(out.scratch, area.id, "gz")
@@ -361,20 +377,23 @@ def build_sheet(area: Area, out: SheetOut, shared: Shared, opt: SheetOptions, to
         pass
     repair: bag.GroundReport | None = None
     if opt.repair_ground:
-        raws, repair = bag.repair_grounds(raws, dtm, dtm_tf)
+        raws, repair = bag.repair_grounds(raws, dtm, dtm_tf, dsm, centroids_in_sheet(raws, area))
     rows, st, mix = bag.build_rows(area, iter(raws))
     bdoc = bag.make_buildings_doc(area, rows, st, mix, retrieved)
     if repair is not None and repair.repaired:
         bdoc["heightNote"] += (f" GROUND PLAUSIBILITY: for {repair.repaired} building(s) 3D BAG's ground was more than {bag.GROUND_DROP_M:g} m below the "
-                               f"median of the buildings within {bag.GROUND_NEIGHBOUR_R_M:g} m or of the AHN4 DTM ring around the footprint; "
-                               f"their ground is the 5th percentile of that ring (hSource '3dbag-p70-ahn4-ground').")
+                               f"median of the {bag.GROUND_MIN_NEIGHBOURS}+ buildings within {bag.GROUND_NEIGHBOUR_R_M:g} m (or, with fewer neighbours, a building "
+                               f"older than the AHN4 survey whose AHN4 height agrees); their ground is the 5th percentile of the AHN4 DTM ring around the "
+                               f"footprint (hSource '3dbag-p70-ahn4-ground'). Never raises a height; never leaves a part under {bag.MIN_REPAIRED_HEIGHT_M:g} m; "
+                               f"never applied to buildings from {bag.AHN4_FLIGHT_YEAR} on.")
     timed("buildings (3D BAG)", t0)
 
     # 2. G5 annotate (hCheck / flag), which the terrain patch selection reads
     t0 = time.time()
     cf = load_script("check-city-frame")
     cf.DATA_DIR, cf.PUBLIC_DIR, cf.AHN_DIR = out.data, out.public, clip_dir
-    g5, n70 = cf.g5_heights(area, rows)
+    years = {r.src_id: r.build_year for r in raws}
+    g5, n70 = cf.g5_v2(area, rows, years)
     flagged = 0
     for r, v in zip(rows, n70, strict=True):
         if np.isfinite(v):
@@ -419,7 +438,7 @@ def build_sheet(area: Area, out: SheetOut, shared: Shared, opt: SheetOptions, to
         t0 = time.time()
         sr = build_surface(area, os.path.join(out.public, f"{area.id}-surface.png"))
         sizes["surface"] = sr.png_bytes
-        surf |= {"scenes": sr.scenes, "fvcMean": round(float(sr.fvc.mean()), 4), "albedoMean": round(float(sr.albedo.mean()), 4),
+        surf |= {"scenes": sr.scenes, "scenesDropped": [list(d) for d in sr.dropped], "fvcMean": round(float(sr.fvc.mean()), 4), "albedoMean": round(float(sr.albedo.mean()), 4),
                  "fvcStd": round(float(sr.fvc.std()), 4), "albedoStd": round(float(sr.albedo.std()), 4)}
         timed("surface (reprojected Sentinel-2)", t0)
 
@@ -448,10 +467,11 @@ def build_sheet(area: Area, out: SheetOut, shared: Shared, opt: SheetOptions, to
                 "green": len(ctx["green"]), "roads": len(ctx["roads"]), "hCheck": sum(1 for r in rows if r["hCheck"] is not None),
                 "flagged": flagged, "postAhn4Patches": len(patches)},
         bytes=sizes,
-        groundRepair=({} if repair is None else {"checkedRing": repair.checked_ring, "flagged": repair.flagged, "byNeighbours": repair.by_neighbours,
-                                                 "byRing": repair.by_ring, "repaired": repair.repaired, "widened": repair.widened, "unrepairable": repair.unrepairable,
-                                                 "maxTallerM": round(repair.max_drop_m, 2),
-                                                 "changes": [[i, round(o, 3), round(n, 3)] for i, o, n in repair.changes]}),
+        groundRepair=({} if repair is None else {
+            "inSheet": repair.buildings, "checkedRing": repair.checked_ring, "repaired": repair.repaired, "widened": repair.widened,
+            "maxLoweredM": round(repair.max_drop_m, 2), "outcomes": dict(repair.outcomes),
+            "changes": [[i, round(o, 3), round(n, 3)] for i, o, n in repair.changes],
+            "kept": [[i, why] for i, why in repair.kept]}),
         surface=surf, guards=guards, seconds=[[s.step, s.seconds] for s in steps], wallSeconds=round(time.time() - t_all, 1))
 
 
@@ -466,9 +486,10 @@ def landmarks_inside(area: Area, cf: Any) -> int:
 
 def run_guards(area: Area, cf: Any, b: CityBuildingsFile, ctx: CityContextFile, terrain: CityTerrainFile,
                g5: dict[str, Any], surface_built: bool) -> list[GuardSummary]:
-    """G1-G8 for a sheet, written to `<data>/<id>/frame-guard.json` (G5/G6 measured here, from the clips). A guard that has no
-    evidence in this sheet (no water, no park, fewer than two Wikidata landmarks) is recorded `pending` with the reason, never
-    forced to pass or fail on nothing; every guard that CAN be measured keeps the repo's own thresholds."""
+    """G1-G8 for a sheet, written to `<data>/<id>/frame-guard.json` (G5/G6 measured here, from the clips). G3, G5, G6 and G7 use the sheet
+    rules of check-city-frame (`*_v2`, P2b audit S1), each of which also runs its mirrored / turned / shifted controls and must see them
+    FAIL. A guard with no evidence in this sheet (too little water, fewer than two Wikidata landmarks, too few pre-AHN4 buildings) is
+    recorded `pending` with the reason, never forced to pass or fail on nothing."""
     rows = b["b"]
     recs: list[dict[str, Any]] = [cf.g1_frame_parity(area), cf.g2_ring_self_consistency(area, rows)]
 
@@ -477,15 +498,12 @@ def run_guards(area: Area, cf: Any, b: CityBuildingsFile, ctx: CityContextFile, 
         return rec
 
     n_water = len([w for w in ctx["water"] if w.get("p")])
-    recs.append(cf.g3_buildings_vs_water(area, rows, ctx) if n_water >= 3 else pending("G3", "buildings vs water", f"{n_water} water polygons: no evidence"))
+    recs.append(cf.g3_v2(area, rows, ctx))
     recs.append(cf.g4_landmarks(area, rows) if landmarks_inside(area, cf) >= 2 else
                 pending("G4", "landmarks", "fewer than 2 Wikidata landmarks in this sheet; the city-level G4 over the assembled sheets covers it"))
     recs.append(g5)
-    recs.append(cf.g6_terrain(area, rows, ctx))
-    park_cells = int(cf.park_mask(area, ctx, 280).sum()) if any(g["cls"] == "park" for g in ctx["green"]) else 0
-    recs.append(cf.g7_surface(area, ctx) if surface_built and park_cells >= G7_MIN_PARK_SHARE * 280 * 280 else
-                pending("G7", "surface raster", "no surface built" if not surface_built else
-                        f"{park_cells} park cells of {280 * 280}: under {G7_MIN_PARK_SHARE:.0%}, too little park to discriminate a mirror"))
+    recs.append(cf.g6_v2(area, rows, ctx))
+    recs.append(cf.g7_v2(area, ctx) if surface_built else pending("G7", "surface raster (v2 rule)", "no surface built"))
     recs.append(cf.g8_export(area, terrain))
     water_level = cf.water_level_evidence(area, ctx) if n_water >= 3 else {}
     doc = {"city": area.city, "area": area.id, "measuredAt": time.strftime("%Y-%m-%d"),
@@ -679,10 +697,10 @@ def _self_test() -> None:
         return {"id": gid, "name": gid, "status": status, "north": 1.0, "mirrored": 0.0, "detail": {}}
     with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as td:
         stub = SimpleNamespace(
-            g1_frame_parity=lambda a: rec("G1"), g2_ring_self_consistency=lambda a, r: rec("G2"), g3_buildings_vs_water=lambda a, r, c: rec("G3"),
-            g4_landmarks=lambda a, r: rec("G4"), g6_terrain=lambda a, r, c: rec("G6"), g7_surface=lambda a, c: rec("G7"),
+            g1_frame_parity=lambda a: rec("G1"), g2_ring_self_consistency=lambda a, r: rec("G2"), g3_v2=lambda a, r, c: rec("G3", "pending"),
+            g4_landmarks=lambda a, r: rec("G4"), g6_v2=lambda a, r, c: rec("G6"), g7_v2=lambda a, c: rec("G7", "pending"),
             g8_export=lambda a, t: rec("G8"), record=lambda gid, name, ev, st, ru, status, n, m, **d: {**rec(gid, status), "detail": d},
-            park_mask=lambda a, c, n: np.zeros((n, n), dtype=bool), water_level_evidence=lambda a, c: {}, landmarks_path=lambda a: "/nonexistent",
+            water_level_evidence=lambda a, c: {}, landmarks_path=lambda a: "/nonexistent",
             frame_guard_path=lambda a: os.path.join(td, "fg.json"), input_hashes=lambda a: {})
         bare = cast(Any, {"b": [], "retrieved": ""})
         got = run_guards(_sheets.sheet_area(2, 0), stub, bare, cast(Any, {"water": [], "green": []}), cast(Any, {}), rec("G5"), True)

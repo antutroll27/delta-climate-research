@@ -286,45 +286,7 @@ def self_test() -> None:
         problems = ovt.validate_context_file(area, cdoc)
         assert not problems, problems
         note += f"; context file ({len(cdoc['water'])} water, {len(cdoc['green'])} green, {len(cdoc['roads'])} roads) satisfies the contract"
-    # GROUND PLAUSIBILITY (P2b). The audit's case: a repeated b3_h_maaiveld of -6.729 m among neighbours at +1.2 m and an AHN4 ring
-    # at +2.3 m is implausible by BOTH tests; a polder whose neighbours and ring lie at -5.3 m is NOT, whatever its absolute NAP.
-    nb_city, ring_city = [1.0, 1.1, 1.2, 1.3, 1.4, 1.2], [2.2, 2.3, 2.4, 2.3, 2.3]
-    assert bag.ground_verdict(-6.729, nb_city, ring_city) == "both"
-    assert bag.ground_verdict(-6.729, nb_city, []) == "neighbours" and bag.ground_verdict(-6.729, [1.0] * 4, ring_city) == "ring"
-    assert bag.ground_verdict(-6.729, [1.0] * 4, [2.0] * 3) == "ok", "too little evidence in either test says nothing"
-    nb_polder, ring_polder = [-5.3, -5.2, -5.4, -5.3, -5.5, -5.3], [-5.4, -5.3, -5.5, -5.4, -5.4]
-    assert bag.ground_verdict(-5.5, nb_polder, ring_polder) == "ok", "a polder far below NAP is not implausible"
-    assert bag.ground_verdict(-6.9, nb_polder, ring_polder) == "ok", "1.6 m under a polder's neighbours is within the 3 m margin"
-    assert bag.ground_verdict(-9.0, nb_polder, ring_polder) == "both", "3.7 m under a polder's neighbours IS implausible, even at -9 m NAP"
-    assert bag.ground_verdict(-2.0, [1.0] * 6, [1.0] * 5) == "ok" and bag.ground_verdict(-2.000001, [1.0] * 6, [1.0] * 5) == "both", "the margin is a strict 3 m"
-    # end to end on a flat 0 m DTM with a hole under every roof: one building keeps a -6.7 m ground, a polder neighbour at -5.4 does not move
-    from rasterio.transform import from_origin
-    from shapely.geometry import Polygon as _P
-    flat = np.zeros((400, 400), dtype=np.float32)
-    ftf = from_origin(0.0, 400.0, 0.5, 0.5)
-    def mkb(sid: str, x: float, ground: float | None) -> bag.RawBuilding:
-        sq = _P([(x, 300), (x + 10, 300), (x + 10, 310), (x, 310)])
-        return bag.RawBuilding(sid, sq, (bag.Part(0, sq, 10.0),), ground, True, False, "ahn5", 2023)
-    row = [mkb(f"n{k}", 40.0 + 11.0 * k, 0.3) for k in range(6)] + [mkb("bad", 110.0, -6.729)]
-    fixed, rep = bag.repair_grounds(row, flat, ftf)
-    assert rep.flagged == rep.repaired == 1 and rep.unrepairable == 0 and abs(rep.max_drop_m - 6.729) < 1e-9, rep
-    byid = {b.src_id: b for b in fixed}
-    assert byid["bad"].ground_fixed and byid["bad"].ground_nap == 0.0 and not byid["n0"].ground_fixed and byid["n0"].ground_nap == 0.3
-    assert bag._roof_height(byid["bad"], byid["bad"].parts[0]) == (10.0, "3dbag-p70-ahn4-ground")
-    assert bag._roof_height(byid["n0"], byid["n0"].parts[0])[1] == "3dbag-p70"
-    # a building packed into a block: no DTM within 6 m of it (neighbouring roofs are nodata), ground at 8-25 m: the ring widens, once
-    packed = flat.copy()
-    packed[int((400 - 316) / 0.5):int((400 - 294) / 0.5), int(104 / 0.5):int(126 / 0.5)] = np.nan       # x 104..126, y 294..316
-    f3, rep3 = bag.repair_grounds(row, packed, ftf)
-    assert rep3.repaired == 1 and rep3.widened == 1 and rep3.unrepairable == 0 and {b.src_id for b in f3 if b.ground_fixed} == {"bad"}, rep3
-    dead = np.full((400, 400), np.nan, dtype=np.float32)
-    f4, rep4 = bag.repair_grounds(row, dead, ftf)
-    assert rep4.flagged == 1 and rep4.unrepairable == 1 and rep4.repaired == 0 and not any(b.ground_fixed for b in f4), \
-        "flagged by its neighbours but with no DTM anywhere: counted as unrepairable and left as it was"
-    poldr = np.full((400, 400), -5.4, dtype=np.float32)
-    pol = [mkb(f"p{k}", 40.0 + 11.0 * k, -5.3) for k in range(6)] + [mkb("deep", 110.0, -5.5)]
-    kept, rep2 = bag.repair_grounds(pol, poldr, ftf)
-    assert rep2.flagged == 0 and all(not b.ground_fixed for b in kept) and kept == pol, "a polder at -5.5 m NAP must NOT trigger"
+    bag.self_test()
     dem.self_test()
     ovt.self_test()
     canopy.self_test()

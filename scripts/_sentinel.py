@@ -295,6 +295,10 @@ def _products(feat: dict[str, Any], read_band: Callable[[str], npt.NDArray[np.fl
 
 GeoBox = tuple[float, float, float, float]
 
+#: Every `read_box` failure of this process: (href, reason). A scene that cannot be read is DROPPED from the composite, and a silent drop
+#: once made two sheets use 22 scenes where the others use 23 (P2B-AUDIT N1): so it is logged to stderr and counted here.
+READ_FAILURES: list[tuple[str, str]] = []
+
 
 def read_box(href: str, box: GeoBox, n: int) -> npt.NDArray[np.float32] | None:
     """Read a lon/lat box (west, south, east, north) from a COG onto an n x n EPSG:4326 grid, by REPROJECTION.
@@ -315,7 +319,9 @@ def read_box(href: str, box: GeoBox, n: int) -> npt.NDArray[np.float32] | None:
             reproject(source=rasterio.band(src, 1), destination=dst, src_nodata=src.nodata, dst_nodata=0.0,
                       dst_transform=tf_from_bounds(*box, n, n), dst_crs="EPSG:4326", resampling=Resampling.bilinear)
         return dst if dst.size else None
-    except Exception:
+    except Exception as ex:                      # deliberately broad (GDAL raises many types), but never silent
+        READ_FAILURES.append((href, f"{type(ex).__name__}: {ex}"))
+        print(f"  _sentinel.read_box: cannot read {href}: {type(ex).__name__}: {ex}", file=sys.stderr, flush=True)
         return None
 
 

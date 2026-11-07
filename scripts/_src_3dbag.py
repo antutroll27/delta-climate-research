@@ -38,7 +38,7 @@ import sqlite3
 import struct
 import time
 from dataclasses import dataclass
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Final, Iterator, Literal, NamedTuple, TypedDict, cast
 
 import numpy as np
@@ -53,6 +53,7 @@ from shapely.geometry import MultiPolygon, Polygon
 from shapely.geometry.polygon import orient
 
 import _city
+import _src_dem
 from _city import Area, CityBuilding, HSource
 
 RELEASE: Final = "v20250903"
@@ -413,19 +414,6 @@ RING_OUTER_M: Final = 4.0
 RING_OUTER_STEPS_M: Final = (4.0, 8.0, 15.0, 25.0)
 RING_MIN_CELLS: Final = 4
 
-GroundVerdict = Literal["ok", "neighbours", "ring", "both"]
-
-
-def ground_verdict(own: float, neighbours: Sequence[float], ring: Sequence[float]) -> GroundVerdict:
-    """Is 3D BAG's ground for one building implausible? Evidence, in the audit's two forms (AMS-FOLLOWUPS-AUDIT.md):
-    the ground is more than `GROUND_DROP_M` below the MEDIAN ground of the buildings within `GROUND_NEIGHBOUR_R_M` (needs at
-    least `GROUND_MIN_NEIGHBOURS` of them), and/or more than `GROUND_DROP_M` below the MEDIAN of the AHN4 DTM ring around the
-    footprint (needs at least `RING_MIN_CELLS` cells). A test without enough evidence says nothing; both silent is "ok"."""
-    by_neighbours = len(neighbours) >= GROUND_MIN_NEIGHBOURS and own < float(np.median(neighbours)) - GROUND_DROP_M
-    by_ring = len(ring) >= RING_MIN_CELLS and own < float(np.median(ring)) - GROUND_DROP_M
-    return "both" if by_neighbours and by_ring else "neighbours" if by_neighbours else "ring" if by_ring else "ok"
-
-
 def ring_cells(footprint: Polygon, dtm: npt.NDArray[np.float32], tf: Affine, outer: float = RING_OUTER_M) -> npt.NDArray[np.float64]:
     """AHN4 DTM values (NAP m) in the ring RING_INNER_M..`outer` outside a footprint (RD, same CRS as `dtm`); nodata dropped."""
     x0, y0, x1, y1 = footprint.bounds
@@ -443,38 +431,117 @@ def ring_cells(footprint: Polygon, dtm: npt.NDArray[np.float32], tf: Affine, out
     return finite
 
 
+#: Buildings from this year on are NOT repaired from the AHN4 ring: the ring is the 2020-22 construction site (preload sand 2-4 m above the
+#: finished polder), not the ground the building stands on. The same year `_src_dem.post_ahn4_ids` uses.
+AHN4_FLIGHT_YEAR: Final = _src_dem.AHN4_FLIGHT_YEAR
+#: A repair that would leave a building lower than this is refused: it is the repair that is wrong, not a 1 m building.
+MIN_REPAIRED_HEIGHT_M: Final = 2.0
+#: nDSM window around a footprint, and pixels it needs, for the AHN4 height check that backs a few-neighbours repair.
+NDSM_PAD_M: Final = 20.0
+NDSM_MIN_PIXELS: Final = 32
+
+#: The outcome for one building. Only "repaired" changes a row.
+GroundOutcome = Literal["ok", "fill", "ring-only", "post-ahn4", "no-ring", "not-lower", "below-2m", "few-neighbours-unconfirmed", "repaired"]
+
+
+def ground_decision(own: float, neighbours: Sequence[float], ring: Sequence[float], fix_ring: Sequence[float], build_year: int | None,
+                    roofs: Sequence[float], h_check: Callable[[], float | None]) -> tuple[GroundOutcome, float | None]:
+    """What to do with one building's 3D BAG ground: (outcome, new ground when repaired). The audit's rule (P2B-AUDIT B1):
+
+    * REPAIR ONLY WHEN THE NEIGHBOURS DISAGREE: at least `GROUND_MIN_NEIGHBOURS` buildings within `GROUND_NEIGHBOUR_R_M` whose median ground is more
+      than `GROUND_DROP_M` above this one's. The AHN4 ring alone ("ring-only") repairs nothing: it is 2020-22 ground and 3D BAG's is mostly 2023.
+    * With fewer neighbours the ring may repair only a building that stood BEFORE the AHN4 survey (BAG `build_year` < `AHN4_FLIGHT_YEAR`) and only if
+      the AHN4 nDSM height check agrees better with the new height than with the old (`h_check()` is evaluated only then).
+    * A building from `AHN4_FLIGHT_YEAR` on is never repaired from the ring.
+    * The new ground is the 5th percentile of `fix_ring` (the ring, widened for a building packed into a block). It must be HIGHER than the old
+      ground (a repair never makes a building taller) and leave every part at least `MIN_REPAIRED_HEIGHT_M` tall; otherwise the building is kept as it was.
+    * No absolute NAP floor.
+    """
+    if not roofs:
+        return "fill", None                                     # no roof evidence: the row is the 2.5 m fill whatever the ground
+    enough = len(neighbours) >= GROUND_MIN_NEIGHBOURS
+    by_neighbours = enough and own < float(np.median(neighbours)) - GROUND_DROP_M
+    by_ring = len(ring) >= RING_MIN_CELLS and own < float(np.median(ring)) - GROUND_DROP_M
+    if enough and not by_neighbours:
+        return ("ring-only" if by_ring else "ok"), None
+    if not enough and not by_ring:
+        return "ok", None
+    post = build_year is not None and build_year >= AHN4_FLIGHT_YEAR
+    if post:
+        return "post-ahn4", None
+    if not enough and build_year is None:
+        return "few-neighbours-unconfirmed", None
+    if len(fix_ring) < RING_MIN_CELLS:
+        return "no-ring", None
+    fixed = float(np.percentile(fix_ring, 5))
+    if fixed <= own:
+        return "not-lower", None
+    if min(roofs) - fixed < MIN_REPAIRED_HEIGHT_M:
+        return "below-2m", None
+    if not enough:
+        hc = h_check()
+        if hc is None or not abs(max(roofs) - fixed - hc) < abs(max(roofs) - own - hc):
+            return "few-neighbours-unconfirmed", None
+    return "repaired", fixed
+
+
+def ndsm_p70(footprint: Polygon, dsm: npt.NDArray[np.float32], dtm: npt.NDArray[np.float32], tf: Affine) -> float | None:
+    """AHN4 nDSM (DSM minus the nearest-filled DTM) 70th percentile inside a footprint, from a window around it; None if too few pixels."""
+    from scipy import ndimage
+    x0, y0, x1, y1 = footprint.bounds
+    c0, c1 = max(0, int(np.floor((x0 - NDSM_PAD_M - tf.c) / tf.a))), min(dtm.shape[1], int(np.ceil((x1 + NDSM_PAD_M - tf.c) / tf.a)) + 1)
+    r0, r1 = max(0, int(np.floor((tf.f - (y1 + NDSM_PAD_M)) / -tf.e))), min(dtm.shape[0], int(np.ceil((tf.f - (y0 - NDSM_PAD_M)) / -tf.e)) + 1)
+    if c1 <= c0 or r1 <= r0:
+        return None
+    d, sf = dtm[r0:r1, c0:c1].copy(), dsm[r0:r1, c0:c1]
+    bad = ~np.isfinite(d)
+    if bad.all():
+        return None
+    if bad.any():
+        idx = ndimage.distance_transform_edt(bad, return_distances=False, return_indices=True)
+        d = d[idx[0], idx[1]]
+    cols, rows = np.meshgrid(np.arange(c0, c1), np.arange(r0, r1))
+    inside = shapely.contains_xy(footprint, tf.c + (cols + 0.5) * tf.a, tf.f + (rows + 0.5) * tf.e)
+    vals = (sf - d)[inside]
+    vals = vals[np.isfinite(vals)]
+    return float(np.percentile(vals, 70)) if vals.size >= NDSM_MIN_PIXELS else None
+
+
 class GroundReport(NamedTuple):
-    buildings: int
-    checked_ring: int            # buildings the DTM covered (a ring test was possible)
-    flagged: int
-    by_neighbours: int
-    by_ring: int
-    repaired: int                # flagged and given the ring p5
-    unrepairable: int            # flagged, but even the widest ring had too few cells to take a p5 from
+    """What `repair_grounds` did to the buildings IN SCOPE (a sheet's own buildings; the rest of the tiles only serve as neighbours)."""
+    buildings: int               # buildings in scope
+    checked_ring: int            # of those, the ones the DTM covered (a ring test was possible)
+    repaired: int
     widened: int                 # repaired from a ring wider than RING_OUTER_M
-    max_drop_m: float            # largest (new ground - old ground) in metres, i.e. how much taller a building was served
-    changes: tuple[tuple[str, float, float], ...]    # (id, old ground, new ground)
+    max_drop_m: float            # largest (new ground - old ground) in metres, i.e. how much a building came down
+    outcomes: tuple[tuple[str, int], ...]                 # outcome -> count, for every outcome that occurred
+    changes: tuple[tuple[str, float, float], ...]         # (id, old ground, new ground)
+    kept: tuple[tuple[str, str], ...]                     # (id, outcome) of every in-scope building the rule looked at and did NOT repair, "ring-only" included
 
 
-def repair_grounds(raws: Sequence[RawBuilding], dtm: npt.NDArray[np.float32], tf: Affine) -> tuple[list[RawBuilding], GroundReport]:
-    """Replace an implausible `ground_nap` by the AHN4 DTM ring's 5th percentile (the statistic 3D BAG itself uses for ground).
-
-    Buildings whose ground fails `ground_verdict` and whose ring has `RING_MIN_CELLS` cells are rewritten with `ground_fixed`
-    set, which tags their rows `3dbag-p70-ahn4-ground`; everything else is returned untouched. Neighbours are looked up among
-    ALL the given buildings (a tile's worth, so a building on a sheet's edge has its neighbours), the ring only where the DTM
-    covers the building. A flagged building with no usable ring keeps its ground and is counted in `unrepairable`."""
+def repair_grounds(raws: Sequence[RawBuilding], dtm: npt.NDArray[np.float32], tf: Affine, dsm: npt.NDArray[np.float32] | None = None,
+                   scope: Sequence[bool] | None = None) -> tuple[list[RawBuilding], GroundReport]:
+    """Apply `ground_decision` to every building in `scope` (default all). Neighbours come from ALL `raws`, so a building on a sheet's edge
+    has them; the ring and the nDSM check come from `dtm` / `dsm` (None: a few-neighbours repair can then never be confirmed).
+    A repaired building is rewritten with `ground_fixed` set, which tags its rows `3dbag-p70-ahn4-ground`; the rest are returned as given."""
     out = list(raws)
+    inside = list(scope) if scope is not None else [True] * len(raws)
     ok_idx = [k for k, b in enumerate(raws) if b.ground_nap is not None]
     cent = np.array([[raws[k].footprint.centroid.x, raws[k].footprint.centroid.y] for k in ok_idx], dtype=np.float64)
     ground = np.array([raws[k].ground_nap for k in ok_idx], dtype=np.float64)
     tree = cKDTree(cent) if len(ok_idx) else None
     minx, maxy = tf.c, tf.f
     maxx, miny = tf.c + dtm.shape[1] * tf.a, tf.f + dtm.shape[0] * tf.e
-    checked = flagged = n_nb = n_ring = repaired = unrep = widened = 0
+    in_scope = checked = repaired = widened = 0
     drop = 0.0
+    counts: dict[str, int] = {}
     changes: list[tuple[str, float, float]] = []
+    kept: list[tuple[str, str]] = []
     for n, k in enumerate(ok_idx):
+        if not inside[k]:
+            continue
         b = raws[k]
+        in_scope += 1
         own = float(ground[n])
         assert tree is not None
         nb = [j for j in tree.query_ball_point(cent[n], GROUND_NEIGHBOUR_R_M) if j != n]
@@ -482,27 +549,29 @@ def repair_grounds(raws: Sequence[RawBuilding], dtm: npt.NDArray[np.float32], tf
         covered = x0 - RING_OUTER_M > minx and x1 + RING_OUTER_M < maxx and y0 - RING_OUTER_M > miny and y1 + RING_OUTER_M < maxy
         ring = ring_cells(b.footprint, dtm, tf) if covered else np.empty(0, dtype=np.float64)
         checked += covered
-        verdict = ground_verdict(own, ground[nb].tolist(), ring.tolist())
-        if verdict == "ok":
-            continue
-        flagged += 1
-        n_nb += verdict in ("neighbours", "both")
-        n_ring += verdict in ("ring", "both")
-        if len(ring) < RING_MIN_CELLS:
+        fix_ring, was_widened = ring, False
+        if covered and len(ring) < RING_MIN_CELLS and len(nb) >= 0:
             for outer in RING_OUTER_STEPS_M[1:]:
-                ring = ring_cells(b.footprint, dtm, tf, outer) if covered else ring
-                if len(ring) >= RING_MIN_CELLS:
-                    widened += 1
+                fix_ring = ring_cells(b.footprint, dtm, tf, outer)
+                if len(fix_ring) >= RING_MIN_CELLS:
+                    was_widened = True
                     break
-        if len(ring) < RING_MIN_CELLS:
-            unrep += 1
+        roofs = [] if b.insufficient else [p.roof_nap for p in b.parts if p.roof_nap is not None]
+        def confirm(fp: Polygon = b.footprint) -> float | None:
+            return ndsm_p70(fp, dsm, dtm, tf) if dsm is not None else None
+        outcome, fixed = ground_decision(own, ground[nb].tolist(), ring.tolist(), fix_ring.tolist(), b.build_year, roofs, confirm)
+        if outcome in ("ok", "fill"):
             continue
-        fixed = float(np.percentile(ring, 5))
+        counts[outcome] = counts.get(outcome, 0) + 1
+        if fixed is None:
+            kept.append((b.src_id, outcome))
+            continue
         out[k] = dataclasses.replace(b, ground_nap=fixed, ground_fixed=True)
         repaired += 1
+        widened += was_widened
         drop = max(drop, fixed - own)
         changes.append((b.src_id, own, fixed))
-    return out, GroundReport(len(raws), checked, flagged, n_nb, n_ring, repaired, unrep, widened, drop, tuple(changes))
+    return out, GroundReport(in_scope, checked, repaired, widened, drop, tuple(sorted(counts.items())), tuple(changes), tuple(kept))
 
 
 def make_buildings_doc(area: Area, rows: list[CityBuilding], st: BuildStats, mix: dict[str, int], retrieved: str,
@@ -521,3 +590,78 @@ def make_buildings_doc(area: Area, rows: list[CityBuilding], st: BuildStats, mix
         heightNote=height_note(op_desc, _op_acc),
         fillFraction=round(st.fill_rows / max(1, len(rows)), 4), heightTiers=tiers, pointCloudMix=mix,
         crossCheck=cross_check, b=rows)
+
+
+# ── self-test ───────────────────────────────────────────────────────────────
+
+def self_test() -> None:
+    """Offline: the ground rule on synthetic buildings, every case the audit names (P2B-AUDIT B1)."""
+    from rasterio.transform import from_origin
+    ftf = from_origin(0.0, 400.0, 0.5, 0.5)                      # a 200 m x 200 m DTM, x 0..200, y 200..400
+
+    def mkb(sid: str, x: float, ground: float | None, year: int | None = 1990, roof: float = 10.0, y: float = 300.0) -> RawBuilding:
+        sq = Polygon([(x, y), (x + 10, y), (x + 10, y + 10), (x, y + 10)])
+        return RawBuilding(sid, sq, (Part(0, sq, roof),), ground, True, False, "ahn5", 2023, build_year=year)
+
+    def neighbours(ground: float, n: int = 6) -> list[RawBuilding]:           # all within 75 m of the building at x = 110
+        return [mkb(f"n{k}", 40.0 + 11.0 * k, ground) for k in range(n)]
+
+    def dtm_of(around: float, far: float | None = None) -> npt.NDArray[np.float32]:
+        return np.full((400, 400), around if far is None else far, dtype=np.float32)
+
+    def run(bad: RawBuilding, nb: list[RawBuilding], dtm: npt.NDArray[np.float32], dsm: npt.NDArray[np.float32] | None = None,
+            ) -> tuple[RawBuilding, GroundReport]:
+        out, rep = repair_grounds([*nb, bad], dtm, ftf, dsm)
+        return out[-1], rep
+
+    # 1. The audit's case, neighbour-backed: -6.729 among neighbours at +0.3 m, AHN4 ring at 0.0: repaired to the ring p5, tagged, 10 m tall.
+    fixed, rep = run(mkb("bad", 110.0, -6.729), neighbours(0.3), dtm_of(0.0))
+    assert fixed.ground_fixed and fixed.ground_nap == 0.0 and rep.repaired == 1 and abs(rep.max_drop_m - 6.729) < 1e-9, rep
+    assert _roof_height(fixed, fixed.parts[0]) == (10.0, "3dbag-p70-ahn4-ground")
+    # 2. A POLDER at -5.5 m NAP among neighbours at -5.3 and an AHN ring at -5.4 is NOT touched, whatever its absolute NAP.
+    fixed, rep = run(mkb("deep", 110.0, -5.5), neighbours(-5.3), dtm_of(-5.4))
+    assert not fixed.ground_fixed and rep.repaired == 0 and not rep.kept, rep   # the polder: not even looked at as a candidate
+    fixed, rep = run(mkb("deeper", 110.0, -9.0), neighbours(-5.3), dtm_of(-5.4))
+    assert fixed.ground_fixed and fixed.ground_nap is not None and abs(fixed.ground_nap + 5.4) < 1e-6, "3.7 m under a polder's neighbours IS implausible, even at -9 m NAP"
+    # 3. WEESPERSLUIS-STYLE NEW BUILD: built 2022, own ground -1.15 = its neighbours', AHN4 ring (a 2020-22 building site) at +2.5: the
+    # neighbours AGREE, so nothing is repaired; the ring alone repairs nothing.
+    fixed, rep = run(mkb("new", 110.0, -1.15, year=2022), neighbours(-1.15), dtm_of(2.5))
+    assert not fixed.ground_fixed and rep.repaired == 0 and dict(rep.kept).get("new") == "ring-only", rep
+    # ... and a new build whose neighbours DO disagree is still not repaired from the (construction-site) ring
+    fixed, rep = run(mkb("new2", 110.0, -6.7, year=2021), neighbours(0.3), dtm_of(0.0))
+    assert not fixed.ground_fixed and dict(rep.kept).get("new2") == "post-ahn4", rep
+    # 4. A RAISED STRUCTURE: own -6.8 like its neighbours, the ring on its plinth at +6.6: neighbours agree, no repair.
+    fixed, rep = run(mkb("plinth", 110.0, -6.8), neighbours(-6.8), dtm_of(6.6))
+    assert not fixed.ground_fixed and dict(rep.kept).get("plinth") == "ring-only", rep
+    # 5. FEWER THAN 5 NEIGHBOURS: the ring may repair only a pre-AHN4 building whose AHN4 nDSM height agrees with the new height better.
+    dsm_new = dtm_of(10.0)                                             # nDSM p70 10 m over a flat 0 m DTM: agrees with the repaired height
+    dsm_old = dtm_of(16.7)                                             # nDSM 16.7 m: agrees with the OLD (too tall) height
+    few = neighbours(0.3, 2)
+    fixed, rep = run(mkb("a", 110.0, -6.7, year=1950), few, dtm_of(0.0), dsm_new)
+    assert fixed.ground_fixed and rep.repaired == 1, rep
+    fixed, rep = run(mkb("b", 110.0, -6.7, year=1950), few, dtm_of(0.0), dsm_old)
+    assert not fixed.ground_fixed and dict(rep.kept).get("b") == "few-neighbours-unconfirmed", rep
+    fixed, rep = run(mkb("c", 110.0, -6.7, year=2021), few, dtm_of(0.0), dsm_new)
+    assert not fixed.ground_fixed and dict(rep.kept).get("c") == "post-ahn4", "never the ring for AHN4's year or later"
+    fixed, rep = run(mkb("d", 110.0, -6.7, year=None), few, dtm_of(0.0), dsm_new)
+    assert not fixed.ground_fixed and dict(rep.kept).get("d") == "few-neighbours-unconfirmed", "an unknown year is not 'before AHN4'"
+    fixed, rep = run(mkb("e", 110.0, -6.7, year=1950), few, dtm_of(0.0), None)
+    assert not fixed.ground_fixed, "without a DSM there is no confirmation"
+    # 6. A result under 2 m is refused (roof 1.5 m above the new ground); 7. a repair never RAISES a height (ring p5 below the old ground).
+    fixed, rep = run(mkb("low", 110.0, -6.7, roof=1.5), neighbours(0.3), dtm_of(0.0))
+    assert not fixed.ground_fixed and dict(rep.kept).get("low") == "below-2m", rep
+    fixed, rep = run(mkb("taller", 110.0, -6.7), neighbours(0.3), dtm_of(-8.0))
+    assert not fixed.ground_fixed and dict(rep.kept).get("taller") == "not-lower", rep
+    # 8. The ring widens for a building packed into a block, once; with no DTM at all the building is kept ('no-ring').
+    packed = dtm_of(0.0)
+    packed[int((400 - 316) / 0.5):int((400 - 294) / 0.5), int(104 / 0.5):int(126 / 0.5)] = np.nan
+    fixed, rep = run(mkb("pk", 110.0, -6.7), neighbours(0.3), packed)
+    assert fixed.ground_fixed and rep.widened == 1, rep
+    fixed, rep = run(mkb("nr", 110.0, -6.7), neighbours(0.3), np.full((400, 400), np.nan, dtype=np.float32))
+    assert not fixed.ground_fixed and dict(rep.kept).get("nr") == "no-ring", rep
+    # 9. SCOPE: only buildings in scope are decided and counted; the others still serve as neighbours.
+    allb = [*neighbours(0.3), mkb("bad", 110.0, -6.7), mkb("edge", 130.0, -6.7)]
+    out, rep = repair_grounds(allb, dtm_of(0.0), ftf, None, [False] * 6 + [True, False])
+    assert rep.buildings == 1 and rep.repaired == 1 and out[-1].ground_fixed is False and out[-2].ground_fixed, rep
+    print("_src_3dbag self-test: ok (ground rule: neighbour-backed repair, polder untouched, new build / raised structure / ring-only kept, "
+          "few-neighbours rule, <2 m refused, never taller, ring widening, scope)")
