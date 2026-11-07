@@ -1,6 +1,7 @@
 import type { PvFile } from './types';
 import type { Owner, RoiResult } from './solar-roi.ts';
 import { citedLeaves, type SolarCostBasis } from './solar-cost.ts';
+import type { CityKey } from './scope/registry.ts';
 
 type Validated = NonNullable<PvFile['tiers']['validated']>;
 
@@ -35,13 +36,13 @@ export function validatedSentence(v: Validated): string {
     engineering expectation (docs/evidence/known-limitations.md, "The ladder on the card"), not a
     measurement, and nothing in the repository establishes either one for another city. Any other
     city prints the fix with no number. */
-const BAND_CITIES: ReadonlySet<string> = new Set(['kolkata']);
+const BAND_CITIES: ReadonlySet<CityKey> = new Set<CityKey>(['kolkata']);
 
 export type LadderRung = 'roof' | 'irradiance';
 
 /** The sentence for a rung's fix. Kolkata keeps the markup's own sentence (passed in as `written`);
     every other city gets the same fix with no figure. */
-export function ladderFix(rung: LadderRung, cityId: string, written: string): string {
+export function ladderFix(rung: LadderRung, cityId: CityKey, written: string): string {
   if (BAND_CITIES.has(cityId)) return written;
   return rung === 'roof'
     ? 'A ten-minute walk of the roof with a phone would narrow it. No band is measured for this city yet.'
