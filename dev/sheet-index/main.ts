@@ -5,7 +5,7 @@ import '../../src/styles/obos-v2/screens/sheet-index.css';
 import './harness.css';
 import { createSheetManager, type ManagerCommand } from '../../src/scripts/climate-engine/streaming/sheet-manager.ts';
 import { indexStateOf, selectEventOf } from '../../src/scripts/climate-engine/streaming/sheet-index.ts';
-import { mountSheetIndex } from '../../src/scripts/climate-engine/streaming/sheet-index-view.ts';
+import { mountSheetIndex } from '../../src/scripts/climate-engine/streaming-host/sheet-index-view.ts';
 
 const q = new URLSearchParams(location.search);
 const root = document.getElementById('root')!;

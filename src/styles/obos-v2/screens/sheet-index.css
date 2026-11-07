@@ -1,5 +1,5 @@
 /* src/styles/obos-v2/screens/sheet-index.css — the sheet index (city-streaming P5): a chip that opens the INDEX PLATE on a desktop and a
-   BOTTOM SHEET on a phone. The markup is src/scripts/climate-engine/streaming/sheet-index-view.ts; this file is only the look.
+   BOTTOM SHEET on a phone. The markup is src/scripts/climate-engine/streaming-host/sheet-index-view.ts; this file is only the look.
    NO HEX HERE (tokens.css owns them) and no new colour: every value is a v2 token. The heat ramp is for temperature only, so the cells
    are neutral: CURRENT is the inverted ink fill (the same as a pressed .place), CORE is a filled well, EDGE an outline, NOT AVAILABLE a dashed,
    dimmed outline.

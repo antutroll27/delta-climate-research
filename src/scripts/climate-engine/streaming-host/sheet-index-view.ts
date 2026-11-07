@@ -23,7 +23,7 @@
 import {
   AMSTERDAM_INDEX_TABLES, activate, announceCurrent, announceLoading, announceMiss, announceRefusal, buildIndexModel, cellLabel, cellReadout,
   formatCount, isArrow, keyAction, selectable, type IndexCell, type IndexModel, type IndexViewState, type KeyAction,
-} from './sheet-index.ts';
+} from '../streaming/sheet-index.ts';
 
 export interface SheetIndexOptions {
   /** The manager's `select`. Called with a shipping sheet code, never with a skipped or outside one. */

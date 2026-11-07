@@ -97,7 +97,6 @@ for (const [name, viewport] of Object.entries(sizes)) {
 
   // Shift+arrow off the edge: nothing moves, and it says so
   await page.waitForTimeout(700);
-  const at = await current();
   for (let i = 0; i < 12; i++) await page.keyboard.press('Shift+ArrowUp');
   await page.waitForTimeout(100);
   assert.match(await page.locator('.si-live').textContent(), /No sheet to the north of/);
