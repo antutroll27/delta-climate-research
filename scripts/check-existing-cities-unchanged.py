@@ -22,7 +22,13 @@ top-level key except `wards` must be unchanged.
 
     python3 scripts/check-existing-cities-unchanged.py                  # compare
     python3 scripts/check-existing-cities-unchanged.py --write-baseline # re-pin
+    python3 scripts/check-existing-cities-unchanged.py --write-baseline --ref HEAD   # re-pin from a committed branch tip (see CANAL RING)
     python3 scripts/check-existing-cities-unchanged.py --self-test
+
+CANAL RING (2026-11-08). Amsterdam's Canal Ring joined the freeze after its surface, ground and canopy fixes (branch
+fix/canal-ring-surface-ground): `public/heat-map/data/canal-ring*`, `data/cities/amsterdam/canal-ring-*` and the frame-guard record are pinned,
+and so is its surface-meta row (the `wards` pins cover every row present at the baseline). The first pin is taken from that branch's tip
+(`--ref HEAD`), because the corrected files are not on origin/main yet; later pins are from origin/main again.
 
 `--write-baseline` reads the blobs with `git cat-file` from `origin/main`, NOT from
 the working tree, so a baseline can never be pinned to an edit that is already in
@@ -61,6 +67,9 @@ FROZEN_PATTERNS: tuple[str, ...] = (
     "data/bangalore/*.json",
     "data/dc-urs/**",
     "data/calibration/**",
+    "public/heat-map/data/canal-ring*",
+    "data/cities/amsterdam/canal-ring-*",
+    "data/cities/amsterdam/frame-guard.json",
 )
 
 
@@ -329,6 +338,7 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0] if __doc__ else None)
     ap.add_argument("--write-baseline", action="store_true",
                     help=f"hash the frozen artefacts at {BASELINE_REF} and write {BASELINE_REL}")
+    ap.add_argument("--ref", default=BASELINE_REF, help="with --write-baseline: the git ref to hash (default origin/main)")
     ap.add_argument("--self-test", action="store_true", help="exercise the guard on a mutated temp copy")
     args = ap.parse_args(argv)
 
@@ -336,7 +346,7 @@ def main(argv: list[str]) -> int:
         self_test()
         return 0
     if args.write_baseline:
-        base = baseline_from_git(ROOT, BASELINE_REF)
+        base = baseline_from_git(ROOT, args.ref)
         out = os.path.join(ROOT, BASELINE_REL)
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, "w", encoding="utf-8") as fh:
@@ -344,7 +354,7 @@ def main(argv: list[str]) -> int:
             fh.write("\n")
         print(f"wrote {BASELINE_REL}: {base['fileCount']} files + surface-meta "
               f"({len(base['surfaceMeta']['wards'])} ward rows, {len(base['surfaceMeta']['topLevel'])} top-level keys) "
-              f"at {BASELINE_REF} = {base['commit'][:12]}")
+              f"at {args.ref} = {base['commit'][:12]}")
         return 0
 
     base = load_baseline(ROOT)

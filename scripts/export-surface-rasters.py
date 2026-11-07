@@ -65,6 +65,7 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -84,7 +85,7 @@ import _wardmask  # noqa: E402
 # copy of the BOA offset rule or the albedo coefficients would be a second thing
 # to keep in step, and that rule has already caused one silent data defect.
 from _sentinel import (  # noqa: E402
-    NDVI_BARE, NDVI_VEG, grid_for, scene_arrays, search,
+    NDVI_BARE, NDVI_VEG, grid_for, scene_arrays, scene_arrays_box, search,
 )
 
 ROOT = os.path.join(HERE, "..")
@@ -150,6 +151,13 @@ def sun_floor(ward_id: str) -> float | None:
     return None if a is None or a.min_sun_elevation_deg is None else float(a.min_sun_elevation_deg)
 
 
+#: Cities after Bengaluru read each scene by REPROJECTION onto the area's own lon/lat grid (`_sentinel.read_box`), not by the UTM envelope: the
+#: envelope read turns the raster by the grid convergence (1.5 degrees at Amsterdam, up to 73 m at a corner; P2B-AUDIT B1). Kolkata and
+#: Bengaluru keep the shipped reader, so their committed rasters stay reproducible.
+#: Set by --scenes: (Earth Search items, directory of local band crops named `<item id>_<band>.tif`). None = search the STAC API.
+LOCAL_SCENES: tuple[list[dict[str, Any]], str] | None = None
+
+
 def composite(ward: _types.Ward, years: list[int]) -> tuple[npt.NDArray[np.float32],
                                                             npt.NDArray[np.float32], int]:
     """Per-cell median NDVI and albedo across every usable scene in `years`.
@@ -170,6 +178,9 @@ def composite(ward: _types.Ward, years: list[int]) -> tuple[npt.NDArray[np.float
     # composite under the old name must never be served for a filtered build.
     if floor is not None:
         stem = f"{stem}-sun{floor:g}"
+    area = _city.AREAS.get(ward.id)
+    if area is not None:
+        stem = f"{stem}-reprojected" + ("-local" if LOCAL_SCENES is not None else "")
     key = os.path.join(COMPOSITE_CACHE, f"{stem}-{min(years)}-{max(years)}.npz")
     if os.path.exists(key):
         cached = np.load(key)
@@ -180,14 +191,33 @@ def composite(ward: _types.Ward, years: list[int]) -> tuple[npt.NDArray[np.float
     lat, lon = ward.centre.lat, ward.centre.lon
     ndvis: list[npt.NDArray[np.float32]] = []
     albedos: list[npt.NDArray[np.float32]] = []
-    for y in years:
-        for feat in search(lat, lon, y, ward.footprint_m, floor):
-            got = scene_arrays(feat, lat, lon, ward.footprint_m)
+    if area is not None:
+        box, n_grid = _city.bounds(area), grid_for(ward.footprint_m)
+        def local_href(sdir: str, fid: str) -> Callable[[str, str], str]:
+            return lambda band, _default: os.path.join(sdir, f"{fid}_{band}.tif")
+        batches: list[tuple[dict[str, Any], Callable[[str, str], str] | None]]
+        if LOCAL_SCENES is not None:
+            feats, scene_dir = LOCAL_SCENES
+            batches = [(feat, local_href(scene_dir, feat["id"])) for feat in feats]
+        else:
+            batches = [(feat, None) for y in years for feat in search(lat, lon, y, ward.footprint_m, floor)]
+        for feat, href_of in batches:
+            got = scene_arrays_box(feat, box, n_grid, href_of)
             if got is None:
+                print(f"    {ward.id} {feat['id']}: dropped (unreadable or under half valid)")
                 continue
             ndvis.append(got[0])
             albedos.append(got[1])
-        print(f"    {ward.id} {y}: {len(ndvis)} scenes cumulative")
+        print(f"    {ward.id}: {len(ndvis)} scenes, reprojected")
+    else:
+        for y in years:
+            for feat in search(lat, lon, y, ward.footprint_m, floor):
+                got = scene_arrays(feat, lat, lon, ward.footprint_m)
+                if got is None:
+                    continue
+                ndvis.append(got[0])
+                albedos.append(got[1])
+            print(f"    {ward.id} {y}: {len(ndvis)} scenes cumulative")
     if len(ndvis) < 3:
         sys.exit(f"{ward.id}: only {len(ndvis)} usable scenes — refusing to build a "
                  f"surface raster that thin. A single-scene composite is one cloud mask "
@@ -266,7 +296,14 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--years", type=int, nargs="+", default=[2021, 2022, 2023, 2024, 2025])
     ap.add_argument("--ward", default=None, help="one ward id; default is Kolkata's three")
+    ap.add_argument("--scenes", nargs=2, metavar=("ITEMS_JSON", "BAND_DIR"), default=None,
+                    help="cities after Bengaluru: use these Earth Search items (a JSON list) and the local band crops "
+                         "'<item id>_<band>.tif' in BAND_DIR, instead of searching the STAC API")
     args = ap.parse_args()
+    if args.scenes is not None:
+        global LOCAL_SCENES
+        with open(args.scenes[0], encoding="utf-8") as fh:
+            LOCAL_SCENES = (json.load(fh), args.scenes[1])
 
     wards = surface_wards()
     # DEFAULTING TO KOLKATA IS DELIBERATE, not an oversight now that six wards
@@ -405,6 +442,8 @@ def main() -> None:
         if floor is not None:
             # Provenance for a city whose scenes were selected by sun height (Amsterdam audit F5).
             entry |= {"sunElevationFloorDeg": floor, "scenes": n_scenes}
+        if ward_id in _city.AREAS:
+            entry |= {"reader": "reprojected onto the area's lon/lat grid (scripts/_sentinel.py read_box); the UTM-envelope reader turned the raster by up to 73 m at a corner"}
         meta["wards"][ward_id] = entry
 
         # A raster with no spatial variance is a constant, and a constant is what

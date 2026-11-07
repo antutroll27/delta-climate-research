@@ -32,7 +32,7 @@ import subprocess
 import sys
 import urllib.request
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 import numpy as np
@@ -254,7 +254,13 @@ def scene_arrays(feat: dict[str, Any], lat: float, lon: float, footprint_m: int
     assets = feat["assets"]
     if not all(b in assets for b in BANDS):
         return None
+    return _products(feat, lambda b: read_window(assets[b]["href"], lat, lon, footprint_m))
 
+
+def _products(feat: dict[str, Any], read_band: Callable[[str], npt.NDArray[np.float32] | None]
+              ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]] | None:
+    """NDVI and albedo from a scene's digital numbers, however they were read. ONE copy of the BOA-offset rule, the clip, the
+    validity mask and the albedo sum, shared by the ward reader (`scene_arrays`) and the sheet reader (`scene_arrays_box`)."""
     # BOA_ADD_OFFSET. Introduced at processing baseline 04.00; BEFORE that there is
     # no offset in the product at all, so there is nothing to remove.
     #
@@ -272,7 +278,7 @@ def scene_arrays(feat: dict[str, Any], lat: float, lon: float, footprint_m: int
 
     refl = {}
     for b in BANDS:
-        dn = read_window(assets[b]["href"], lat, lon, footprint_m)
+        dn = read_band(b)
         if dn is None:
             return None
         r = (dn + offset) / 10_000.0
@@ -285,6 +291,49 @@ def scene_arrays(feat: dict[str, Any], lat: float, lon: float, footprint_m: int
     ndvi = np.where(valid, (refl["nir"] - refl["red"]) / (refl["nir"] + refl["red"] + 1e-9), np.nan)
     albedo = np.where(valid, sum(w * refl[b] for b, w in ALBEDO_W.items()), np.nan)
     return ndvi.astype(np.float32), albedo.astype(np.float32)
+
+
+GeoBox = tuple[float, float, float, float]
+
+#: Every `read_box` failure of this process: (href, reason). A scene that cannot be read is DROPPED from the composite, and a silent drop
+#: once made two sheets use 22 scenes where the others use 23 (P2B-AUDIT N1): so it is logged to stderr and counted here.
+READ_FAILURES: list[tuple[str, str]] = []
+
+
+def read_box(href: str, box: GeoBox, n: int) -> npt.NDArray[np.float32] | None:
+    """Read a lon/lat box (west, south, east, north) from a COG onto an n x n EPSG:4326 grid, by REPROJECTION.
+
+    THE FIX FOR AUDIT B1. `read_window` transforms the box to the scene's UTM CRS, takes the ENVELOPE of the result and squeezes it
+    into an n x n array: the raster is a UTM-north-up window of the ground, turned by the grid convergence (about 1.5 degrees at
+    Amsterdam in UTM 31N, 0.5-0.6 degrees at Kolkata and Bengaluru) against the true-north frame. Corner cells land up to ~60 m from
+    their ground position and the centre does not move. Here the destination IS the frame's grid (uniform in degrees, which is
+    uniform in the local frame), so cell (r, c) is exactly the ground the frame says it is. Bilinear, as the ward reader; cells
+    the scene does not cover stay 0, which `_products` treats as invalid, as before.
+    """
+    try:
+        from rasterio.enums import Resampling
+        from rasterio.transform import from_bounds as tf_from_bounds
+        from rasterio.warp import reproject
+        dst = np.zeros((n, n), dtype=np.float32)
+        with rasterio.open(href) as src:
+            reproject(source=rasterio.band(src, 1), destination=dst, src_nodata=src.nodata, dst_nodata=0.0,
+                      dst_transform=tf_from_bounds(*box, n, n), dst_crs="EPSG:4326", resampling=Resampling.bilinear)
+        return dst if dst.size else None
+    except Exception as ex:                      # deliberately broad (GDAL raises many types), but never silent
+        READ_FAILURES.append((href, f"{type(ex).__name__}: {ex}"))
+        print(f"  _sentinel.read_box: cannot read {href}: {type(ex).__name__}: {ex}", file=sys.stderr, flush=True)
+        return None
+
+
+def scene_arrays_box(feat: dict[str, Any], box: GeoBox, n: int, href_of: Callable[[str, str], str] | None = None
+                     ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]] | None:
+    """Per-cell NDVI and albedo for one scene on the lon/lat box's own n x n grid (`read_box`). `href_of(band, default_href)` lets
+    a caller point the bands at a local crop; None reads the STAC hrefs. The box is the caller's exact object (for a sheet, the
+    lattice cell `_sheets.geo_bounds`), never re-derived here from a centre and a latitude (audit B2)."""
+    assets = feat["assets"]
+    if not all(b in assets for b in BANDS):
+        return None
+    return _products(feat, lambda b: read_box(assets[b]["href"] if href_of is None else href_of(b, assets[b]["href"]), box, n))
 
 
 def scene_metrics(feat: dict[str, Any], lat: float, lon: float,

@@ -57,3 +57,35 @@ test('the height cross-check is recorded per building and never blended into h',
   const exported = JSON.parse(read('public/heat-map/data/canal-ring.json'));
   assert.deepEqual(exported.b.slice(0, 20).map((r) => r[0]), doc.b.slice(0, 20).map((b) => Math.round(b.h * 100) / 100), 'the exported h is the 3D BAG h');
 });
+
+/* 2026-11-08 (branch fix/canal-ring-surface-ground): the surface is read by REPROJECTION, 3D BAG's implausible grounds are repaired only where
+   the neighbours disagree, and the canopy is read without GDAL's nodata nudge. These pins hold those three to account. */
+
+test('ground repair: 51 buildings, tagged, none taller than before, none left under 2 m, none from AHN4\'s year on', () => {
+  const doc = JSON.parse(read('data/cities/amsterdam/canal-ring-buildings.json'));
+  const fixed = doc.b.filter((b) => b.hSource === '3dbag-p70-ahn4-ground');
+  assert.equal(fixed.length, 51);
+  assert.equal(doc.heightTiers['3dbag-p70-ahn4-ground'], 51);
+  assert.equal(doc.count, 21342, 'a repair changes a height and never a footprint');
+  assert.ok(fixed.every((b) => b.h >= 2), 'a repaired height under 2 m is refused by the rule');
+  assert.match(doc.heightNote, /GROUND PLAUSIBILITY: for 51 building/);
+  /* the repair is neighbour-backed: the AHN4 height check now agrees with the served height to within the guard's own 5 m for nearly all of them */
+  const agree = fixed.filter((b) => b.hCheck !== null && Math.abs(b.h - b.hCheck) <= 5).length;
+  assert.ok(agree >= 0.9 * fixed.filter((b) => b.hCheck !== null).length, `${agree} of ${fixed.length} repaired heights agree with the AHN4 nDSM`);
+});
+
+test('surface: the canal-ring row records the reprojecting reader and the 22 scenes it used', () => {
+  const row = JSON.parse(read('public/heat-map/data/surface-meta.json')).wards['canal-ring'];
+  assert.equal(row.scenes, 22);
+  assert.match(row.reader, /reprojected onto the area's lon\/lat grid/);
+  assert.equal(row.fvc_mean, 0.3485);
+  assert.equal(row.albedo_mean, 0.0993);
+  const scenes = JSON.parse(read('data/cities/amsterdam/canal-ring-surface-scenes.json'));
+  assert.ok(scenes.length >= 22 && scenes.every((s) => s.properties['view:sun_elevation'] >= 40), 'the scene list is the sun >= 40 degree selection');
+});
+
+test('canopy: bare ground stays bare (the nodata nudge turned every 0 into 1.0 and read 23 % tall)', () => {
+  const doc = JSON.parse(read('data/cities/amsterdam/canal-ring-canopy.json'));
+  assert.equal(doc.count, 16121);
+  assert.ok(Math.abs(doc.coverFrac - 0.278) < 0.002, 'cover >= 3 m is what the nudge never touched');
+});
