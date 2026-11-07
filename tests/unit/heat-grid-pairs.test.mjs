@@ -67,3 +67,21 @@ test('the grid version names the pair, not just the grid', () => {
   assert.equal(gridVersion(1800), 'hm-grid-247-1800-v1', 'Ward 68 names both halves too');
   assert.throws(() => gridVersion(999), /admitted/i);
 });
+
+/* THE HALO PAIR (P2a). A sheet's 384-cell core plus a 60-cell ring each side: 504 over 3,675 m, the same 175/24 m cell,
+   so a halo cell is the neighbouring sheet's own cell. Admitted now, consumed in P3. */
+test('the halo pair 504 over 3,675 m is admitted, is core + 2 x 60 halo cells, and keeps the shared cell size EXACTLY', () => {
+  const core = ADMITTED_GRIDS.find((g) => g.sizeM === 2800);
+  const halo = ADMITTED_GRIDS.find((g) => g.sizeM === 3675);
+  assert.ok(core && halo);
+  const HALO_CELLS = 60;
+  assert.equal(halo.n, core.n + 2 * HALO_CELLS);
+  assert.equal(halo.sizeM, core.sizeM + 2 * HALO_CELLS * (core.sizeM / core.n));
+  assert.equal(halo.sizeM / halo.n, 175 / 24, 'bit-equal cell size, not merely within 0.1 %');
+  assert.equal(core.sizeM / core.n, 175 / 24);
+  assert.ok(isAdmittedGrid({ n: 504, cellMeters: 3675 / 504 }, 3675));
+  assert.equal(isAdmittedGrid({ n: 480, cellMeters: 3675 / 480 }, 3675), false, 'the superseded 48-cell halo is not the pair');
+  assert.equal(isAdmittedGrid({ n: 504, cellMeters: 2800 / 504 }, 2800), false, '504 cells over a sheet is not a halo');
+  assert.equal(gridVersion(3675), 'hm-grid-504-3675-v1');
+  assert.equal(gridVersion(2800), 'hm-grid-384-2800-v1', 'the sheet core keeps its own pair');
+});
