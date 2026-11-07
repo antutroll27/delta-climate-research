@@ -27,7 +27,7 @@ import { makeHeatOverlay } from './heat-overlay.ts';
 import { buildRibbonMesh } from '../road-ribbon.ts';
 import { densifyRing } from '../ward-mask.ts';
 import { displayColor, HAZE_GLSL, makeContactAO, srgbLinear } from './look-shading.ts';
-import { hasBuildingModel, loadBuildingModel, type LandmarkNode } from './building-model.ts';
+import { decodeBuildingModel, fetchBuildingModelBytes, hasBuildingModel, type LandmarkNode } from './building-model.ts';
 import { releaseCpuCopyAfterUpload } from './gpu-resident.ts';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './building-pick.ts';
 import {
@@ -78,6 +78,11 @@ export class ThreeReliefRenderer implements ReliefRenderer {
    * ponytail: no eviction — a city has three wards; add an LRU if one ships dozens.
    */
   private modelCache = new Map<string, { buildings: THREE.Group; landmarks: readonly LandmarkNode[] }>();
+  /** The compressed GLB of each ward fetched so far (about 0.3 MB each), kept so that a lost WebGL context is
+   *  recovered by decoding these again, with no network: the decoded geometry is GPU-only (gpu-resident.ts). */
+  private modelBytes = new Map<string, ArrayBuffer>();
+  /** The pending rebuild after a context restore; see `onGlRestored`. */
+  private restoreTimer: ReturnType<typeof setTimeout> | null = null;
   /** 1 extruded, FLAT_BUILDING_SCALE flat — the model's heights switch, applied about the ground. */
   private modelExtrude = { value: 1 };
   /** Settles when the current ward's buildings are in the scene. See `buildingsReady`. */
@@ -423,12 +428,14 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.glCanvas?.removeEventListener('webglcontextlost', this.onGlLost);
     this.glCanvas?.removeEventListener('webglcontextrestored', this.onGlRestored);
     this.glCanvas = null;
+    if (this.restoreTimer !== null) { clearTimeout(this.restoreTimer); this.restoreTimer = null; }
     this.clearBuildings();
     this.ready.resolve();
     for (const cached of this.modelCache.values()) {
       cached.buildings.traverse((object) => { (object as THREE.Mesh).geometry?.dispose?.(); });
     }
     this.modelCache.clear();
+    this.modelBytes.clear();
     this.landmarkLayer?.dispose(); this.landmarkLayer = null;
     this.modelFacade?.dispose();
     this.overlay?.geometry.dispose();
@@ -607,8 +614,16 @@ export class ThreeReliefRenderer implements ReliefRenderer {
    * The context is back: three has reset its GL state, but the building meshes have no CPU
    * arrays left to re-upload (gpu-resident.ts), so build them again from the ward data, the
    * way `rebuildWard` does. The model cache is emptied for the same reason: its geometries
-   * are GPU-only too, and the next `installModel` re-decodes the GLB. Nothing else here
-   * needs it; every other layer, texture and the overlay still hold their own arrays.
+   * are GPU-only too, and the next `installModel` decodes the kept GLB bytes again (`modelBytes`),
+   * so a Bengaluru ward comes back with no network. Nothing else here needs it; every other
+   * layer, texture and the overlay still hold their own arrays.
+   *
+   * THE REBUILD IS NOT RUN IN THIS EVENT. Canal Ring's is 21k extrusions and a merge, measured at
+   * about 0.5 s of main thread, which would sit inside the one task that also runs MapLibre's and
+   * three's restore handlers. Here the old city is only dropped; the rebuild follows in its own
+   * task, and until it lands the frames draw the rest of the scene without buildings. The ward
+   * token and `buildingsReady()` are moved on now, so a ward switch or a second restore in
+   * between cancels it, and a caller waiting on the buildings waits for the real ones.
    */
   private onGlRestored = (): void => {
     this.glLost = false;
@@ -621,8 +636,16 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     const token = ++this.wardToken;
     this.clearBuildings();
     if (this.landmarkLayer) { this.landmarkLayer.dispose(); this.landmarkLayer = null; }
-    if (hasBuildingModel(bundle.wardId)) void this.installModel(bundle, token);
-    else { this.installExtrusion(bundle); this.applyLayerState(); }
+    this.ready.resolve();
+    this.ready = readyLatch(false);
+    if (this.restoreTimer !== null) clearTimeout(this.restoreTimer);
+    this.restoreTimer = setTimeout(() => {
+      this.restoreTimer = null;
+      if (this.disposed || token !== this.wardToken || !this.scene) return;
+      if (hasBuildingModel(bundle.wardId)) void this.installModel(bundle, token);
+      else { this.installExtrusion(bundle); this.applyLayerState(); this.ready.resolve(); }
+      this.options.map.triggerRepaint();
+    }, 0);
     this.options.map.triggerRepaint();
   };
 
@@ -647,7 +670,13 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private async installModel(bundle: ReliefWardBundle, token: number): Promise<void> {
     let cached = this.modelCache.get(bundle.wardId);
     if (!cached) {
-      const model = await loadBuildingModel(bundle.wardId);
+      let bytes = this.modelBytes.get(bundle.wardId);
+      if (!bytes) {
+        bytes = (await fetchBuildingModelBytes(bundle.wardId)) ?? undefined;
+        if (bytes && !this.disposed) this.modelBytes.set(bundle.wardId, bytes);
+      }
+      const model = bytes ? await decodeBuildingModel(bytes) : null;
+      if (!model) this.modelBytes.delete(bundle.wardId);   // bytes that do not decode are fetched afresh next time
       if (this.disposed) {
         model?.buildings.traverse((object) => { (object as THREE.Mesh).geometry?.dispose?.(); });
         return;

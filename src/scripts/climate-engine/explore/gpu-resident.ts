@@ -8,7 +8,7 @@
  *
  * Only for attributes NOTHING reads or rewrites after upload. A freed attribute
  * cannot be re-uploaded, so the owner MUST rebuild the geometry from its source
- * data on `webglcontextrestored` (relief-renderer.ts `restoreBuildings`); and
+ * data on `webglcontextrestored` (relief-renderer.ts `onGlRestored`); and
  * `needsUpdate` on one would crash the next upload. The bounding volumes are
  * computed first, because frustum culling asks for them lazily from `position`.
  *
