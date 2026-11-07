@@ -27,6 +27,11 @@ export const METAR_STATIONS: Readonly<Record<string, readonly MetarStation[]>> =
     { icao: 'VOBL', name: 'Kempegowda airport', lat: 13.205, lon: 77.704 },
     { icao: 'VOBG', name: 'HAL airport', lat: 12.949, lon: 77.663 },
   ],
+  /* One: Schiphol, 8.4 km from the Canal Ring centre. The next station aviationweather.gov
+     serves is Lelystad, 44 km out (docs/evidence/2026-11-07-amsterdam-observed-weather.md). */
+  amsterdam: [
+    { icao: 'EHAM', name: 'Schiphol airport', lat: 52.315, lon: 4.79 },
+  ],
 });
 
 /** Every station any city reads — the API's allow-list. */

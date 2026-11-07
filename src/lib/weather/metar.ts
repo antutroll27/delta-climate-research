@@ -124,7 +124,8 @@ function weatherGroup(tok: string): WeatherGroup | null {
   };
 }
 
-const signedC = (s: string): number => (s.startsWith('M') ? -Number(s.slice(1)) : Number(s));
+/* `M00` is a real EHAM token (Schiphol, 2026-11-07 `M00/M01`): negative zero, which prints as "-0" under toLocaleString. 0 - x folds it to +0. */
+const signedC = (s: string): number => (s.startsWith('M') ? 0 - Number(s.slice(1)) : Number(s));
 
 /**
  * Resolve DDHHMM against a reference instant: the most recent such moment no

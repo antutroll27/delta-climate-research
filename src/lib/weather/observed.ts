@@ -242,6 +242,16 @@ export function describeWeather(o: ObservedNow): WeatherWords {
   }
   const dryingOut = o.ambient.observed && o.ambient.observed.wet > 0.05 ? 'surfaces drying' : '';
   if (o.thunder) return { icon: '⛈', iconLabel: 'Thunderstorm', text: `Thunderstorm${nearby}`, effect: dryingOut };
+  /* Frozen precipitation and fog are what a Dutch winter report says; the sky words below would otherwise call them "Mostly cloudy". */
+  const own = m.weather.filter((w) => !w.vicinity);
+  const snow = own.find((w) => w.phenomena.some((p) => p === 'SN' || p === 'SG' || p === 'PL' || p === 'GR' || p === 'GS'));
+  if (snow) {
+    const hail = snow.phenomena.some((p) => p === 'GR' || p === 'GS');
+    return { icon: hail ? '🌨' : '❄', iconLabel: hail ? 'Hail' : 'Snow', text: `${INTENSITY[snow.intensity]} ${hail ? 'hail' : 'snow'}${nearby}`, effect: dryingOut };
+  }
+  if (own.some((w) => w.phenomena.includes('FG') && w.descriptor !== 'MI' && w.descriptor !== 'BC')) {
+    return { icon: '🌫', iconLabel: 'Fog', text: `Fog${nearby}`, effect: dryingOut };
+  }
   const c = o.cloud;
   const sky = c === null ? { icon: '🌡', label: 'Sky not reported', text: 'Sky not reported' }
     : c === 0 ? { icon: '☀', label: 'Clear', text: 'Clear' }
