@@ -144,9 +144,14 @@ export function isAirArea(key: string): boolean { return Object.hasOwn(AREAS, ke
  * `localAirReady`, the same question `loadAir` and the API ask), so a card is never offered beside a map that cannot be opened and
  * an area the local dispatch does not know is never sent down the CPCB path.
  */
-export function isAirCity(key: string): boolean {
+export function isAirCity(key: string): boolean { return isCpcbAirCity(key) || localAirReady(key); }
+/**
+ * True only where the Air card is CPCB's (`in/bengaluru/x` → true, `nl/amsterdam/canal-ring` → false). The map key's "India AQI bands" row
+ * and its CPCB wording hang on THIS, not on `isAirCity`: Amsterdam has an Air card (Luchtmeetnet's LKI) but India's bands and colours are not its.
+ */
+export function isCpcbAirCity(key: string): boolean {
   const prefix = key.split('/').slice(0, 2).join('/') + '/';
-  return Object.keys(AREAS).some((k) => k.startsWith(prefix)) || localAirReady(key);
+  return Object.keys(AREAS).some((k) => k.startsWith(prefix));
 }
 /**
  * The station as the wire carries it — ONE builder for every response path (OBOS's
