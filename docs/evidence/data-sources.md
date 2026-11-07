@@ -831,6 +831,26 @@ daarvan niet noodzakelijkerwijs onderschrijft"; knmi.nl/copyright re-read in ful
   more than 1.5 m lower (the pit outruns its footprint). It only ever raises. Six buildings qualify; 14 mesh cells change
   (10 by more than 0.5 m; the pit cell −4.52 → −0.66 m), the lowest mesh cell is now −2.53 m NAP. The rule and the building
   list are in `canal-ring-terrain.json` `postAhn4Patch`.
+- **Eight buildings stand 7 to 9 m too tall because 3D BAG's ground value is wrong (source fault, not ours; left as shipped).**
+  Eight Canal Ring buildings carry the same `b3_h_maaiveld` = −6.729 m NAP in 3D BAG v20250903 (tile 10/432/722). It is a fault in
+  the source: the roof levels are sound (3.1 to 18.0 m NAP) and the neighbours of the two buildings checked have ground at
+  +0.4 to +2.0 m NAP. The AHN4 ground model reads +2.3 m under `…0092374` and +1.15 m under `…2182448`; the other six
+  have no AHN4 ground cell. The pipeline applies the documented rule (`b3_h_70p` minus `b3_h_maaiveld`) exactly, so each served
+  height is the true height plus about 6.7 to 9 m. The AHN4 cross-check flags all eight (`hCheck` below). The pit patch is not
+  affected because it only raises ground. Nothing was edited: the values are source values. Fix when 3D BAG corrects them,
+  or by a deliberate plausibility rule in a later data pass.
+
+  | Building (`NL.IMBAG.Pand.` + id) | Served h | AHN4 hCheck |
+  |---|---|---|
+  | 0363100012178227 | 17.00 m | 9.76 m |
+  | 0363100012171875 | 13.86 m | 6.08 m |
+  | 0363100012178820 | 9.85 m | 2.22 m |
+  | 0363100012252174 | 10.54 m | 3.01 m |
+  | 0363100012178822 | 9.82 m | 2.32 m |
+  | 0363100012178823 | 10.00 m | 2.44 m |
+  | 0363100012182448 | 24.74 m | 16.98 m |
+  | 0363100100092374 | 11.85 m | 2.89 m |
+
 - **Tree species.** Kolkata's draw has palms; Amsterdam's does not. The founder's rule is no palms outside the tropics, so a
   Köppen C/D city draws one generic `broadleaf` (the 10 m placement knows a canopy height, not a species). Positions,
   heights and the 16,710 count are unchanged; only the label differs, and `canal-ring-trees.json` carries its own
