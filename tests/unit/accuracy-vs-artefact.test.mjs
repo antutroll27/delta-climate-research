@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
-import { ACCURACY, NIGHT_AS_SHIPPED } from '../../src/scripts/climate-engine/accuracy.ts';
+import { ACCURACY, NIGHT_AS_SHIPPED, SPATIAL, PEAK_AIR_OFFSET_LOO_RMSE_K } from '../../src/scripts/climate-engine/accuracy.ts';
 import { DEFAULT_PARAMS, STORE_NIGHT } from '../../src/scripts/climate-engine/types.ts';
 import { skyTemperatureC } from '../../src/scripts/climate-engine/sky.ts';
 
@@ -104,4 +104,11 @@ test('the night note quotes the model as shipped, and the band covers it as well
   assert.ok(ACCURACY.night.bandK >= Math.max(S.rmseK, S.looOverpassRmseK, art.night.rmse_K, art.night.loo_overpass_rmse_K));
   /* the shipped bias has the artefact's sign, so "warmer" is still the right word */
   assert.ok(art.night.bias_K > 0 && S.biasK > 0);
+});
+
+test('the spatial note opens with the peak skill over air temperature, from the artefact figure', () => {
+  assert.ok(SPATIAL.note.startsWith('Ward means are checked against ECOSTRESS; at peak daytime heat the model beats air temperature (2.36 vs 3.42 K out of sample).'), SPATIAL.note);
+  assert.equal(PEAK_AIR_OFFSET_LOO_RMSE_K, 3.42);
+  assert.ok(ACCURACY.peak.looOverpassRmseK < PEAK_AIR_OFFSET_LOO_RMSE_K);
+  assert.ok(!/calibrated/i.test(SPATIAL.note), 'no ward-level "calibrated" claim beside the night caveat');
 });

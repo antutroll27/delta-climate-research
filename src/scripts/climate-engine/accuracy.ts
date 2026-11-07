@@ -104,6 +104,13 @@ export const NIGHT_AS_SHIPPED = {
   airOffsetLooRmseK: 2.38,
 } as const;
 
+/**
+ * Peak ECOSTRESS, leave-one-overpass-out, for "air temperature plus a fixed offset" (n = 23 over 8
+ * overpasses; kolkata-skill-check REPORT.md Q1, 3.42 K). The model scores ACCURACY.peak.looOverpassRmseK
+ * (2.36 K) on the same rows, so by day it beats air temperature, unlike at night.
+ */
+export const PEAK_AIR_OFFSET_LOO_RMSE_K = 3.42;
+
 export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
   night: {
     n: 50,
@@ -498,15 +505,16 @@ export const SPATIAL = {
    * "illustrative", which told them where NOT to trust the map and nothing about
    * where they could. The scale sweep earned the middle tier.
    */
-  note: 'Ward-level surface temperature is calibrated against ECOSTRESS. The pattern WITHIN a '
-      + 'ward is not: block by block it scores r = 0.27, still below the r = 0.31 of a '
+  note: 'Ward means are checked against ECOSTRESS; at peak daytime heat the model beats air '
+      + `temperature (${ACCURACY.peak.looOverpassRmseK.toFixed(2)} vs ${PEAK_AIR_OFFSET_LOO_RMSE_K.toFixed(2)} K out of sample). `
+      + 'The pattern WITHIN a ward does not hold up: block by block it scores r = 0.27, still below the r = 0.31 of a '
       + 'vegetation map given the same treatment, and coarsening the comparison does not '
       + 'close that gap at any scale. At neighbourhood scale (~300-500 m) it reaches '
       + 'r = 0.4, but only about 0.2 in KMC Ward 68, whose dense, uniform fabric leaves '
       + 'the satellite little pattern to match. The colour range inside a ward is close '
       + 'to what the satellite measures (0.97x), though about 0.8x in Ward 68, where '
       + 'contrasts are slightly understated. '
-      + 'Ward figures are measured, neighbourhood contrast is indicative, block-by-block '
+      + 'Ward means are checked, neighbourhood contrast is indicative, block-by-block '
       + 'detail is illustrative.',
 } as const;
 
