@@ -127,6 +127,11 @@ class Area:
     #: differ by an exact translation and a shared seam is one meridian. NORTH is not affected: 110_540 m/deg is
     #: latitude-independent here. See scripts/_sheets.py.
     frame_lat: Degrees | None = None
+    #: The area's EXACT lon/lat box (west, south, east, north), when it is not "centre +- half a size". A SHEET of a tiled
+    #: city sets it to its lattice cell (`_sheets.geo_bounds`), so every ingest that asks `bounds(area)` -- 3D BAG clip,
+    #: AHN mesh, CHM window, Overture scan, the surface reader -- gets the very floats the lattice table holds, and a
+    #: shared seam is bit-equal in what ingest USES, not only in the table. None = derive it from the centre as always.
+    box: tuple[float, float, float, float] | None = None
 
     def frame_parallel(self) -> float:
         """The latitude the east scale is taken at: `frame_lat` if set, else the area's own centre latitude."""
@@ -178,8 +183,13 @@ def frame_m_per_deg(a: Area) -> tuple[float, float]:
 
 
 def bounds(a: Area, pad_m: float = 0.0) -> tuple[float, float, float, float]:
-    """(west, south, east, north) in EPSG:4326 -- rasterio's `from_bounds` order."""
+    """(west, south, east, north) in EPSG:4326 -- rasterio's `from_bounds` order.
+
+    An area with a `box` returns it unchanged at pad 0 (`w - 0.0 == w`), grown by `pad_m` in the frame's metres otherwise."""
     mx, my = frame_m_per_deg(a)
+    if a.box is not None:
+        w, s, e, n = a.box
+        return (w - pad_m / mx, s - pad_m / my, e + pad_m / mx, n + pad_m / my)
     half = a.size_m / 2.0 + pad_m
     return (a.centre.lon - half / mx, a.centre.lat - half / my,
             a.centre.lon + half / mx, a.centre.lat + half / my)
@@ -247,7 +257,9 @@ def bounds_local_crs(a: Area, pad_m: float = 0.0) -> tuple[float, float, float, 
 
 # ── file contracts (TypedDict at the JSON boundary ONLY) ───────────────────
 
-HSource = Literal["3dbag-p70", "plateau-measured", "plateau-lod1", "fill"]
+#: "3dbag-p70-ahn4-ground": 3D BAG's roof, but the ground came from the AHN4 DTM ring outside the footprint, because 3D BAG's own
+#: `b3_h_maaiveld` failed the plausibility rule (`_src_3dbag.ground_verdict`). Sheets only; Canal Ring's shipped file has none.
+HSource = Literal["3dbag-p70", "3dbag-p70-ahn4-ground", "plateau-measured", "plateau-lod1", "fill"]
 
 
 class CityBuilding(TypedDict):

@@ -30,24 +30,29 @@ const table = JSON.parse(readFileSync(new URL('data/cities/amsterdam/sheets.json
 const CANAL = 'nl/amsterdam/canal-ring';
 const sheetAreaKeys = SHEETS.filter((s) => s.id !== 'canal-ring').map(sheetKey);
 
-test('the table has the shape the EXACT counts give: 31 shipping sheets (24 core, 7 edge), 22 skipped, on a graticule lattice', () => {
+test('the table has the shape the EXACT counts give: 32 shipping sheets (24 core, 8 edge), 21 skipped, on a graticule lattice', () => {
   assert.deepEqual(Object.keys(table),
     ['city', 'lattice', 'shipRule', 'method', 'sources', 'sheets', 'skipped', 'totals']);
   assert.equal(table.city, 'amsterdam');
-  assert.equal(table.sheets.length, 31);
+  assert.equal(table.sheets.length, 32);
   assert.equal(table.sheets.filter((s) => s.kind === 'core').length, 24);
-  assert.equal(table.sheets.filter((s) => s.kind === 'edge').length, 7);
-  assert.equal(table.skipped.length, 22);
+  assert.equal(table.sheets.filter((s) => s.kind === 'edge').length, 8);
+  assert.equal(table.skipped.length, 21);
   assert.equal(table.sheets.length + table.skipped.length, 53, 'the municipality touches 53 lattice cells');
-  assert.equal(table.totals.shipping, 31);
-  assert.equal(table.totals.core + table.totals.edge, 31);
-  assert.deepEqual(table.shipRule, { minBuildings: 500, minMunicipalShare: 0.1, coreMinBuildings: 2000 });
+  assert.equal(table.totals.shipping, 32);
+  assert.equal(table.totals.core + table.totals.edge, 32);
+  /* P2b: the rule is the building count alone. The earlier extra condition (10 % of the sheet inside the municipality)
+     dropped B5, 1,279 municipal buildings on 4.2 % of its area. `municipalShare` is still recorded, as information. */
+  assert.deepEqual(table.shipRule, { minBuildings: 500, coreMinBuildings: 2000 });
   assert.equal(table.lattice.kind, 'graticule');
   assert.equal(table.lattice.ingestCrs, 'EPSG:28992', 'RD New is the ingest CRS, not the lattice');
   assert.equal(table.lattice.frameLat, 52.364, "every sheet's frame uses E4's latitude as its standard parallel");
   for (const s of table.sheets) {
     assert.deepEqual(Object.keys(s), ['id', 'code', 'i', 'j', 'kind', 'buildings', 'municipalBuildings', 'municipalShare',
-      'stadsdeel', 'label', 'wgs84Bounds', 'rdQuad', 'centre'], s.code);
+      'stadsdeel', 'label', 'wgs84Bounds', 'rdQuad', 'centre', 'frameLat'], s.code);
+    /* S5: every sheet record states its frame's standard parallel; there is no silent default to the sheet's own latitude */
+    assert.equal(s.frameLat, AMSTERDAM_SHEET_LATTICE.frameLat, `${s.code} carries the lattice's frameLat`);
+    assert.equal(s.frameLat, table.lattice.frameLat, s.code);
     assert.equal(s.wgs84Bounds.length, 4);
     assert.equal(s.rdQuad.length, 8);
     const [w, so, e, n] = s.wgs84Bounds;
@@ -57,13 +62,13 @@ test('the table has the shape the EXACT counts give: 31 shipping sheets (24 core
     assert.ok(Math.abs((n - so) * table.lattice.mPerDegLat - 2800) < 1e-6, `${s.code} is 2.8 km north-south in the frame`);
     assert.ok(w < s.centre.lon && s.centre.lon < e, `${s.code} centre inside its box`);
     assert.ok(so < s.centre.lat && s.centre.lat < n, `${s.code} centre inside its box`);
-    assert.ok(s.municipalBuildings >= 500 && s.municipalShare >= 0.1, `${s.code} meets the ship rule`);
+    assert.ok(s.municipalBuildings >= 500, `${s.code} meets the ship rule`);
     assert.equal(s.kind, s.municipalBuildings >= 2000 ? 'core' : 'edge', s.code);
     assert.ok(s.municipalBuildings <= s.buildings, `${s.code}: municipal buildings are a subset of the box's`);
   }
   for (const k of table.skipped) {
-    assert.ok(k.municipalBuildings < 500 || k.municipalShare < 0.1, `${k.code} fails the ship rule`);
-    assert.equal(k.reason, k.municipalBuildings < 500 ? 'under-500-buildings' : 'under-10-percent-municipal', k.code);
+    assert.ok(k.municipalBuildings < 500, `${k.code} fails the ship rule`);
+    assert.equal(k.reason, 'under-500-buildings', k.code);
   }
 });
 
@@ -83,8 +88,8 @@ test('the generated TypeScript module carries the JSON table exactly (the drift 
 
 test('ids are unique, `ams-<code>`, and E4 alone keeps `canal-ring`', () => {
   const ids = SHEETS.map((s) => s.id);
-  assert.equal(new Set(ids).size, 31);
-  assert.equal(new Set(SHEETS.map((s) => s.code)).size, 31);
+  assert.equal(new Set(ids).size, 32);
+  assert.equal(new Set(SHEETS.map((s) => s.code)).size, 32);
   for (const s of SHEETS) {
     if (s.code === 'E4') continue;
     assert.equal(s.id, `ams-${s.code.toLowerCase()}`);
@@ -175,7 +180,7 @@ test('neighbours: eight around Canal Ring, fewer at the edge, none that do not s
 });
 
 test('NO SHEET IS DRAWABLE, PUBLIC, PUBLISHED OR ROUTED (only Canal Ring is, as before)', () => {
-  assert.equal(sheetAreaKeys.length, 30);
+  assert.equal(sheetAreaKeys.length, 31);
   for (const key of sheetAreaKeys) {
     const [country, city, area] = key.split('/');
     const entry = REGISTRY[country].cities[city].areas[area];
@@ -198,7 +203,7 @@ test('NO SHEET IS DRAWABLE, PUBLIC, PUBLISHED OR ROUTED (only Canal Ring is, as 
   assert.equal(REGISTRY.nl.cities.amsterdam.areas['canal-ring'].sheet, undefined, 'E4 is not flagged: it is written by hand');
   assert.deepEqual(REGISTRY.nl.cities.amsterdam.areas['canal-ring'], { shipsData: false, drawable: true });
   assert.equal(PUBLIC_AREA_KEYS.length, 7, 'Kolkata 3 + Bengaluru 3 + Canal Ring');
-  assert.equal(AREA_KEYS.length, 40);
+  assert.equal(AREA_KEYS.length, 41);
   assert.deepEqual(PUBLIC_AREA_KEYS.filter((k) => k.startsWith('nl/')), [CANAL]);
   assertRegistryLogic();
 });
@@ -235,7 +240,7 @@ test('the sheet-index data model: 70 cells, the current sheet and its neighbours
   assert.equal(idx.columns, 'ABCDEFGHIJ');
   assert.equal(idx.rows, 7);
   assert.equal(idx.cells.length, 70);
-  assert.deepEqual(idx.counts, { core: 24, edge: 7, skipped: 22, shipping: 31 });
+  assert.deepEqual(idx.counts, { core: 24, edge: 8, skipped: 21, shipping: 32 });
   assert.equal(idx.current.code, 'E4');
   assert.equal(idx.cells[0].code, 'A1');
   assert.equal(idx.cells[69].code, 'J7');
@@ -243,8 +248,8 @@ test('the sheet-index data model: 70 cells, the current sheet and its neighbours
   assert.deepEqual(idx.cells.filter((c) => c.neighbour).map((c) => c.code), ['D3', 'E3', 'F3', 'D4', 'F4', 'D5', 'E5', 'F5']);
   const count = (state) => idx.cells.filter((c) => c.state === state).length;
   assert.equal(count('core'), 24);
-  assert.equal(count('edge'), 7);
-  assert.equal(count('skipped'), 22);
+  assert.equal(count('edge'), 8);
+  assert.equal(count('skipped'), 21);
   assert.equal(count('outside'), 17);
   for (const c of idx.cells) {
     assert.equal(c.key !== null, c.state === 'core' || c.state === 'edge', c.code);
@@ -257,22 +262,22 @@ test('the sheet-index data model: 70 cells, the current sheet and its neighbours
   assert.equal(isTiledCity(CANAL), true);
   assert.equal(isTiledCity('in/bengaluru/mg-road'), false);
   assert.deepEqual(sheetKeysInCity('in/kolkata/ballygunge'), []);
-  assert.equal(sheetKeysInCity(CANAL).length, 31);
+  assert.equal(sheetKeysInCity(CANAL).length, 32);
 });
 
-test('the registry and the table name the same 31 sheets, in both directions', () => {
+test('the registry and the table name the same 32 sheets, in both directions', () => {
   assert.deepEqual([...registeredSheetKeys()].sort(), SHEETS.map(sheetKey).sort());
   assert.deepEqual([...sheetKeysInCity(CANAL)].sort(), [...registeredSheetKeys()].sort());
-  assert.equal(SKIPPED_SHEETS.length, 22);
+  assert.equal(SKIPPED_SHEETS.length, 21);
   for (const k of SKIPPED_SHEETS) assert.ok(!AREA_KEYS.some((key) => key.endsWith(`/ams-${k.code.toLowerCase()}`)), `${k.code} skipped, not registered`);
 });
 
-test('the building counts are exact, and the 31 carry nearly all the municipality', () => {
+test('the building counts are exact, and the 32 carry nearly all the municipality', () => {
   assert.doesNotMatch(JSON.stringify(table), /buildingsEst/, 'the estimate is gone');
   assert.match(table.method, /EXACT/);
   const t = table.totals;
   assert.equal(t.municipalBuildingsShipping + t.municipalBuildingsSkipped, t.municipalBuildingsCity);
-  assert.ok(t.municipalBuildingsShipping / t.municipalBuildingsCity > 0.98, 'the 31 hold at least 98 % of the municipal buildings');
+  assert.ok(t.municipalBuildingsShipping / t.municipalBuildingsCity > 0.98, 'the 32 hold at least 98 % of the municipal buildings');
   assert.equal(t.municipalBuildingsCity, 191998, 'every municipal building of the 227 city tiles, once');
   /* E4's box holds every building Canal Ring ships plus the slivers its ingest drops (G9a proves the 61 are all under 4 m2) */
   const shipped = new Set(JSON.parse(readFileSync(new URL('data/cities/amsterdam/canal-ring-buildings.json', ROOT), 'utf8')).b.map((b) => b.src_id.split('#')[0]));
@@ -287,6 +292,13 @@ test('P2a: the exact counts moved these sheets against the P1 estimate (so the c
   const kind = (c) => sheetByCode(c).kind;
   assert.equal(kind('H7'), 'core'); assert.equal(kind('I7'), 'core'); assert.equal(kind('G5'), 'edge');
   assert.equal(sheetByCode('G4').municipalBuildings, 2000, 'G4 sits exactly on the core line and the rule is >= 2000');
+});
+
+test('P2b: the ship rule is the building count alone, so B5 (1,279 municipal buildings on 4.2 % of its area) ships as an edge sheet', () => {
+  const b5 = sheetByCode('B5');
+  assert.ok(b5 !== undefined && b5.kind === 'edge' && b5.municipalBuildings === 1279 && b5.municipalShare < 0.1);
+  assert.deepEqual(table.skipped.filter((k) => k.municipalShare < 0.1 && k.municipalBuildings >= 500), [], 'no skipped cell holds 500 municipal buildings');
+  assert.ok(table.skipped.every((k) => k.reason === 'under-500-buildings'));
 });
 
 test('F2: the `sheet` flag only appears on a tiled city\'s sheets (and every generated sheet carries it)', () => {
