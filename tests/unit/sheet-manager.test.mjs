@@ -357,6 +357,20 @@ test('the LRU keeps the tier cap of bundles: the least recently used goes, its h
   assert.ok(h.find('E4', 'lod0'), 'an evicted sheet is fetched again');
 });
 
+test('a prefetched bundle nobody has visited is evicted before a visited one', () => {
+  const h = settled('E4', 'full');                             // cap 3
+  h.select('D4'); h.drain(); h.send({ type: 'handover-done' });   // E4 and D4 visited
+  h.camera(at(...Object.values(cellOf('D4'))), false, 90);      // heading east from D4: prefetch E4? no, it is resident; the fan continues
+  h.drain();
+  const guessed = [...h.state().sheets].filter(([c, e]) => e.lod0.status === 'ready' && c !== 'D4' && c !== 'E4').map(([c]) => c);
+  assert.equal(guessed.length, 1, 'one speculative bundle');
+  const mark = h.log.length;
+  h.select('C4'); h.drain();                                   // a cold move that needs a slot
+  const gone = h.since(mark).filter((c) => c.type === 'evict' && c.level === 'lod0').map((c) => c.sheet);
+  assert.ok(gone.includes(guessed[0]), 'the guess goes first');
+  assert.ok(!gone.includes('E4'), 'the sheet the user visited stays');
+});
+
 test('the current sheet and the outgoing mesh are never evicted, even over the cap', () => {
   const h = settled('E4', 'low');                              // cap 1
   h.select('F4');

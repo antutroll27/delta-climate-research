@@ -480,7 +480,10 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
       if (hit === undefined) break;                                         // a cancelled or unknown request: stale, ignored
       if (event.type === 'load-finished') {
         d.seq += 1;
-        put(d, hit.sheet, hit.level, { status: 'ready', usedSeq: d.seq, sinceMs: now });
+        /* A bundle nobody has stood in yet (a prefetch) ranks below every visited one: if room is needed, the guess goes
+           before the sheet the user may walk back to. It earns a real rank when it becomes current (`touch`). */
+        const speculative = hit.level === 'lod0' && hit.sheet !== d.current;
+        put(d, hit.sheet, hit.level, { status: 'ready', usedSeq: speculative ? 0 : d.seq, sinceMs: now });
       } else {
         put(d, hit.sheet, hit.level, { status: 'failed', attempts: hit.entry.attempts, atMs: now });
         if (hit.sheet === d.current && hit.entry.attempts >= MAX_ATTEMPTS) {
