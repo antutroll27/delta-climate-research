@@ -11,7 +11,7 @@ import { SENTINEL_CREDIT } from '../../src/scripts/climate-engine/v2/credits.ts'
 import { creditsPanelHtml } from '../../src/scripts/climate-engine/v2/credit-html.ts';
 import { AREA_KEYS, PUBLIC_AREA_KEYS, splitKey } from '../../src/scripts/climate-engine/scope/registry.ts';
 import { resolve } from '../../src/scripts/climate-engine/scope/resolve.ts';
-import { isAirCity } from '../../src/lib/aqi/stations.ts';
+import { isAirCity, isCpcbAirCity } from '../../src/lib/aqi/stations.ts';
 
 /* tests/fixtures/credits/overlays-original-lines.html is the seven <li> lines
    v2/Overlays.astro typed before credits became per-city data, cut from origin/main
@@ -175,7 +175,7 @@ async function renderedKeyAndChip(source, filename, vars) {
 const freshVars = (scope) => ({
   chipLead: scope.area.hasData ? CITY_CHIP_LEAD[scope.city.id] : '',
   chipRequired: scope.area.hasData ? CITY_CHIP_REQUIRED[scope.city.id] : null,
-  showAqiBands: isAirCity(scope.key),
+  showAqiBands: isCpcbAirCity(scope.key),
 });
 
 test('Kolkata and Bengaluru: the key popover and the credits chip are character-identical to the pre-change template\'s', async () => {
@@ -203,7 +203,8 @@ test('the chip lead: Kolkata and Bengaluru keep today\'s string byte for byte; A
 test('Amsterdam\'s key popover has no India AQI bands, and its chip carries the desktop lead and the phone credit', async () => {
   const now = readFileSync('src/components/ClimateEngine/v2/Overlays.astro', 'utf8');
   const scope = resolve('nl/amsterdam/canal-ring');
-  assert.equal(isAirCity(scope.key), false);
+  assert.equal(isCpcbAirCity(scope.key), false);
+  assert.equal(isAirCity(scope.key), true, 'Amsterdam has an Air card (LKI), just not CPCB\'s bands');
   const html = await renderedKeyAndChip(now, 'new/Overlays.astro', freshVars(scope));
   assert.ok(!/India|CPCB|aq-good|aq-severe/.test(html), 'no Indian AQI wording or colours on the Amsterdam key');
   assert.ok(html.includes('<p class="foot">Red and orange belong to the heat ramp.</p>'));
@@ -222,7 +223,7 @@ test('phone.css keeps .at-req and drops the chip\'s own "© " for a city that ha
 
 test('Overlays.astro reads the lead and the AQI gate from data, not from literals', () => {
   const o = readFileSync('src/components/ClimateEngine/v2/Overlays.astro', 'utf8');
-  assert.ok(o.includes('CITY_CHIP_LEAD[scope.city.id]') && o.includes('CITY_CHIP_REQUIRED[scope.city.id]') && o.includes('isAirCity(scope.key)'));
+  assert.ok(o.includes('CITY_CHIP_LEAD[scope.city.id]') && o.includes('CITY_CHIP_REQUIRED[scope.city.id]') && o.includes('isCpcbAirCity(scope.key)'));
   assert.ok(!o.includes("'© OpenStreetMap · OpenMapTiles"), 'the India lead is no longer typed in the template');
 });
 

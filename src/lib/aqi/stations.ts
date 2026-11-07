@@ -8,6 +8,7 @@
  * NOx closure) but its SO₂ µg/m³ is INFERRED, not verified (AQI-R31). A change here
  * is a data claim: update the register in the same commit.
  */
+import { localAirReady } from './local-areas.ts';
 import type { AqiStation, Pollutant } from './types.ts';
 
 export interface SensorRef { id: number; unit: 'ug_m3' | 'mg_m3' }
@@ -137,8 +138,18 @@ export function candidatesFor(key: string): readonly StationEntry[] {
 }
 
 export function isAirArea(key: string): boolean { return Object.hasOwn(AREAS, key); }
-/** True when the area's city has an Air card (`in/bengaluru/x` → true): the UI's one gate, read from AREAS. */
-export function isAirCity(key: string): boolean {
+/**
+ * True when the area's city has an Air card (`in/bengaluru/x` → true): the UI's one gate. The Indian cities are read from AREAS;
+ * a city whose standard is its own regulator's (Amsterdam, Tokyo) counts per AREA, and only once it is DRAWABLE (local-areas.ts
+ * `localAirReady`, the same question `loadAir` and the API ask), so a card is never offered beside a map that cannot be opened and
+ * an area the local dispatch does not know is never sent down the CPCB path.
+ */
+export function isAirCity(key: string): boolean { return isCpcbAirCity(key) || localAirReady(key); }
+/**
+ * True only where the Air card is CPCB's (`in/bengaluru/x` → true, `nl/amsterdam/canal-ring` → false). The map key's "India AQI bands" row
+ * and its CPCB wording hang on THIS, not on `isAirCity`: Amsterdam has an Air card (Luchtmeetnet's LKI) but India's bands and colours are not its.
+ */
+export function isCpcbAirCity(key: string): boolean {
   const prefix = key.split('/').slice(0, 2).join('/') + '/';
   return Object.keys(AREAS).some((k) => k.startsWith(prefix));
 }

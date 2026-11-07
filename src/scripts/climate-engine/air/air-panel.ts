@@ -19,6 +19,8 @@ import { category } from '../../../lib/aqi/cpcb.ts';
 import { LIVE_H } from '../../../lib/aqi/build.ts';
 import { AIR_STATES, isAirPayload, isCity, isUsNowcast } from '../../../lib/aqi/valid.ts';
 import { US_WORD, naqiToConcentration, usAqiOf } from '../../../lib/aqi/us-aqi.ts';
+import { isLocalAirArea } from '../../../lib/aqi/local-areas.ts';
+import { loadLocalAir } from './local-air-panel.ts';
 import type { AirQualityPayload, AqiResult, CityAqi, UsNowcast, AqiStation, CpcbCategory, CpcbSubIndex, HistoryDay, HistoryResponse, Pollutant, PollutantReading, Result } from '../../../lib/aqi/types.ts';
 
 type Current = AirQualityPayload['current'];
@@ -439,7 +441,11 @@ export function statusText(p: AirQualityPayload, place: string, now: Date = new 
 }
 
 /** What `loadAir` hands the app: the card (null = keep it hidden), the whole pane, the bars' days for `wireBarTips`, and the live-region line. */
-export interface AirPaint { block: string | null; pane: string; days: readonly HistoryDay[]; status: string }
+export interface AirPaint {
+  block: string | null; pane: string; days: readonly HistoryDay[]; status: string;
+  /** Only the local-regulator cities set it (local-air-panel.ts): re-paints the kept payload at a later time, so a stale hour cannot stay "Live". */
+  refresh?: (now: Date) => { block: string | null; pane: string; status: string };
+}
 
 export interface AirIo {
   fetch: (url: string, init: { signal: AbortSignal }) => Promise<Pick<Response, 'ok' | 'json'>>;
@@ -457,6 +463,9 @@ export interface AirIo {
  * malformed body that fails `isAirPayload`) is the designed failure view in both places, never a silent hide.
  */
 export async function loadAir(area: string, place: string, io: AirIo): Promise<AirPaint | null> {
+  /* A city whose standard is its own regulator's (Amsterdam's LKI, Tokyo's concentration standards) has its own contract and painters
+     (local-air-panel.ts); this function's CPCB path below is not touched by them. */
+  if (isLocalAirArea(area)) return loadLocalAir(area, place, io);
   let body: unknown = null, ok = false;
   try {
     const r = await io.fetch(`/api/air-quality?area=${encodeURIComponent(area)}`, { signal: io.signal });

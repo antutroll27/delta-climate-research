@@ -5,7 +5,7 @@ import type { ResolvedScope } from '../../../scripts/climate-engine/scope/resolv
 import { SENTINEL_CREDIT } from '../../../scripts/climate-engine/v2/credits.ts';
 import { creditsPanelHtml } from '../../../scripts/climate-engine/v2/credit-html.ts';
 import { CITY_CHIP_LEAD, CITY_CHIP_REQUIRED } from '../../../data/city-credits.ts';
-import { isAirCity } from '../../../lib/aqi/stations.ts';
+import { isCpcbAirCity } from '../../../lib/aqi/stations.ts';
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
 /* The data lines are DATA, per city (src/data/city-credits.ts): Kolkata and Bengaluru reproduce the lines this file used to type, an
@@ -18,9 +18,9 @@ const chipLead = scope.area.hasData ? CITY_CHIP_LEAD[scope.city.id] : '';
 /* A licence that REQUIRES a visible credit (3D BAG: bottom-right of a browsable map) cannot sit behind the phone's "© Credits" button, so
    the city's short credit is a span the phone CSS keeps (`.at-req`); desktop hides it, because the lead above already carries the text. */
 const chipRequired = scope.area.hasData ? CITY_CHIP_REQUIRED[scope.city.id] : null;
-/* The India AQI bands are CPCB's. They are keyed only where this site has an Air card (the same gate the Air pane uses), never on a
-   city whose air data is not CPCB's. */
-const showAqiBands = isAirCity(scope.key);
+/* The India AQI bands are CPCB's. They are keyed only where this site's Air card is CPCB's (isCpcbAirCity, not the Air pane's wider isAirCity), never on a
+   city whose air data is its own regulator's (Amsterdam's LKI). */
+const showAqiBands = isCpcbAirCity(scope.key);
 ---
 <div class="key-pop card" id="v2Key" role="dialog" aria-label="How to read the marks" tabindex="-1" data-open="false" data-hud>
   <div class="row"><h2 class="name-xl"><b>How</b><span> to read the marks</span></h2><button class="sp-close" type="button" data-pop-close aria-label="Close the key">×</button></div>

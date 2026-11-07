@@ -338,6 +338,116 @@
         "Concertgebouw": "Q849957"
       },
       "userAgent": "obos-pipeline/1.0 (+https://deltaclimate.earth)"
+    },
+    {
+      "id": "luchtmeetnet-air-quality",
+      "role": "live air quality: the LKI as published and the four substances behind it (Phase C, task C3)",
+      "name": "Luchtmeetnet open API (RIVM, GGD Amsterdam and the other Dutch monitoring networks)",
+      "retrieved": "2026-11-06",
+      "urls": {
+        "stations": {
+          "url": "https://api.luchtmeetnet.nl/open_api/stations",
+          "http": 200,
+          "note": "5 pages, 103 stations; detail per station at /open_api/stations/{id} (all 103 read, coordinates are [lon, lat])"
+        },
+        "lki": {
+          "url": "https://api.luchtmeetnet.nl/open_api/lki?station_number={id}&order_by=timestamp_measured&order_direction=desc&start={ISO}&end={ISO}",
+          "http": 200,
+          "note": "WITHOUT start/end the API answers 302 to https://iq.luchtmeetnet.nl/…; OBOS always sends an explicit 6 h window"
+        },
+        "measurements": {
+          "url": "https://api.luchtmeetnet.nl/open_api/measurements?station_number={id}&order_by=timestamp_measured&order_direction=desc&start={ISO}&end={ISO}",
+          "http": 200,
+          "note": "all components in one request; timestamp_measured is the END of the hour (timestamp_measured_start/_end in the same row)"
+        },
+        "cmsPages": {
+          "url": "https://api.luchtmeetnet.nl/cms/pages",
+          "http": 200,
+          "note": "the site's own CMS: the Open data, Tijdnotatie, Disclaimer, LKI and Handelingsadvies pages quoted below (tests/fixtures/aqi/nl/cms-pages-used.json)"
+        },
+        "rivmReport": {
+          "url": "https://www.rivm.nl/bibliotheek/rapporten/2014-0050.pdf",
+          "http": 200,
+          "note": "RIVM report 2014-0050 (origin of the index; ten classes and four groups proposed there, NOT the live scheme)"
+        }
+      },
+      "licence": "CC BY-ND 4.0 International (Naamsvermelding-GeenAfgeleideWerken)",
+      "licenceUrl": "https://www.luchtmeetnet.nl/informatie/download-data/open-data",
+      "licenceVerbatim": {
+        "nl": "Op de data beschikbaar gesteld via www.luchtmeetnet.nl is de licentie Naamsvermelding-GeenAfgeleideWerken 4.0 Internationaal (CC BY-ND 4.0) van toepassing.",
+        "en": "On the data provided through www.luchtmeetnet.nl, the following license is applicable: No-derivative Works 4.0 International (CC BY-ND 4.0)."
+      },
+      "requiredCredit": "Source: www.luchtmeetnet.nl",
+      "requiredCreditBasis": "\"Bij hergebruik van de inhoud van de datasets is bronvermelding (www.luchtmeetnet.nl) verplicht.\" / \"When reusing the contents of datasets, a source reference to www.luchtmeetnet.nl is mandatory.\" The terms prescribe no further wording; the plan's longer form (\"RIVM, GGD Amsterdam and partners\") is not required and is not used.",
+      "requiredStatement": "\"Bij het citeren van de inhoud mag niet de indruk worden gewekt dat wij de strekking van het afgeleide werk onderschrijven.\" / \"When quoting the content, users cannot create the impression that we endorse the scope of their derived work.\" The card prints: \"Luchtmeetnet does not endorse this page.\"",
+      "editStatement": null,
+      "noDerivatives": "ND forbids sharing adapted material. OBOS prints the LKI and the hourly concentrations exactly as the API returns them (no rounding, averaging or unit change) and derives no \"US AQI\" line from the PM2.5, which would be an adaptation. A legal read of whether a selection and layout of the unaltered values is an adaptation is founder question Q6a.",
+      "dataCaveat": "Unvalidated hourly values (\"ongevalideerde uurgemiddelde data\"), indicative, may be corrected; availability is not guaranteed (Open data page, Disclaimer page). The card says so.",
+      "fairUse": "100 requests per 5 minutes; one cold answer costs 2 requests, a worst case 5; results are cached 10 min server-side.",
+      "indexDefinition": {
+        "prose": "luchtmeetnet.nl 'Luchtkwaliteitsindex (LKI)': five classes from good to very bad; a number 1 to 11 per substance; the substance with the highest number decides; decimals round up.",
+        "classEdges": "1-3 Goed (Good), 4-6 Matig (Moderate), 7-8 Onvoldoende (Insufficient), 9-10 Slecht (Bad), 11 Zeer slecht (Very bad)",
+        "classEdgesBasis": "read from the site's own script chunks (tests/fixtures/aqi/nl/lki-legend-evidence.json, sha256 of the classifying chunk 9d748442c77790ea…): no prose page states the edges",
+        "colours": "the site's own legend colours #3077CE, #dfb300, #D84000, #9F1D35, #7d27cd"
+      },
+      "stationsUsed": [
+        {
+          "id": "NL49014",
+          "name": "Amsterdam-Vondelpark",
+          "type": "Municipal",
+          "organisation": "GGD Amsterdam",
+          "lat": 52.359714,
+          "lon": 4.866208,
+          "distance_m": 1362,
+          "components": "CO FN NO NO2 O3 PM10 PM25 BCWB"
+        },
+        {
+          "id": "NL49012",
+          "name": "Amsterdam-Van Diemenstraat",
+          "type": "Traffic",
+          "organisation": "GGD Amsterdam",
+          "lat": 52.389983,
+          "lon": 4.887811,
+          "distance_m": 2895,
+          "components": "CO FN NO NO2 O3 PM10 PM25 BCWB"
+        },
+        {
+          "id": "NL49003",
+          "name": "Amsterdam-Nieuwendammerdijk",
+          "type": "Municipal",
+          "organisation": "GGD Amsterdam",
+          "lat": 52.389314,
+          "lon": 4.943822,
+          "distance_m": 4885,
+          "components": "FN NO NO2 O3 BCWB PM10 PM25"
+        },
+        {
+          "id": "NL10552",
+          "name": "Haarlem-Freddie Oversteegenstraat",
+          "type": "Other",
+          "organisation": "RIVM",
+          "lat": 52.37029,
+          "lon": 4.651789,
+          "distance_m": 15849,
+          "components": "PM25 NO PM10 O3 NO2"
+        },
+        {
+          "id": "NL10641",
+          "name": "Breukelen-A2",
+          "type": "Traffic",
+          "organisation": "RIVM",
+          "lat": 52.20153,
+          "lon": 4.987444,
+          "distance_m": 19363,
+          "components": "FN NO NO2 O3 PM10 PM25 BCWB"
+        }
+      ],
+      "stationRule": "a station serves the LKI card only if its published component list holds NO2, PM10, PM25 and O3 (the four the LKI is built from); within 20 km of the canal-ring centre 52.3640, 4.8850",
+      "stationsNotUsed": "nearer stations lacking O3: NL49017 Stadhouderskade 1198 m, NL49019 Oude Schans 1593 m (NO, NO2 only), NL49020 Jan van Galenstraat 2061 m, NL49002 Haarlemmerweg 2463 m, NL49007 Einsteinweg 3317 m, NL49016 Westerpark 3482 m",
+      "stationDetails": "all 103 stations' details are in tests/fixtures/aqi/nl/stations-details.json (the last three, NL50014 Gulpen, NL10738 Wekerom, NL53001 Ossendrecht, are 63 to 192 km away)",
+      "timeConvention": "Tijdnotatie page: values are stored in UTC; the website shows local time with the summer/winter correction. OBOS tells the hour-end instant in Europe/Amsterdam ('CET'/'CEST') through lib/aqi/clock.ts zoneClock.",
+      "userAgent": "obos-pipeline/1.0 (+https://deltaclimate.earth)",
+      "openFounderQuestion": "Q6a: written confirmation from RIVM/Luchtmeetnet of the API licence as applied to a commercial web app (the CC BY-ND 4.0 statement is on the site's own Open data page; no separate API licence text was found)."
     }
   ]
 }
