@@ -1,0 +1,592 @@
+{
+ "city": "amsterdam",
+ "credit": "Gemeente Amsterdam, Kernregistratie gebieden (CC0 1.0): wijk names",
+ "rule": "name = the wijk holding the most of the area's drawn buildings (a building counts for the wijk its centroid lies in; weighting by building count, not by polygon area, because wijk polygons include water and port basins); if the second wijk holds more than 35% of them, 'A & B'; E4 stays 'Canal Ring'; a name two areas would share gets a compass qualifier, '(west)' / '(east)' or '(north)' / '(south)', so every name is unique",
+ "retrieved": "2026-11-08",
+ "areas": {
+  "D2": {
+   "name": "Havens-West",
+   "stadsdeel": "Westpoort",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Havens-West",
+     "share": 0.914
+    },
+    {
+     "name": "Coenhaven/Minervahaven",
+     "share": 0.082
+    },
+    {
+     "name": "Oostzanerwerf",
+     "share": 0.004
+    }
+   ]
+  },
+  "E2": {
+   "name": "Tuindorp Oostzaan",
+   "stadsdeel": "Noord",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Tuindorp Oostzaan",
+     "share": 0.615
+    },
+    {
+     "name": "Oostzanerwerf",
+     "share": 0.213
+    },
+    {
+     "name": "Kadoelen",
+     "share": 0.136
+    }
+   ]
+  },
+  "F2": {
+   "name": "Banne Buiksloot",
+   "stadsdeel": "Noord",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Banne Buiksloot",
+     "share": 0.513
+    },
+    {
+     "name": "Elzenhagen",
+     "share": 0.319
+    },
+    {
+     "name": "Kadoelen",
+     "share": 0.122
+    }
+   ]
+  },
+  "B3": {
+   "name": "Sloterdijk Nieuw-West",
+   "stadsdeel": "Nieuw-West",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Sloterdijk Nieuw-West",
+     "share": 0.547
+    },
+    {
+     "name": "Lutkemeer/Ookmeer",
+     "share": 0.23
+    },
+    {
+     "name": "Havens-West",
+     "share": 0.129
+    }
+   ]
+  },
+  "C3": {
+   "name": "Geuzenveld",
+   "stadsdeel": "Nieuw-West",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Geuzenveld",
+     "share": 0.559
+    },
+    {
+     "name": "Slotermeer-West",
+     "share": 0.208
+    },
+    {
+     "name": "Sloterdijk Nieuw-West",
+     "share": 0.126
+    }
+   ]
+  },
+  "D3": {
+   "name": "Slotermeer-Noordoost",
+   "stadsdeel": "West",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Slotermeer-Noordoost",
+     "share": 0.353
+    },
+    {
+     "name": "Landlust",
+     "share": 0.333
+    },
+    {
+     "name": "Erasmuspark",
+     "share": 0.097
+    }
+   ]
+  },
+  "E3": {
+   "name": "Staatsliedenbuurt",
+   "stadsdeel": "West",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Staatsliedenbuurt",
+     "share": 0.206
+    },
+    {
+     "name": "Jordaan",
+     "share": 0.187
+    },
+    {
+     "name": "Spaarndammerbuurt/Zeeheldenbuurt",
+     "share": 0.161
+    }
+   ]
+  },
+  "F3": {
+   "name": "Volewijck",
+   "stadsdeel": "Noord",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Volewijck",
+     "share": 0.355
+    },
+    {
+     "name": "IJplein/Vogelbuurt",
+     "share": 0.178
+    },
+    {
+     "name": "Tuindorp Nieuwendam",
+     "share": 0.116
+    }
+   ]
+  },
+  "G3": {
+   "name": "Waterlandpleinbuurt",
+   "stadsdeel": "Noord",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Waterlandpleinbuurt",
+     "share": 0.591
+    },
+    {
+     "name": "Tuindorp Nieuwendam",
+     "share": 0.247
+    },
+    {
+     "name": "Waterland",
+     "share": 0.105
+    }
+   ]
+  },
+  "H3": {
+   "name": "Waterland",
+   "stadsdeel": "Noord",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Waterland",
+     "share": 1.0
+    }
+   ]
+  },
+  "B4": {
+   "name": "De Aker (north)",
+   "stadsdeel": "Nieuw-West",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "De Aker",
+     "share": 0.712
+    },
+    {
+     "name": "Lutkemeer/Ookmeer",
+     "share": 0.173
+    },
+    {
+     "name": "De Punt",
+     "share": 0.108
+    }
+   ]
+  },
+  "C4": {
+   "name": "Osdorp-Oost",
+   "stadsdeel": "Nieuw-West",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Osdorp-Oost",
+     "share": 0.26
+    },
+    {
+     "name": "Geuzenveld",
+     "share": 0.173
+    },
+    {
+     "name": "Slotermeer-West",
+     "share": 0.12
+    }
+   ]
+  },
+  "D4": {
+   "name": "Slotervaart-Noord",
+   "stadsdeel": "Nieuw-West",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Slotervaart-Noord",
+     "share": 0.127
+    },
+    {
+     "name": "Hoofdweg e.o.",
+     "share": 0.11
+    },
+    {
+     "name": "Hoofddorppleinbuurt",
+     "share": 0.094
+    }
+   ]
+  },
+  "E4": {
+   "name": "Canal Ring",
+   "stadsdeel": "Centrum",
+   "source": "hand-named anchor: Canal Ring",
+   "wijken": [
+    {
+     "name": "Museumkwartier",
+     "share": 0.131
+    },
+    {
+     "name": "Oude Pijp",
+     "share": 0.109
+    },
+    {
+     "name": "Jordaan",
+     "share": 0.094
+    }
+   ]
+  },
+  "F4": {
+   "name": "Middenmeer",
+   "stadsdeel": "Oost",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Middenmeer",
+     "share": 0.147
+    },
+    {
+     "name": "Indische Buurt-West",
+     "share": 0.108
+    },
+    {
+     "name": "Transvaalbuurt",
+     "share": 0.102
+    }
+   ]
+  },
+  "G4": {
+   "name": "IJburg-West (west)",
+   "stadsdeel": "Oost",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "IJburg-West",
+     "share": 0.423
+    },
+    {
+     "name": "Zeeburgereiland/Bovendiep",
+     "share": 0.27
+    },
+    {
+     "name": "Oostelijk Havengebied",
+     "share": 0.183
+    }
+   ]
+  },
+  "H4": {
+   "name": "IJburg-West (east)",
+   "stadsdeel": "Oost",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "IJburg-West",
+     "share": 0.862
+    },
+    {
+     "name": "IJburg-Zuid",
+     "share": 0.116
+    },
+    {
+     "name": "IJburg-Oost",
+     "share": 0.019
+    }
+   ]
+  },
+  "B5": {
+   "name": "De Aker (south)",
+   "stadsdeel": "Nieuw-West",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "De Aker",
+     "share": 1.0
+    }
+   ]
+  },
+  "C5": {
+   "name": "Sloten/Nieuw-Sloten",
+   "stadsdeel": "Nieuw-West",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Sloten/Nieuw-Sloten",
+     "share": 0.667
+    },
+    {
+     "name": "De Aker",
+     "share": 0.31
+    },
+    {
+     "name": "Osdorp-Oost",
+     "share": 0.013
+    }
+   ]
+  },
+  "D5": {
+   "name": "Stadionbuurt",
+   "stadsdeel": "Zuid",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Stadionbuurt",
+     "share": 0.311
+    },
+    {
+     "name": "Hoofddorppleinbuurt",
+     "share": 0.252
+    },
+    {
+     "name": "Buitenveldert-West",
+     "share": 0.138
+    }
+   ]
+  },
+  "E5": {
+   "name": "Scheldebuurt",
+   "stadsdeel": "Zuid",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Scheldebuurt",
+     "share": 0.275
+    },
+    {
+     "name": "Apollobuurt",
+     "share": 0.199
+    },
+    {
+     "name": "Zuid Pijp",
+     "share": 0.087
+    }
+   ]
+  },
+  "F5": {
+   "name": "Frankendael",
+   "stadsdeel": "Oost",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Frankendael",
+     "share": 0.301
+    },
+    {
+     "name": "Betondorp",
+     "share": 0.3
+    },
+    {
+     "name": "Rijnbuurt",
+     "share": 0.178
+    }
+   ]
+  },
+  "G5": {
+   "name": "Betondorp",
+   "stadsdeel": "Oost",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Betondorp",
+     "share": 0.436
+    },
+    {
+     "name": "Geerdinkhof/Kantershof",
+     "share": 0.337
+    },
+    {
+     "name": "Middenmeer",
+     "share": 0.177
+    }
+   ]
+  },
+  "H5": {
+   "name": "IJburg-Zuid",
+   "stadsdeel": "Oost",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "IJburg-Zuid",
+     "share": 0.924
+    },
+    {
+     "name": "IJburg-Oost",
+     "share": 0.055
+    },
+    {
+     "name": "IJburg-West",
+     "share": 0.01
+    }
+   ]
+  },
+  "E6": {
+   "name": "Buitenveldert-West & Buitenveldert-Oost",
+   "stadsdeel": "Zuid",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Buitenveldert-West",
+     "share": 0.497
+    },
+    {
+     "name": "Buitenveldert-Oost",
+     "share": 0.494
+    },
+    {
+     "name": "Omval/Overamstel",
+     "share": 0.009
+    }
+   ]
+  },
+  "F6": {
+   "name": "Venserpolder & Amstel III/Bullewijk",
+   "stadsdeel": "Zuidoost",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Venserpolder",
+     "share": 0.52
+    },
+    {
+     "name": "Amstel III/Bullewijk",
+     "share": 0.475
+    },
+    {
+     "name": "Amsterdamse Poort e.o.",
+     "share": 0.003
+    }
+   ]
+  },
+  "G6": {
+   "name": "K-buurt",
+   "stadsdeel": "Zuidoost",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "K-buurt",
+     "share": 0.316
+    },
+    {
+     "name": "Ganzenhoef e.o.",
+     "share": 0.217
+    },
+    {
+     "name": "Geerdinkhof/Kantershof",
+     "share": 0.15
+    }
+   ]
+  },
+  "H6": {
+   "name": "Driemond",
+   "stadsdeel": "Weesp",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Driemond",
+     "share": 0.408
+    },
+    {
+     "name": "Geerdinkhof/Kantershof",
+     "share": 0.322
+    },
+    {
+     "name": "Weesp-Noordwest",
+     "share": 0.114
+    }
+   ]
+  },
+  "I6": {
+   "name": "Weesp Binnenstad/Zuid",
+   "stadsdeel": "Weesp",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Weesp Binnenstad/Zuid",
+     "share": 0.343
+    },
+    {
+     "name": "Bloemendalerpolder",
+     "share": 0.322
+    },
+    {
+     "name": "Weesp-Noordwest",
+     "share": 0.25
+    }
+   ]
+  },
+  "G7": {
+   "name": "Reigersbos",
+   "stadsdeel": "Zuidoost",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Reigersbos",
+     "share": 0.608
+    },
+    {
+     "name": "Holendrecht",
+     "share": 0.233
+    },
+    {
+     "name": "Gein",
+     "share": 0.116
+    }
+   ]
+  },
+  "H7": {
+   "name": "Gein",
+   "stadsdeel": "Zuidoost",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Gein",
+     "share": 0.988
+    },
+    {
+     "name": "Aetsveld/Oostelijke Vechtoever",
+     "share": 0.012
+    }
+   ]
+  },
+  "I7": {
+   "name": "Aetsveld/Oostelijke Vechtoever",
+   "stadsdeel": "Weesp",
+   "source": "Gemeente Amsterdam, Kernregistratie gebieden, wijken (CC0 1.0)",
+   "wijken": [
+    {
+     "name": "Aetsveld/Oostelijke Vechtoever",
+     "share": 0.919
+    },
+    {
+     "name": "Weesp Binnenstad/Zuid",
+     "share": 0.081
+    }
+   ]
+  }
+ }
+}
