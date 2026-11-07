@@ -183,6 +183,19 @@ export const CITY_CHIP_REQUIRED: Readonly<Record<CityId, string | null>> = byCit
   amsterdam: '© 3DBAG',
 }, null);
 
+/**
+ * The one-line source summary on the ward card's layer list (v2/MapStack.astro): "Live basemap, real footprints & <heights source> heights".
+ * It was typed once, for every city, as "... & Google heights", which is true of Kolkata and Bengaluru (Google Open Buildings 2.5D) and
+ * false of Amsterdam, whose heights are 3D BAG's (TU Delft / 3DGI, built from AHN). Kolkata and Bengaluru keep today's text BYTE FOR
+ * BYTE (a test pins it). Empty for a city that draws nothing: its pages never print the row.
+ */
+const INDIA_PROVENANCE_LINE = 'Live basemap, real footprints & Google heights';
+export const CITY_PROVENANCE_LINE: Readonly<Record<CityId, string>> = byCity<string>({
+  kolkata: INDIA_PROVENANCE_LINE,
+  bengaluru: INDIA_PROVENANCE_LINE,
+  amsterdam: 'Live basemap, real footprints & 3D BAG heights',
+}, '');
+
 /** The map control's text: the city's required credit and the ward boundary's, either may be absent; null when both are. */
 export function joinMapCredits(cityCredit: string | null | undefined, wardCredit: string | null | undefined): string | null {
   /* `typeof`, not `!== null`: a missing table row is `undefined`, and that must never reach the map control as the text "undefined". */

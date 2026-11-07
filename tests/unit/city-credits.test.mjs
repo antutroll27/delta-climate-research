@@ -5,7 +5,7 @@ import test from 'node:test';
 import { transform } from '@astrojs/compiler-rs';
 import { addAttribute, escapeHTML, unescapeHTML, HTMLString } from 'astro/runtime/server/index.js';
 
-import { CITY_CREDITS, CITY_MAP_CREDIT, CITY_CREDIT_NOTE, CITY_CHIP_LEAD, CITY_CHIP_REQUIRED, byCity, joinMapCredits } from '../../src/data/city-credits.ts';
+import { CITY_CREDITS, CITY_PROVENANCE_LINE, CITY_MAP_CREDIT, CITY_CREDIT_NOTE, CITY_CHIP_LEAD, CITY_CHIP_REQUIRED, byCity, joinMapCredits } from '../../src/data/city-credits.ts';
 import { creditListHtml, creditNoteHtml } from '../../src/scripts/climate-engine/v2/credit-html.ts';
 import { SENTINEL_CREDIT } from '../../src/scripts/climate-engine/v2/credits.ts';
 import { creditsPanelHtml } from '../../src/scripts/climate-engine/v2/credit-html.ts';
@@ -250,4 +250,20 @@ test('EVERY DRAWABLE city has a non-empty credits row that credits its basemap (
 test('no city module names a not-public city: its literal is absent from src/data/city-credits.ts', () => {
   const src = readFileSync('src/data/city-credits.ts', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.doesNotMatch(src, /dubai|\buae\b/i);
+});
+
+/* The ward card's layer list says where the heights come from, per city (v2/MapStack.astro). It read "... & Google heights" for every city,
+   which is false for Amsterdam (3D BAG). Kolkata and Bengaluru keep today's string character for character. */
+test('the ward card source line is per city: Kolkata and Bengaluru unchanged, Amsterdam says 3D BAG', () => {
+  assert.equal(CITY_PROVENANCE_LINE.kolkata, 'Live basemap, real footprints & Google heights');
+  assert.equal(CITY_PROVENANCE_LINE.bengaluru, 'Live basemap, real footprints & Google heights');
+  assert.equal(CITY_PROVENANCE_LINE.amsterdam, 'Live basemap, real footprints & 3D BAG heights');
+  assert.doesNotMatch(CITY_PROVENANCE_LINE.amsterdam, /google/i);
+  for (const key of PUBLIC_AREA_KEYS) assert.ok(CITY_PROVENANCE_LINE[splitKey(key).city].length > 0, `${key}: no source line`);
+});
+
+test('MapStack.astro reads the source line from the table, not from a literal', () => {
+  const ms = readFileSync('src/components/ClimateEngine/v2/MapStack.astro', 'utf8');
+  assert.ok(ms.includes('CITY_PROVENANCE_LINE[scope.city.id]'));
+  assert.ok(!/Google heights/.test(ms), 'no city\'s heights source is typed in the template');
 });

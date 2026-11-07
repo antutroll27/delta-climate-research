@@ -88,8 +88,9 @@ test('H23: the method card prints method-copy rows, and "checked", never "valida
 /* ── S4.2: the ward card ── */
 test('H10: the ward card carries the v1 map-face chip word for word, as three provenance rows', () => {
   const ms = V2('MapStack.astro');
-  for (const t of ['Live basemap, real footprints &amp; Google heights', 'Heat field · modelled', 'Block detail · illustrative']) assert.ok(ms.includes(t), t);
-  assert.ok(/<Sym shape="square" c="ink" size=\{13\} \/><\/span><span>Live basemap/.test(ms), 'the measured row must be SOLID');
+  assert.ok(ms.includes('CITY_PROVENANCE_LINE[scope.city.id]'), 'the source line is per city (city-credits.ts)');
+  for (const t of ['Heat field · modelled', 'Block detail · illustrative']) assert.ok(ms.includes(t), t);
+  assert.ok(/<Sym shape="square" c="ink" size=\{13\} \/><\/span><span>\{CITY_PROVENANCE_LINE/.test(ms), 'the measured row must be SOLID');
   assert.ok(/<Sym shape="ward" c="heat-4" kind="modelled"/.test(ms), 'the heat field row must be OUTLINED');
   assert.ok(ms.indexOf('Heat field · modelled') < ms.indexOf('<div class="wc-body">'), 'FINAL audit F6: the heat-field row is in the always-visible header, never in the foldable .wc-body');
   assert.ok(/<Sym shape="square" c="neutral" kind="modelled"[^>]*\/><\/span><span>Block detail/.test(ms), 'illustrative block detail must be OUTLINED, neutral');
