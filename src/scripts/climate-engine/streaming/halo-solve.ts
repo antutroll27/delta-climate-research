@@ -79,8 +79,16 @@ function reflect(i: number, n: number): number {
   return i < 0 ? -i - 1 : i >= n ? 2 * n - 1 - i : i;
 }
 
-/** Neighbour ground by direction. A direction with no entry uses the edge rule above. */
-export type NeighbourLayers = Readonly<Partial<Record<Direction, SimLayers>>>;
+/** A neighbour's ground at rest: one byte a cell, 1/255 steps (halo-asset.ts). Read through `/ 255`, never expanded to floats. */
+export interface QuantisedSource {
+  readonly albedo: Uint8Array;
+  readonly veg: Uint8Array;
+  readonly built: Uint8Array;
+  readonly water: Uint8Array;
+}
+
+/** Neighbour ground by direction, as floats or quantised. A direction with no entry uses the edge rule above. */
+export type NeighbourLayers = Readonly<Partial<Record<Direction, SimLayers | QuantisedSource>>>;
 
 export interface HaloAssembly {
   readonly layers: SimLayers;
@@ -90,7 +98,7 @@ export interface HaloAssembly {
 
 const LAYER_NAMES = ['albedo', 'veg', 'built', 'water'] as const;
 
-function checkLayers(name: string, l: SimLayers, count: number): void {
+function checkLayers(name: string, l: SimLayers | QuantisedSource, count: number): void {
   for (const k of LAYER_NAMES) {
     if (l[k].length !== count) throw new RangeError(`${name}.${k} has ${l[k].length} cells; a ${Math.sqrt(count)}-cell square needs ${count}.`);
   }
@@ -109,6 +117,8 @@ export function assembleHaloLayers(g: HaloGeometry, core: SimLayers, neighbours:
     if (n !== undefined) checkLayers(`neighbour ${dir}`, n, count);
   }
   const N = haloN(g);
+  const scale: Partial<Record<Direction, number>> = {};
+  for (const dir of DIRECTIONS) { const n = neighbours[dir]; if (n !== undefined) scale[dir] = n.albedo instanceof Uint8Array ? 1 / 255 : 1; }
   const out: SimLayers = {
     albedo: new Float32Array(N * N), veg: new Float32Array(N * N), built: new Float32Array(N * N), water: new Float32Array(N * N),
   };
@@ -122,7 +132,8 @@ export function assembleHaloLayers(g: HaloGeometry, core: SimLayers, neighbours:
         c = reflect(C - g.haloCells, g.coreN);
       }
       const from = (real ?? core), at = r * g.coreN + c, to = R * N + C;
-      for (const k of LAYER_NAMES) out[k][to] = from[k][at];
+      const k1 = real === undefined || src.dir === null ? 1 : scale[src.dir]!;
+      for (const k of LAYER_NAMES) out[k][to] = from[k][at]! * k1;
     }
   }
   const missing = DIRECTIONS.filter((d) => neighbours[d] === undefined);

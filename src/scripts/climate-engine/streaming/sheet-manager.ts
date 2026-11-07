@@ -384,12 +384,14 @@ function reconcile(cfg: ManagerConfig, d: Draft, now: number, out: ManagerComman
     }
   }
 
-  // 3. solve once the displayed sheet has its halo or its halo has failed (edge rule: do not wait out the retry backoff for
-  //    it), and solve AGAIN if the halo turns up after an edge-rule solve
+  // 3. solve as soon as the sheet is displayed (on the edge rule if the halo is not here yet), and solve AGAIN when it turns up
   if (cur !== null && d.displayed === cur) {
     const halo = levelOf(d, cur, 'halo');
     const ready = halo.status === 'ready';
-    const first = d.solved !== cur && (ready || halo.status === 'failed');
+    /* P3b: do not wait for the halo at all. The halo is the neighbours' ground, fetched and rasterised in the background
+       (about 4 s on a cold cache); the first solve runs on the edge rule at once and `upgrade` repeats it when the halo
+       lands. The two differ by far less than a cell's worth of heat except at the seams. */
+    const first = d.solved !== cur;
     const upgrade = d.solved === cur && !d.solvedWithHalo && ready;
     if (first || upgrade) {
       d.solved = cur; d.solvedWithHalo = ready;

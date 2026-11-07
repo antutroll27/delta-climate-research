@@ -5,7 +5,7 @@ import { AMSTERDAM_SHEET_LATTICE as L } from '../../src/data/sheets/amsterdam.ts
 import {
   DEFAULT_CONFIG, createSheetManager, gpuMB, initialState, levelOf, nextWakeMs, reduce,
 } from '../../src/scripts/climate-engine/streaming/sheet-manager.ts';
-import { SHEET_BUDGETS, MAX_ATTEMPTS, RETRY_BACKOFF_MS } from '../../src/scripts/climate-engine/streaming/sheet-budgets.ts';
+import { SHEET_BUDGETS, MAX_ATTEMPTS, RETRY_BACKOFF_MS, lod0MeshMB } from '../../src/scripts/climate-engine/streaming/sheet-budgets.ts';
 import { AMSTERDAM_TOPOLOGY as T, DIRECTIONS } from '../../src/scripts/climate-engine/streaming/sheet-topology.ts';
 
 /* THE SHEET MANAGER IS A PURE STATE MACHINE, so these tests drive it with events and read commands. `Host` plays the
@@ -384,8 +384,12 @@ test('the current sheet and the outgoing mesh are never evicted, even over the c
   assert.equal(levelOf(h.state(), 'F4', 'lod0').status, 'ready');
 });
 
+/* P3b turned the cross-fade OFF in the shipped table (a kept mesh would be tinted by the new sheet's heat); the machinery stays, so
+   these tests switch it on. */
+const FADING = { ...DEFAULT_CONFIG, budgets: { ...SHEET_BUDGETS, full: { ...SHEET_BUDGETS.full, crossFade: true } } };
+
 test('cross-fade: full keeps the old mesh until handover-done; other tiers dispose it at once; a second move cleans the first', () => {
-  const full = settled('E4', 'full');
+  const full = settled('E4', 'full', FADING);
   full.select('F4');
   const swap = full.finish('F4', 'lod0').find((c) => c.type === 'make-current');
   assert.deepEqual(swap, { type: 'make-current', sheet: 'F4', outgoing: 'E4', outgoingMesh: 'keep-until-handover' });
@@ -394,7 +398,7 @@ test('cross-fade: full keeps the old mesh until handover-done; other tiers dispo
   assert.deepEqual(done, [{ type: 'dispose-mesh', sheet: 'E4' }]);
   assert.equal(full.state().outgoing, null);
 
-  const quick = settled('E4', 'full');
+  const quick = settled('E4', 'full', FADING);
   quick.select('F4'); quick.drain();
   quick.select('G4');
   const second = quick.finish('G4', 'lod0');
@@ -408,17 +412,18 @@ test('cross-fade: full keeps the old mesh until handover-done; other tiers dispo
 
 test('cross-fade is refused when both meshes would not fit under the ceiling', () => {
   const tight = { ...DEFAULT_CONFIG, budgets: { ...SHEET_BUDGETS, full: { ...SHEET_BUDGETS.full, gpuCeilingMB: 200 } } };
-  const h = settled('E4', 'full', tight);                      // E4 alone is 44 + 153 MB = 197 MB
+  const h = settled('E4', 'full', { ...tight, budgets: { ...tight.budgets, full: { ...tight.budgets.full, crossFade: true } } });   // E4 alone is 44 + 131 MB
   h.select('F4');
   assert.equal(h.finish('F4', 'lod0').find((c) => c.type === 'make-current').outgoingMesh, 'dispose-now');
 });
 
 test('over the GPU ceiling the massing is shed, farthest first, never the mesh', () => {
-  const tight = { ...DEFAULT_CONFIG, budgets: { ...SHEET_BUDGETS, balanced: { ...SHEET_BUDGETS.balanced, gpuCeilingMB: 24 + 60 + 4 * 3 } } };
-  const h = settled('E4', 'balanced', tight);                  // room for three LOD1 meshes after E4's ~59 MB
+  const b = SHEET_BUDGETS.balanced, e4 = lod0MeshMB('balanced', T.buildings('E4'));
+  const tight = { ...DEFAULT_CONFIG, budgets: { ...SHEET_BUDGETS, balanced: { ...b, gpuCeilingMB: b.baselineMB + e4 + b.lod1MeshMB * 3.2 } } };
+  const h = settled('E4', 'balanced', tight);                  // room for three LOD1 meshes after E4's ~23 MB
   const ready = [...h.state().sheets].filter(([, e]) => e.lod1.status === 'ready').map(([c]) => c);
   assert.equal(ready.length, 3);
-  assert.ok(gpuMB(tight, h.state()) <= 24 + 60 + 12);
+  assert.ok(gpuMB(tight, h.state()) <= tight.budgets.balanced.gpuCeilingMB);
   assert.ok(ready.every((c) => ['E3', 'F4', 'E5', 'D4'].includes(c)), 'edge neighbours are kept before corners');
 });
 
@@ -528,9 +533,9 @@ test('reduce is pure: the input state is untouched and the output frozen', () =>
 test('gpuMB follows the model: baseline + displayed mesh + massing', () => {
   const h = settled('E4', 'full');
   const ring = [...h.state().sheets].filter(([, e]) => e.lod1.status === 'ready').length;
-  const e4 = (T.buildings('E4') * 128 * 56) / 1e6;
-  assert.ok(Math.abs(gpuMB(DEFAULT_CONFIG, h.state()) - (44 + e4 + ring * 4)) < 1e-9);
-  assert.ok(Math.abs(e4 - 153) < 1, `E4 is ${e4} MB bevelled (P0: 153)`);
+  const e4 = (T.buildings('E4') * 128 * 48) / 1e6;
+  assert.ok(Math.abs(gpuMB(DEFAULT_CONFIG, h.state()) - (44 + e4 + ring * SHEET_BUDGETS.full.lod1MeshMB)) < 1e-9);
+  assert.ok(Math.abs(e4 - 131.1) < 0.2, `E4 is ${e4} MB bevelled (bevel-core: 131.1)`);
 });
 
 /** A tiny seeded generator, so a failing walk can be replayed. */
@@ -577,7 +582,7 @@ test('S1: a demotion rebuilds the on-screen mesh at the new tier, and the model 
 });
 
 test('S1: a demotion in the middle of a cross-fade drops the outgoing mesh built at the old tier', () => {
-  const h = settled('E4', 'full');
+  const h = settled('E4', 'full', FADING);
   h.select('F4'); h.finish('F4', 'lod0');
   assert.equal(h.state().outgoing, 'E4');
   const cmds = h.send({ type: 'tier-changed', tier: 'balanced' });
@@ -585,13 +590,14 @@ test('S1: a demotion in the middle of a cross-fade drops the outgoing mesh built
   assert.deepEqual(cmds.filter((c) => c.type === 'rebuild-mesh').map((c) => c.sheet), ['F4']);
 });
 
-test('S2: a transient halo failure does not hold the first solve back; the halo arriving later re-solves', () => {
+test('S2: the first solve does not wait for the halo; a halo arriving later (after a failure or a slow fetch) re-solves once', () => {
   const h = new Host('full');
   h.start('E4');
-  h.finish('E4', 'lod0');
-  const first = h.fail('E4', 'halo');                            // one failure: no waiting out 2 s + 8 s of backoff
-  const solve = first.find((c) => c.type === 'solve');
+  const shown = h.finish('E4', 'lod0');                          // P3b: the solve runs on the edge rule at once
+  const solve = shown.find((c) => c.type === 'solve');
   assert.ok(solve && solve.haloLoaded === false && solve.upgrade === false);
+  const failed = h.fail('E4', 'halo');                           // one failure: nothing more to solve
+  assert.equal(failed.filter((c) => c.type === 'solve').length, 0);
   h.advance(RETRY_BACKOFF_MS[0]).tick();                         // the automatic retry
   const arrived = h.finish('E4', 'halo');
   const again = arrived.filter((c) => c.type === 'solve');
@@ -602,17 +608,18 @@ test('S2: a transient halo failure does not hold the first solve back; the halo 
   assert.equal(h.tick().filter((c) => c.type === 'solve').length, 0, 'and no third');
 });
 
-test('S2: a halo that is simply slow is waited for; a solve with the halo is never "upgraded"', () => {
+test('S2: a halo that is already here when the sheet is shown makes the first solve the real one; it is never "upgraded"', () => {
   const h = new Host('full');
-  h.start('E4'); h.finish('E4', 'lod0');
-  assert.equal(h.of('solve').length, 0);
-  h.finish('E4', 'halo');
+  h.start('E4'); h.finish('E4', 'halo');
+  assert.equal(h.of('solve').length, 0, 'the halo alone changes nothing: the solve needs the displayed sheet');
+  h.finish('E4', 'lod0');
   assert.equal(h.of('solve').length, 1);
   assert.equal(h.of('solve')[0].upgrade, false);
+  assert.equal(h.of('solve')[0].haloLoaded, true);
 });
 
 test('N1: a second start disposes the meshes the first one left on screen', () => {
-  const h = settled('E4', 'full');
+  const h = settled('E4', 'full', FADING);
   h.select('F4'); h.finish('F4', 'lod0');                       // E4 outgoing, F4 displayed
   const cmds = h.start('D4');
   assert.deepEqual(cmds.filter((c) => c.type === 'dispose-mesh').map((c) => c.sheet).sort(), ['E4', 'F4']);

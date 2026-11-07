@@ -102,6 +102,20 @@ function fillRing(mask: Float32Array, ring: readonly number[], start: number, n:
  * @param nearM     radius of the tight contact blur, metres.
  */
 export function makeContactAO(buildings: readonly (readonly number[])[], sizeM: number, n: number, nearM: number): THREE.DataTexture {
+  return contactAoTexture(contactAoData(buildings, sizeM, n, nearM), n);
+}
+
+/** The texture around baked contact-occlusion data (RGBA8, n x n). Split from the bake so a worker can do the arithmetic. */
+export function contactAoTexture(data: Uint8Array, n: number): THREE.DataTexture {
+  const texture = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
+  texture.minFilter = texture.magFilter = THREE.LinearFilter;
+  texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/** The baked occlusion itself: pure arithmetic, no GL, about 0.3 s for Canal Ring's 21k footprints. */
+export function contactAoData(buildings: readonly (readonly number[])[], sizeM: number, n: number, nearM: number): Uint8Array {
   const mask = new Float32Array(n * n);
   for (const b of buildings) fillRing(mask, b, 1, n, sizeM);
   const texelM = sizeM / n;
@@ -116,9 +130,5 @@ export function makeContactAO(buildings: readonly (readonly number[])[], sizeM: 
     data[i * 4 + 1] = Math.round(255 * Math.min(1, far[i] * 1.4) * outside);
     data[i * 4 + 3] = 255;
   }
-  const texture = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
-  texture.minFilter = texture.magFilter = THREE.LinearFilter;
-  texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.needsUpdate = true;
-  return texture;
+  return data;
 }

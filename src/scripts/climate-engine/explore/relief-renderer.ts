@@ -26,9 +26,10 @@ import { CLASSIC, CLAY, clayFor, DARK, glintSun, isPhone, lookAmounts, STUDIO_LI
 import { makeHeatOverlay } from './heat-overlay.ts';
 import { buildRibbonMesh } from '../road-ribbon.ts';
 import { densifyRing } from '../ward-mask.ts';
-import { displayColor, HAZE_GLSL, makeContactAO, srgbLinear } from './look-shading.ts';
+import { contactAoTexture, displayColor, HAZE_GLSL, makeContactAO, srgbLinear } from './look-shading.ts';
 import { decodeBuildingModel, fetchBuildingModelBytes, hasBuildingModel, type LandmarkNode } from './building-model.ts';
 import { releaseCpuCopyAfterUpload } from './gpu-resident.ts';
+import { G_RANGE_M, H_RANGE_M } from '../streaming/prism-mesh.ts';
 import { buildRegistry, pickBuilding, projectWard, type BuildingMeta } from './building-pick.ts';
 import {
   createLandmarkLayer,
@@ -39,6 +40,8 @@ import {
   type SkyEnvironment, type SunPlacement,
 } from './sun-lighting.ts';
 import type {
+  NeighbourSheet,
+  PreparedBuildings,
   ReliefFieldUpdate,
   ReliefRenderer,
   ReliefRendererOptions,
@@ -97,6 +100,13 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   private wardToken = 0;
   private overlay: THREE.Mesh | null = null;
   private facade: THREE.MeshStandardMaterial;
+  /** STREAMED CITIES: the facade that decodes the 30-byte packed attributes; built on first use. */
+  private packedFacade: THREE.MeshStandardMaterial | null = null;
+  /** STREAMED CITIES: the grey massing of the neighbour sheets, one mesh each, and their shared material. */
+  private neighbours = new Map<string, THREE.Mesh>();
+  private massingMaterial: THREE.MeshLambertMaterial | null = null;
+  /** (west, east, north, south) of the overlay's edge fade; all on unless a streamed city turns a side off. */
+  private seams = { value: new THREE.Vector4(1, 1, 1, 1) };
   private water: WaterLayer | null = null;
   private clouds: CloudLayer | null = null;
   private roads: RoadLayer | null = null;
@@ -335,6 +345,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
   setBuildingsVisible(v: boolean): void {
     this.layers.buildings = v;
     if (this.city) this.city.visible = v;
+    for (const mesh of this.neighbours.values()) mesh.visible = v;
     /* A Bengaluru ward draws an authored model, not `city`; toggling only `city` left
        the footprints row doing nothing there. */
     if (this.model) this.model.visible = v;
@@ -438,6 +449,9 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.modelBytes.clear();
     this.landmarkLayer?.dispose(); this.landmarkLayer = null;
     this.modelFacade?.dispose();
+    this.packedFacade?.dispose();
+    this.setNeighbours([]);
+    this.massingMaterial?.dispose();
     this.overlay?.geometry.dispose();
     (this.overlay?.material as THREE.Material | undefined)?.dispose();
     this.water?.dispose(); this.clouds?.dispose(); this.roads?.dispose(); this.veg?.dispose();
@@ -572,7 +586,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.displaceGround(bundle.terrain, bundle.wardData.sizeM);
     if (!CLASSIC) {
       this.aoTex.value.dispose();
-      this.aoTex.value = makeContactAO(bundle.wardData.b, bundle.wardData.sizeM, 1024, CLAY.aoNearM);
+      this.aoTex.value = bundle.aoData ? contactAoTexture(bundle.aoData, 1024) : makeContactAO(bundle.wardData.b, bundle.wardData.sizeM, 1024, CLAY.aoNearM);
     }
     /* The editorial look's holders, handed to every layer; `undefined` under
        `?look=classic`, which makes each layer take its classic shader. */
@@ -639,6 +653,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     this.ready.resolve();
     this.ready = readyLatch(false);
     if (this.restoreTimer !== null) clearTimeout(this.restoreTimer);
+    if (this.neighbours.size > 0) { this.setNeighbours([]); this.options.streamed?.onNeighboursLost(); }
     this.restoreTimer = setTimeout(() => {
       this.restoreTimer = null;
       if (this.disposed || token !== this.wardToken || !this.scene) return;
@@ -720,10 +735,79 @@ export class ThreeReliefRenderer implements ReliefRenderer {
 
   /** The extrusion path, unchanged — the only city Kolkata has ever drawn. */
   private installExtrusion(bundle: ReliefWardBundle): void {
+    if (bundle.prepared) { this.installPrepared(bundle.prepared); return; }
     const merged = this.extrudeBuildings(bundle);
     if (!merged || !this.scene) return;
     this.city = new THREE.Mesh(merged, this.facade);
     this.scene.add(this.city);
+  }
+
+  /**
+   * STREAMED CITIES: upload buildings a worker has already extruded. The arrays go to the GPU and are dropped
+   * (gpu-resident.ts), exactly as the main-thread path's are; a lost WebGL context rebuilds from the ward data, which the
+   * page re-requests through `setWard` (the worker's answer is not kept, so it is not a second copy).
+   */
+  private installPrepared(prepared: PreparedBuildings): void {
+    if (!this.scene) return;
+    const geometry = new THREE.BufferGeometry();
+    if (prepared.kind === 'bevel') {
+      geometry.setAttribute('position', new THREE.BufferAttribute(prepared.position, 3));
+      geometry.setAttribute('normal', new THREE.BufferAttribute(prepared.normal, 3));
+      geometry.setAttribute('aDelay', new THREE.BufferAttribute(prepared.aDelay, 1));
+      geometry.setAttribute('aH', new THREE.BufferAttribute(prepared.aH, 1));
+      geometry.setAttribute('aCtr', new THREE.BufferAttribute(prepared.aCtr, 2));
+      geometry.setAttribute('aG', new THREE.BufferAttribute(prepared.aG, 1));
+      geometry.setAttribute('aIn', new THREE.BufferAttribute(prepared.aIn, 1));
+      if (prepared.vertexCount < prepared.position.length / 3) geometry.setDrawRange(0, prepared.vertexCount);   // the arrays hold an upper bound
+    } else {
+      geometry.setAttribute('position', new THREE.BufferAttribute(prepared.position, 3));
+      geometry.setAttribute('normal', new THREE.BufferAttribute(prepared.normal, 4, true));
+      geometry.setAttribute('aDelay', new THREE.BufferAttribute(prepared.aDelay, 1, true));
+      geometry.setAttribute('aHn', new THREE.BufferAttribute(prepared.aH, 1, true));
+      geometry.setAttribute('aCtr', new THREE.BufferAttribute(prepared.aCtr, 2));
+      geometry.setAttribute('aGn', new THREE.BufferAttribute(prepared.aG, 1, true));
+      geometry.setAttribute('aIn', new THREE.BufferAttribute(prepared.aIn, 1, true));
+      geometry.setIndex(new THREE.BufferAttribute(prepared.index, 1));
+    }
+    releaseCpuCopyAfterUpload(geometry);
+    this.city = new THREE.Mesh(geometry, prepared.kind === 'bevel' ? this.facade : (this.packedFacade ??= this.makeFacade('extruded', true)));
+    this.scene.add(this.city);
+  }
+
+  /* ── STREAMED CITIES: the neighbour sheets ─────────────────────────────────────
+     Grey block massing, one indexed draw per sheet, no heat and no grow (PLAN 3.1 LOD1). A sheet's mesh is built in ITS OWN
+     metres; the offset puts it where it belongs in the open sheet's, a whole number of 2,800 m steps, which is exact because
+     every sheet's frame shares one standard parallel (scripts/_sheets.py). */
+  setNeighbours(sheets: readonly NeighbourSheet[]): void {
+    const scene = this.scene;
+    const keep = new Set(sheets.map((s) => s.key));
+    for (const [key, mesh] of this.neighbours) {
+      if (keep.has(key)) continue;
+      scene?.remove(mesh); mesh.geometry.dispose(); this.neighbours.delete(key);
+    }
+    if (!scene) return;
+    for (const sheet of sheets) {
+      const have = this.neighbours.get(sheet.key);
+      if (have) { have.position.set(sheet.offsetX, 0, sheet.offsetZ); continue; }
+      const m = sheet.mesh;
+      if (m === null) continue;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(m.position, 3));
+      geometry.setAttribute('normal', new THREE.BufferAttribute(m.normal, 4, true));
+      geometry.setIndex(new THREE.BufferAttribute(m.index, 1));
+      releaseCpuCopyAfterUpload(geometry);
+      const mesh = new THREE.Mesh(geometry, this.massingMaterial ??= new THREE.MeshLambertMaterial({ color: 0x8f9699 }));
+      mesh.position.set(sheet.offsetX, 0, sheet.offsetZ);
+      mesh.visible = this.layers.buildings;
+      this.neighbours.set(sheet.key, mesh);
+      scene.add(mesh);
+    }
+    this.options.map.triggerRepaint();
+  }
+
+  setSeamFade(west: number, east: number, north: number, south: number): void {
+    this.seams.value.set(west, east, north, south);
+    this.options.map.triggerRepaint();
   }
 
   /** One merged BufferGeometry from the ward's footprint rings, with the three
@@ -1056,11 +1140,12 @@ export class ThreeReliefRenderer implements ReliefRenderer {
     return makeHeatOverlay({
       heat: this.heatUniform, heatMin: this.heatMin, heatMax: this.heatMax, cooling: this.cooling,
       ao: this.aoTex, aoAmt: this.aoAmt, aoW: this.aoW, haze: this.haze, hazeCol: this.hazeCol, opBoost: this.opBoost,
+      ...(this.options.streamed ? { seams: this.seams } : {}),
     });
   }
 
-  private makeFacade(kind: 'extruded' | 'model' = 'extruded'): THREE.MeshStandardMaterial {
-    return CLASSIC ? this.makeFacadeClassic(kind) : this.makeEditorialFacade(kind);
+  private makeFacade(kind: 'extruded' | 'model' = 'extruded', packed = false): THREE.MeshStandardMaterial {
+    return CLASSIC ? this.makeFacadeClassic(kind) : this.makeEditorialFacade(kind, packed);
   }
 
   /** The facade shipped until 2026-10-02, kept unchanged for `?look=classic`. */
@@ -1118,7 +1203,7 @@ export class ThreeReliefRenderer implements ReliefRenderer {
    *   · floor lines in Clay are drawn lighter (CLAY.lineK / strokeK);
    *   · roughness varies per block, and distance hazes toward the paper (Clay only).
    */
-  private makeEditorialFacade(kind: 'extruded' | 'model'): THREE.MeshStandardMaterial {
+  private makeEditorialFacade(kind: 'extruded' | 'model', packed = false): THREE.MeshStandardMaterial {
     const material = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0.0 });
     const clay = srgbLinear(CLAY.building), roof = srgbLinear(CLAY.roof);
     const v3 = (c: THREE.Color): string => `vec3(${c.r.toFixed(4)},${c.g.toFixed(4)},${c.b.toFixed(4)})`;
@@ -1131,7 +1216,11 @@ export class ThreeReliefRenderer implements ReliefRenderer {
       const varyings = 'varying vec3 vFp; varying vec3 vFn; varying float vTop; varying float vT; varying float vSel; varying float vH; varying float vRnd; varying float vIn;\n';
       const declare = kind === 'model'
         ? varyings + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr; uniform float uSelR; attribute float aGround; uniform float uExtrude;\nfloat mdh(vec2 p){float h=sin(p.x*127.1+p.y*311.7)*43758.5453;return h-floor(h);}\n'
-        : 'attribute float aDelay; attribute float aH; attribute vec2 aCtr; attribute float aG; attribute float aIn;\n' + varyings + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr;\n';
+        : (packed
+          /* STREAMED CITIES (streaming/prism-mesh.ts): aH and aG arrive as normalised u16 / i16 and are scaled back here. */
+          ? 'attribute float aDelay; attribute float aHn; attribute vec2 aCtr; attribute float aGn; attribute float aIn;\n'
+          : 'attribute float aDelay; attribute float aH; attribute vec2 aCtr; attribute float aG; attribute float aIn;\n')
+        + varyings + 'uniform float uGrow; uniform float uSize; uniform sampler2D tField; uniform vec2 uSelCtr;\n';
       /* Per-block tone. The extrusion has a centroid per block; the merged glTF has
          none, so it takes a smooth 40 m value noise instead — no seams, gentler. */
       const place = kind === 'model'
@@ -1143,7 +1232,8 @@ export class ThreeReliefRenderer implements ReliefRenderer {
           vRnd=mix(mix(mdh(qi),mdh(qi+vec2(1,0)),qf.x),mix(mdh(qi+vec2(0,1)),mdh(qi+vec2(1,1)),qf.x),qf.y);
           vT=texture2D(tField,clamp(position.xz/uSize+.5,0.,1.)).g;
           vSel=uSelR>0.?1.-step(uSelR,distance(position.xz,uSelCtr)):0.;vIn=1.;`
-        : `#include <begin_vertex>
+        : `#include <begin_vertex>${packed ? `
+          float aH=aHn*${H_RANGE_M.toFixed(1)}; float aG=aGn*${G_RANGE_M.toFixed(1)};` : ''}
           float gT=clamp((uGrow-aDelay*.55)/.45,0.,1.); float gE=1.+2.70158*pow(gT-1.,3.)+1.70158*pow(gT-1.,2.);
           transformed.y*=gE;vFp=transformed;vFn=normal;vTop=position.y/max(aH,.001);vH=(position.y-aG)*gE;vIn=aIn;
           vRnd=fract(sin(dot(aCtr,vec2(12.9898,78.233)))*43758.5453);

@@ -9,9 +9,10 @@
  *   PLAN      = PLAN.md section 3.2 (a proposal the founder accepted; the real-phone check replaces it)
  *   ESTIMATE  = nobody has measured it yet; P3b measures and replaces it
  *
- * WHAT THE MESH COST IS. P0 section 2b/3: E4's merged building mesh is 128.0 vertices per building today (bevelled) and
- * 58.0 without the bevel; a vertex is 56 B with today's 8 attributes, 48 B without `uv` (the shader reads none), 32 B
- * with the compact packing. That gives 153 MB / 59.4 MB / 39.6 MB for E4, which is what `lod0MeshMB` returns for it.
+ * WHAT THE MESH COST IS (P3b, replacing P0's estimates with the meshes the worker really builds). `full` keeps the bevel:
+ * 128.0 vertices a building of 48 B (no `uv`) = 131.1 MB for E4. `balanced` and `low` draw the flat packed prism: 29.2
+ * vertices a building, 36.4 B all in (30 B of attributes plus the index) = 22.6 MB for E4. P0 had priced them at 153 / 59.4 /
+ * 39.6 MB; the packed mesh is cheaper than its 32 B target because it has no bottom cap and shares its roof vertices.
  * THE CPU ROW. P0 section 3 found three.js keeps a CPU copy of every vertex array after upload: ArrayBuffers were 181.6 MB
  * (bevelled), 98 MB (no bevel) and 88 MB (no `uv`) at E4, the same bytes as the GL buffers plus ~29 MB of other arrays.
  * `releaseCpuCopyAfterUpload` (explore/gpu-resident.ts) frees it. Every tier here REQUIRES the release (`releasesCpuCopy`);
@@ -39,7 +40,7 @@ export interface MeshCostModel {
   readonly bytesPerVertex: number;
 }
 
-export type Source = 'P0' | 'plan' | 'estimate';
+export type Source = 'P0' | 'P3b-measured' | 'plan' | 'estimate';
 
 export interface TierBudget {
   /** The whole page's GPU ceiling, MapLibre included, in MB (PLAN 3.2). */
@@ -51,7 +52,7 @@ export interface TierBudget {
   readonly baselineMB: number;
   /** LOD0 mesh model of this tier (bevelled on `full`, no bevel and no `uv` on `balanced`, compact packing on `low`). */
   readonly lod0: MeshCostModel;
-  /** GPU cost of one sheet's LOD1 massing, MB (ESTIMATE: the plan sizes the file at 50-100 KB, nobody has built the mesh). */
+  /** GPU cost of one sheet's LOD1 massing, MB: the WORST sheet (E4), P3b-measured; see LOD1_WORST_SHEET_MB. */
   readonly lod1MeshMB: number;
   /** Parsed LOD0 bundles kept in the JS heap, current sheet included (PLAN 3.2). */
   readonly maxLod0Sheets: number;
@@ -67,28 +68,44 @@ export interface TierBudget {
   }>;
 }
 
-/** MEASURED: bytes per vertex of today's 8-attribute bevelled mesh, the no-`uv` mesh, and the compact packing (P0 2b). */
-const BEVELLED: MeshCostModel = { verticesPerBuilding: 128, bytesPerVertex: 56 };
-const FLAT: MeshCostModel = { verticesPerBuilding: 58, bytesPerVertex: 48 };
-const FLAT_PACKED: MeshCostModel = { verticesPerBuilding: 58, bytesPerVertex: 32 };
+/**
+ * P3b-measured, from the meshes the worker really builds (tests/unit/prism-mesh.test.mjs, streaming-host/bevel-core.ts):
+ *   BEVELLED  `full`. E4: 2,731,890 vertices (128.0 a building) of 48 bytes (position 12, normal 12, aDelay 4, aH 4, aCtr 8,
+ *             aG 4, aIn 4; no `uv`, the shader reads none) = 131.1 MB. P0 priced the 56-byte mesh with `uv` at 153 MB.
+ *   PACKED    `balanced` and `low`. E4: 622,500 vertices (29.2 a building: 4 per wall edge + the roof ring, no bottom, no bevel)
+ *             of 30 bytes in seven attributes (streaming/prism-mesh.ts) plus the u32 index (46.5 indices a building, 6.4
+ *             bytes a vertex on average) = 22.64 MB, 36.4 bytes a vertex all in. P0's estimate for the same tier was 39.6 MB.
+ */
+const BEVELLED: MeshCostModel = { verticesPerBuilding: 128, bytesPerVertex: 48 };
+const PACKED: MeshCostModel = { verticesPerBuilding: 29.2, bytesPerVertex: 36.4 };
+
+/**
+ * One sheet's LOD1 grey massing, MB, P3b-measured: E4 (21,342 buildings, the densest sheet) is 9.65 MB; the other 31 shipped
+ * sheets are 0.20 to 5.46 MB with a mean of 2.36 MB (0.45 KB a building at most). The table holds the WORST sheet so a ring of
+ * eight cannot be under-priced; the page adds up the real bytes it holds (tests/unit/prism-mesh.test.mjs).
+ */
+const LOD1_WORST_SHEET_MB = 10;
 
 export const SHEET_BUDGETS: Readonly<Record<ExploreDeviceTier, TierBudget>> = Object.freeze({
   full: {
-    gpuCeilingMB: 500, baselineMB: 44, lod0: BEVELLED, lod1MeshMB: 4, maxLod0Sheets: 3,
-    ring: 'ring8', crossFade: true, prefetch: 'heading-lod0', releasesCpuCopy: true,
-    sources: { gpuCeilingMB: 'plan', baselineMB: 'estimate', lod0: 'P0', lod1MeshMB: 'estimate', maxLod0Sheets: 'plan' },
+    /* crossFade is OFF (P3b). A kept LOD0 mesh is tinted by the page's CURRENT heat field, sampled in the old sheet's
+       coordinates, so for the length of a cross-fade the old sheet would show the wrong sheet's heat. The old sheet becomes its
+       grey massing in the same frame the new one appears instead (city-stream.ts builds that massing before the swap). */
+    gpuCeilingMB: 500, baselineMB: 44, lod0: BEVELLED, lod1MeshMB: LOD1_WORST_SHEET_MB, maxLod0Sheets: 3,
+    ring: 'ring8', crossFade: false, prefetch: 'heading-lod0', releasesCpuCopy: true,
+    sources: { gpuCeilingMB: 'plan', baselineMB: 'estimate', lod0: 'P3b-measured', lod1MeshMB: 'P3b-measured', maxLod0Sheets: 'plan' },
   },
   balanced: {
-    gpuCeilingMB: 250, baselineMB: 21, lod0: FLAT, lod1MeshMB: 4, maxLod0Sheets: 2,
+    gpuCeilingMB: 250, baselineMB: 21, lod0: PACKED, lod1MeshMB: LOD1_WORST_SHEET_MB, maxLod0Sheets: 2,
     ring: 'ring8', crossFade: false, prefetch: 'heading-lod0', releasesCpuCopy: true,
-    sources: { gpuCeilingMB: 'plan', baselineMB: 'P0', lod0: 'P0', lod1MeshMB: 'estimate', maxLod0Sheets: 'plan' },
+    sources: { gpuCeilingMB: 'plan', baselineMB: 'P0', lod0: 'P3b-measured', lod1MeshMB: 'P3b-measured', maxLod0Sheets: 'plan' },
   },
   low: {
     /* "LOD1 on demand" in PLAN 3.2 is read here as: the four edge neighbours' massing, fetched after the current sheet is
        ready. Nothing of LOD0 is fetched ahead. */
-    gpuCeilingMB: 150, baselineMB: 21, lod0: FLAT_PACKED, lod1MeshMB: 4, maxLod0Sheets: 1,
+    gpuCeilingMB: 150, baselineMB: 21, lod0: PACKED, lod1MeshMB: LOD1_WORST_SHEET_MB, maxLod0Sheets: 1,
     ring: 'edge4', crossFade: false, prefetch: 'none', releasesCpuCopy: true,
-    sources: { gpuCeilingMB: 'plan', baselineMB: 'P0', lod0: 'P0', lod1MeshMB: 'estimate', maxLod0Sheets: 'plan' },
+    sources: { gpuCeilingMB: 'plan', baselineMB: 'P0', lod0: 'P3b-measured', lod1MeshMB: 'P3b-measured', maxLod0Sheets: 'plan' },
   },
 });
 

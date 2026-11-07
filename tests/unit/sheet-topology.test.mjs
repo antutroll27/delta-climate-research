@@ -87,10 +87,10 @@ test('compass sectors: 45 degrees each, north = 0, clockwise, wrapping', () => {
 
 // ── the budget table ────────────────────────────────────────────────────────
 
-test('the budget table reproduces the P0 mesh measurements for Canal Ring (21,342 buildings)', () => {
-  assert.ok(Math.abs(lod0MeshMB('full', 21342) - 152.9) < 0.5, 'P0: 152.2-153 MB of vertex attributes bevelled');
-  assert.ok(Math.abs(lod0MeshMB('balanced', 21342) - 59.4) < 0.1, 'P0 2b: 59.4 MB at 48 B/vertex');
-  assert.ok(Math.abs(lod0MeshMB('low', 21342) - 39.6) < 0.1, 'P0 2b: 39.6 MB at the 32 B packing');
+test('the budget table reproduces the P3b mesh measurements for Canal Ring (21,342 buildings)', () => {
+  assert.ok(Math.abs(lod0MeshMB('full', 21342) - 131.1) < 0.2, 'bevel-core: 2,731,890 vertices of 48 B');
+  assert.ok(Math.abs(lod0MeshMB('balanced', 21342) - 22.7) < 0.2, 'prism-mesh: 622,500 vertices of 30 B plus the index = 22.64 MB');
+  assert.ok(Math.abs(lod0MeshMB('low', 21342) - 22.7) < 0.2, 'balanced and low draw the same packed mesh');
 });
 
 test('tiers are ordered: a smaller device never holds more, and the plan numbers are in the table', () => {
@@ -99,7 +99,7 @@ test('tiers are ordered: a smaller device never holds more, and the plan numbers
   assert.deepEqual([full.maxLod0Sheets, balanced.maxLod0Sheets, low.maxLod0Sheets], [3, 2, 1], 'PLAN 3.2');
   assert.ok(full.maxLod0Sheets > balanced.maxLod0Sheets && balanced.maxLod0Sheets > low.maxLod0Sheets);
   assert.deepEqual([full.ring, balanced.ring, low.ring], ['ring8', 'ring8', 'edge4']);
-  assert.deepEqual([full.crossFade, balanced.crossFade, low.crossFade], [true, false, false]);
+  assert.deepEqual([full.crossFade, balanced.crossFade, low.crossFade], [false, false, false]);
   assert.equal(low.prefetch, 'none');
   for (const tier of Object.values(SHEET_BUDGETS)) {
     assert.equal(tier.releasesCpuCopy, true, 'every tier must free the CPU copy (P0 section 3)');
@@ -112,8 +112,8 @@ test('every budget number says where it comes from; the unmeasured ones are mark
   const { full, balanced, low } = SHEET_BUDGETS;
   for (const tier of [full, balanced, low]) {
     assert.deepEqual(Object.keys(tier.sources).sort(), ['baselineMB', 'gpuCeilingMB', 'lod0', 'lod1MeshMB', 'maxLod0Sheets']);
-    assert.equal(tier.sources.lod1MeshMB, 'estimate');
-    assert.equal(tier.sources.lod0, 'P0');
+    assert.equal(tier.sources.lod1MeshMB, 'P3b-measured');
+    assert.equal(tier.sources.lod0, 'P3b-measured');
     assert.equal(tier.sources.gpuCeilingMB, 'plan');
     assert.equal(tier.sources.maxLod0Sheets, 'plan');
   }
@@ -126,10 +126,10 @@ test('every budget number says where it comes from; the unmeasured ones are mark
 test('the CPU row: without the release a tab holds twice the mesh, and low would break its ceiling on the densest sheet if it were bevelled', () => {
   const e4 = 21342;
   assert.equal(tabMeshMB('full', e4), lod0MeshMB('full', e4), 'released: the GL bytes only');
-  assert.ok(Math.abs(2 * lod0MeshMB('full', e4) - 305.8) < 1, 'kept: ~306 MB (P0: 152 GL + 182 ArrayBuffers)');
+  assert.ok(Math.abs(2 * lod0MeshMB('full', e4) - 262.2) < 1, 'kept: ~262 MB (P0 saw 152 GL + 182 ArrayBuffers on the 56 B mesh)');
   const { low } = SHEET_BUDGETS;
-  assert.ok(low.baselineMB + lod0MeshMB('low', e4) + 4 * low.lod1MeshMB < low.gpuCeilingMB, 'low fits with the 32 B packing');
-  assert.ok(low.baselineMB + lod0MeshMB('full', e4) > low.gpuCeilingMB, 'but a bevelled E4 alone (153 MB) is over the 150 MB ceiling: P3b must ship the packing');
+  assert.ok(low.baselineMB + lod0MeshMB('low', e4) + 4 * low.lod1MeshMB < low.gpuCeilingMB, 'low fits with the packed mesh and four worst-case massings');
+  assert.ok(low.baselineMB + lod0MeshMB('full', e4) > low.gpuCeilingMB, 'but a bevelled E4 alone (131 MB) is over the 150 MB ceiling once the baseline is added: low ships the packing');
 });
 
 test('the camera-crossing and retry constants are the plan\'s', () => {
