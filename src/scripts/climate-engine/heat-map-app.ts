@@ -73,7 +73,7 @@ import { heatAccuracyClaim, heightsNote } from './scope/accuracy-claim.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
 import { fmtMoney, fmtRate, currencyMark, noCostBasisLine, planScoreLine } from './money.ts';
 import { pvRanges, tierOf } from './solar-ranges.ts';
-import { wardSummary, validatedSentence, noteFor, sharePct, ESTIMATE_TAG, paybackText, oldestAsOf } from './solar-copy.ts';
+import { wardSummary, validatedSentence, noteFor, sharePct, ladderFix, ESTIMATE_TAG, paybackText, oldestAsOf } from './solar-copy.ts';
 import { costBasisFor } from './solar-cost.ts';
 import { CITY_MAP_CREDIT, joinMapCredits } from '../../data/city-credits.ts';
 import { wardRoi, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
@@ -941,6 +941,12 @@ export function mountHeatMap(): () => void {
      tier in prose ("Screening estimate · not bankable · …"), so it cannot stay
      frozen while the chip above it says the roof has been checked. */
   const SOL_NOTE_DEFAULT = el('bcSolNote')?.textContent ?? '';
+  /* The ladder's two "narrows to" sentences, as the markup wrote them (Kolkata's). A city whose
+     bands nobody measured gets the same fix without the figure (`ladderFix`). */
+  const FIX_DEFAULT = {
+    roof: el('bcSure')?.querySelector('[data-fix="roof"]')?.textContent ?? '',
+    irradiance: el('bcSure')?.querySelector('[data-fix="irradiance"]')?.textContent ?? '',
+  } as const;
   /* The BRIEF's footer, captured the same way and for the same reason: it says
      "Screening estimate · not bankable" in the markup, and a sheet whose chip reads
      `validated` while its footer still opens "Screening estimate" is the page
@@ -987,6 +993,10 @@ export function mountHeatMap(): () => void {
     setText('bcSureRoof', `Capacity ${r.kwpLow.toFixed(1)}–${r.kwpHigh.toFixed(1)} kWp today.`);
     setText('bcSureCanopy', `Shading ${pct(pv.loss[i])} headline, ${pct(pv.loss_strict[i])} floor.`);
     setText('bcSureIrr', `Yield ${yLo.toLocaleString()}–${yHi.toLocaleString()} kWh per kWp today.`);
+    for (const rung of ['roof', 'irradiance'] as const) {
+      const fix = el('bcSure')?.querySelector(`[data-fix="${rung}"]`);
+      if (fix) fix.textContent = ladderFix(rung, SCOPE.city.id, FIX_DEFAULT[rung]);
+    }
     const v = pv.tiers.validated;
     const tier = tierOf(pv);
     const rung = v === null ? SURE_VALID_DEFAULT : validatedSentence(v);

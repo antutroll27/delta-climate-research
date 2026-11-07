@@ -517,6 +517,10 @@ lists the five limits, each with the fix that narrows it. The bands are the arte
 | building height unverified | ward-scale only | a survey or a drone pass | per roof |
 | never compared with real rooftops | no measured error | the pre-registered validation study | a measured spread, with its n |
 
+The two "narrows to" figures (about ±10 % for the roof walk, about ±5 % for the ground station) are written for
+Kolkata only, and neither is measured anywhere. The card prints them for Kolkata and prints the same fix with
+no figure for every other city (`ladderFix` in `solar-copy.ts`; no city but Kolkata ships a solar screen today).
+
 Each line is a button that opens a pre-filled email to the technical-queries address with the ward, the
 building index and the limit named; the survey and the measured rung do not exist yet and the button
 does not pretend they do. A one-page **installer brief** prints from the card (the browser's own print,
