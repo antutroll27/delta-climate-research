@@ -1,0 +1,419 @@
+{
+ "dataset_status": "http://data.overheid.nl/status/beschikbaar",
+ "maintainer": null,
+ "issued": "2017-08-29T00:00:00",
+ "contact_point_email": "gebruik.basisinformatie@amsterdam.nl",
+ "authority": "http://standaarden.overheid.nl/owms/terms/Amsterdam",
+ "maintainer_email": null,
+ "num_tags": 28,
+ "frequency": "http://publications.europa.eu/resource/authority/frequency/IRREG",
+ "metadata_language": "http://publications.europa.eu/resource/authority/language/NLD",
+ "high_value": "false",
+ "contact_point_name": "Hans Hut / Dirk Graas",
+ "metadata_created": "2020-04-02T19:32:26.856262",
+ "relationships_as_object": [],
+ "metadata_modified": "2024-01-19T21:34:07.062083",
+ "author": null,
+ "author_email": null,
+ "access_rights": "http://publications.europa.eu/resource/authority/access-right/PUBLIC",
+ "id": "e1a1c516-9b9d-40a6-9edf-9058a1de9d43",
+ "theme": [
+  "http://standaarden.overheid.nl/owms/terms/Bestuur"
+ ],
+ "state": "active",
+ "referentie_data": "false",
+ "license_id": "http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+ "type": "dataset",
+ "resources": [
+  {
+   "cache_last_updated": null,
+   "package_id": "e1a1c516-9b9d-40a6-9edf-9058a1de9d43",
+   "metadata_language": "http://publications.europa.eu/resource/authority/language/NLD",
+   "id": "1a6642f0-a84b-4e49-82d1-d8c80f7a2be0",
+   "modification_date": "2020-03-09T00:00:00",
+   "title": "Data en Informatie Gemeente Amsterdam",
+   "state": "active",
+   "license_id": "http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+   "description": "unknown",
+   "format": "http://publications.europa.eu/resource/authority/file-type/HTML",
+   "mimetype_inner": null,
+   "url_type": null,
+   "mimetype": "text/html",
+   "cache_url": null,
+   "name": "Data en Informatie Gemeente Amsterdam",
+   "language": [
+    "http://publications.europa.eu/resource/authority/language/NLD"
+   ],
+   "created": "2020-03-13T21:31:44.060715",
+   "url": "https://data.amsterdam.nl/data/?modus=kaart&legenda=true",
+   "last_modified": null,
+   "position": 0,
+   "revision_id": "145dc9db-ce7d-434a-867b-340b298a0b98",
+   "resource_type": null
+  },
+  {
+   "cache_last_updated": null,
+   "package_id": "e1a1c516-9b9d-40a6-9edf-9058a1de9d43",
+   "metadata_language": "http://publications.europa.eu/resource/authority/language/NLD",
+   "id": "b7d5ed91-831f-49c1-ba3e-21eeb40991b0",
+   "modification_date": "2020-03-09T00:00:00",
+   "title": "Stelselpedia Gebieden",
+   "state": "active",
+   "license_id": "http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+   "description": "unknown",
+   "format": "http://publications.europa.eu/resource/authority/file-type/HTML",
+   "mimetype_inner": null,
+   "url_type": null,
+   "mimetype": "text/html",
+   "cache_url": null,
+   "name": "Stelselpedia Gebieden",
+   "language": [
+    "http://publications.europa.eu/resource/authority/language/NLD"
+   ],
+   "created": "2020-03-13T21:31:44.060718",
+   "url": "https://www.amsterdam.nl/stelselpedia/gebieden-index/",
+   "last_modified": null,
+   "position": 1,
+   "revision_id": "145dc9db-ce7d-434a-867b-340b298a0b98",
+   "resource_type": null
+  },
+  {
+   "cache_last_updated": null,
+   "package_id": "e1a1c516-9b9d-40a6-9edf-9058a1de9d43",
+   "metadata_language": "http://publications.europa.eu/resource/authority/language/NLD",
+   "id": "2c76fa07-798a-4ca0-a7cb-37194a3bac49",
+   "modification_date": "2022-11-02T00:00:00",
+   "title": "GBD_<objectklasse>_Actueel.csv",
+   "state": "active",
+   "license_id": "http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+   "description": "unknown",
+   "format": "http://publications.europa.eu/resource/authority/file-type/CSV",
+   "mimetype_inner": null,
+   "url_type": null,
+   "mimetype": "text/csv",
+   "cache_url": null,
+   "name": "GBD_<objectklasse>_Actueel.csv",
+   "language": [
+    "http://publications.europa.eu/resource/authority/language/NLD"
+   ],
+   "created": "2022-11-04T21:34:47.462645",
+   "url": "https://www.amsterdam.nl/stelselpedia/gebieden-index/producten-gebieden/prodspec-csv-actueel/",
+   "last_modified": null,
+   "position": 2,
+   "revision_id": "145dc9db-ce7d-434a-867b-340b298a0b98",
+   "resource_type": null
+  },
+  {
+   "cache_last_updated": null,
+   "package_id": "e1a1c516-9b9d-40a6-9edf-9058a1de9d43",
+   "metadata_language": "http://publications.europa.eu/resource/authority/language/NLD",
+   "id": "89a7af01-da5d-4db4-96e1-022415c56c99",
+   "modification_date": "2022-11-02T00:00:00",
+   "title": "GBD_<objectklasse>_ActueelEnHistorie.csv",
+   "state": "active",
+   "license_id": "http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+   "description": "unknown",
+   "format": "http://publications.europa.eu/resource/authority/file-type/CSV",
+   "mimetype_inner": null,
+   "url_type": null,
+   "mimetype": "text/csv",
+   "cache_url": null,
+   "name": "GBD_<objectklasse>_ActueelEnHistorie.csv",
+   "language": [
+    "http://publications.europa.eu/resource/authority/language/NLD"
+   ],
+   "created": "2022-11-04T21:34:47.462662",
+   "url": "https://www.amsterdam.nl/stelselpedia/gebieden-index/producten-gebieden/prodspec-actueelhistorie/",
+   "last_modified": null,
+   "position": 3,
+   "revision_id": "145dc9db-ce7d-434a-867b-340b298a0b98",
+   "resource_type": null
+  },
+  {
+   "cache_last_updated": null,
+   "package_id": "e1a1c516-9b9d-40a6-9edf-9058a1de9d43",
+   "metadata_language": "http://publications.europa.eu/resource/authority/language/NLD",
+   "id": "ef59a369-065c-4089-a65a-81381842d4d9",
+   "modification_date": "2022-11-02T00:00:00",
+   "title": "GBD_NLCS_Amsterdam.dgn",
+   "state": "active",
+   "license_id": "http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+   "description": "unknown",
+   "format": "http://publications.europa.eu/resource/authority/file-type/TAR_XZ",
+   "mimetype_inner": null,
+   "url_type": null,
+   "mimetype": "application/octet-stream",
+   "cache_url": null,
+   "name": "GBD_NLCS_Amsterdam.dgn",
+   "language": [
+    "http://publications.europa.eu/resource/authority/language/NLD"
+   ],
+   "created": "2022-11-04T21:34:47.462671",
+   "url": "https://www.amsterdam.nl/stelselpedia/gebieden-index/producten-gebieden/productspec-dgn/",
+   "last_modified": null,
+   "position": 4,
+   "revision_id": "145dc9db-ce7d-434a-867b-340b298a0b98",
+   "resource_type": null
+  },
+  {
+   "cache_last_updated": null,
+   "package_id": "e1a1c516-9b9d-40a6-9edf-9058a1de9d43",
+   "metadata_language": "http://publications.europa.eu/resource/authority/language/NLD",
+   "id": "15bfe2b5-9559-4c42-9a48-fdce3161f6d5",
+   "modification_date": "2022-11-02T00:00:00",
+   "title": "GBD_<objectklasse>.shp",
+   "state": "active",
+   "license_id": "http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+   "description": "unknown",
+   "format": "http://publications.europa.eu/resource/authority/file-type/SHP",
+   "mimetype_inner": null,
+   "url_type": null,
+   "mimetype": "application/x-zipped-shp",
+   "cache_url": null,
+   "name": "GBD_<objectklasse>.shp",
+   "language": [
+    "http://publications.europa.eu/resource/authority/language/NLD"
+   ],
+   "created": "2022-11-04T21:34:47.462678",
+   "url": "https://www.amsterdam.nl/stelselpedia/gebieden-index/producten-gebieden/productspec-shp/",
+   "last_modified": null,
+   "position": 5,
+   "revision_id": "145dc9db-ce7d-434a-867b-340b298a0b98",
+   "resource_type": null
+  }
+ ],
+ "num_resources": 6,
+ "tags": [
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "Boswet",
+   "id": "c88a76e7-825c-4ce3-87c6-2f7054f7b942",
+   "name": "Boswet"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "CBS",
+   "id": "5e52bb6e-0a32-4748-9b91-07e7bd79451d",
+   "name": "CBS"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "Gebiedsindeling",
+   "id": "b44a4aac-67e5-4d5a-b5b9-0e228b26a135",
+   "name": "Gebiedsindeling"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "Gebiedsindelingstadsdelen",
+   "id": "7d7fb067-10c3-459e-b882-dff176adc5ad",
+   "name": "Gebiedsindelingstadsdelen"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "Statistiek",
+   "id": "d3f6bf0a-78c8-4ed4-b553-867c1863cdc5",
+   "name": "Statistiek"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "UNESCO",
+   "id": "595d4e6a-d6b8-48ec-911d-c8d790eb91d0",
+   "name": "UNESCO"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "Wegenverkeerswet",
+   "id": "83189e47-b3a9-4b26-9070-a92203810bf0",
+   "name": "Wegenverkeerswet"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "bebouwde kom",
+   "id": "e4115b84-9013-4580-9610-464b40dd9093",
+   "name": "bebouwde kom"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "boswet",
+   "id": "593796a0-55c7-4ab3-adf0-608ac3f49155",
+   "name": "boswet"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "bouwblok",
+   "id": "4e09dc7f-60c9-41f3-b1e2-a5cc6002bc93",
+   "name": "bouwblok"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "bouwblokken",
+   "id": "5e227061-3058-49e5-ad39-d7cd5e4e15a5",
+   "name": "bouwblokken"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "buurt",
+   "id": "9ba97804-4d5e-44d1-9c95-c55736961104",
+   "name": "buurt"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "buurten",
+   "id": "eef8259a-ea08-404a-bbfd-2b75e69b166f",
+   "name": "buurten"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "cbs",
+   "id": "47dde190-fc93-4e21-92a8-55a02bdbb895",
+   "name": "cbs"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "gebiedsgericht werken",
+   "id": "aaaad097-5436-40a9-9ee1-342e8c96a6d0",
+   "name": "gebiedsgericht werken"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "gebiedsindeling",
+   "id": "38bb090a-5740-4b06-8818-3120dd9aa257",
+   "name": "gebiedsindeling"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "geometrie",
+   "id": "3ebfa9b4-7f17-4d93-9888-3574dd6cbee0",
+   "name": "geometrie"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "grootstedelijk gebied",
+   "id": "79488f57-7d3b-4978-bf20-9498286d78ca",
+   "name": "grootstedelijk gebied"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "grootstedelijke gebieden",
+   "id": "68731cbf-3962-4210-b5c3-2e7b543c4757",
+   "name": "grootstedelijke gebieden"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "stadsdeel",
+   "id": "ebd331b6-fe99-4a96-b342-08860713545c",
+   "name": "stadsdeel"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "stadsdelen",
+   "id": "03060ba7-bf2b-4e4f-a368-d3863c51b76b",
+   "name": "stadsdelen"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "statistiek",
+   "id": "be48aa30-14bf-42e6-b6ef-4273a2a36b31",
+   "name": "statistiek"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "unesco",
+   "id": "eb8cfa3d-e1d6-4c7d-a951-b5909ba3c89d",
+   "name": "unesco"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "wegenverkeerswet",
+   "id": "6792b5af-40d2-4c07-9928-538edccca3d4",
+   "name": "wegenverkeerswet"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "werelderfgoed",
+   "id": "81634bff-1f0f-46c6-9609-25fc9e632f74",
+   "name": "werelderfgoed"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "wijk",
+   "id": "89817687-3abc-4a70-93d9-3631edb9c0e0",
+   "name": "wijk"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "wijken",
+   "id": "318b8c8c-bd58-4e92-961f-e7edea9d3fca",
+   "name": "wijken"
+  },
+  {
+   "vocabulary_id": null,
+   "state": "active",
+   "display_name": "woonplaats",
+   "id": "b4e4fc3f-c3fa-4d88-82ea-21f9c70602e2",
+   "name": "woonplaats"
+  }
+ ],
+ "language": [
+  "http://publications.europa.eu/resource/authority/language/NLD"
+ ],
+ "basis_register": "false",
+ "national_coverage": "false",
+ "groups": [],
+ "creator_user_id": "47a69263-acfd-49bd-8479-a620c6ba8f82",
+ "source_catalog": "https://data.amsterdam.nl/",
+ "relationships_as_subject": [],
+ "license_title": "CC-0 (1.0)",
+ "publisher": "http://standaarden.overheid.nl/owms/terms/Amsterdam",
+ "organization": {
+  "description": "",
+  "created": "2020-04-01T09:49:47.656427",
+  "title": "Gemeente Amsterdam",
+  "name": "gemeente-amsterdam",
+  "is_organization": true,
+  "state": "active",
+  "image_url": "2024-10-15-081741.421862gemeenteamsterdam.png",
+  "revision_id": "c2aefff4-3b98-400f-b821-462c6ef76073",
+  "type": "organization",
+  "id": "9f681fd9-31b2-4c8b-acae-2aaf7b12f265",
+  "approval_status": "approved"
+ },
+ "name": "5l2csm77flzgya",
+ "isopen": false,
+ "changetype": ":updated",
+ "owner_org": "9f681fd9-31b2-4c8b-acae-2aaf7b12f265",
+ "modified": "2018-09-12T00:00:00",
+ "private": false,
+ "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.nl",
+ "title": "Kernregistratie gebieden",
+ "revision_id": "c75a489b-7b6b-48ab-aef4-69c30bfe6eb1",
+ "identifier": "https://api.data.amsterdam.nl/dcatd/datasets/5L2CSm77FLZGYA",
+ "notes": "In de Registratie gebieden worden de Amsterdamse stadsdelen, wijken, buurten en bouwblokken vastgelegd. Verder bevat de registratie gegevens van de grootstedelijke gebieden binnen de gemeente en de gebieden van gebiedsgericht werken. Voor alle onderstaande data resources geldt een update frequentie van 2x per week."
+}

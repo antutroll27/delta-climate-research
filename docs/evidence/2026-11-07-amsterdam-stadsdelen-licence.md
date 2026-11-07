@@ -17,8 +17,10 @@ stadsdeel with the largest share of the sheet's municipal area). Canal Ring keep
    `https://data.overheid.nl/data/api/3/action/package_search?q=stadsdelen+amsterdam`. Description: "In de Registratie
    gebieden worden de Amsterdamse stadsdelen, wijken, buurten en bouwblokken vastgelegd." Licence field:
    `license_title: "CC-0 (1.0)"`, `license_id: http://creativecommons.org/publicdomain/zero/1.0/deed.nl`. Record
-   metadata modified 2024-01-19. A copy of the record is at `/Volumes/OBOSLab/tmp/city-streaming/p1-kernregistratie-gebieden.json`.
-2. **Maps Data terms** (`https://maps.amsterdam.nl/open_geodata/terms.php`, HTTP 200, read in full). The Maps Data list
+   metadata modified 2024-01-19. The record is saved next to this note: `2026-11-07-amsterdam-stadsdelen-licence/kernregistratie-gebieden-ckan-record.json`
+   (13 KB; the search response it came from is in `/Volumes/OBOSLab/research/city-streaming/evidence/data-overheid-package_search-stadsdelen.json`).
+2. **Maps Data terms** (`https://maps.amsterdam.nl/open_geodata/terms.php`, HTTP 200, read in full; the page as fetched is kept, with its scripts, at
+   `/Volumes/OBOSLab/research/city-streaming/evidence/maps-data-terms.html` rather than in the repo). The Maps Data list
    (`https://maps.amsterdam.nl/open_geodata/`) offers "Amsterdam Stadsdelen" (id 202) and "Amsterdam Stadsdelen excl.water"
    (id 203). The terms: "verleent u hierbij een licentie voor het gebruiken en hergebruiken van de gedownloade dataset
    voor elk wettig doel. U mag de dataset zowel voor niet-commerciële als commerciële doeleinden gebruiken." Attribution:
@@ -27,7 +29,7 @@ stadsdeel with the largest share of the sheet's municipal area). Canal Ring keep
 3. **The API we read** (`https://api.data.amsterdam.nl/v1/gebieden/stadsdelen/`, schema
    `https://schemas.data.amsterdam.nl/datasets/gebieden/dataset`, publisher `BENK`, "Datateam Basis- en Kernregistraties",
    `auth: OPENBAAR`). The schema carries **no licence field**, and the API documentation page
-   (`/v1/docs/datasets/gebieden.html`) states no licence either.
+   (`/v1/docs/datasets/gebieden.html`) states no licence either. The schema is saved as `2026-11-07-amsterdam-stadsdelen-licence/gebieden-api-schema.json`.
 
 ## What this does and does not settle
 

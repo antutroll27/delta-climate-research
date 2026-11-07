@@ -1,8 +1,10 @@
 /**
  * The sheet index: the data model behind whole-city streaming's "which part of the city am I in".
  *
- * A SHEET is a 2.8 km square on one RD New lattice anchored on Canal Ring, which is sheet E4 and keeps its
- * id `canal-ring`. The table is generated (scripts/_sheets.py -> data/cities/amsterdam/sheets.json and
+ * A SHEET is Canal Ring's own lon/lat box (2.8 km in the shared frame), repeated across the city on one graticule
+ * lattice. Canal Ring is sheet E4 and keeps its id `canal-ring`; E4's box IS Canal Ring's, bit for bit, and every
+ * sheet's frame uses E4's latitude as its standard parallel, so seams are shared meridians and parallels. RD New is
+ * the ingest CRS only (`rdQuad` is informational). The table is generated (scripts/_sheets.py -> data/cities/amsterdam/sheets.json and
  * src/data/sheets/amsterdam.ts); this module is the pure reader. NO THREE.JS, no DOM, no registry mutation, so
  * node can test all of it.
  *

@@ -46,7 +46,7 @@
    invariant is right: an area that SHIPS DATA must be in the published ward
    table, because shipsData is what puts it in the sitemap and the catalogue. */
 import { WARDS as WARD_TABLE } from '../../../data/wards.ts';
-import { AMSTERDAM_SHEET_AREAS } from '../../../data/sheets/amsterdam.ts';
+import { AMSTERDAM_SHEET_AREAS, AMSTERDAM_SHEET_IDS } from '../../../data/sheets/amsterdam.ts';
 import type { AirNormals } from '../types.ts';
 
 /**
@@ -292,7 +292,7 @@ export const REGISTRY = {
            (src/data/wards.ts), like every other drawable area; resolve refuses an area that names itself in both places. */
         areas: {
           'canal-ring': { shipsData: false, drawable: true },
-          /* THE OTHER 36 SHEETS of the whole-city tiling (city-streaming phase P1; Canal Ring is sheet E4 and stays
+          /* THE OTHER 35 SHEETS of the whole-city tiling (city-streaming phase P1; Canal Ring is sheet E4 and stays
              exactly as written above). NAMEABLE, NOT PUBLIC: every one is `drawable: false`, so none reaches
              PUBLIC_AREA_KEYS, getStaticPaths, the sitemap or the switcher (the Dubai mechanism), and `sheet: true`
              keeps them out of the per-city area lists (`areaKeysInCity`). Generated from
@@ -404,7 +404,7 @@ interface AreaEntry {
   readonly drawable: boolean;
   /**
    * A SHEET of a whole-city tiling (scope/sheets.ts), not an area a visitor chooses. Sheets are registered so the
-   * scope code can NAME them, and are left out of `areaKeysInCity` so no list that already exists grows 36 rows.
+   * scope code can NAME them, and are left out of `areaKeysInCity` so no list that already exists grows 35 rows.
    * Present (as `true`) only on the generated sheet entries; Canal Ring is sheet E4 and does not carry it.
    */
   readonly sheet?: true;
@@ -646,6 +646,45 @@ export function areaTableDrift(
 }
 
 /**
+ * The sheet flag's invariant, pure so a bad tree can be shown to fail (tests/unit/amsterdam-sheets.test.mjs).
+ *
+ * `sheet: true` removes an area from every per-city list (`areaKeysInCity`), so on an area that is NOT a sheet of a
+ * tiled city it would silently drop a real area from the switcher, the comparison and the catalogue. It is allowed
+ * only on a tiled city's sheets: `tiled` maps "country/city" to the ids of that city's sheets, written by hand for
+ * Canal Ring (E4, which carries no flag) and generated for the rest. Both directions: every flagged area is a sheet
+ * of its city, and every generated sheet other than E4 is flagged (else a sheet would appear in the lists).
+ * Returns the failure messages; empty when the tree agrees.
+ */
+export function sheetFlagProblems(
+  tree: Readonly<Record<string, { readonly cities: Readonly<Record<string, { readonly areas: Readonly<Record<string, { readonly sheet?: true }>> }>> }>>,
+  tiled: Readonly<Record<string, readonly string[]>>,
+  anchorId: string,
+): string[] {
+  const out: string[] = [];
+  for (const [country, entry] of Object.entries(tree)) {
+    for (const [city, cityEntry] of Object.entries(entry.cities)) {
+      const sheets = tiled[`${country}/${city}`];
+      for (const [areaId, area] of Object.entries(cityEntry.areas)) {
+        if (area.sheet === true) {
+          if (sheets === undefined) {
+            out.push(`"${country}/${city}/${areaId}" carries sheet: true but ${country}/${city} is not a tiled city — `
+              + 'the flag would silently drop a real area from every list');
+          } else if (!sheets.includes(areaId) || areaId === anchorId) {
+            out.push(`"${country}/${city}/${areaId}" carries sheet: true but is ${areaId === anchorId ? 'the anchor sheet, which is written by hand and unflagged' : 'not in the sheet table'}`);
+          }
+        } else if (sheets !== undefined && sheets.includes(areaId) && areaId !== anchorId) {
+          out.push(`"${country}/${city}/${areaId}" is a sheet of the table but is not flagged sheet: true — it would join the area lists`);
+        }
+      }
+      for (const id of sheets ?? []) {
+        if (!(id in cityEntry.areas)) out.push(`sheet "${country}/${city}/${id}" is in the sheet table but not registered`);
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Runnable self-check. Every assertion here guards a failure that is SILENT —
  * one that ships green and shows a wrong page rather than throwing.
  *
@@ -829,6 +868,12 @@ export function assertRegistryLogic(): void {
       + 'three-letter ISO 4217 code — Intl.NumberFormat throws on it, from inside the '
       + 'cost readout rather than from here');
   }
+
+  /* 11 · THE SHEET FLAG IS ONLY FOR A TILED CITY'S SHEETS (city-streaming F2). `sheet: true` hides an area from every
+     per-city list, so on a Kolkata ward it would silently remove that ward from the switcher, the comparison and the
+     catalogue, with every other check green. See sheetFlagProblems. */
+  failures.push(...sheetFlagProblems(
+    COUNTRIES, { 'nl/amsterdam': AMSTERDAM_SHEET_IDS }, 'canal-ring'));
 
   if (failures.length > 0) {
     for (const failure of failures) console.error(`FAIL ${failure}`);
