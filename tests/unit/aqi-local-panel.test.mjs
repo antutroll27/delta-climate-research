@@ -230,6 +230,8 @@ test('F4: a Tokyo placeholder hour says it could not be read right now, never "n
 test('F6: the LKI explainer and the station-rule comment carry the tie rule', () => {
   const t = text(localCardHtml(nlLive, 'Canal Ring', NL_NOW));
   assert.ok(t.includes('the highest number is the index; if all the substances have the same number, the index is one point higher'), t.slice(0, 200));
+  const pane = text(localPaneHtml(nlLive, 'Canal Ring', NL_NOW));
+  assert.ok(pane.includes('If two substances tie for the highest, the index is that number. Luchtmeetnet adds one point only when all the substances share the same number.'), 'the pane says what a tie does');
   assert.match(read('src/lib/aqi/nl-stations.ts'), /same\s+index\s+number[\s\S]{0,120}one\s+point/i);
   assert.match(read('src/lib/aqi/nl-stations.ts'), /not strictly/i);
 });
