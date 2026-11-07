@@ -831,25 +831,26 @@ daarvan niet noodzakelijkerwijs onderschrijft"; knmi.nl/copyright re-read in ful
   more than 1.5 m lower (the pit outruns its footprint). It only ever raises. Six buildings qualify; 14 mesh cells change
   (10 by more than 0.5 m; the pit cell −4.52 → −0.66 m), the lowest mesh cell is now −2.53 m NAP. The rule and the building
   list are in `canal-ring-terrain.json` `postAhn4Patch`.
-- **Eight buildings stand 7 to 9 m too tall because 3D BAG's ground value is wrong (source fault, not ours; left as shipped).**
-  Eight Canal Ring buildings carry the same `b3_h_maaiveld` = −6.729 m NAP in 3D BAG v20250903 (tile 10/432/722). It is a fault in
-  the source: the roof levels are sound (3.1 to 18.0 m NAP) and the neighbours of the two buildings checked have ground at
-  +0.4 to +2.0 m NAP. The AHN4 ground model reads +2.3 m under `…0092374` and +1.15 m under `…2182448`; the other six
-  have no AHN4 ground cell. The pipeline applies the documented rule (`b3_h_70p` minus `b3_h_maaiveld`) exactly, so each served
-  height is the true height plus about 6.7 to 9 m. The AHN4 cross-check flags all eight (`hCheck` below). The pit patch is not
-  affected because it only raises ground. Nothing was edited: the values are source values. Fix when 3D BAG corrects them,
-  or by a deliberate plausibility rule in a later data pass.
+- **54 Canal Ring buildings stand too tall because 3D BAG gives them an implausible ground value (source fault; left as shipped, a
+  correction is planned).** In 3D BAG v20250903, 54 of the 21,342 served buildings carry a `b3_h_maaiveld` more than 3 m below the
+  median ground of the buildings within 75 m (at least 5 neighbours). The values repeat, which marks a fault in the source's ground
+  step rather than real ground: −3.310 m NAP on 20 buildings, −4.784 m on 12, −6.729 m on 8, −4.12 m on 3, and one to two
+  buildings each at −2.80, −3.77, −5.13 and −5.58 m. Across all 47 raw tiles it is 58 of 37,150 buildings (0.16 %); 54 of them
+  are in the Canal Ring. Amsterdam's polders do lie below −5 m, so this is a test against the neighbours, not a floor in NAP.
 
-  | Building (`NL.IMBAG.Pand.` + id) | Served h | AHN4 hCheck |
-  |---|---|---|
-  | 0363100012178227 | 17.00 m | 9.76 m |
-  | 0363100012171875 | 13.86 m | 6.08 m |
-  | 0363100012178820 | 9.85 m | 2.22 m |
-  | 0363100012252174 | 10.54 m | 3.01 m |
-  | 0363100012178822 | 9.82 m | 2.32 m |
-  | 0363100012178823 | 10.00 m | 2.44 m |
-  | 0363100012182448 | 24.74 m | 16.98 m |
-  | 0363100100092374 | 11.85 m | 2.89 m |
+  How big the error is. Our rule is 3D BAG's documented one (`b3_h_70p` minus `b3_h_maaiveld`), applied as published, so each
+  served height is the true height plus the ground error. For the 50 of the 54 that have an AHN4 cross-check (`hCheck`), served h
+  runs above it by +2.6 to +9.0 m (median +5.4 m). 18 of the 54 are confirmed directly against the AHN4 ground model, which lies
+  at least 3 m above their 3D BAG ground in a 0.5 to 4 m ring around the footprint (for example `…0012182448`: ring median
+  +1.53 m against −6.729 m; `…0100092374`: +2.31 m). The other 36 lie outside the AHN4 clip or have too few ring cells, so they
+  rest on the neighbour test alone.
+
+  What we do and do not do. AHN4 is used only as a cross-check and is never blended into h. That cross-check (guard G5) flags a
+  building only when |h − hCheck| exceeds 5 m, so it flags 32 of the 54, not all of them. Nothing was edited in the shipped data.
+  A plausibility correction is planned, pending the founder's decision: where ground is more than 3 m below the 75 m neighbour
+  median, or below the AHN4 ring median, replace it with the 5th percentile of the AHN4 ground ring (the statistic 3D BAG itself
+  uses) and tag the building's `hSource`. The method was run by `/Volumes/OBOSLab/tmp/ams-followups-audit/scripts/ground.py` and
+  re-run on 2026-11-07 with the same counts (58 city-wide, 54 served, 18 confirmed, 32 flagged).
 
 - **Tree species.** Kolkata's draw has palms; Amsterdam's does not. The founder's rule is no palms outside the tropics, so a
   Köppen C/D city draws one generic `broadleaf` (the 10 m placement knows a canopy height, not a species). Positions,
