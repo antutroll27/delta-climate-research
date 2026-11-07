@@ -14,7 +14,12 @@ import { LAB, pick, relief, placed } from './obos-v2-onmap-helpers';
  *   · a lost-and-restored context brings the same city back. Sabotage-checked: with the `webglcontextrestored` handler
  *     removed, three re-uploads from a null array and the city does not come back.
  *
- * LOCAL ONLY, on the relief project: it needs Metal, because headless SwiftShader runs tier 0 and never builds this mesh.
+ *   · Bengaluru comes back WITHOUT THE NETWORK: the renderer keeps the compressed GLB (and the Draco decoder), so a restore decodes
+ *     them again; with the network cut after the first load the model and its landmark labels return, and nothing asks for the GLB.
+ *
+ * LOCAL ONLY, on the relief project: it needs Metal. Headless SwiftShader runs tier 0 and opens on the flat map, so CI's relief clicks
+ * (ward-switch, obos-v2-building, solar) do draw this mesh and cover render-after-free, picking and area switches on the software path,
+ * but a forced context loss and restore is covered only here.
  */
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -156,5 +161,31 @@ test.describe('the building mesh gives back its CPU copy', () => {
     const m = await memory(page);
     expect(m.arrayMB / m.glMB, `ArrayBuffers ${m.arrayMB.toFixed(1)} MB vs GL ${m.glMB.toFixed(1)} MB`).toBeLessThan(1.8);
     await restoreBringsCityBack(page, thrown, 2);
+  });
+
+  test('Bengaluru with no network: a lost context comes back with the model and its landmark labels', async ({ page, context }) => {
+    const thrown: string[] = [];
+    page.on('pageerror', (error) => thrown.push(String(error)));
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await countGlBuffers(page);
+    await stubAt(page, '2026-10-07T06:05:00Z');
+    await openV2(page, '/heat-map/in/bengaluru/mg-road/?lab=1');
+    await relief(page);
+    const chips = page.locator('#lmlabs .lmlab:not([hidden])');
+    await expect(chips.first(), 'the landmark labels are up before the loss').toBeVisible({ timeout: 120_000 });
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __bigUploads: number[] }).__bigUploads.length), { timeout: 120_000 }).toBeGreaterThanOrEqual(2);
+    await page.waitForTimeout(5000);
+    const labelsBefore = await chips.count();
+
+    /* THE CONNECTION DROPS. From here any request for the model or the decoder is a failure of this test, not just a failed fetch. */
+    await context.setOffline(true);
+    const asked: string[] = [];
+    page.on('request', (request) => { if (/\.glb|\/draco\//.test(request.url())) asked.push(request.url()); });
+
+    await restoreBringsCityBack(page, thrown, 2);
+    await expect(chips.first(), 'the landmark labels come back after the restore').toBeVisible({ timeout: 60_000 });
+    expect(await chips.count(), 'the same landmarks').toBe(labelsBefore);
+    expect(asked, 'the restore decoded the kept bytes: no request for the model or the decoder').toEqual([]);
+    await context.setOffline(false);
   });
 });
