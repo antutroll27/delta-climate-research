@@ -12,6 +12,7 @@ import { mkdirSync } from 'node:fs';
 const BASE = process.env.OBOS_STREAM_URL;
 const SHOTS = process.env.OBOS_STREAM_SHOTS ?? '/Volumes/PortableSSD/OBOS Lab/previews/city-streaming/p3b';
 const TIER = process.env.OBOS_STREAM_TIER;     // optional ?streamtier=
+const TAG = (tag: string): string => (TIER ? `${tag}-${TIER}` : tag);
 const F4_CENTRE = { lon: 4.926190546565045, lat: 52.364 };
 
 interface Report {
@@ -22,10 +23,12 @@ interface Report {
 const report = (page: Page): Promise<Report | null> =>
   page.evaluate(() => (window as unknown as { __obosStream?: { report(): unknown } }).__obosStream?.report() as Report | null ?? null);
 
+/* The timeout covers the browser launch too (a loaded machine took over 30 s to start Chromium), so it is set for the file. */
+test.describe.configure({ timeout: 240_000 });
+
 for (const viewport of [{ width: 390, height: 844, tag: 'phone' }, { width: 1440, height: 900, tag: 'desktop' }]) {
   test(`streaming dev: E4 to F4 across the seam, ${viewport.tag}`, async ({ page }) => {
     test.skip(!BASE, 'set OBOS_STREAM_URL to a server running a PUBLIC_OBOS_STREAM_DEV=1 build');
-    test.setTimeout(240_000);
     mkdirSync(SHOTS, { recursive: true });
     const thrown: string[] = [];
     page.on('pageerror', (error) => thrown.push(String(error)));
@@ -36,7 +39,7 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone' }, { width: 1440
     await expect.poll(async () => (await report(page))?.massing.length ?? 0, { timeout: 90_000, message: 'the eight-neighbour ring arrives' }).toBeGreaterThanOrEqual(4);
     await page.waitForTimeout(3_000);                        // let the first grow and the first solve settle
     const before = (await report(page))!;
-    await page.screenshot({ path: `${SHOTS}/p3b-${viewport.tag}-1-E4-before.png` });
+    await page.screenshot({ path: `${SHOTS}/p3b-${TAG(viewport.tag)}-1-E4-before.png` });
 
     // Pan to the middle of F4 and let go: the crossing needs the centre 200 m inside, no gesture, 400 ms idle.
     await page.evaluate(({ lon, lat }) => {
@@ -46,7 +49,7 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone' }, { width: 1440
     await expect.poll(async () => (await report(page))?.open, { timeout: 120_000, message: 'the sheet switches to F4' }).toBe('F4');
     await page.waitForTimeout(4_000);
     const after = (await report(page))!;
-    await page.screenshot({ path: `${SHOTS}/p3b-${viewport.tag}-2-F4-after.png` });
+    await page.screenshot({ path: `${SHOTS}/p3b-${TAG(viewport.tag)}-2-F4-after.png` });
 
     console.log(`[stream ${viewport.tag}] before ${JSON.stringify(before)}\n[stream ${viewport.tag}] after ${JSON.stringify(after)}`);
     expect(after.switches).toBeGreaterThanOrEqual(2);
@@ -54,6 +57,7 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone' }, { width: 1440
     expect(after.massing, 'the sheet we left is now grey massing').toContain('E4');
     expect(after.modelMB).toBeLessThanOrEqual(after.ceilingMB);
     expect(before.modelMB).toBeLessThanOrEqual(before.ceilingMB);
+    expect(after.haloKB, 'the halo asset of the open sheet is held (4 layers x 8 neighbours, one byte a cell)').toBeGreaterThan(1_000);
     expect(thrown, `page errors: ${thrown.join(' | ')}`).toEqual([]);
   });
 }
