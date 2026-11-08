@@ -65,8 +65,15 @@ SUN_FLOOR_DEG: Final = 40.0
 MIN_SCENES: Final = 20
 #: The quantised mean and the float mean of the same composite agree to this (one 8-bit step of albedo is 0.002).
 QUANT_TOLERANCE: Final = 0.003
-#: A neutral stand-in, like Canal Ring's (cities.ts: "`swatch` is a neutral stand-in for the founder's visual review").
-SWATCH: Final = "radial-gradient(circle at 40% 40%,#6fcad6,#9fb98a 58%,#093a3e)"
+#: Canal Ring's swatch, which no streamed area may share (the ward strip must tell wards apart: tests/unit/heat-map-city-registry.test.mjs).
+CANAL_RING_SWATCH: Final = "radial-gradient(circle at 40% 40%,#6fcad6,#9fb98a 58%,#093a3e)"
+
+
+def swatch_of(index: int) -> str:
+    """A neutral, UNIQUE identifying mark per area (a stand-in like Canal Ring's, not a reading): the hue steps 37 degrees per area, and 37 is
+    coprime to 360, so no two of the first 360 areas share one."""
+    hue = (index * 37) % 360
+    return f"radial-gradient(circle at 40% 40%,hsl({hue} 55% 62%),hsl({(hue + 40) % 360} 35% 63%) 58%,#093a3e)"
 
 #: A NewType per unit-bearing or role-bearing string, so a name cannot be passed where a zone is wanted.
 AreaName = NewType("AreaName", str)
@@ -237,9 +244,7 @@ def build_records(inp: Inputs) -> AreaRecords:
     table = inp.table
     lattice_frame_lat = float(cast(float, table["lattice"]["frameLat"]))
     areas: list[AreaRecord] = []
-    for s in table["sheets"]:
-        if s["code"] == _sheets.ANCHOR_CODE:
-            continue
+    for index, s in enumerate(x for x in table["sheets"] if x["code"] != _sheets.ANCHOR_CODE):
         m = inp.measured.get(s["id"])
         if m is None:
             raise SystemExit(f"{s['id']}: no build outputs to make a record from")
@@ -251,7 +256,7 @@ def build_records(inp: Inputs) -> AreaRecords:
         areas.append(AreaRecord(
             id=SheetId(s["id"]), code=SheetCode(s["code"]), kind=s["kind"], name=AreaName(entry["name"]), stadsdeel=Stadsdeel(s["stadsdeel"]),
             zone=zone_of(s["stadsdeel"], s["code"]), body=body_of(s["stadsdeel"]), lat=s["centre"]["lat"], lon=s["centre"]["lon"],
-            frame_lat=lattice_frame_lat, footprint_m=FOOTPRINT_M, veg=js_round3(m.fvc_mean_q), swatch=SWATCH, sheet=True, drawable=False,
+            frame_lat=lattice_frame_lat, footprint_m=FOOTPRINT_M, veg=js_round3(m.fvc_mean_q), swatch=swatch_of(index), sheet=True, drawable=False,
             counts=Counts(drawn=m.drawn, in_box=m.in_box, municipal=s["municipalBuildings"], dropped_small=m.dropped_small, multipart=m.multipart, trees=m.trees, water=m.water, green=m.green, roads=m.roads),
             surface=SurfaceMeta(grid=m.png_grid, footprint_m=FOOTPRINT_M, veg_std=m.fvc_std, albedo_std=m.albedo_std, level="measured",
                                 fvc_mean=round(m.fvc_mean_q, 4), albedo_mean=round(m.albedo_mean_q, 4), sun_elevation_floor_deg=SUN_FLOOR_DEG, scenes=m.scenes),
@@ -272,6 +277,7 @@ def problems(doc: AreaRecords, table: _sheets.SheetTable, names: NamesDoc, ancho
     if doc.frame_lat != lattice_frame_lat or lattice_frame_lat != _sheets.FRAME_LAT:
         out.append(f"document frameLat {doc.frame_lat} vs lattice {lattice_frame_lat} vs _sheets.FRAME_LAT {_sheets.FRAME_LAT}")
     seen: dict[str, str] = {}
+    swatches: set[str] = set()
     for r, s in zip(doc.areas, want, strict=False):
         tag = str(r.id)
         if r.frame_lat != lattice_frame_lat:
@@ -299,8 +305,11 @@ def problems(doc: AreaRecords, table: _sheets.SheetTable, names: NamesDoc, ancho
             out.append(f"{tag}: veg {r.veg} is not the surface row's fvc_mean {r.surface.fvc_mean} to three places")
         if not 0 < r.surface.albedo_mean < 0.5:
             out.append(f"{tag}: albedo_mean {r.surface.albedo_mean}")
-        if len(r.provenance) < 4 or r.swatch != SWATCH:
-            out.append(f"{tag}: provenance/swatch")
+        if len(r.provenance) < 4:
+            out.append(f"{tag}: provenance")
+        if r.swatch == CANAL_RING_SWATCH or r.swatch in swatches:
+            out.append(f"{tag}: swatch is shared with another ward")
+        swatches.add(r.swatch)
     if doc.anchor.drawn != anchor_drawn or doc.anchor.code != _sheets.ANCHOR_CODE or doc.anchor.id != _sheets.ANCHOR_ID:
         out.append(f"anchor E4: drawn {doc.anchor.drawn} vs the shipped canal-ring.json count {anchor_drawn}")
     if doc.name_credit != names["credit"]:
@@ -546,6 +555,7 @@ def _self_test() -> None:
     doc = build_records(inputs())
     assert len(doc.areas) == 31 and not problems(doc, table, names, 21342), problems(doc, table, names, 21342)
     assert all(r.frame_lat == fl for r in doc.areas)
+    assert len({r.swatch for r in doc.areas}) == 31 and CANAL_RING_SWATCH not in {r.swatch for r in doc.areas}
     # round trip: JSON -> records -> JSON, and the TS is a pure function of the records
     again = from_json(json.loads(serialise(doc)))
     assert again == doc and serialise(again) == serialise(doc) and render_ts(again) == render_ts(doc)
