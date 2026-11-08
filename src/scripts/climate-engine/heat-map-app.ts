@@ -4505,14 +4505,7 @@ export function mountHeatMap(): () => void {
     ]);
     /* WHERE THE LAYER FILES COME FROM: the manifest (public/heat-map/data/ams-r2-manifest.json) names Cloudflare R2 for every area but Canal Ring. A manifest
        that cannot be read is not a reason to guess: every other area then fails into the loader's failed state, with the reason. */
-    try {
-      const response = await fetch(dataSource.MANIFEST_URL, { cache: 'no-cache' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      dataSource.configureStreamData({ kind: 'manifest', manifest: dataSource.asR2Manifest(await response.json()) });
-    } catch (error) {
-      console.warn('streaming: the area data manifest could not be read', error);
-      dataSource.configureStreamData({ kind: 'unavailable', reason: error instanceof Error ? error.message : String(error) });
-    }
+    await dataSource.readStreamManifest((url, init) => fetch(url, init));           // a failed read is retried by the controller before every load (a Retry works; INT re-audit R4)
     streamedAreaUrls = dataSource.streamedAreaUrls;
     /* The page furniture (the loader view, the area picker, the header/URL projections) is made first: the controller's hooks feed it. */
     const stageEl = document.querySelector<HTMLElement>('.stage');
@@ -4562,6 +4555,7 @@ export function mountHeatMap(): () => void {
       failure: () => undefined,
       warn: (message, error) => console.warn(`streaming: ${message}`, error ?? ''),
       ...(wiring ? {
+        loaderVisible: (code) => wiring.loaderVisible(code),
         command: (c) => wiring.command(c),
         stage: (code, s) => wiring.stage(code, s),
         facts: (code, f) => wiring.facts(code, f),

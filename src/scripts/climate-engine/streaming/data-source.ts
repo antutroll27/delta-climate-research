@@ -10,7 +10,8 @@
  *   - A manifest whose `baseUrl` is null is the dev loop with local files: the same flat directory as before.
  *   - An area (or any one of its six files) missing from the manifest THROWS. The throw lands in the area's lod0 load, which fails
  *     into the loader's failed state with Retry; it is never a quiet 404 that leaves an empty map looking loaded.
- *   - No manifest at all (the file did not load) is the same failure for every area but Canal Ring, with the reason.
+ *   - No manifest at all (the file did not load) is the same failure for every area but Canal Ring, with the reason. It is not final: the controller
+ *     calls `ensureStreamData()` before every load, which reads the manifest AGAIN while the source is `unavailable`, so a Retry can succeed (INT re-audit R4).
  *
  * ONE HELPER FOR BOTH CALLERS: `sheetUrls(code)` in streaming-host/city-stream.ts and `streamPaths()` in heat-map-app.ts.
  * PURE: no DOM, no window, no bundler imports.
@@ -49,6 +50,28 @@ const SAME_ORIGIN_AREA = 'canal-ring';
 const FIELDS = ['ward', 'terrain', 'water', 'roads', 'trees', 'surface'] as const;
 
 let source: StreamDataSource = { kind: 'local' };
+
+/** The page's `fetch`, passed in: this module stays free of the network (streaming-dormant.test.mjs). */
+export type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
+
+/** Read the manifest and make it the source; a read that fails makes the source `unavailable` (with the reason). Never throws. */
+export async function readStreamManifest(fetcher: Fetcher): Promise<void> {
+  try {
+    const response = await fetcher(MANIFEST_URL, { cache: 'no-cache' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    source = { kind: 'manifest', manifest: asR2Manifest(await response.json()) };
+  } catch (error) {
+    source = { kind: 'unavailable', reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+let rereading: Promise<void> | null = null;
+/** Called before a load: while the manifest could not be read, read it again (one read at a time). A no-op once it is in hand, and for the local source. */
+export function ensureStreamData(fetcher: Fetcher): Promise<void> {
+  if (source.kind !== 'unavailable') return Promise.resolve();
+  rereading ??= readStreamManifest(fetcher).finally(() => { rereading = null; });
+  return rereading;
+}
 
 /** Set once by `startStream` (after it has read the manifest), before the first open. Tests set it back to `local`. */
 export function configureStreamData(next: StreamDataSource): void { source = next; }

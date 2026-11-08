@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { asR2Manifest, configureStreamData, streamedAreaUrls } from '../../src/scripts/climate-engine/streaming/data-source.ts';
+import { asR2Manifest, configureStreamData, ensureStreamData, readStreamManifest, streamedAreaUrls } from '../../src/scripts/climate-engine/streaming/data-source.ts';
 import { sheetUrls } from '../../src/scripts/climate-engine/streaming-host/city-stream.ts';
 import { readFileSync } from 'node:fs';
 
@@ -67,4 +67,30 @@ test('the committed manifest is whole: 186 files, 31 areas, six files each, a ba
   configureStreamData({ kind: 'manifest', manifest: m });
   for (const code of ['B3', 'F4', 'G5', 'E5']) assert.match(sheetUrls(code).ward, /^https:\/\/obos-city-data\.[a-z0-9-]+\.workers\.dev\/amsterdam\/[0-9a-f]{16}\/ams-[a-z0-9]+\.json$/);
   configureStreamData({ kind: 'local' });
+});
+
+test('R4: a manifest that cannot be read makes the source unavailable (with the reason), and ensureStreamData reads it AGAIN until it can be', async () => {
+  configureStreamData({ kind: 'local' });
+  let calls = 0, up = false;
+  const fetcher = async () => { calls++; return up ? new Response(JSON.stringify(manifestFor(['ams-f4'])), { status: 200 }) : new Response('no', { status: 503 }); };
+  await readStreamManifest(fetcher);
+  assert.throws(() => sheetUrls('F4'), /HTTP 503/, 'the failure names its reason');
+  assert.equal(sheetUrls('E4').ward, '/heat-map/data/canal-ring.json', 'Canal Ring never needs the manifest');
+  await ensureStreamData(fetcher);
+  assert.equal(calls, 2, 'still down: read again');
+  assert.throws(() => sheetUrls('F4'), /HTTP 503/);
+  up = true;
+  await Promise.all([ensureStreamData(fetcher), ensureStreamData(fetcher)]);
+  assert.equal(calls, 3, 'one read at a time: two concurrent askers share it');
+  assert.equal(sheetUrls('F4').ward, 'https://r2.example/amsterdam/v1/ams-f4.json', 'recovered');
+  await ensureStreamData(fetcher);
+  assert.equal(calls, 3, 'and a manifest in hand is never read again');
+  configureStreamData({ kind: 'local' });
+});
+
+test('R4: ensureStreamData does nothing for the local source (every other test, and the production page)', async () => {
+  configureStreamData({ kind: 'local' });
+  let calls = 0;
+  await ensureStreamData(async () => { calls++; return new Response('x'); });
+  assert.equal(calls, 0);
 });

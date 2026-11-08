@@ -31,7 +31,7 @@ import type { TileStage } from '../streaming/loader-model.ts';
 import { AMSTERDAM_TOPOLOGY as TOPOLOGY, DIRECTIONS, type Direction } from '../streaming/sheet-topology.ts';
 import type { NetworkClass } from '../streaming/sheet-budgets.ts';
 import type { AreaPaths } from '../scope/paths.ts';
-import { streamedAreaUrls } from '../streaming/data-source.ts';
+import { ensureStreamData, streamedAreaUrls } from '../streaming/data-source.ts';
 import { sheetByCode, type SheetCode } from '../scope/sheets.ts';
 import type { Prepared, SheetWorker } from './sheet-worker-client.ts';
 import type { MassingMesh } from '../streaming/prism-mesh.ts';
@@ -84,6 +84,9 @@ export interface CityStreamHooks {
   /** OPTIONAL page furniture (the loader view, the area picker). Every manager command the loader cares about, in order, as the manager issued it:
    *  `loader`, `failure`, `cancel`, `evict` when it is issued; `make-current` at the page's commit (so the building rise starts when the buildings do). */
   command?(command: ManagerCommand): void;
+  /** Is the loader for `code` ON SCREEN now (the view's own visibility: a rise is drawn 150 ms after the manager's `rise`)? Decides whether the open is held for
+   *  the loader's end. Without it the manager's phase stands in (INT re-audit R3). */
+  loaderVisible?(code: SheetCode): boolean;
   /** A real stage of `code`'s load finished (the loader's progress; never invented). */
   stage?(code: SheetCode, stage: TileStage): void;
   /** What was DRAWN for `code` (its building count, its trees), once its bundle is loaded: the loader's plate and the picker print these. */
@@ -145,7 +148,19 @@ class Memo<V> {
     return v;
   }
   delete(code: SheetCode): void { this.map.delete(code); }
+  /** Forget `code` only if it still holds `v` (a newer ask may have replaced it). */
+  deleteIf(code: SheetCode, v: V): void { if (this.map.get(code) === v) this.map.delete(code); }
   clear(): void { this.map.clear(); }
+}
+
+/** One shared promise per sheet, forgotten when it REJECTS. The forgetting runs after the promise is stored: an async body that throws before its first
+ *  await (a URL helper that throws, INT re-audit R4) has already settled by the time `set` runs, so a `delete` inside its own catch would find nothing. */
+function memoised<V>(memo: Memo<Promise<V>>, code: SheetCode, make: () => Promise<V>): Promise<V> {
+  const held = memo.get(code);
+  if (held !== undefined) return held;
+  const made = memo.set(code, make());
+  made.catch(() => memo.deleteIf(code, made));
+  return made;
 }
 
 export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, options: { now?: () => number } = {}): CityStream {
@@ -204,49 +219,43 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
   };
 
   const getTexts = (code: SheetCode, job: LoadJob | { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<{ ward: string; roads: string | null }> =>
-    texts.get(code) ?? texts.set(code, (async () => {
-      const urls = sheetUrls(code);
-      try {
-        const [ward, roads] = await Promise.all([
-          get(urls.ward, job).then((r) => r.text()),
-          optional<string | null>(urls.roads, job, null, (r) => r.text()),
-        ]);
-        return { ward, roads };
-      } catch (error) { texts.delete(code); throw error; }       // a failed or aborted fetch is not remembered
-    })());
+    memoised(texts, code, async () => {
+      const urls = sheetUrls(code);                                   // throws while the data manifest is unavailable: a rejection is not remembered (R4)
+      const [ward, roads] = await Promise.all([
+        get(urls.ward, job).then((r) => r.text()),
+        optional<string | null>(urls.roads, job, null, (r) => r.text()),
+      ]);
+      return { ward, roads };
+    });                                                               // a failed or aborted fetch is not remembered either
 
   const getSurface = (code: SheetCode, job: { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<WardSurface> =>
-    surfaces.get(code) ?? surfaces.set(code, (async () => {
+    memoised(surfaces, code, async () => {
       const registered = hooks.registeredSurface(code);
       if (registered !== null) return registered;
-      try {
-        const blob = await (await get(sheetUrls(code).surface, job)).blob();
-        const raster = await decodeSurfaceBlob(blob, code);
-        if (raster === null) return { means: { fvc: 0.25, albedo: 0.2 }, surface: null };
-        /* THE EXPORTER'S MEANS, from the area's surface-meta row (P2c), checked against the texture exactly as a registered area's are
-           (`assertSurfaceMatches`); a texture that disagrees is dropped and the area is flat at the mean, as everywhere else. A row that
-           is missing (or no hook) falls back to the raster's own mean, which holds the invariant by construction and claims nothing. */
-        const recorded = (await hooks.surfaceMeans?.(code)) ?? null;
-        if (recorded !== null) {
-          try { assertSurfaceMatches(raster, recorded.fvc, recorded.albedo, 0.01, null); }
-          catch (error) { hooks.warn(`surface of ${code} disagrees with its record`, error); return { means: recorded, surface: null }; }
-          return { means: recorded, surface: raster };
-        }
-        let veg = 0, albedo = 0;
-        for (let i = 0; i < raster.veg.length; i++) { veg += raster.veg[i]!; albedo += raster.albedo[i]!; }
-        return { means: { fvc: veg / raster.veg.length, albedo: albedo / raster.albedo.length }, surface: raster };
-      } catch (error) { surfaces.delete(code); throw error; }
-    })());
+      const blob = await (await get(sheetUrls(code).surface, job)).blob();
+      const raster = await decodeSurfaceBlob(blob, code);
+      if (raster === null) return { means: { fvc: 0.25, albedo: 0.2 }, surface: null };
+      /* THE EXPORTER'S MEANS, from the area's surface-meta row (P2c), checked against the texture exactly as a registered area's are
+         (`assertSurfaceMatches`); a texture that disagrees is dropped and the area is flat at the mean, as everywhere else. A row that
+         is missing (or no hook) falls back to the raster's own mean, which holds the invariant by construction and claims nothing. */
+      const recorded = (await hooks.surfaceMeans?.(code)) ?? null;
+      if (recorded !== null) {
+        try { assertSurfaceMatches(raster, recorded.fvc, recorded.albedo, 0.01, null); }
+        catch (error) { hooks.warn(`surface of ${code} disagrees with its record`, error); return { means: recorded, surface: null }; }
+        return { means: recorded, surface: raster };
+      }
+      let veg = 0, albedo = 0;
+      for (let i = 0; i < raster.veg.length; i++) { veg += raster.veg[i]!; albedo += raster.albedo[i]!; }
+      return { means: { fvc: veg / raster.veg.length, albedo: albedo / raster.albedo.length }, surface: raster };
+    });
 
   const getPrepared = (code: SheetCode, job: { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<Prepared> =>
-    prepares.get(code) ?? prepares.set(code, (async () => {
-      try {
-        const [t, s] = await Promise.all([getTexts(code, job), getSurface(code, job)]);
-        const prepared = await worker.prepare(code, t.ward, t.roads, s.means, s.surface, undefined);
-        timings.prepare.push(Math.round(prepared.ms));
-        return prepared;
-      } catch (error) { prepares.delete(code); throw error; }
-    })());
+    memoised(prepares, code, async () => {
+      const [t, s] = await Promise.all([getTexts(code, job), getSurface(code, job)]);
+      const prepared = await worker.prepare(code, t.ward, t.roads, s.means, s.surface, undefined);
+      timings.prepare.push(Math.round(prepared.ms));
+      return prepared;
+    });
 
   // ── the three levels ────────────────────────────────────────────────────────
 
@@ -340,7 +349,8 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
   const ports: ExecutorPorts = {
     now,
     schedule: (ms, fn) => { const id = setTimeout(fn, ms); return () => clearTimeout(id); },
-    load: (job) => {
+    load: async (job) => {
+      await ensureStreamData((url, init) => fetch(url, init));                         // a manifest that could not be read at page load is read again: a Retry can work (R4)
       switch (job.level) {
         case 'lod0': return loadLod0(job);
         case 'halo': return loadHalo(job);
@@ -394,7 +404,13 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
           opened = true;
           if (token === switchToken && !disposed) executor.send({ type: 'opened', sheet: c.sheet });
         };
-        const loaderShown = (): boolean => { const l = inner.state().loader; return l !== null && l.sheet === c.sheet && l.phase !== 'quiet'; };
+        /* "Shown" is what the VIEW has on screen, not the manager's phase: the manager's `rise` comes at 400 ms and the view draws it 150 ms later, and an area that
+           commits inside that gap is a fast open (nothing was drawn, nothing should be held for), INT re-audit R3. */
+        const loaderShown = (): boolean => {
+          const l = inner.state().loader;
+          if (l === null || l.sheet !== c.sheet || l.phase === 'quiet') return false;
+          return hooks.loaderVisible === undefined ? true : hooks.loaderVisible(c.sheet);
+        };
         const openThis = hooks.showSheet(c.sheet, built.mesh, built.ao, first, () => {
           open = c.sheet; switches++;
           supply(c.sheet, halos.get(c.sheet));

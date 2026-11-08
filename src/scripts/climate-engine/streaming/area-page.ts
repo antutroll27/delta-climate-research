@@ -10,7 +10,7 @@
  * area is the query parameter `area=F4`, written with replaceState (never a navigation). A refresh reads it back with `areaFromUrl`.
  */
 import type { ManagerCommand, ManagerState } from './sheet-manager.ts';
-import type { AreaNames, SheetFacts, TileStage } from './loader-model.ts';
+import { isVisible, type AreaNames, type LoaderState, type SheetFacts, type TileStage } from './loader-model.ts';
 import { indexStateOf, type IndexViewState } from './sheet-index.ts';
 import { sheetByCode, type SheetCode } from '../scope/sheets.ts';
 
@@ -59,6 +59,8 @@ export interface LoaderLike {
   setFacts(code: SheetCode, facts: SheetFacts): void;
   /** The first-entry sweep's points (optional: a loader without it simply draws no survey). */
   setSurvey?(code: SheetCode, points: SurveyPoints): void;
+  /** The loader's own state, so the page can ask what is really on screen (optional: without it nothing is known to be visible). */
+  state?(): LoaderState;
 }
 
 /** Building centroids across the area's box, 0..1 east and north, and each height 0..1 of the tallest: what the first-entry sweep draws. */
@@ -93,6 +95,9 @@ export interface PageFurniture {
   dispatched(state: ManagerState): void;
   /** `code` is now the open area, with `drawn` buildings on screen. */
   areaShown(code: SheetCode, drawn: number): void;
+  /** Is the loader for `code` ON SCREEN right now? The view's own answer (a rise is drawn REVEAL_DELAY_MS after the manager's command), not the manager's phase
+   *  (INT re-audit R3). False when the loader view cannot say. */
+  loaderVisible(code: SheetCode): boolean;
 }
 
 export function createPageFurniture(parts: {
@@ -101,12 +106,19 @@ export function createPageFurniture(parts: {
   readonly writer: AreaWriter;
   readonly names: AreaNames;
   readonly location: () => { readonly pathname: string; readonly search: string; readonly hash: string };
+  /** The loader view's clock (default `performance.now`). */
+  readonly now?: () => number;
 }): PageFurniture {
   const { loader, picker, writer, names } = parts;
   let lastPicker = '';
   /** The area on screen: what the header, the address and the Area select say. */
   let shown: SheetCode | null = null;
+  const now = parts.now ?? ((): number => performance.now());
   return {
+    loaderVisible(code) {
+      const state = loader.state?.();
+      return state !== undefined && state.sheet === code && isVisible(state, now());
+    },
     command(c) {
       loader.command(c);
       /* A pick that did not open leaves the native Area select naming it. The header, crumb and address were never moved (they are written at a
