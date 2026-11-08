@@ -224,10 +224,11 @@ def fetch(url: str | None, tok: str) -> str | None:
     path = os.path.join(CACHE, url.rsplit("/", 1)[-1])
     if os.path.exists(path) and os.path.getsize(path) > MIN_TIF_BYTES:
         return path
+    # The bearer header goes in on stdin (-H @-), never in argv, where `ps` would show it.
     rc = subprocess.run(
-        ["curl", "-sL", "--fail", "-H", f"Authorization: Bearer {tok}",
+        ["curl", "-sL", "--fail", "-H", "@-",
          "-H", "User-Agent: DeltaClimateResearch/1.0", "-o", path, url],
-        timeout=600).returncode
+        input=f"Authorization: Bearer {tok}\n", text=True, timeout=600).returncode
     if rc != 0 or not os.path.exists(path) or os.path.getsize(path) < MIN_TIF_BYTES:
         if os.path.exists(path):
             os.remove(path)
