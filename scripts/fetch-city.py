@@ -64,18 +64,8 @@ def fetch_buildings(area: Area) -> None:
     _, op_desc, op_acc = bag.rd_transformer()
     hs = [r["h"] for r in rows]
     p50, p95 = bag.percentiles(hs, (50.0, 95.0))
-    tiers: dict[str, int] = {}
-    for r in rows:
-        tiers[r["hSource"]] = tiers.get(r["hSource"], 0) + 1
-    doc = CityBuildingsFile(
-        city=area.city, area=area.id, name=area.name, centre=[area.centre.lat, area.centre.lon],
-        sizeM=float(area.size_m), release=f"3D BAG {bag.RELEASE}", retrieved=TODAY, count=len(rows),
-        source=(f"3D BAG (tudelft3d + 3DGI), {bag.RELEASE}, BAG footprints; heights from the AHN point clouds "
-                "(AHN5 © Het Waterschapshuis, CC BY 4.0; AHN4 and AHN3, CC0), CC BY 4.0"),
-        heightSource="3D BAG LoD1.2 roof 70th percentile minus ground level (NAP)",
-        heightNote=bag.height_note(op_desc, op_acc),
-        fillFraction=round(st.fill_rows / max(1, len(rows)), 4), heightTiers=tiers, pointCloudMix=mix,
-        crossCheck="AHN nDSM cross-check not yet run (guard G5, Task A9)", b=rows)
+    doc = bag.make_buildings_doc(area, rows, st, mix, TODAY)
+    tiers = doc["heightTiers"]
     write_json(out_path(area, "buildings"), doc)
     size_mb = os.path.getsize(out_path(area, "buildings")) / 1e6
     print(f"\nwrote {out_path(area, 'buildings')} ({size_mb:.1f} MB)")
@@ -195,7 +185,7 @@ def validate_buildings_file(area: Area, doc: CityBuildingsFile) -> list[str]:
         if max(abs(v) for v in b["p"]) > lim:
             bad.append(f"row {i}: vertex outside +-{lim:.0f} m")
             break
-        if b["hSource"] not in ("3dbag-p70", "fill"):
+        if b["hSource"] not in ("3dbag-p70", "3dbag-p70-ahn4-ground", "fill"):
             bad.append(f"row {i}: hSource {b['hSource']}")
             break
     if sum(doc["heightTiers"].values()) != doc["count"]:
@@ -204,6 +194,7 @@ def validate_buildings_file(area: Area, doc: CityBuildingsFile) -> list[str]:
 
 
 def self_test() -> None:
+    import numpy as np
     import shapely
     from shapely.geometry import Polygon
 
@@ -267,6 +258,11 @@ def self_test() -> None:
     rows2, st2, _ = bag.build_rows(area, iter([two, out]))
     assert st2.inside_square == 1 and st2.multipart_buildings == 1 and sorted(x["h"] for x in rows2) == [5.0, 20.0], st2
 
+    # An invalid (bow-tie) part ring makes GEOS raise on the intersection; the row is rebuilt on repaired copies and the repair is counted.
+    bow = Polygon([(cx + 100, cy + 100), (cx + 112, cy + 108), (cx + 112, cy + 100), (cx + 100, cy + 108)])
+    tie = bag.RawBuilding("NL.IMBAG.Pand.tie", near, (bag.Part(0, bow, 5.5), bag.Part(1, right, 20.5)), 0.5, True, False, "ahn5", 2023)
+    rows3, st3, _ = bag.build_rows(area, iter([tie]))
+    assert st3.invalid_repaired >= 1 and st3.rows >= 1 and rows3, st3
     # The committed file, when present, passes its own contract.
     path = out_path(area, "buildings")
     note = "no committed buildings file yet"
@@ -290,6 +286,7 @@ def self_test() -> None:
         problems = ovt.validate_context_file(area, cdoc)
         assert not problems, problems
         note += f"; context file ({len(cdoc['water'])} water, {len(cdoc['green'])} green, {len(cdoc['roads'])} roads) satisfies the contract"
+    bag.self_test()
     dem.self_test()
     ovt.self_test()
     canopy.self_test()

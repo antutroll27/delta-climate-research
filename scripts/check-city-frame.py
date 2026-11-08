@@ -38,6 +38,7 @@ import sys
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from collections.abc import Callable, Sequence
 from typing import Any, Final, Literal, NamedTuple, TypedDict, cast
 
 import numpy as np
@@ -114,6 +115,21 @@ class FrameGuardFile(TypedDict):
     waterLevel: dict[str, Any]
 
 
+#: Where the guards read and write when they are not run on the committed Canal Ring files. A SHEET build (scripts/_sheet_build.py)
+#: points them at its own directories; None = the committed locations, so `--city amsterdam` behaves exactly as it always has.
+DATA_DIR: str | None = None
+PUBLIC_DIR: str | None = None
+AHN_DIR: str | None = None
+
+
+def data_root(area: Area) -> str:
+    return DATA_DIR if DATA_DIR is not None else _city.data_dir(area.city)
+
+
+def public_root() -> str:
+    return PUBLIC_DIR if PUBLIC_DIR is not None else _city.PUBLIC
+
+
 def sha256_of(path: str) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -123,7 +139,7 @@ def sha256_of(path: str) -> str:
 
 
 def doc_path(area: Area, layer: str) -> str:
-    return os.path.join(_city.data_dir(area.city), f"{area.id}-{layer}.json")
+    return os.path.join(data_root(area), f"{area.id}-{layer}.json")
 
 
 def load(area: Area, layer: str) -> Any:
@@ -316,6 +332,8 @@ class Grid(NamedTuple):
 
 
 def ahn_raw() -> str:
+    if AHN_DIR is not None:
+        return AHN_DIR
     return os.path.join(os.path.expanduser("~"), ".cache", "delta-climate", "cities", "amsterdam", "raw", "ahn")
 
 
@@ -349,12 +367,15 @@ def to_crs_xy(area: Area, xy_local: npt.NDArray[np.float64]) -> npt.NDArray[np.f
 
 
 def crs_polygons(area: Area, polys: list[Polygon]) -> list[Polygon]:
-    out: list[Polygon] = []
-    for p in polys:
-        if p.is_empty:
-            continue
-        out.append(Polygon(to_crs_xy(area, np.asarray(p.exterior.coords))))
-    return out
+    """Polygons (exteriors) from the local frame into the source CRS. ONE pyproj call for all the vertices: the guards project tens of
+    thousands of rings several times (the controls), and a call per ring was minutes."""
+    live = [p for p in polys if not p.is_empty]
+    if not live:
+        return []
+    rings = [np.asarray(p.exterior.coords) for p in live]
+    xy = to_crs_xy(area, np.concatenate(rings))
+    cuts = np.cumsum([len(r) for r in rings])[:-1]
+    return [Polygon(part) for part in np.split(xy, cuts)]
 
 
 def burn(shapes: list[tuple[Polygon, int]], grid: Grid) -> npt.NDArray[np.int32]:
@@ -400,10 +421,23 @@ def spearman(h: npt.NDArray[np.float64], n70: npt.NDArray[np.float64]) -> tuple[
     return float(spearmanr(h[ok], n70[ok]).statistic), int(ok.sum())
 
 
+_NDSM: dict[str, tuple[F32, Grid]] = {}
+
+
+def ndsm_grid() -> tuple[F32, Grid]:
+    """The AHN4 nDSM (DSM minus the nearest-filled DTM) at 1 m, read once per clip directory: the sheet rules rasterise several copies of
+    the same buildings against it, and the fill (a distance transform of the whole square) is the cost."""
+    key = ahn_raw()
+    if key not in _NDSM:
+        _NDSM.clear()
+        dsm, grid = read_downsampled("dsm_05m_clip.tif", 2)
+        dtm, _ = read_downsampled("dtm_05m_clip.tif", 2)
+        _NDSM[key] = ((dsm - fill_nearest(dtm)).astype(np.float32), grid)
+    return _NDSM[key]
+
+
 def ndsm_p70(area: Area, b: list[CityBuilding], mirrored: bool) -> npt.NDArray[np.float64]:
-    dsm, grid = read_downsampled("dsm_05m_clip.tif", 2)
-    dtm, _ = read_downsampled("dtm_05m_clip.tif", 2)
-    ndsm = (dsm - fill_nearest(dtm)).astype(np.float32)
+    ndsm, grid = ndsm_grid()
     ids = rasterise_ids(crs_polygons(area, polygons(b, mirrored)), grid)
     return p70_per_polygon(ids, ndsm, len(b))
 
@@ -471,7 +505,7 @@ def water_level_evidence(area: Area, ctx: CityContextFile) -> dict[str, Any]:
 
 def read_surface(area: Area) -> npt.NDArray[np.float64]:
     from PIL import Image
-    path = os.path.join(_city.PUBLIC, f"{area.id}-surface.png")
+    path = os.path.join(public_root(), f"{area.id}-surface.png")
     if not os.path.isfile(path):
         raise SystemExit(f"{path} is missing: run scripts/export-surface-rasters.py --ward {area.id}")
     rgb = np.asarray(Image.open(path).convert("RGB"), dtype=np.float64)
@@ -507,7 +541,7 @@ def g7_surface(area: Area, ctx: CityContextFile) -> GuardRecord:
 # ── G8: export orientation ─────────────────────────────────────────────────
 
 def g8_export(area: Area, terrain: CityTerrainFile) -> GuardRecord:
-    path = os.path.join(_city.PUBLIC, f"{area.id}-terrain.json")
+    path = os.path.join(public_root(), f"{area.id}-terrain.json")
     if not os.path.isfile(path):
         return record("G8", "export orientation", "the exported public terrain (row 0 = NORTH) vs the data file (row 0 = SOUTH)",
                       "exact equality after one flip", "equal; the unflipped compare must differ", "pending", None, None,
@@ -529,6 +563,253 @@ def g8_export(area: Area, terrain: CityTerrainFile) -> GuardRecord:
                   flippedEqual=flipped_equal, unflippedEqual=unflipped_equal)
 
 
+# ── the rules for SHEETS (P2b audit S1) ────────────────────────────────────
+#
+# G3, G5, G6 and G7 above were fitted to the dense Canal Ring. In a suburb, in the port or on new land they fail on base rates and stale
+# reference data and not on misregistration (P2B-AUDIT, "Guards"). Each rule below is written so that the CANDIDATE (the sheet as built)
+# must pass AND every control -- the same data mirrored, turned 180 degrees, turned 3 degrees, or shifted -- must FAIL THE SAME RULE.
+# A guard that passes the controls too proves nothing, so a sheet passes only if the candidate does and the controls do not.
+
+Xform = Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]]
+_TH = np.deg2rad(3.0)
+_ROT3 = np.array([[np.cos(_TH), np.sin(_TH)], [-np.sin(_TH), np.cos(_TH)]])
+IDENTITY: Final[Xform] = lambda a: a                                                    # noqa: E731
+MIRROR: Final[Xform] = lambda a: a * np.array([1.0, -1.0])                              # noqa: E731
+ROT180: Final[Xform] = lambda a: a * np.array([-1.0, -1.0])                             # noqa: E731
+ROT3: Final[Xform] = lambda a: a @ _ROT3                                                # noqa: E731
+SHIFT10E: Final[Xform] = lambda a: a + np.array([10.0, 0.0])                            # noqa: E731
+SHIFT20E: Final[Xform] = lambda a: a + np.array([20.0, 0.0])                            # noqa: E731
+
+
+def shift_xform(dx: float, dy: float) -> Xform:
+    return lambda a: a + np.array([dx, dy])
+
+
+def turn_xform(deg: float) -> Xform:
+    """A turn of `deg` degrees about the centre (the sign convention of ROT3, which is turn_xform(3))."""
+    t = np.deg2rad(deg)
+    r = np.array([[np.cos(t), np.sin(t)], [-np.sin(t), np.cos(t)]])
+    return lambda a: a @ r
+
+
+G3V2_SHIFTS_M: Final = ((10.0, 0.0), (-10.0, 0.0), (0.0, 10.0), (0.0, -10.0), (20.0, 0.0), (-20.0, 0.0), (0.0, 20.0), (0.0, -20.0))
+G3V2_MAX_SHARE: Final = 0.01
+G3V2_SHIFT_MARGIN: Final = 0.95
+G3V2_MIRROR_RATIO: Final = 1.5
+G3V2_COINCIDENT_IOU: Final = 0.8
+G3V2_MIN_WATER: Final = 3
+G5V2_MIN_PRE_BUILDINGS: Final = 50
+G5V2_MIN_RHO: Final = 0.8
+G5V2_MIN_SHARE: Final = 0.6
+G5V2_WITHIN_M: Final = 2.0
+G6V2_MIN_KAPPA: Final = 0.5
+#: THE FACTOR IS 2 AND MUST STAY 2. The tightest real sheet is H3 (north kappa 0.927 against a mirrored 0.323, ratio 2.87): its mirrored score is the
+#: north-south symmetry of the IJmeer water lobe, not a misplacement (buildings-only mirrored kappa -0.009; Opus audit, CANAL-RING-FIX-AUDIT.md part B).
+#: A factor of 3 would FAIL H3 (0.927 < 3 x 0.323 = 0.969); the old absolute ceiling (mirrored <= 0.2) failed H3 and H7 for the same reason.
+#: Next tightest: H7 at 3.5, then 7+ for every other sheet.
+G6V2_RATIO: Final = 2.0
+#: The mirrored and 180-degree kappa are floored at this before the ratio, so a candidate is not failed for beating a control that is ~0.
+G6V2_CONTROL_FLOOR: Final = 0.1
+#: The candidate must be its OWN LOCAL OPTIMUM: strictly better than the same data shifted 10 or 20 m east or north (either sign) or turned 3 degrees
+#: either way. This is what lets the guard see 10-20 m and 2-3 degree registration errors that the kappa LEVEL cannot (a 2 m mask of dense blocks keeps
+#: kappa 0.6-0.7 under them), and what makes a shifted or turned copy handed in AS the sheet fail.
+G6V2_TURNS_DEG: Final = (3.0, -3.0)
+G7V2_MIN_WATER_SHARE: Final = 0.01
+G7V2_MIN_R: Final = 0.2
+G7V2_RATIO: Final = 1.5
+
+
+def g6v2_ok(north: float, mirror: float, rot180: float, perturbed: Sequence[float]) -> bool:
+    """G6's rule: kappa >= 0.5; at least 2x the larger of the mirrored and 180-degree kappa (floored at 0.1); and above every shifted and turned copy."""
+    return (north >= G6V2_MIN_KAPPA and north >= G6V2_RATIO * max(mirror, rot180, G6V2_CONTROL_FLOOR)
+            and all(north > p for p in perturbed))
+
+
+def g3v2_ok(north: float, shifted: Sequence[float], mirrored: float) -> bool:
+    """G3 rule on one candidate: the buildings' overlap with water is under 1 %, or is the OPTIMUM of the candidate's own +-10/20 m shifts
+    (stale water that really lies under new land is flat there); and the candidate's own mirrored copy overlaps >= 1.5x more."""
+    return (north <= G3V2_MAX_SHARE or north < G3V2_SHIFT_MARGIN * min(shifted)) and mirrored >= G3V2_MIRROR_RATIO * max(north, 1e-6)
+
+
+def g5v2_ok(rho_pre: float, share_within: float) -> bool:
+    """G5 rule on one candidate: rank correlation of 3D BAG height with the AHN4 nDSM over buildings that stood BEFORE the AHN4 survey, and the
+    share of all compared buildings within 2 m of it."""
+    return rho_pre >= G5V2_MIN_RHO and share_within >= G5V2_MIN_SHARE
+
+
+def kappa(a: npt.NDArray[np.bool_], c: npt.NDArray[np.bool_], inside: npt.NDArray[np.bool_]) -> float:
+    """Cohen's kappa between two masks inside a region: agreement beyond what their base rates alone give (a high nodata share inflates Jaccard)."""
+    pa, pc = float(a[inside].mean()), float(c[inside].mean())
+    po = float((a == c)[inside].mean())
+    pe = pa * pc + (1 - pa) * (1 - pc)
+    return (po - pe) / (1 - pe) if pe < 1.0 else 0.0
+
+
+def g7v2_ok(north: float, mirrored: float, rot180: float) -> bool:
+    """G7 rule on one candidate: correlation of the Overture water mask with -albedo is >= 0.2 and >= 1.5x that of its mirrored and turned copies."""
+    return north >= G7V2_MIN_R and north >= G7V2_RATIO * max(mirrored, rot180)
+
+
+def _polys(rows: list[CityBuilding], fn: Xform) -> list[Polygon]:
+    return [Polygon(fn(ring_xy(r["p"]))).buffer(0) for r in rows]
+
+
+def _transformed_rows(rows: list[CityBuilding], fn: Xform) -> list[CityBuilding]:
+    return [cast(CityBuilding, {**r, "p": fn(ring_xy(r["p"])).ravel().tolist()}) for r in rows]
+
+
+def _water_polys_v2(ctx: CityContextFile, rows: list[CityBuilding]) -> list[Polygon]:
+    """Overture water polygons without the ones that ARE a building (a covered tank or a houseboat shell drawn as water: IoU > 0.8 with a footprint)."""
+    wat = water_polys(ctx, False)
+    if not wat or not rows:
+        return wat
+    foot = _polys(rows, IDENTITY)
+    tree = STRtree(foot)
+    keep: list[Polygon] = []
+    for w in wat:
+        if w.is_empty or w.area <= 0:
+            continue
+        coincident = False
+        for k in tree.query(w, predicate="intersects"):
+            inter = w.intersection(foot[int(k)]).area
+            if inter / (w.area + foot[int(k)].area - inter) > G3V2_COINCIDENT_IOU:
+                coincident = True
+                break
+        if not coincident:
+            keep.append(w)
+    return keep
+
+
+def g3_v2(area: Area, rows: list[CityBuilding], ctx: CityContextFile) -> GuardRecord:
+    """On a 1 m raster in the LOCAL frame (the controls are local transforms; a shift of 10 or 20 m is 10 or 20 whole pixels), which is also two
+    orders of magnitude cheaper than 40 polygon intersections against a city-sized water union."""
+    from rasterio.features import rasterize
+    from rasterio.transform import from_origin
+    from shapely.geometry import mapping
+    wat = _water_polys_v2(ctx, rows)
+    dropped = len(water_polys(ctx, False)) - len(wat)
+    if len(wat) < G3V2_MIN_WATER:
+        return record("G3", "buildings vs water (v2 rule)", "-", "-", "-", "pending", None, None, note=f"{len(wat)} water polygons: no evidence")
+    pad = 40
+    n = int(area.size_m) + 2 * pad
+    tf = from_origin(-area.size_m / 2.0 - pad, area.size_m / 2.0 + pad, 1.0, 1.0)
+    wmask = rasterize([(mapping(w), 1) for w in wat], out_shape=(n, n), transform=tf, fill=0, dtype="uint8").astype(bool)
+
+    def bmask(fn: Xform) -> npt.NDArray[np.bool_]:
+        return rasterize([(mapping(p), 1) for p in _polys(rows, fn) if not p.is_empty], out_shape=(n, n), transform=tf, fill=0, dtype="uint8").astype(bool)
+
+    def share(b: npt.NDArray[np.bool_]) -> float:
+        return float((b & wmask).sum() / max(1, b.sum()))
+
+    def stats(fn: Xform) -> tuple[float, float, float, bool]:
+        b = bmask(fn)
+        s0 = share(b)
+        ss = [share(np.roll(np.roll(b, int(-dy), axis=0), int(dx), axis=1)) for dx, dy in G3V2_SHIFTS_M]       # +x east = +col, +y north = -row
+        mir = share(bmask(lambda a: MIRROR(fn(a))))
+        return s0, min(ss), mir, g3v2_ok(s0, ss, mir)
+
+    n0, nmin, nmir, nok = stats(IDENTITY)
+    controls = {name: stats(fn) for name, fn in (("mirror", MIRROR), ("rot180", ROT180), ("rot3deg", ROT3))}
+    # GATING controls: mirror and rot180 (a 3-degree turn keeps most buildings off the water, so it passes the 1 % branch: recorded, not gated)
+    ok = nok and not controls["mirror"][3] and not controls["rot180"][3]
+    return record("G3", "buildings vs water (v2 rule)", "Overture water polygons without footprint-coincident ones (OSM; independent of BAG)",
+                  "share of footprint area on water at 1 m; north-up, its +-10/20 m shifts and its mirrored copy",
+                  f"north <= {G3V2_MAX_SHARE:.0%} or below 0.95x every shift, and mirrored >= {G3V2_MIRROR_RATIO}x; the mirrored and 180-degree candidates must FAIL the same rule (rot3deg is recorded)",
+                  "pass" if ok else "fail", n0, nmir, minShift=round(nmin, 4), candidatePasses=nok, waterPolygons=len(wat), footprintCoincidentDropped=dropped,
+                  controls={k: {"share": round(v[0], 4), "minShift": round(v[1], 4), "itsMirror": round(v[2], 4), "passesRule": v[3]} for k, v in controls.items()})
+
+
+def g5_v2(area: Area, rows: list[CityBuilding], years: dict[str, int | None]) -> tuple[GuardRecord, npt.NDArray[np.float64]]:
+    h = np.array([r["h"] for r in rows], dtype=np.float64)
+    yr = np.array([(years.get(r["src_id"].split("#")[0]) or 9999) for r in rows])
+    pre = yr < 2020
+
+    def stats(fn: Xform) -> tuple[float, float, int, npt.NDArray[np.float64]]:
+        n70 = ndsm_p70(area, rows if fn is IDENTITY else _transformed_rows(rows, fn), False)
+        ok = np.isfinite(n70)
+        sel = ok & pre
+        rho = float(spearman(h[sel], n70[sel])[0]) if int(sel.sum()) >= G5V2_MIN_PRE_BUILDINGS else float("nan")
+        share = float((np.abs(h - n70)[ok] < G5V2_WITHIN_M).mean()) if ok.any() else 0.0
+        return rho, share, int(sel.sum()), n70
+
+    rho, share, n_pre, n70 = stats(IDENTITY)
+    if n_pre < G5V2_MIN_PRE_BUILDINGS:
+        return (record("G5", "heights vs AHN nDSM (v2 rule)", "-", "-", "-", "pending", None, None,
+                       note=f"{n_pre} buildings from before the AHN4 survey: under {G5V2_MIN_PRE_BUILDINGS}, no evidence"), n70)
+    controls = {name: stats(fn)[:3] for name, fn in (("mirror", MIRROR), ("rot180", ROT180), ("shift10E", SHIFT10E))}
+    cok = {k: (not np.isnan(v[0]) and g5v2_ok(v[0], v[1])) for k, v in controls.items()}
+    ok = g5v2_ok(rho, share) and not any(cok.values())
+    dev = np.abs(h - n70)
+    return (record("G5", "heights vs AHN nDSM (v2 rule)",
+                   "AHN4 dsm_05m - dtm_05m (ground under buildings filled from the nearest valid DTM), p70 inside each footprint",
+                   "Spearman rho over buildings that stood before the AHN4 survey, and the share of all compared buildings within 2 m",
+                   f"rho >= {G5V2_MIN_RHO} and share within {G5V2_WITHIN_M:g} m >= {G5V2_MIN_SHARE}; mirror, rot180 and a 10 m shift must FAIL the same rule",
+                   "pass" if ok else "fail", rho, controls["mirror"][0], shareWithin2m=round(share, 3), buildingsPreAhn4=n_pre,
+                   flaggedOver=DISAGREE_M, flagged=int(np.nansum(dev > DISAGREE_M)), medianAbsDevM=round(float(np.nanmedian(dev)), 2),
+                   controls={k: {"rhoPre": None if np.isnan(v[0]) else round(v[0], 3), "shareWithin2m": round(v[1], 3), "passesRule": cok[k]}
+                             for k, v in controls.items()},
+                   note="AHN4 (2020-22) vs AHN5-dominated 3D BAG heights: buildings from 2020 on are not in the correlation (the nDSM cannot see them)"), n70)
+
+
+def g6_v2(area: Area, rows: list[CityBuilding], ctx: CityContextFile) -> GuardRecord:
+    dtm, grid = read_downsampled("dtm_05m_clip.tif", 4)             # 2 m
+    nodata = ~np.isfinite(dtm)
+    half = area.size_m / 2.0
+    inside = burn([(crs_polygons(area, [box(-half, -half, half, half)])[0], 1)], grid).astype(bool)
+    wat = [w for w in ctx["water"] if w.get("p")]
+
+    def k(fn: Xform) -> float:
+        geoms = crs_polygons(area, _polys(rows, fn) + [Polygon(fn(ring_xy(w["p"]))).buffer(0) for w in wat])
+        vec = burn([(g, 1) for g in geoms], grid).astype(bool)
+        return kappa(nodata, vec, inside)
+
+    north = k(IDENTITY)
+    mirror, rot180 = k(MIRROR), k(ROT180)
+    perturbed = {f"turn{deg:+g}deg": k(turn_xform(deg)) for deg in G6V2_TURNS_DEG}
+    perturbed |= {f"shift{dx:+g}E{dy:+g}N": k(shift_xform(dx, dy)) for dx, dy in G3V2_SHIFTS_M}
+    best = max(perturbed.values())
+    ok = g6v2_ok(north, mirror, rot180, list(perturbed.values()))
+    return record("G6", "terrain registration (v2 rule)", "the AHN DTM nodata mask (no ground points under buildings or water)",
+                  "Cohen's kappa of the DTM nodata mask vs rasterised footprints + water at 2 m, inside the square",
+                  f"kappa >= {G6V2_MIN_KAPPA}; >= {G6V2_RATIO:g}x the larger of the mirrored and 180-degree kappa (floored at {G6V2_CONTROL_FLOOR}); "
+                  "and above every copy shifted 10/20 m east or north (either sign) or turned 3 degrees either way (gated)",
+                  "pass" if ok else "fail", north, mirror, nodataShare=round(float(nodata[inside].mean()), 3),
+                  ratio=round(north / max(mirror, rot180, G6V2_CONTROL_FLOOR), 3), optimumMargin=round(north - best, 3),
+                  controls={"mirror": round(mirror, 3), "rot180": round(rot180, 3), **{k_: round(v, 3) for k_, v in perturbed.items()}})
+
+
+def g7_v2(area: Area, ctx: CityContextFile) -> GuardRecord:
+    from PIL import Image
+    path = os.path.join(public_root(), f"{area.id}-surface.png")
+    if not os.path.isfile(path):
+        raise SystemExit(f"{path} is missing: build the surface first")
+    alb = np.asarray(Image.open(path).convert("RGB"), dtype=np.float64)[:, :, 1] / 255.0 * 0.5
+    n = alb.shape[0]
+    wat = [Polygon(ring_xy(w["p"])).buffer(0) for w in ctx["water"] if w.get("p")]
+    xs = (np.arange(n) + 0.5) * area.size_m / n - area.size_m / 2.0
+    X, Y = np.meshgrid(xs, -xs)                                       # row 0 = NORTH
+    m: npt.NDArray[Any] = np.asarray(shapely.contains_xy(shapely.union_all(wat), X, Y), dtype=np.float64) if wat else np.zeros((n, n))
+    if float(m.mean()) < G7V2_MIN_WATER_SHARE:
+        return record("G7", "surface raster (v2 rule)", "-", "-", "-", "pending", None, None,
+                      note=f"water covers {m.mean():.1%} of the sheet: under {G7V2_MIN_WATER_SHARE:.0%}, nothing to correlate albedo with")
+
+    def r(mm: npt.NDArray[Any]) -> float:
+        return float(np.corrcoef(mm.ravel(), -alb.ravel())[0, 1])
+
+    def ok_of(mm: npt.NDArray[Any]) -> tuple[float, float, float, bool]:
+        a, b, c = r(mm), r(np.flipud(mm)), r(np.rot90(mm, 2))
+        return a, b, c, g7v2_ok(a, b, c)
+
+    a, b, c, nok = ok_of(m)
+    controls = {"mirror": ok_of(np.flipud(m)), "rot180": ok_of(np.rot90(m, 2))}
+    ok = nok and not any(v[3] for v in controls.values())
+    return record("G7", "surface raster (v2 rule)", "Overture water polygons (OSM; independent of Sentinel-2)",
+                  "correlation of the water mask with -albedo from the exported PNG (row 0 = north); north-up, mirrored, turned 180 degrees",
+                  f"north >= {G7V2_MIN_R} and >= {G7V2_RATIO}x both copies; the mirrored and turned candidates must FAIL the same rule",
+                  "pass" if ok else "fail", a, max(b, c), waterShare=round(float(m.mean()), 3), candidatePasses=nok,
+                  controls={k: {"r": round(v[0], 3), "itsMirror": round(v[1], 3), "itsRot180": round(v[2], 3), "passesRule": v[3]} for k, v in controls.items()})
+
+
 # ── driver ─────────────────────────────────────────────────────────────────
 
 INPUT_LAYERS: Final = ("buildings", "terrain", "context")
@@ -539,7 +820,10 @@ def input_hashes(area: Area) -> dict[str, str]:
 
 
 def frame_guard_path(area: Area) -> str:
-    return os.path.join(_city.data_dir(area.city), "frame-guard.json")
+    """Canal Ring's record stays where it is; a sheet's lives beside its own artefacts, `<id>/frame-guard.json` (PLAN 6.1)."""
+    if area.box is not None and area.id != "canal-ring":
+        return os.path.join(data_root(area), area.id, "frame-guard.json")
+    return os.path.join(data_root(area), "frame-guard.json")
 
 
 def run_committed_guards(area: Area) -> list[GuardRecord]:
@@ -668,7 +952,121 @@ def _self_test() -> None:
         assert g1_frame_parity(sheet)["status"] == "fail", "G1 must catch a frame that ignores frame_lat"
     finally:
         _city.frame_m_per_deg = real
+    _self_test_sheet_rules()
     print("check-city-frame self-test: ok")
+
+
+
+def _self_test_sheet_rules() -> None:
+    """The sheet rules (P2b audit S1) on a synthetic world, with their NEGATIVE CONTROLS: the same data mirrored, turned 180 degrees or shifted
+    is handed to the very same guard as if it were the sheet, and that guard must FAIL it."""
+    import dataclasses
+    import tempfile
+
+    import rasterio
+    from PIL import Image
+    from rasterio.transform import from_origin
+    # the pure rules
+    assert g3v2_ok(0.0, [0.4] * 8, 0.6) and g3v2_ok(0.05, [0.06, 0.07], 0.5) and not g3v2_ok(0.05, [0.04, 0.07], 0.5), "stale water: the optimum counts"
+    assert not g3v2_ok(0.05, [0.06], 0.06) and not g3v2_ok(0.5, [0.5], 0.0), "the mirrored copy must overlap clearly more"
+    assert g5v2_ok(0.9, 0.7) and not g5v2_ok(0.9, 0.46) and not g5v2_ok(0.79, 0.9)
+    assert g7v2_ok(0.5, 0.3, 0.2) and not g7v2_ok(0.5, 0.4, 0.2) and not g7v2_ok(0.15, 0.0, 0.0)
+    m = np.zeros((10, 10), dtype=bool)
+    m[:5] = True
+    ins = np.ones((10, 10), dtype=bool)
+    assert kappa(m, m, ins) == 1.0 and kappa(m, ~m, ins) == -1.0 and abs(kappa(m, np.zeros_like(m), ins)) < 1e-12, "kappa discounts the base rate"
+    # the world: a 300 m sheet at Canal Ring, 90 buildings of 8 m placed (not symmetric) in the north-east, a 'canal' in the south-west
+    base = _city.AREAS["canal-ring"]
+    area = dataclasses.replace(base, id="synthetic-guards", size_m=300)
+    rng = np.random.default_rng(11)
+    rows: list[CityBuilding] = []
+    for k in range(90):
+        cx, cy = float(rng.uniform(-40, 130)), float(rng.uniform(10, 130))
+        rows.append(cast(CityBuilding, {"src_id": f"NL.IMBAG.Pand.{k:04d}", "p": [cx - 4, cy - 4, cx + 4, cy - 4, cx + 4, cy + 4, cx - 4, cy + 4],
+                                        "lonlat": [], "h": float(rng.uniform(4, 30)), "hSource": "3dbag-p70", "quality": True, "hCheck": None, "flag": False}))
+
+    def ring(x0: float, y0: float, x1: float, y1: float) -> list[float]:
+        return [x0, y0, x1, y0, x1, y1, x0, y1]
+    water: list[dict[str, Any]] = [{"cls": "canal", "p": ring(-140, -140 + 50 * k, 60, -100 + 50 * k)} for k in range(3)]                  # three polygons, south-west
+    ctx = cast(CityContextFile, {"water": water, "green": [], "roads": [], "city": "", "area": "", "sizeM": 300.0, "release": "", "source": ""})
+    years: dict[str, int | None] = {r["src_id"]: 1990 for r in rows}
+    with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as td:
+        os.makedirs(os.path.join(td, "ahn"))
+        global DATA_DIR, PUBLIC_DIR, AHN_DIR
+        saved = (DATA_DIR, PUBLIC_DIR, AHN_DIR)
+        DATA_DIR, PUBLIC_DIR, AHN_DIR = td, td, os.path.join(td, "ahn")
+        try:
+            # the synthetic AHN4: a DTM of 0 m with NO DATA under every building and water polygon; a DSM that is the building's height there
+            minx, miny, maxx, maxy = _city.bounds_local_crs(area, 30.0)
+            tf = from_origin(float(np.floor(minx)), float(np.ceil(maxy)), 0.5, 0.5)
+            shape = (int((np.ceil(maxy) - np.floor(miny)) / 0.5), int((np.ceil(maxx) - np.floor(minx)) / 0.5))
+            grid = Grid(tf, shape)
+            h_img = np.zeros(shape, dtype=np.float32)
+            nod = np.zeros(shape, dtype=bool)
+            for r in rows:
+                g = crs_polygons(area, [Polygon(ring_xy(r["p"]))])[0]
+                m_ = burn([(g, 1)], grid).astype(bool)
+                h_img[m_] = r["h"]
+                nod |= m_
+            for w in water:
+                nod |= burn([(crs_polygons(area, [Polygon(ring_xy(w["p"]))])[0], 1)], grid).astype(bool)
+            dtm = np.where(nod, np.nan, 0.0).astype(np.float32)
+            dsm = np.where(h_img > 0, h_img, np.where(nod, np.nan, 0.0)).astype(np.float32)
+            for name, arr in (("dtm_05m_clip.tif", dtm), ("dsm_05m_clip.tif", dsm)):
+                with rasterio.open(os.path.join(td, "ahn", name), "w", driver="GTiff", height=shape[0], width=shape[1], count=1, dtype="float32",
+                                   crs="EPSG:28992", transform=tf, nodata=float("nan")) as dst:
+                    dst.write(arr, 1)
+            # the synthetic surface: albedo dark on water, light elsewhere, north-up
+            n = 150
+            xs = (np.arange(n) + 0.5) * 300.0 / n - 150.0
+            X, Y = np.meshgrid(xs, -xs)
+            wmask = shapely.contains_xy(shapely.union_all([Polygon(ring_xy(w["p"])) for w in water]), X, Y)
+            alb = np.where(wmask, 0.05, 0.25)
+            rgb = np.dstack([np.full((n, n), 80), np.round(alb / 0.5 * 255), np.zeros((n, n))]).astype(np.uint8)
+            Image.fromarray(rgb).save(os.path.join(td, "synthetic-guards-surface.png"))
+            Image.fromarray(rgb[::-1]).save(os.path.join(td, "mirrored-surface.png"))
+
+            def xf(fn: Xform) -> list[CityBuilding]:
+                return _transformed_rows(rows, fn)
+            # G3: the sheet passes; the mirrored and the turned copies, handed in AS the sheet, fail
+            assert g3_v2(area, rows, ctx)["status"] == "pass"
+            assert g3_v2(area, xf(MIRROR), ctx)["status"] != "pass", "G3 must fail a mirrored copy"
+            assert g3_v2(area, xf(ROT180), ctx)["status"] != "pass", "G3 must fail a copy turned 180 degrees"
+            # a water polygon that IS a footprint (a covered tank) is dropped, not counted as water
+            tank = {"cls": "water", "p": rows[0]["p"]}
+            assert g3_v2(area, rows, cast(CityContextFile, {**ctx, "water": [*water, tank]}))["detail"]["footprintCoincidentDropped"] == 1
+            # G5: heights vs the nDSM
+            rec5, _ = g5_v2(area, rows, years)
+            assert rec5["status"] == "pass" and rec5["detail"]["shareWithin2m"] > 0.95, rec5["detail"]
+            for name, fn in (("mirror", MIRROR), ("rot180", ROT180), ("a 10 m shift", SHIFT10E)):
+                bad, _ = g5_v2(area, xf(fn), years)
+                assert bad["status"] != "pass", f"G5 must fail {name}: {bad['status']} {bad['detail']}"
+            assert g5_v2(area, rows, {k: 2022 for k in years})[0]["status"] == "pending", "buildings from AHN4's year on are no evidence"
+            # G6: kappa of the nodata mask
+            rec6 = g6_v2(area, rows, ctx)
+            assert rec6["status"] == "pass" and rec6["north"] is not None and rec6["north"] > 0.8, rec6
+            # EVERY control copy, handed in AS the sheet, must fail the same rule: mirror, 180 degrees, +3 and -2 degrees, 10 m and 20 m east, 15 m north and 6 m
+            # south (the last three are not on the rule's own perturbation lattice, so they test the optimum, not a memorised grid)
+            for name, fn in (("mirror", MIRROR), ("rot180", ROT180), ("+3 degrees", turn_xform(3.0)), ("-2 degrees", turn_xform(-2.0)),
+                             ("10 m east", SHIFT10E), ("20 m east", SHIFT20E), ("15 m north", shift_xform(0.0, 15.0)),
+                             ("6 m south", shift_xform(0.0, -6.0))):
+                got = g6_v2(area, xf(fn), cast(CityContextFile, {**ctx, "water": [{"cls": "canal", "p": fn(ring_xy(w["p"])).ravel().tolist()} for w in water]}))
+                assert got["status"] != "pass", f"G6 must fail the {name} copy: {got['north']} {got['detail']}"
+            # the rule itself, on the numbers of the two sheets that broke the old absolute ceiling (H3 and H7), and the factor-3 counterexample
+            assert g6v2_ok(0.927, 0.323, -0.371, [0.791]), "H3 passes: its mirrored 0.323 is water symmetry, ratio 2.87"
+            assert g6v2_ok(0.833, 0.238, 0.054, [0.536]), "H7 passes: ratio 3.5"
+            assert not 0.927 >= 3.0 * 0.323, "a factor of 3 would fail H3 (0.927 < 0.969): the factor stays 2"
+            assert not g6v2_ok(0.927, 0.323, -0.371, [0.95]), "a copy that beats the candidate means the candidate is not at its optimum"
+            assert not g6v2_ok(0.49, 0.0, 0.0, []) and not g6v2_ok(0.6, 0.35, 0.0, []), "below 0.5, or under 2x the mirrored kappa: fail"
+            assert g6v2_ok(0.6, 0.0, -0.4, []) and not g6v2_ok(0.15, 0.0, 0.0, []), "the 0.1 floor: a control at ~0 is compared as 0.1"
+            # G7: the water mask against -albedo; the mirrored image handed in as the surface fails
+            assert g7_v2(area, ctx)["status"] == "pass"
+            os.replace(os.path.join(td, "synthetic-guards-surface.png"), os.path.join(td, "keep.png"))
+            os.replace(os.path.join(td, "mirrored-surface.png"), os.path.join(td, "synthetic-guards-surface.png"))
+            assert g7_v2(area, ctx)["status"] != "pass", "G7 must fail a mirrored surface"
+        finally:
+            DATA_DIR, PUBLIC_DIR, AHN_DIR = saved
+    print("  sheet rules: G3/G5/G6/G7 pass the synthetic sheet and FAIL its mirrored, turned and shifted copies (G6: eight control copies)")
 
 
 if __name__ == "__main__":

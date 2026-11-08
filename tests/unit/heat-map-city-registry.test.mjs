@@ -74,6 +74,7 @@ test('every renderable city declares a resolution the readout can print', () => 
 test('a fourth ward would be a data change: the registry is the only ward list', () => {
   // seven wards across three cities, and since Task A12 all seven are renderable
   // (Amsterdam's canal ring was registered and nameable first, drawable second).
-  assert.equal(allWards().length, 7);
-  assert.equal(RENDERABLE_WARDS.length, 7);
+  // PLUS the 31 streamed Amsterdam areas (city-streaming P2c): ward-table rows, none drawable or listed.
+  assert.equal(allWards().length, 7 + 31);
+  assert.equal(RENDERABLE_WARDS.length, 7 + 31);
 });

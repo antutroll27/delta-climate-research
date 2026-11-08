@@ -10,6 +10,7 @@ import { rasterizeWardBuilt } from '../../src/scripts/climate-engine/ward-raster
 import { requireGrid } from '../../src/scripts/climate-engine/types.ts';
 import { SHEETS, neighbours, sheetFrameOrigin } from '../../src/scripts/climate-engine/scope/sheets.ts';
 import { AMSTERDAM_SHEET_LATTICE } from '../../src/data/sheets/amsterdam.ts';
+import { AMSTERDAM_AREA_WARDS } from '../../src/data/sheets/amsterdam-areas.ts';
 
 /* frame_lat DEFAULTS TO THE AREA'S OWN LATITUDE, so every ward that existed before it keeps its frame to the last bit.
    `tests/fixtures/frame-lat/ts.json` was written by this very file (WRITE_FRAME_GOLDEN=1) from the code as it stood BEFORE
@@ -20,9 +21,13 @@ import { AMSTERDAM_SHEET_LATTICE } from '../../src/data/sheets/amsterdam.ts';
 const GOLDEN = 'tests/fixtures/frame-lat/ts.json';
 const XY = [-1400, -700, -1, 0, 0.5, 333.3, 700, 1400];
 
+/* The 31 streamed Amsterdam areas (P2c) are renderable too, but they were never "existing": their files are not committed (founder D7) and
+   their frames are pinned by tests/unit/amsterdam-area-records.test.mjs and G9c below. The golden is of the wards that existed before frameLat. */
+const STREAMED = new Set(AMSTERDAM_AREA_WARDS.map((w) => w.id));
+
 function compute() {
   const out = {};
-  for (const w of RENDERABLE_WARDS) {
+  for (const w of RENDERABLE_WARDS.filter((x) => !STREAMED.has(x.id))) {
     const f = wardMercatorScale(w.lat);
     const local = [];
     for (const x of XY) for (const y of XY) local.push(wardLatLon(w, x, y));

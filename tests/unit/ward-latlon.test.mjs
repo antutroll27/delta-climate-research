@@ -97,8 +97,13 @@ test('deriving the ward coordinate labels reproduces the shipped strings (six, p
     'canal-ring': '52.364° N · 4.885° E',
   };
   const wards = allWards();
-  assert.equal(wards.length, 7, 'every registry ward must be covered, published or not');
+  assert.equal(wards.length, 7 + 31, 'every registry ward must be covered, published or not');
   for (const w of wards) {
+    if (shipped[w.id] === undefined) {
+      /* the 31 streamed areas (P2c) have no shipped string; theirs must still be a plausible Amsterdam coordinate at the same three decimals */
+      assert.match(formatLatLon(w.lat, w.lon, ' · ', 3), /^52\.\d{3}° N · [45]\.\d{3}° E$/, w.id);
+      continue;
+    }
     assert.equal(formatLatLon(w.lat, w.lon, ' · ', 3), shipped[w.id],
       `${w.id}: the header coordinate moved when the stored copy went`);
   }

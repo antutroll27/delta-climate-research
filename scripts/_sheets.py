@@ -48,8 +48,10 @@ pyproj operation as ingest, G9a). Two numbers per sheet:
     municipalBuildings  those whose centroid is ALSO inside the municipality (the union of the nine current
                         stadsdelen): the number the ship rule reads
 
-SHIP RULE (founder D1: every sheet that passes, not a fixed number): at least 500 MUNICIPAL buildings AND at
-least 10 % of the sheet's area inside the municipality. CORE = at least 2,000 municipal buildings, else EDGE.
+SHIP RULE (founder D1: every sheet that passes, not a fixed number): at least 500 MUNICIPAL buildings. CORE = at
+least 2,000 municipal buildings, else EDGE. (Phase P2b dropped the earlier extra condition "and at least 10 % of the
+sheet's area inside the municipality": it wrongly dropped B5, 1,279 municipal buildings on 4.2 % of its area, a
+sheet holding more buildings than five shipping edge sheets. `municipalShare` is still recorded, as information.)
 The decisions are taken on the numbers the table records, so `--check` re-derives them without any raw data.
 
 STADSDEEL. The name beside the code is the stadsdeel holding the largest share of the sheet's
@@ -84,7 +86,7 @@ import _city  # noqa: E402
 import _src_3dbag as bag  # noqa: E402
 
 Kind = Literal["core", "edge"]
-SkipReason = Literal["under-500-buildings", "under-10-percent-municipal"]
+SkipReason = Literal["under-500-buildings"]
 #: "F4". A NewType, not an alias: a bare string is also an id and a stadsdeel.
 SheetCode = NewType("SheetCode", str)
 #: "ams-f4", or "canal-ring" for E4.
@@ -124,7 +126,6 @@ ANCHOR_ID: Final = SheetId("canal-ring")
 ANCHOR_NAME: Final = "Canal Ring"
 
 SHIP_MIN_BUILDINGS: Final = 500
-SHIP_MIN_SHARE: Final = 0.10
 CORE_MIN_BUILDINGS: Final = 2000
 
 JSON_REL: Final = os.path.join("data", "cities", CITY, "sheets.json")
@@ -234,13 +235,9 @@ def kind_of(buildings: int) -> Kind:
     return "core" if buildings >= CORE_MIN_BUILDINGS else "edge"
 
 
-def skip_reason(buildings: int, share: float) -> SkipReason | None:
-    """None when the sheet ships; else the first rule it fails."""
-    if buildings < SHIP_MIN_BUILDINGS:
-        return "under-500-buildings"
-    if share < SHIP_MIN_SHARE:
-        return "under-10-percent-municipal"
-    return None
+def skip_reason(municipal_buildings: int) -> SkipReason | None:
+    """None when the sheet ships; else the rule it fails."""
+    return "under-500-buildings" if municipal_buildings < SHIP_MIN_BUILDINGS else None
 
 
 # ── the table (typed at the JSON boundary) ─────────────────────────────────
@@ -264,6 +261,9 @@ class SheetRow(TypedDict):
     wgs84Bounds: list[float]
     rdQuad: list[float]
     centre: Centre
+    #: The standard parallel of this sheet's frame: E4's latitude for EVERY sheet (S5: stated on the record, so a
+    #: consumer never falls back to the sheet's own latitude, which puts a seam up to 4.8 m off).
+    frameLat: float
 
 
 class SkippedRow(TypedDict):
@@ -378,7 +378,7 @@ def build_table(cands: list[Candidate]) -> SheetTable:
     skipped: list[SkippedRow] = []
     for c in cands:
         code = code_of(c.i, c.j)
-        reason = skip_reason(c.municipal, c.share)
+        reason = skip_reason(c.municipal)
         if reason is not None:
             skipped.append(SkippedRow(code=code, i=c.i, j=c.j, buildings=c.buildings, municipalBuildings=c.municipal,
                                       municipalShare=c.share, reason=reason))
@@ -388,18 +388,18 @@ def build_table(cands: list[Candidate]) -> SheetTable:
             id=id_of(code), code=code, i=c.i, j=c.j, kind=kind_of(c.municipal),
             buildings=c.buildings, municipalBuildings=c.municipal, municipalShare=c.share, stadsdeel=c.stadsdeel,
             label=label_of(code, c.stadsdeel), wgs84Bounds=list(geo_bounds(c.i, c.j)),
-            rdQuad=rd_quad(c.i, c.j), centre=Centre(lat=lat, lon=lon)))
+            rdQuad=rd_quad(c.i, c.j), centre=Centre(lat=lat, lon=lon), frameLat=FRAME_LAT))
     core = sum(1 for s in sheets if s["kind"] == "core")
     return SheetTable(
         city=CITY,
         lattice=lattice_dict(),
-        shipRule={"minBuildings": SHIP_MIN_BUILDINGS, "minMunicipalShare": SHIP_MIN_SHARE,
-                  "coreMinBuildings": CORE_MIN_BUILDINGS},
+        shipRule={"minBuildings": SHIP_MIN_BUILDINGS, "coreMinBuildings": CORE_MIN_BUILDINGS},
         method=("buildings = EXACT count of unique 3D BAG " + RELEASE + " buildings whose footprint centroid (RD, "
                 "projected to WGS84 as ingest does) lies in the sheet's half-open lon/lat box; municipalBuildings = "
                 "those also inside the union of the nine current stadsdelen, the number the ship rule reads. "
                 "municipalShare = share of "
                 "the sheet inside that union. stadsdeel = largest share of the sheet. "
+                "frameLat = the standard parallel of every sheet's frame (E4's latitude); "
                 "wgs84Bounds = the sheet's own lon/lat box (Canal Ring's, repeated); rdQuad = its four corners in "
                 "RD New, informational."),
         sources=["3D BAG " + RELEASE + " BAG3D:tiles (CC BY 4.0, 3DBAG by tudelft3d and 3DGI)",
@@ -457,7 +457,7 @@ def render_ts(t: SheetTable) -> str:
             f"  {{ id: {_q(s['id'])}, code: {_q(s['code'])}, i: {s['i']}, j: {s['j']}, kind: {_q(s['kind'])}, "
             f"buildings: {s['buildings']}, municipalBuildings: {s['municipalBuildings']}, municipalShare: {s['municipalShare']}, "
             f"stadsdeel: {_q(s['stadsdeel'])}, label: {_q(s['label'])}, wgs84Bounds: {_row(s['wgs84Bounds'])}, "
-            f"rdQuad: {_row(s['rdQuad'])}, centre: {{ lat: {s['centre']['lat']}, lon: {s['centre']['lon']} }} }},")
+            f"rdQuad: {_row(s['rdQuad'])}, centre: {{ lat: {s['centre']['lat']}, lon: {s['centre']['lon']} }}, frameLat: {s['frameLat']!r} }},")
     out += ["] as const;", "",
             "/** The ids alone (E4 included), so the registry's invariant check can read membership without the table's weight. */",
             "export const AMSTERDAM_SHEET_IDS = [" + ", ".join(_q(s["id"]) for s in t["sheets"]) + "] as const;", "",
@@ -471,14 +471,14 @@ def render_ts(t: SheetTable) -> str:
         "/* The registry's area entries for every sheet EXCEPT E4, which is `canal-ring` and is written by hand in",
         "   registry.ts so that its live behaviour cannot change. `drawable: false` keeps all of these off every",
         "   route, sitemap and switcher; `sheet: true` keeps them out of the per-city area lists. Names and",
-        "   descriptors are owned here, as Dubai's are owned by the registry: sheets are not in the ward table. */",
+        "   descriptors are NOT here: since city-streaming P2c every sheet has a row in the ward table",
+        "   (src/data/sheets/amsterdam-areas.ts, spread into cities.ts), and resolve() refuses an area that names itself in both places. */",
         "export const AMSTERDAM_SHEET_AREAS = {",
     ]
     for s in t["sheets"]:
         if s["id"] == ANCHOR_ID:
             continue
-        out.append(f"  {_q(s['id'])}: {{ shipsData: false, drawable: false, sheet: true, name: {_q(s['label'])}, "
-                   f"descriptor: {_q('sheet · ' + s['kind'] + ' · our tiling')} }},")
+        out.append(f"  {_q(s['id'])}: {{ shipsData: false, drawable: false, sheet: true }},")
     out += ["} as const;", ""]
     return "\n".join(out)
 
@@ -540,13 +540,14 @@ def check_table(t: SheetTable, root: str = _city.ROOT) -> list[str]:
         need(len(s["rdQuad"]) == 8 and all(abs(a - b) <= 0.2 for a, b in zip(s["rdQuad"], rd_quad(s["i"], s["j"]), strict=True)),
              f"{tag}: rdQuad is not the projected box (0.2 m)")
         need((s["centre"]["lat"], s["centre"]["lon"]) == centre_lat_lon(s["i"], s["j"]), f"{tag}: centre is not the sheet centre")
-        need(skip_reason(s["municipalBuildings"], s["municipalShare"]) is None, f"{tag}: ships but fails the ship rule")
+        need(s.get("frameLat") == FRAME_LAT, f"{tag}: frameLat {s.get('frameLat')!r} is not the lattice's standard parallel {FRAME_LAT!r} (S5: no silent default)")
+        need(skip_reason(s["municipalBuildings"]) is None, f"{tag}: ships but fails the ship rule")
         need(s["kind"] == kind_of(s["municipalBuildings"]), f"{tag}: kind {s['kind']!r} disagrees with the core rule")
         need(0 <= s["municipalBuildings"] <= s["buildings"], f"{tag}: municipal buildings exceed the buildings in the box")
         need(s["label"] == label_of(SheetCode(s["code"]), s["stadsdeel"]), f"{tag}: label is not code + stadsdeel")
     for k in skipped:
         need(ij_of(k["code"]) == (k["i"], k["j"]), f"{k['code']}: skipped code and (i, j) disagree")
-        need(skip_reason(k["municipalBuildings"], k["municipalShare"]) == k["reason"], f"{k['code']}: skip reason is not the rule's")
+        need(skip_reason(k["municipalBuildings"]) == k["reason"], f"{k['code']}: skip reason is not the rule's")
         need(0 <= k["municipalBuildings"] <= k["buildings"], f"{k['code']}: municipal buildings exceed the buildings in the box")
     core = sum(1 for s in sheets if s["kind"] == "core")
     need(t["totals"] == Totals(
@@ -581,7 +582,7 @@ def sheet_area(i: int, j: int) -> _city.Area:
     lat, lon = centre_lat_lon(i, j)
     return _city.Area(id_of(code), CITY, ANCHOR_NAME if code == ANCHOR_CODE else code, _city.LatLon(lat, lon), SIZE_M,
                       _ANCHOR_AREA.local_crs, _ANCHOR_AREA.koppen, _ANCHOR_AREA.min_sun_elevation_deg,
-                      frame_lat=_city.Degrees(FRAME_LAT))
+                      frame_lat=_city.Degrees(FRAME_LAT), box=geo_bounds(i, j))
 
 
 class FrameReport(NamedTuple):
@@ -691,8 +692,9 @@ def check_frames(t: SheetTable, factory: FrameFactory = sheet_area) -> tuple[lis
     bad_d, n_cells, worst_deg = check_halo_cells([*pairs, *[(b, a) for a, b in pairs]], factory)
     bad = [*bad_c, *bad_d]
     e4 = factory(0, 0)
-    if _city.frame_m_per_deg(e4) != _city.frame_m_per_deg(_ANCHOR_AREA) or _city.bounds(e4) != _city.bounds(_ANCHOR_AREA):
-        bad.append("G9c E4's frame is not Canal Ring's own (m/deg or bounds differ)")
+    if (_city.frame_m_per_deg(e4) != _city.frame_m_per_deg(_ANCHOR_AREA) or _city.bounds(e4) != _city.bounds(_ANCHOR_AREA)
+            or e4.centre != _ANCHOR_AREA.centre):
+        bad.append("G9c E4's frame is not Canal Ring's own (m/deg, centre or bounds differ)")
     return bad, FrameReport(len(pairs), points, worst_m, n_cells, worst_deg)
 
 
@@ -1020,8 +1022,7 @@ def _self_test() -> None:
     assert cell_of_point(lon_edge(0) + 1e-9, lat_edge(1)) == (0, 1) and cell_of_point(lon_edge(0) + 1e-9, lat_edge(0)) == (0, 0)
     assert cell_of_point(lon, lat) == (0, 0) and cell_of_point(*reversed(centre_lat_lon(-4, 3))) == (-4, 3)
     # the rule
-    assert skip_reason(499, 1.0) == "under-500-buildings" and skip_reason(500, 0.099) == "under-10-percent-municipal"
-    assert skip_reason(500, 0.1) is None and kind_of(1999) == "edge" and kind_of(2000) == "core"
+    assert skip_reason(499) == "under-500-buildings" and skip_reason(500) is None and kind_of(1999) == "edge" and kind_of(2000) == "core"
     # exact counts: the vectorised cell lookup equals the scalar one bit for bit, edges and corners included
     rng = np.random.default_rng(7)
     gl, gt = np.meshgrid(np.array([lon_edge(k) for k in range(-4, 7)]), np.array([lat_edge(k) for k in range(-3, 5)]))
