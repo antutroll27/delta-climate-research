@@ -15,9 +15,12 @@ import { requireGrid } from '../../src/scripts/climate-engine/types.ts';
 const KEY = 'nl/amsterdam/canal-ring';
 const city = REGISTRY.nl.cities.amsterdam;
 
-test('Amsterdam is one ward on the admitted 2,800 m / 384-cell pair', () => {
+test('Amsterdam is Canal Ring first, then the 31 streamed areas, every one on the admitted 2,800 m / 384-cell pair', () => {
   const wards = wardsOfCity('amsterdam');
-  assert.equal(wards.length, 1);
+  /* city-streaming P2c: the other 31 areas are ward-table rows too (src/data/sheets/amsterdam-areas.ts, generated). Canal Ring stays first because
+     `wards[0]` sets the city's declared resolution and is the showcase. */
+  assert.equal(wards.length, 32);
+  assert.ok(wards.every((x) => x.footprintM === 2800), 'every area is the 2,800 m square');
   const w = wards[0];
   assert.equal(w.id, 'canal-ring');
   assert.equal(w.footprintM, 2800);

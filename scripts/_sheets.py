@@ -471,14 +471,14 @@ def render_ts(t: SheetTable) -> str:
         "/* The registry's area entries for every sheet EXCEPT E4, which is `canal-ring` and is written by hand in",
         "   registry.ts so that its live behaviour cannot change. `drawable: false` keeps all of these off every",
         "   route, sitemap and switcher; `sheet: true` keeps them out of the per-city area lists. Names and",
-        "   descriptors are owned here, as Dubai's are owned by the registry: sheets are not in the ward table. */",
+        "   descriptors are NOT here: since city-streaming P2c every sheet has a row in the ward table",
+        "   (src/data/sheets/amsterdam-areas.ts, spread into cities.ts), and resolve() refuses an area that names itself in both places. */",
         "export const AMSTERDAM_SHEET_AREAS = {",
     ]
     for s in t["sheets"]:
         if s["id"] == ANCHOR_ID:
             continue
-        out.append(f"  {_q(s['id'])}: {{ shipsData: false, drawable: false, sheet: true, name: {_q(s['label'])}, "
-                   f"descriptor: {_q('sheet · ' + s['kind'] + ' · our tiling')} }},")
+        out.append(f"  {_q(s['id'])}: {{ shipsData: false, drawable: false, sheet: true }},")
     out += ["} as const;", ""]
     return "\n".join(out)
 

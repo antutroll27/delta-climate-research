@@ -198,7 +198,9 @@ test('NO SHEET IS DRAWABLE, PUBLIC, PUBLISHED OR ROUTED (only Canal Ring is, as 
     assert.equal(scope.area.publishes, false, key);
     assert.equal(scope.tier, 'geometry', `${key}: D10, geometry tier and noindex`);
     assert.ok(!WARDS.some((w) => w.id === area), `${key} is in the published ward table`);
-    assert.ok(!wardsOfCity('amsterdam').some((w) => w.id === area), `${key} is in the renderable ward table`);
+    /* P2c: every streamed area is a row in the RENDERABLE ward table (so the page can load it without a stand-in), never in the PUBLISHED one */
+    assert.ok(wardsOfCity('amsterdam').some((w) => w.id === area), `${key} has no renderable ward-table row`);
+    assert.ok(RENDERABLE_WARDS.some((w) => w.id === area), `${key} is not in RENDERABLE_WARDS`);
   }
   assert.equal(REGISTRY.nl.cities.amsterdam.areas['canal-ring'].sheet, undefined, 'E4 is not flagged: it is written by hand');
   assert.deepEqual(REGISTRY.nl.cities.amsterdam.areas['canal-ring'], { shipsData: false, drawable: true });
@@ -208,13 +210,17 @@ test('NO SHEET IS DRAWABLE, PUBLIC, PUBLISHED OR ROUTED (only Canal Ring is, as 
   assertRegistryLogic();
 });
 
-test('every sheet is named by the lattice code and, because the stadsdeel boundary is CC0, the district', () => {
+test('every streamed area is named by its wijk (CC0 area-names.json) in the ward table, and carries the code and the district as its descriptor', () => {
+  const names = JSON.parse(readFileSync(new URL('data/cities/amsterdam/area-names.json', ROOT), 'utf8'));
+  const seen = new Set();
   for (const key of sheetAreaKeys) {
     const s = sheetOf(key);
     const scope = resolve(key);
-    assert.equal(scope.area.name, `${s.code} · ${s.stadsdeel}`);
-    assert.equal(scope.area.name, s.label);
-    assert.match(scope.area.descriptor, /^sheet · (core|edge) · our tiling$/);
+    assert.equal(scope.area.name, names.areas[s.code].name, `${s.code}: the name is area-names.json's`);
+    assert.equal(scope.area.descriptor, `${s.stadsdeel} \u00b7 area ${s.code}`);
+    assert.ok(!seen.has(scope.area.name), `${scope.area.name} names two areas`);
+    seen.add(scope.area.name);
+    assert.ok(!('name' in REGISTRY.nl.cities.amsterdam.areas[s.id]), `${s.id}: the registry must not name an area that is in the ward table`);
   }
   assert.deepEqual([...new Set(SHEETS.map((s) => s.stadsdeel))].sort(),
     ['Centrum', 'Nieuw-West', 'Noord', 'Oost', 'West', 'Weesp', 'Westpoort', 'Zuid', 'Zuidoost'].sort());

@@ -17,6 +17,7 @@
  * whose artefacts are absent — see the filter and the reasoning in wards.ts.
  */
 import { requireGrid } from '../scripts/climate-engine/types.ts';
+import { AMSTERDAM_AREA_WARDS } from './sheets/amsterdam-areas.ts';
 
 export interface WardRecord {
   readonly id: string;
@@ -153,6 +154,11 @@ const AMSTERDAM_WARDS: readonly WardRecord[] = [
     body: 'Gemeente Amsterdam (stadsdelen Centrum, Zuid, West)',
     lat: 52.3640, lon: 4.8850, veg: 0.350, footprintM: 2800,
     swatch: 'radial-gradient(circle at 40% 40%,#6fcad6,#9fb98a 58%,#093a3e)' },
+  /* THE OTHER 31 STREAMED AREAS (city-streaming P2c): ward-table rows generated from the sheet pipeline's outputs by
+     scripts/build-area-records.py (data/cities/amsterdam/area-records.json), every one `frameLat` = this lattice's standard
+     parallel. They are `sheet: true, drawable: false` in the scope registry and TILED_CITY_READY is false, so none is routed,
+     listed or published; Canal Ring (E4) stays exactly as written above and stays first (`wards[0]` is the city's resolution). */
+  ...AMSTERDAM_AREA_WARDS,
 ];
 
 /**
