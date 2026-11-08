@@ -107,10 +107,14 @@ test('parseMeasurements: the four LKI substances, negatives kept, rows that cont
   assert.equal(one({ ...row, formula: 'CO' }).length, 0);
 });
 
-test('the ladder is derived by rule from the recorded station details, and equals the baked one', () => {
+/** Breukelen-A2 measures all four substances but is a motorway-side traffic station: dropped by decision (2026-11-09), not by the rule. */
+const DROPPED = ['NL10641'];
+
+test('the Canal Ring ladder is derived by rule from the recorded stations, and equals the baked one', () => {
+  /* Both recordings agree: the 11-06 national list (103 stations) and the 11-09 survey (30 within 30 km of 52.37, 4.90). */
   const eligible = Object.entries(DETAILS)
     .map(([id, d]) => ({ id, name: d.location, comps: d.components, lon: d.geometry.coordinates[0], lat: d.geometry.coordinates[1], owner: d.organisation }))
-    .filter((s) => measuresLkiBasis(s.comps))
+    .filter((s) => measuresLkiBasis(s.comps) && !DROPPED.includes(s.id))
     .map((s) => ({ ...s, d: distanceM(CANAL_RING.lat, CANAL_RING.lon, s.lat, s.lon) }))
     .filter((s) => s.d <= MAX_NL_SERVE_M).sort((a, b) => a.d - b.d);
   assert.deepEqual(nlLadder().map((x) => x.station.id), eligible.map((s) => s.id));
@@ -119,7 +123,8 @@ test('the ladder is derived by rule from the recorded station details, and equal
     assert.deepEqual([ref.lat, ref.lon, ref.owner], [s.lat, s.lon, s.owner], s.id);
     assert.equal(ref.name, s.name.trim());
   }
-  assert.deepEqual(nlLadder().map((x) => [x.station.id, x.station.distance_m]), [['NL49014', 1362], ['NL49012', 2895], ['NL49003', 4885], ['NL10552', 15849], ['NL10641', 19363]]);
+  /* Breukelen-A2 (19,363 m, traffic beside the A2) is no longer a rung; Almere and De Zilk are beyond 20 km of Canal Ring. */
+  assert.deepEqual(nlLadder().map((x) => [x.station.id, x.station.distance_m]), [['NL49014', 1362], ['NL49012', 2895], ['NL49003', 4885], ['NL10552', 15849]]);
   assert.deepEqual([...LKI_COMPONENTS].sort(), ['NO2', 'O3', 'PM10', 'PM25']);
 });
 

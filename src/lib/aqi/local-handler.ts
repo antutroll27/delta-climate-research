@@ -1,13 +1,14 @@
 /**
- * GET /api/air-quality?area=nl/amsterdam/canal-ring (or jp/tokyo/marunouchi): the air card of a city whose standard
- * is its own regulator's. Called from api/air-quality.ts after the area has been recognised; the CPCB path never
+ * GET /api/air-quality?area=nl/amsterdam/canal-ring (or another of Amsterdam's 31 streamed areas, nl/amsterdam/ams-f4 …, or
+ * jp/tokyo/marunouchi): the air card of a city whose standard is its own regulator's. Called from api/air-quality.ts after the area has been recognised; the CPCB path never
  * reaches this file and this file never reaches it.
  *
  * SERVER-SIDE ONLY, NO KEYS. Both sources are keyless; nothing here reads an environment variable. The browser
  * gets the payload and never contacts either government server.
  *
- * NOT READY, NOT SERVED. An area answers only while its city is drawable (local-areas.ts `localAirReady`); before
- * that it is a 404 like any unknown area, so no figure leaves the server for a card that is not on a page.
+ * NOT READY, NOT SERVED. An area answers only while its city is drawable, or it is one of Amsterdam's streamed sheets
+ * (local-areas.ts `localAirReady`); before that it is a 404 like any unknown area, so no figure leaves the server for a card that is
+ * not on a page. Every Amsterdam area is read from its OWN centre (nl-stations.ts `amsterdamCentre`).
  *
  * CACHING. A LIVE answer is held in-process for CACHE_TTL_MS and shared by concurrent requests; a not-reporting
  * answer is held for BACKOFF_MS only (a back-off, not a figure), and the CDN is told `no-store` for it. The CDN may hold a live
@@ -18,6 +19,7 @@ import { judge, secondsLeft } from './local-judge.ts';
 import { readAmsterdam } from './luchtmeetnet.ts';
 import { localAirArea, localAirReady, type DrawableFn } from './local-areas.ts';
 import type { LocalAirPayload } from './local-types.ts';
+import { amsterdamCentre } from './nl-stations.ts';
 import { readTokyo } from './soramame.ts';
 import type { Fetch } from './http.ts';
 
@@ -60,7 +62,11 @@ async function read(area: string, now: Date, d: LocalDeps): Promise<LocalAirPayl
   const cfg = localAirArea(area)!;
   const signal = AbortSignal.timeout(d.budgetMs ?? BUDGET_MS);
   const deps = { fetch: d.fetch ?? realFetch, now, signal };
-  return cfg.standard === 'nl-lki' ? readAmsterdam(area, deps) : readTokyo(area, deps);
+  if (cfg.standard !== 'nl-lki') return readTokyo(area, deps);
+  /* Every Amsterdam area is measured from ITS OWN centre (the sheet record's). A registered area with no centre is a table fault, never a quiet fall back to Canal Ring's. */
+  const from = amsterdamCentre(area.split('/')[2] ?? '');
+  if (from === null) throw new RangeError(`air-quality: ${area} has no centre in the sheet table`);
+  return readAmsterdam(area, { ...deps, from });
 }
 
 /** Cached live answer, a shared in-flight read, or a new read. Only a live answer enters the cache. */
@@ -69,7 +75,11 @@ function payloadFor(area: string, now: Date, d: LocalDeps): Promise<LocalAirPayl
   const hit = c.entries.get(area);
   /* A cached hour is re-judged on THIS request's clock: one that has since passed its window is not handed back (the CPCB path
      rebuilds every hit against its own `now` for the same reason). It is dropped and the source asked again. */
-  if (hit && now.getTime() - hit.at < (hit.payload.state === 'live' ? CACHE_TTL_MS : BACKOFF_MS) && judge(hit.payload, now).state === hit.payload.state) return Promise.resolve(hit.payload);
+  if (hit && now.getTime() - hit.at < (hit.payload.state === 'live' ? CACHE_TTL_MS : BACKOFF_MS)) {
+    /* `judge` also drops a modelled line whose hour is over, so the cached payload is handed back as judged (the same object when nothing changed). */
+    const judged = judge(hit.payload, now);
+    if (judged.state === hit.payload.state) return Promise.resolve(judged);
+  }
   let p = c.inflight.get(area);
   if (!p) {
     p = read(area, now, d)

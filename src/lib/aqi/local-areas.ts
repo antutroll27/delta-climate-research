@@ -9,6 +9,7 @@
  * the page cannot keep. `localAirReady` is that one gate, used by the UI (`isAirCity`) and by the API
  * (an area that is not ready answers 404 like an unknown one). This file does not set `drawable`.
  */
+import { AMSTERDAM_SHEET_IDS } from '../../data/sheets/amsterdam.ts';
 import { isDrawable } from '../../scripts/climate-engine/scope/registry.ts';
 import type { LocalStandard } from './local-types.ts';
 
@@ -18,11 +19,23 @@ export interface LocalAirArea {
   country: 'nl' | 'jp';
   /** The IANA zone the card's times are told in (also the registry's `tz` for the city). */
   tz: string;
+  /**
+   * True for Amsterdam's other 31 streamed areas (src/data/sheets/amsterdam.ts). They are registered non-drawable (no page of their own until
+   * TILED_CITY_READY), yet the whole-city stream opens each of them on the Canal Ring page, and the card follows the open one; so their
+   * readiness is not `drawable` but their being a sheet of the table. They are never offered by a production page: nothing there opens one.
+   */
+  streamed?: true;
 }
+
+/** Amsterdam's streamed areas other than Canal Ring (which keeps its own, drawable-gated entry): `nl/amsterdam/ams-f4`, … Derived from the sheet table's ids, never listed by hand. */
+const AMSTERDAM_STREAMED: Readonly<Record<string, LocalAirArea>> = Object.fromEntries(
+  AMSTERDAM_SHEET_IDS.filter((id) => id !== 'canal-ring').map((id) => [`nl/amsterdam/${id}`, { standard: 'nl-lki', country: 'nl', tz: 'Europe/Amsterdam', streamed: true } satisfies LocalAirArea]),
+);
 
 /** Keys are `country/city/area`, exactly the registry's. Tokyo's key is the plan's (B6); the Tokyo registry entry arrives with that task. */
 export const LOCAL_AIR_AREAS: Readonly<Record<string, LocalAirArea>> = {
   'nl/amsterdam/canal-ring': { standard: 'nl-lki', country: 'nl', tz: 'Europe/Amsterdam' },
+  ...AMSTERDAM_STREAMED,
   'jp/tokyo/marunouchi': { standard: 'jp-eqs', country: 'jp', tz: 'Asia/Tokyo' },
 };
 
@@ -47,9 +60,10 @@ export function localAirArea(key: string): LocalAirArea | null {
 
 export type DrawableFn = (country: string, city: string, area: string) => boolean;
 
-/** True when the area has a local-regulator Air card AND its city can be opened. The one gate. */
+/** True when the area has a local-regulator Air card AND it can be opened: its city is drawable, or it is a streamed sheet (see `streamed`). The one gate. */
 export function localAirReady(key: string, drawable: DrawableFn = isDrawable): boolean {
   if (!isLocalAirArea(key)) return false;
+  if (LOCAL_AIR_AREAS[key]!.streamed === true) return true;
   const [country, city, area] = key.split('/');
   return country !== undefined && city !== undefined && area !== undefined && drawable(country, city, area);
 }
