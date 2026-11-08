@@ -571,7 +571,14 @@ def seam_continuity(data: str, public: str, sheets: list[_sheets.SheetRow]) -> l
 def aggregate(table: _sheets.SheetTable, data: str) -> dict[str, object]:
     """One small committed record of what the batch built: per sheet the counts, output sizes, wall time and guard statuses."""
     rows: list[dict[str, object]] = []
+    anchor_row: dict[str, object] | None = None
     for s in table["sheets"]:
+        if s["id"] == _sheets.ANCHOR_ID:
+            # E4 is not built by the batch; the picker needs its DRAWN count, which is its shipped file's `count` (P2c)
+            with open(os.path.join(_city.PUBLIC, "canal-ring.json"), encoding="utf-8") as fh:
+                anchor_row = {"code": s["code"], "id": s["id"], "kind": s["kind"], "buildings": int(json.load(fh)["count"]), "anchor": True,
+                              "source": "public/heat-map/data/canal-ring.json `count` (the shipped file; not built by the batch)"}
+            continue
         rec = _read_build(data, s["id"])
         if rec is None:
             continue
@@ -581,7 +588,8 @@ def aggregate(table: _sheets.SheetTable, data: str) -> dict[str, object]:
     return {"city": _sheets.CITY, "frameLat": _sheets.FRAME_LAT, "built": len(rows), "of": len(table["sheets"]) - 1,
             "note": "E4 (Canal Ring) is never built into the repo's data dir: see build-city-sheets.py --e4-identity / --e4-new",
             "totals": {"wallSeconds": round(sum(float(cast(float, r["wallSeconds"])) for r in rows), 1),
-                       "outputBytes": sum(int(cast(int, r["outputBytes"])) for r in rows)}, "sheets": rows}
+                       "outputBytes": sum(int(cast(int, r["outputBytes"])) for r in rows)},
+            "sheets": rows if anchor_row is None else [*rows, anchor_row]}
 
 
 def cross_checks(table: _sheets.SheetTable) -> int:
