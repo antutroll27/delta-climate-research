@@ -20,8 +20,9 @@ import { mkdirSync, readFileSync } from 'node:fs';
  * drawn over an area that is already on screen (INT audit F1/F9), and the test fails if it ever happens, resident arrival or not.
  *
  * THE DATA. Every area but Canal Ring is read from Cloudflare R2, through the Worker in front of the bucket (public/heat-map/data/ams-r2-manifest.json, streaming/data-source.ts); the test
- * proxies those requests through Playwright (real network, real bytes) to hold the detail files and to add `Access-Control-Allow-Origin`, because
- * the bucket's CORS list names the dev ports 4321/4322 and this run may be on another. It asserts no area but Canal Ring came from the page's origin.
+ * proxies those requests through Playwright (real network, real bytes) to hold the detail files and answers them with `Access-Control-Allow-Origin: *`, so this run exercises the
+ * bytes and the page's handling of them, NOT the Worker's CORS policy (which admits production, the Vercel previews of this team and the local dev ports 4321/4322, and may not
+ * admit the port of this run). That policy is checked against the live Worker by `node scripts/check-city-worker-cors.mjs`. It asserts no area but Canal Ring came from the page's origin.
  */
 const BASE = process.env.OBOS_STREAM_URL;
 const SHOTS = process.env.OBOS_STREAM_SHOTS ?? '/Volumes/PortableSSD/OBOS Lab/previews/city-streaming/int';

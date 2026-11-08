@@ -336,7 +336,9 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
 
   // ── the ports ───────────────────────────────────────────────────────────────
 
-  /** Build the open sheet's mesh again in the worker at `tier` and show it through the page's own commit. */
+  /** Build the open sheet's mesh again in the worker at `tier` and show it through the page's own commit. 
+   *  KNOWN LIMITATION (INT re-audit R6, accepted): two rebuilds in flight (two demotions in quick succession) can commit out of order, leaving the higher tier on
+   *  screen while the manager records the lower one. Demotions are spaced, so it is rare; the fix, when wanted, is to drop a result whose tier is no longer `hooks.tier()`. */
   function rebuildOpen(code: SheetCode, tier: ExploreDeviceTier): void {
     void (async () => {
       const t = await getTexts(code, { priority: 'high' });
