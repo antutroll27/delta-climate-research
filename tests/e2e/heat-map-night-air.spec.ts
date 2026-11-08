@@ -31,12 +31,26 @@ async function stub(page: Page, s: { now: string; raw: string }) {
 test.describe('Kolkata night air', () => {
   test.setTimeout(180_000);
 
-  test('at night the tile shows the airport, the line says the model air is lower', async ({ page }) => {
+  test('at night the tile shows the airport, the line says the map uses lower air', async ({ page }) => {
     await stub(page, NIGHT);
     await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator('#liveSrc')).toHaveText('Air now · Dum Dum airport (16 km)', { timeout: 60_000 });
     await expect(page.locator('#liveT')).toHaveText('21');
-    await expect(page.locator('#wxLine')).toContainText(/model air [34]\.\d K lower at night · may differ over the ward/);
+    await expect(page.locator('#wxLine')).toContainText(/Map uses air [34]\.\d °C below the airport at night \(calibration\) · may differ over the ward/);
+  });
+
+  test('at night, choosing the 13:00 or 22:00 scenario drops the line: the offset is the Now view\'s only', async ({ page }) => {
+    await stub(page, NIGHT);
+    await page.goto('/heat-map/in/kolkata/ballygunge/');
+    await expect(page.locator('#wxLine')).toContainText('below the airport at night', { timeout: 60_000 });
+    /* the control may be hidden in the v2 shell; the handler is the thing under test */
+    const press = (id: string) => page.evaluate((p) => (document.querySelector(`#segPhase button[data-p="${p}"]`) as HTMLElement).click(), id);
+    for (const id of ['peak', 'night']) {
+      await press(id);
+      await expect(page.locator('#wxLine')).not.toContainText('below the airport');
+    }
+    await press('now');
+    await expect(page.locator('#wxLine')).toContainText('below the airport at night');
   });
 
   test('by day nothing is adjusted and nothing is said', async ({ page }) => {
@@ -44,6 +58,6 @@ test.describe('Kolkata night air', () => {
     await page.goto('/heat-map/in/kolkata/ballygunge/');
     await expect(page.locator('#liveSrc')).toHaveText('Air now · Dum Dum airport (16 km)', { timeout: 60_000 });
     await expect(page.locator('#liveT')).toHaveText('31');
-    await expect(page.locator('#wxLine')).not.toContainText('model air');
+    await expect(page.locator('#wxLine')).not.toContainText('below the airport');
   });
 });

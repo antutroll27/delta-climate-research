@@ -25,7 +25,11 @@ const out = rows.rows.map((r) => {
 });
 // instants that exercise the edges the 49 night scenes do not: day, dusk, month turn, IST midnight
 const probes = ['2025-11-10T06:00:00', '2025-11-10T11:55:00', '2025-11-10T12:05:00', '2025-01-31T18:29:00',
-  '2025-01-31T18:30:00', '2025-06-15T00:30:00', '2025-06-15T22:00:00', '2026-03-05T23:46:24'].map((u) => {
+  '2025-01-31T18:30:00', '2025-06-15T00:30:00', '2025-06-15T22:00:00', '2026-03-05T23:46:24',
+  // TWILIGHT (0 < sun <= SUN_LIT), either side of the SUN_LIT boundary, dawn and dusk, three seasons
+  // (audit 2026-11-08 m2): the band where the branch flips and the offset switches on or off
+  '2025-11-10T00:40:00', '2025-11-10T00:45:00', '2025-11-10T00:50:00', '2025-11-10T11:20:00', '2025-11-10T11:25:00',
+  '2025-06-15T12:40:00', '2025-06-15T23:35:00', '2025-06-15T23:40:00', '2026-03-05T00:25:00', '2026-03-05T11:50:00'].map((u) => {
   const ms = Date.parse(`${u}Z`);
   const sun = sunAt(ms, 22.55, POWER_LON);
   return { utc: u, month: istMonth(ms), sun, offsetK: nightAirOffsetK('VECC', ms, sun) };

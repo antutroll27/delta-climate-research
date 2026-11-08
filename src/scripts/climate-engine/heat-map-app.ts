@@ -25,7 +25,7 @@ import { isCurrentSnapshot, type HeatSimHost, type HeatSimRequest, type HeatSimS
 import * as M from './heat-map-model';
 import { parseMetar, type Metar } from '../../lib/weather/metar.ts';
 import { describeWeather, fallbackAmbient, fixed, observedNow, placeWords, rankStations, type ObservedNow } from '../../lib/weather/observed.ts';
-import { nightAirOffsetK, sunAt } from '../../lib/weather/night-air.ts';
+import { nightAirMonthOffsetK } from '../../lib/weather/night-air.ts';
 import { METAR_STATIONS } from '../../data/metar-stations.ts';
 import { unmeasuredNote, isTransitionHour } from './accuracy';
 import { solarElevationFactor, solarDayHours } from './sky';
@@ -2858,14 +2858,15 @@ export function mountHeatMap(): () => void {
     const byStation: Record<string, Metar[]> = {};
     for (const m of cached?.reports ?? []) (byStation[m.station] ??= []).push(m);
     const ranked = rankStations(city, w.lat, w.lon);
-    /* At night the model is given the airport's air put back on the basis it was calibrated
-       on (night-air.ts: a measured month table, air against air). The product's own branch
-       rule decides what is night, at this ward and this instant. Day is untouched. */
-    const nowMs = now(), sun = sunAt(nowMs, w.lat, w.lon);
+    /* The night-air table's offset for this month is CARRIED on the observation, never
+       subtracted here: composition happens on load and every 10 minutes, but what is night is
+       decided by the sun at the moment the model runs. currentParams subtracts it in the "Now"
+       night branch only (nightAirAppliedK), so scenarios and the dawn/dusk flip are right. */
+    const nowMs = now();
     observed = cached
       ? observedNow(byStation, ranked, nowMs,
         { cloudPct: metno?.cloud ?? null, rh: metno?.rh ?? null, windMs: metno?.wind ?? null },
-        (icao) => nightAirOffsetK(icao, nowMs, sun))
+        (icao) => nightAirMonthOffsetK(icao, nowMs))
       : null;
     /* A stale airport hands "now" to met.no WITH the rain's memory: the surface keeps
        drying from where it was rather than snapping back to the dry model. */
@@ -3159,7 +3160,10 @@ export function mountHeatMap(): () => void {
       /* Short on purpose: the rail must keep the legend above its fold at 1280x720
          (solar-pane.spec). Every clause is still here: what, where, how far, when,
          what the model does, and that the ward is not the airport. */
-      if (observed.airAdjustK !== 0) parts.push(`model air ${observed.airAdjustK.toFixed(1)} K lower at night`);
+      /* Said only while the model really is running on the lowered air (Now, after dark). */
+      /* `phase` too: before the first refreshNowSun() `sunNow` is still the 0 sentinel. */
+      const adjK = state.phase === 'night' ? M.nightAirAppliedK(state) : 0;
+      if (adjK > 0) parts.push(`Map uses air ${adjK.toFixed(1)} °C below the airport at night (calibration)`);
       parts.push(`may differ over ${esc(placeWords(splitKey(state.ward).city, resolve(state.ward).area.name).over)}`);
       /* The pictograph is an image with a name, not decoration: screen readers get
          "Rain", sighted readers the glyph, and the sentence never depends on it. */
@@ -4070,8 +4074,11 @@ export function mountHeatMap(): () => void {
     if (state.sunNow === undefined || state.sunNow === null) return;
     const h = wardSolarHour();
     const doy = dayOfYearUtc(now());
+    const was = state.phase;
     state.sunNow = solarElevationFactor(h, doy, wardOf(state.ward)?.lat ?? 22.55);
     state.phase = state.sunNow > M.SUN_LIT ? 'peak' : 'night';
+    /* The weather line names the night-air adjustment only while it applies. */
+    if (state.phase !== was) paintWeatherLine(state.live);
   }
   document.querySelectorAll('#segPhase button').forEach(b => onEl(b, 'click', () => {
     /* selectPhase decides; this only applies. An unrecognised data-p returns
@@ -4083,6 +4090,7 @@ export function mountHeatMap(): () => void {
     state.phase = sel.phase; state.sunNow = sel.sunNow; state.heatTairC = sel.heatTairC;
     if (sel.sunNow != null) refreshNowSun();
     document.querySelectorAll('#segPhase button').forEach(x => x.classList.toggle('on', x === b));
+    paintWeatherLine(state.live);
     updateCompareHref(); applyScenarioChange();
   }));
   document.querySelectorAll('#segPath button').forEach(b => onEl(b, 'click', () => { state.path = (b as HTMLElement).dataset.p!; document.querySelectorAll('#segPath button').forEach(x => x.classList.toggle('on', x === b)); applyScenarioChange(); }));

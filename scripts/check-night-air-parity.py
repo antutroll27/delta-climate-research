@@ -81,6 +81,12 @@ def main() -> None:
         if na.ist_month(u) != p["month"] or abs(sun - p["sun"]) > TOL_SUN:
             sys.exit(f"probe {p['utc']}: month/sun differ")
         worst = max(worst, abs(na.correction_k(table, u, sun) - p["offsetK"]))
+    # The twilight band (0 < sun <= SUN_LIT) must be probed on BOTH sides of the boundary: some probe
+    # inside it with the offset on, and a lit neighbour with it off (audit m2).
+    twi = [p for p in ts["probes"] if 0.0 < p["sun"] <= na.SUN_LIT]
+    lit = [p for p in ts["probes"] if na.SUN_LIT < p["sun"] < 2 * na.SUN_LIT]
+    if len(twi) < 4 or len(lit) < 2 or any(p["offsetK"] <= 0 for p in twi) or any(p["offsetK"] != 0 for p in lit):
+        sys.exit(f"twilight probes missing or wrong: {len(twi)} inside, {len(lit)} just lit")
     if worst > TOL_K:
         sys.exit(f"night-air parity FAILED: worst {worst:.3e} K > {TOL_K:g} K")
     print(f"  night-air parity: {len(scenes)} scenes + {len(ts['probes'])} probes, worst {worst:.2e} K (<= {TOL_K:g})")

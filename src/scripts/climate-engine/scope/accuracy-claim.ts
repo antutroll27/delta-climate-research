@@ -24,7 +24,7 @@
  * FAIL CLOSED: an unknown tier is `none`.
  */
 import {
-  ACCURACY, SPATIAL, HEIGHTS, PEAK_CHIP_BASIS, PEAK_EVIDENCE_BASIS, HEIGHTS_EVIDENCE_BASIS,
+  ACCURACY, SPATIAL, HEIGHTS, PEAK_CHIP_BASIS, PEAK_EVIDENCE_BASIS, HEIGHTS_EVIDENCE_BASIS, NIGHT_AIR_NOTE,
   TRANSITION_RMSE_K, bandLabel, seasonalCaveat, seasonalCaveatLine, seasonalCaveatDetail,
 } from '../accuracy.ts';
 import { checkedRows, caveatRows, type Row } from '../v2/method-copy.ts';
@@ -117,6 +117,8 @@ export interface HeatAccuracyFigures {
   /** the methods "How sure" ledger, one string per row (the markup keeps its own punctuation) */
   readonly ledger: {
     readonly night: string;
+    /** the Kolkata night-air note: what the Now view does to the airport's air, and where the band was measured */
+    readonly nightAir: string;
     readonly peak: string;
     readonly patternR: string;
     readonly patternVegR: string;
@@ -185,6 +187,7 @@ const FIGURES: HeatAccuracyFigures = Object.freeze({
 
   ledger: Object.freeze({
     night: `night level calibrated, ward detail unvalidated · ±${ACCURACY.night.bandK.toFixed(1)} °C · n = ${ACCURACY.night.n} · calibration-run error ${ACCURACY.night.modelRmseK} K · ceiling ${ACCURACY.night.ceilingRmseK} K`,
+    nightAir: NIGHT_AIR_NOTE,
     peak: `indicative · ±${ACCURACY.peak.bandK.toFixed(1)} °C · n = ${ACCURACY.peak.n}. ${PEAK_EVIDENCE_BASIS}`,
     patternR: SPATIAL.rModel.toFixed(2),
     patternVegR: SPATIAL.rVegOnly.toFixed(2),
