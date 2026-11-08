@@ -98,7 +98,8 @@ test('names are the wijk names of area-names.json (CC0), unique, with the credit
 });
 
 test('surface-meta: every streamed area has a measured row in Canal Ring\'s shape, and veg is its fvc_mean to three places', () => {
-  const canalKeys = Object.keys(meta['canal-ring']);
+  // #88 added a free-text `reader` note to Canal Ring's row (which reader made it); no code reads it, and the streamed rows are measured by that same reader, so their shape is Canal Ring's minus the note.
+  const canalKeys = Object.keys(meta['canal-ring']).filter((k) => k !== 'reader');
   for (const r of records.areas) {
     const row = meta[r.id];
     assert.ok(row, `${r.id}: no surface-meta row`);
