@@ -172,3 +172,9 @@ It is not shipped because the choice between table and constant was made after s
 ### Observation, not acted on: the 22:00 Retained view
 
 `currentParams` subtracts a fixed 2.5 K from the observed air for the 22:00 view (heat-map-model.ts, the `baseTair - 2.5` line), so with an airport report in hand that view is also driven by the raw airport air; this change does not touch it. Lab only (`/Volumes/OBOSLab/research/daytime-refit/night-air-audit/retained2200.py`): on the 49 scenes, applying the month offset (mean 2.14 K, 1.06 to 4.04) as well would move the modelled surface by a mean -2.38 K (-4.64 to -1.09), at the model's 1.10 K per K of air. Scored against the passes, the 22:00 form on raw air reads bias -0.27 K, RMSE 2.00 K; with the offset on top it would read bias -2.65 K, RMSE 3.80 K. The 22:00 view is a representative-evening convention, not a satellite-time view, so those scores say how far the numbers would move, not that either is right. The -2.5 K convention and the month offset overlap in purpose (the mean offset is 2.14 K), so stacking them risks correcting twice. A founder / science decision.
+
+Left unchanged: the -2.5 K convention already does at night what the offset does, so stacking would double-count (lab: bias -2.65 K, RMSE 3.80 K); revisit in the pre-registered night recalibration, together with the older weakness that the 22:00 view subtracts 2.5 K from whatever the airport reads when you look (at 14:00 it uses afternoon air).
+
+### Minor nit: month boundary
+
+The carried month is the month at the moment the observation is composed, so for up to 10 minutes after IST midnight on the 1st the previous month's offset is used. The steps between adjacent months are at most 1 K, so this is negligible and left as is.
