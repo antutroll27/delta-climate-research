@@ -16,7 +16,7 @@
  * PURE: no DOM, no timers, no GL. tests/unit/loader-model.test.mjs runs every transition in node.
  */
 import type { Level, ManagerCommand } from './sheet-manager.ts';
-import { createProgress, type Stage as ProgressStage } from '../loader-progress.ts';
+import { STAGE_WEIGHTS, createProgress, type Stage as ProgressStage } from '../loader-progress.ts';
 import { sheetByCode, type SheetCode } from '../scope/sheets.ts';
 
 // ── constants (each one a decision, not a tuning knob to wiggle) ───────────────────────────────────────────────
@@ -130,6 +130,8 @@ export interface LoaderState {
   readonly holdUntilMs: number | null;
   /** the first load of this city has already been through make-current: later loads are design A */
   readonly entered: boolean;
+  /** the sheet the last `make-current` put on screen (null before the first): the grey massing of a neighbour is what a load can have "already on screen" */
+  readonly shown: SheetCode | null;
   readonly reducedMotion: boolean;
   readonly failure: LoaderFailure | null;
   readonly stages: ReadonlyMap<SheetCode, readonly TileStage[]>;
@@ -150,7 +152,7 @@ export interface LoaderOptions {
 export function initialLoaderState(options: LoaderOptions = {}): LoaderState {
   return Object.freeze({
     mode: 'idle', sheet: null, design: 'A', sinceMs: null, visibleAtMs: null, announced: false, endPending: false, holdUntilMs: null,
-    entered: options.firstEntry === false, reducedMotion: options.reducedMotion === true, failure: null,
+    entered: options.firstEntry === false, shown: null, reducedMotion: options.reducedMotion === true, failure: null,
     stages: new Map(), facts: new Map(), names: Object.freeze({}), status: Object.freeze({ text: '', kind: 'polite', seq: 0 }), rise: null, lastEnd: null,
   });
 }
@@ -208,12 +210,26 @@ export function stageValue(stage: TileStage, facts: SheetFacts | undefined): str
   }
 }
 
+/** The stages that CAN happen for `sheet`. "Massing" is the neighbour's grey blocks already on screen, which only a sheet next door to the one on
+ *  screen ever has; for a far pick the row would sit unticked for the whole load and read as a stuck step (INT audit F8). Hidden, not invented. */
+export function stagesApplicable(state: LoaderState, sheet: SheetCode | null = state.sheet): readonly TileStage[] {
+  if (sheet === null || state.shown === null || state.shown === sheet) return TILE_STAGES;
+  if (stagesOf(state, sheet).includes('massing')) return TILE_STAGES;
+  const a = sheetByCode(state.shown), b = sheetByCode(sheet);
+  if (a !== undefined && b !== undefined && Math.abs(a.i - b.i) <= 1 && Math.abs(a.j - b.j) <= 1) return TILE_STAGES;
+  return TILE_STAGES.filter((s) => s !== 'massing');
+}
+
 /** Real progress, 0..1, monotonic for a given set of stages (loader-progress.ts). Nothing here is ever printed as a percentage. */
 export function progressOf(state: LoaderState, sheet: SheetCode | null = state.sheet): number {
   if (sheet === null) return 0;
   const p = createProgress();
   for (const stage of state.stages.get(sheet) ?? []) p.complete(PROGRESS_STAGE[stage]);
-  return p.value();
+  /* Over the stages that can happen: a far pick's bar is not capped below full by a row that never exists. */
+  const applicable = stagesApplicable(state, sheet);
+  if (applicable.length === TILE_STAGES.length) return p.value();
+  const total = applicable.reduce((t, s) => t + STAGE_WEIGHTS[PROGRESS_STAGE[s]], 0);
+  return Math.min(1, p.value() / total);
 }
 
 export function stagesOf(state: LoaderState, sheet: SheetCode | null = state.sheet): readonly TileStage[] {
@@ -343,6 +359,7 @@ function command(d: Draft, c: ManagerCommand, now: number): void {
       const afterLoader = shownNow || justEnded;
       d.rise = Object.freeze({ startMs: now, durationMs: d.reducedMotion ? 0 : afterLoader ? RISE_MS : QUICK_RISE_MS, afterLoader });
       d.entered = true;
+      d.shown = c.sheet;
       return;
     }
     default: return;                                                        // load, reprioritise, solve, refuse, dispose-mesh, rebuild-mesh

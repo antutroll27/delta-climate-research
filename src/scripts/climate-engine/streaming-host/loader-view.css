@@ -35,6 +35,7 @@
 .cl-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
 .cl-steps li { display: flex; gap: 7px; align-items: center; font-size: 10.5px; color: var(--plate-ink-3); opacity: 0.45; transition: opacity var(--cl-dur) var(--ease); }
 .cl-steps li .dot { width: 7px; height: 7px; border-radius: 50%; border: 1.2px solid currentColor; flex: none; }
+.cl-steps li[hidden], .cl-rows li[hidden] { display: none; }      /* a stage that cannot happen for this area is not drawn (INT audit F8) */
 .cl-steps li.on { opacity: 1; color: var(--plate-ink-1); }
 .cl-steps li.on .dot { background: currentColor; }
 .cl-bar { height: 3px; background: var(--plate-well-2); border-radius: 2px; overflow: hidden; margin-top: 7px; }

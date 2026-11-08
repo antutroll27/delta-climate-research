@@ -292,6 +292,52 @@ test('after a select the camera, still over the old sheet, does not drag the use
   assert.equal(h.state().current, 'E4');
 });
 
+test('INT audit F2a: a fly interrupted over the old sheet is ended by `fly-ended`, and panning on then streams; a fly-ended for a sheet not yet open arms nothing', () => {
+  const h = settled('E4');
+  const e4 = cellOf('E4'), e5 = cellOf('E5');
+  h.camera(at(e4.i, e4.j));
+  h.select('F4'); h.drain();                                     // opened at once (autoOpen): F4 is displayed, the camera is over E4
+  h.advance(1000);
+  h.camera(at(e5.i, e5.j));
+  h.advance(2000).tick();
+  assert.equal(h.state().current, 'F4', 'unarmed: the camera never reached F4, so a pan streams nothing (the bug)');
+  h.send({ type: 'fly-ended' });                                 // MapLibre's moveend for the interrupted fly
+  h.advance(1000);
+  h.camera(at(e5.i, e5.j));
+  h.advance(1000).tick();
+  assert.equal(h.state().current, 'E5', 'armed by the end of the fly');
+  const g = settled('E4');
+  g.autoOpen = false;
+  g.select('F4'); g.drain();
+  g.send({ type: 'fly-ended' });
+  assert.equal(g.state().armed, false, 'F4 is not open yet: the old fly\'s end must not arm a crossing back');
+});
+
+test('INT audit F2b: a picked sheet that failed for good lets the camera take over for ANOTHER sheet, but not for the one on screen', () => {
+  const h = settled('E4');
+  const e4 = cellOf('E4'), e5 = cellOf('E5');
+  h.camera(at(e4.i, e4.j));
+  h.autoOpen = false;
+  h.select('F4');
+  for (const level of ['lod0']) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const c = h.find('F4', level);
+      assert.ok(c, `attempt ${attempt + 1} is in flight`);
+      h.fail('F4', level);
+      h.advance(RETRY_BACKOFF_MS[attempt] ?? 0).tick();
+    }
+  }
+  assert.equal(h.state().current, 'F4');
+  assert.equal(h.state().displayed, 'E4');
+  h.advance(1000);
+  h.camera(at(e4.i, e4.j, 200));
+  h.advance(2000).tick();
+  assert.equal(h.state().current, 'F4', 'nudging inside the sheet on screen keeps the failed pick (and its plate)');
+  h.camera(at(e5.i, e5.j));
+  h.advance(1000).tick();
+  assert.equal(h.state().current, 'E5', 'panning into another sheet streams it');
+});
+
 // ── heading prefetch ────────────────────────────────────────────────────────
 
 test('heading east prefetches the east neighbour (lod0 + halo, low), one at a time, never evicting', () => {

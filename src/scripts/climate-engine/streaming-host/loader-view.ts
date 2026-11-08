@@ -31,7 +31,7 @@ import type { Level, ManagerCommand } from '../streaming/sheet-manager.ts';
 import { SHEETS, type SheetCode } from '../scope/sheets.ts';
 import { AMSTERDAM_SHEET_LATTICE as LATTICE } from '../../../data/sheets/amsterdam.ts';
 import {
-  STAGE_LABEL, TILE_STAGES, createLoaderModel, nextLoaderWakeMs, progressOf, retryEventOf, riseValue, areaLabel, areaParts, areaDetail, stageValue, parseAreaNames,
+  STAGE_LABEL, TILE_STAGES, stagesApplicable, createLoaderModel, nextLoaderWakeMs, progressOf, retryEventOf, riseValue, areaLabel, areaParts, areaDetail, stageValue, parseAreaNames,
   showsPlate, showsRise, showsSweep, stagesOf,
   type AreaNames, type LoaderOptions, type LoaderState, type RisePlan, type SheetFacts, type TileStage,
 } from '../streaming/loader-model.ts';
@@ -354,8 +354,11 @@ export function createLoaderView(options: LoaderViewOptions): LoaderView {
       const scale = `scaleX(${progressOf(state, sheet).toFixed(3)})`;
       if (miniBar.style.transform !== scale) { miniBar.style.transform = scale; plateBar.style.transform = scale; }
       const facts = sheet === null ? undefined : state.facts.get(sheet);
+      const applicable = stagesApplicable(state, sheet);
       TILE_STAGES.forEach((s, k) => {
         const on = done.includes(s);
+        const here = applicable.includes(s);
+        for (const li of [miniLis[k]!, rowLis[k]!]) if (li.hidden === here) li.hidden = !here;       // a row that cannot happen is not drawn (F8)
         toggle(miniLis[k]!, 'on', on);
         toggle(rowLis[k]!, 'on', on);
         setText(rowLis[k]!.lastElementChild!, on ? stageValue(s, facts) : '');

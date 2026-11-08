@@ -6,7 +6,7 @@ import { MAX_ATTEMPTS, PLATE_AFTER_MS } from '../../src/scripts/climate-engine/s
 import { SKIP_FAST_MS, STAGE_WEIGHTS } from '../../src/scripts/climate-engine/loader-progress.ts';
 import {
   FIRST_ENTRY_MIN_MS, QUICK_RISE_MS, REVEAL_DELAY_MS, RISE_MS, STAGE_OF_LEVEL, TILE_STAGES,
-  createLoaderModel, initialLoaderState, isVisible, nextLoaderWakeMs, progressOf, reduceLoader, retryEventOf, riseValue,
+  createLoaderModel, initialLoaderState, isVisible, nextLoaderWakeMs, progressOf, stagesApplicable, reduceLoader, retryEventOf, riseValue,
   areaLabel, areaParts, areaDetail, parseAreaNames, stageValue, showsPlate, showsRise, showsSweep, stagesOf,
 } from '../../src/scripts/climate-engine/streaming/loader-model.ts';
 
@@ -313,7 +313,11 @@ test('the level-to-stage map covers the levels the manager loads', () => {
 
 /** The page: a real manager, every command forwarded to the loader model, loads answered when the test says so. */
 class City {
-  constructor(options = { firstEntry: false }) {
+  /** `hold`: how long the page's open keeps running after its commit (the app waits for the buildings and the first solve, up to 4 s). The page
+   *  opens at the commit when no loader was shown for the area, and when one was, only after the hold (city-stream.ts). INT audit F1: a harness
+   *  that opened every area instantly could not see a loader drawing over an area that is already on screen. */
+  constructor(options = { firstEntry: false }, hold = 0) {
+    this.hold = hold; this.pendingOpen = null;
     this.m = createSheetManager('full');
     this.loader = createLoaderModel(options);
     this.t = 0;
@@ -330,11 +334,19 @@ class City {
     }
     /* TWO-PHASE OPEN (P3b audit S3): the manager marks a sheet displayed only when the page says it opened it, and the loader's
        `end` comes with that. The page opens synchronously here, as it does in the app's commit. */
-    for (const c of cmds) if (c.type === 'make-current') this.event({ type: 'opened', sheet: c.sheet });
+    for (const c of cmds) if (c.type === 'make-current') {
+      if (this.hold === 0 || this.loader.state().mode === 'idle') this.event({ type: 'opened', sheet: c.sheet });
+      else this.pendingOpen = { sheet: c.sheet, at: this.t + this.hold };
+    }
     // the executor re-arms a timer from nextWakeMs; a tick at that moment is what the page does
     return cmds;
   }
-  at(ms) { this.t = ms; return this; }
+  at(ms) {
+    const due = this.pendingOpen;
+    if (due !== null && due.at <= ms) { this.pendingOpen = null; this.t = Math.max(this.t, due.at); this.event({ type: 'opened', sheet: due.sheet }); }
+    this.t = ms;
+    return this;
+  }
   tick() { return this.event({ type: 'tick' }); }
   /** Finish a level, and report the real stage that means. */
   land(sheet, level) {
@@ -489,4 +501,49 @@ test('FOOTPRINTS: only the count the host passes is shown; with none the row is 
   }
   assert.equal(stageValue('surface', { surfaceScenes: 6 }), 'Sentinel-2 · 6');
   assert.equal(stageValue('vector', { trees: 18400 }), '18,400 trees');
+});
+
+
+test('INT audit F1, REAL MANAGER: an area that lands inside the quiet window never shows the loader, however long the page\'s post-commit hold is', () => {
+  const c = new City({ firstEntry: false }, 4000);
+  c.event({ type: 'start', sheet: 'E4' });
+  c.land('E4', 'lod0'); c.land('E4', 'halo');
+  for (const key of [...c.pending.keys()]) { const [s, l] = key.split('/'); c.land(s, l); }
+  c.at(10_000).event({ type: 'select', sheet: 'F4' });
+  c.at(10_300).land('F4', 'lod0');                              // ready at 300 ms: the page commits and opens at once
+  let ever = false;
+  for (const dt of [350, 400, 450, 900, 1300, 2000, 3000, 4500]) { c.at(10_000 + dt).tick(); ever ||= c.visibleNow(); }
+  assert.equal(ever, false, 'nothing of the loader was drawn');
+  assert.equal(c.state.mode, 'idle');
+  assert.equal(c.m.state().displayed, 'F4');
+});
+
+test('INT audit F1, REAL MANAGER: a loader that was shown holds through the page\'s hold and ends with it', () => {
+  const c = new City({ firstEntry: false }, 1500);
+  c.event({ type: 'start', sheet: 'E4' });
+  c.land('E4', 'lod0'); c.land('E4', 'halo');
+  for (const key of [...c.pending.keys()]) { const [s, l] = key.split('/'); c.land(s, l); }
+  c.at(10_000).event({ type: 'select', sheet: 'F4' });
+  c.at(10_500).tick(); c.at(11_300).tick();
+  assert.equal(c.state.mode, 'plate');
+  c.at(11_400).land('F4', 'lod0');                              // lands over the plate: committed, held for 1.5 s
+  assert.equal(c.m.state().displayed, 'E4', 'not open for the manager yet');
+  c.at(12_000).tick();
+  assert.ok(c.visibleNow(), 'the plate holds while the buildings and the first solve land');
+  c.at(12_900);
+  assert.equal(c.m.state().displayed, 'F4');
+  assert.equal(c.state.mode, 'idle');
+  assert.equal(c.state.lastEnd.shown, true);
+});
+
+test('INT audit F8: "Massing" is not a stage of a far pick (hidden, not invented), progress is over the stages that can happen, a neighbour keeps it', () => {
+  const c = openAt('E4');
+  c.at(10_000).event({ type: 'select', sheet: 'G5' });           // two cells away from E4
+  assert.deepEqual(stagesApplicable(c.state, 'G5'), ['ward', 'surface', 'vector', 'sim']);
+  for (const stage of ['ward', 'surface', 'vector', 'sim']) c.loader.dispatch({ type: 'stage', atMs: 10_100, sheet: 'G5', stage });
+  assert.equal(progressOf(c.state, 'G5'), 1, 'every stage that can happen is done: the bar is full, not capped at 0.75');
+  const n = openAt('E4');
+  n.at(10_000).event({ type: 'select', sheet: 'F4' });           // a ring neighbour
+  assert.deepEqual(stagesApplicable(n.state, 'F4'), ['massing', 'ward', 'surface', 'vector', 'sim']);
+  assert.ok(progressOf(n.state, 'F4') < 1);
 });

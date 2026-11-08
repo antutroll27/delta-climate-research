@@ -2476,10 +2476,10 @@ export function mountHeatMap(): () => void {
   let committedBundle: StagedWard | null = null;
 
   /** A streamed sheet opened through `loadWard` (streaming-host/city-stream.ts). */
-  interface StreamOpen { readonly prepared: PreparedBuildings | null; readonly ao: Uint8Array | null; readonly first: boolean; readonly fly: boolean; readonly afterCommit: () => void }
+  interface StreamOpen { readonly prepared: PreparedBuildings | null; readonly ao: Uint8Array | null; readonly first: boolean; readonly fly: boolean; readonly rebuild: boolean; readonly afterCommit: () => void }
   const treesStore: Record<string, TreesFile | null> = {};
   /** Dev read-out: where the main thread spent a streamed sheet's open, in ms (stage = fetch/parse/cooling, commit = renderer + UI). */
-  const streamTimings: { stage: number[]; commit: number[]; after: number[]; reset: number[] } = { stage: [], commit: [], after: [], reset: [] };
+  const streamTimings: { stage: number[]; commit: number[]; after: number[]; reset: number[]; rebuilds: number } = { stage: [], commit: [], after: [], reset: [], rebuilds: 0 };
   const preparedStore: Record<string, SheetBundle['prepared']> = {};
 
   async function loadWard(name: AreaKey, stream?: StreamOpen) {
@@ -2507,7 +2507,10 @@ export function mountHeatMap(): () => void {
        keeping it. */
     if (P === null) return;
     const tStart = performance.now();
-    const token = wardSession.begin(name);
+    /* A REBUILD (a tier demotion, a restored GL context) opens the ward that is already on screen again, with a new mesh: the session refuses
+       that unless asked (INT audit F3). It never cuts across a different area that is opening: that one is built at the current tier anyway. */
+    if (stream?.rebuild && wardSession.pendingWard !== null && wardSession.pendingWard !== name) return;
+    const token = wardSession.begin(name, stream?.rebuild ? { reload: true } : undefined);
     if (!token) {
       /* Refused because this ward is already on screen. After a failed switch that is
          the one click the reader will try, and the failure chip was up for good. */
@@ -2637,7 +2640,8 @@ export function mountHeatMap(): () => void {
     const tCommit = performance.now();
     try {
       streamCommit = stream ?? null;
-      commitWard(staged, false);
+      commitWard(staged, stream?.rebuild === true);      // a rebuild is framed already: the rollback path's "no fly, nothing grows in again"
+      if (stream?.rebuild) streamTimings.rebuilds++;
     } catch (error) {
       const previous = committedBundle;
       if (previous && previous !== staged) {
@@ -2807,6 +2811,9 @@ export function mountHeatMap(): () => void {
         const dur = relief ? 1400 : 0;
         map.flyTo({ center: [w.lon, w.lat], zoom: 15.3, pitch: mode === 'iso' ? 0 : 60, bearing: mode === 'iso' ? 0 : -18, duration: dur });
         orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') { orbit = true; requestRuntimeFrame('orbit'); } }, dur + 600);
+        /* THE FLY'S END ARMS THE CAMERA CROSSINGS (INT audit F2): MapLibre fires `moveend` when the fly lands AND when the person takes the map
+           from it, so a pick interrupted over the old area can still be panned away from. A zero-length fly has already ended. */
+        if (dur === 0) streamControl?.flyEnded(); else map.once('moveend', () => streamControl?.flyEnded());
       }
       growStart = 0;
       growProgress = reduceMotion || !streamRise ? 1 : 0;
@@ -4490,13 +4497,14 @@ export function mountHeatMap(): () => void {
   const streamPaths = (key: AreaKey): AreaPaths => streamedAreaPaths(splitKey(key).area);
 
   async function startStream(): Promise<void> {
-    const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }, { measured }, { wirePage }, { areaFromUrl }, { streamedAreaMeans }] = await Promise.all([
+    const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }, { measured }, { wirePage }, { areaFromUrl }, { streamedAreaMeans }, { createLateStream }] = await Promise.all([
       import('./streaming-host/city-stream'), import('./streaming-host/sheet-worker-client'), import('./streaming/halo-sim-host'),
-      glMeterReady, import('./streaming-host/page-wiring'), import('./streaming/area-page'), import('./surface-raster'),
+      glMeterReady, import('./streaming-host/page-wiring'), import('./streaming/area-page'), import('./surface-raster'), import('./streaming/late-stream'),
     ]);
     /* The page furniture (the loader view, the area picker, the header/URL projections) is made first: the controller's hooks feed it. */
     const stageEl = document.querySelector<HTMLElement>('.stage');
-    const wiring = stageEl ? wirePage(stageEl, () => stream) : null;
+    const lateStream = createLateStream();            // a click before the controller exists is kept, not thrown at (INT audit F6)
+    const wiring = stageEl ? wirePage(stageEl, lateStream) : null;
     streamRise = wiring ? (t) => wiring.riseValue(t) : null;
     streamShown = wiring ? (key, drawn) => { const row = sheetOf(key); if (row) wiring.areaShown(row.code, drawn); } : null;
     cleanup.push(() => { wiring?.dispose(); streamRise = null; streamShown = null; });
@@ -4527,13 +4535,13 @@ export function mountHeatMap(): () => void {
         const key = keyOf(code);
         for (const store of [cache, roadsCache, waterCache, terrainCache, surfaceCache, labelCache, provCache, canopyCache, pvCache, maskCache, treesStore, preparedStore] as Array<Record<string, unknown>>) delete store[key];
       },
-      showSheet: async (code, prepared, ao, first, afterCommit, fly = false) => {
-        await loadWard(keyOf(code), { prepared, ao, first, fly: fly || first, afterCommit });
+      showSheet: async (code, prepared, ao, first, afterCommit, fly = false, rebuild = false) => {
+        await loadWard(keyOf(code), { prepared, ao, first, fly: (fly || first) && !rebuild, rebuild, afterCommit });
         if (state.ward !== keyOf(code)) throw new Error(`${code} did not open`);
         /* THE LOADER HOLDS UNTIL THE BUILDINGS ARE ON SCREEN AND THE AREA HAS ITS FIRST FIGURES (the heat solve's first burst), capped, as the
            page's own chip always did. Only then is the area "opened" for the manager, so the loader's `end` is the true end. */
         await Promise.race([Promise.all([relief ? relief.buildingsReady() : Promise.resolve(), fieldArrival]), new Promise<void>((r) => window.setTimeout(r, 4000))]);
-        wiring?.stage(code, 'sim');
+        /* the controller reports the 'sim' stage when this resolves, and tells the manager the area is open (at the commit if no loader was shown) */
       },
       setHaloSupply: (next) => { supply = next; },
       resolve: () => { void resetSim(); },
@@ -4564,10 +4572,11 @@ export function mountHeatMap(): () => void {
     map.on('move', () => sendCamera(false));
     map.on('moveend', () => sendCamera(true));
     (window as unknown as { __obosStream?: unknown }).__obosStream = {
-      report: () => stream.report(), measured, timings: () => streamTimings, select: (code: string) => stream.select(code), map, state: () => ({ ward: state.ward, mean: state.lastMean }),
+      report: () => stream.report(), measured, timings: () => streamTimings, select: (code: string) => stream.select(code), setTier: (tier: ExploreDeviceTier) => setStreamTier?.(tier), map, state: () => ({ ward: state.ward, mean: state.lastMean }),
     };
     wiring?.dispatched(stream.managerState());
     stream.start(areaFromUrl(window.location.search) ?? 'E4');      // a refresh returns to the area in the address bar
+    lateStream.bind(stream);                                        // and a choice made while the capability probe ran is applied now, over it
   }
   /* THE WARD FIRST, THEN THE SKY. `mapHasLoaded` unlocks `syncSky`, which refuses
      to touch the style before this moment because doing so stops this very event

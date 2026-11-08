@@ -66,6 +66,7 @@ export type PageEvent =
   | { readonly type: 'opened'; readonly sheet: SheetCode }
   | { readonly type: 'open-failed'; readonly sheet: SheetCode }
   | { readonly type: 'handover-done' }
+  | { readonly type: 'fly-ended' }
   | { readonly type: 'tier-changed'; readonly tier: ExploreDeviceTier }
   | { readonly type: 'network-changed'; readonly network: 'fast' | 'constrained' }
   | { readonly type: 'memory-pressure'; readonly level: 'none' | 'moderate' | 'critical' };
@@ -85,6 +86,8 @@ export function createExecutor(manager: SheetManager, ports: ExecutorPorts): She
   let draining = false;
   let cancelTimer: (() => void) | null = null;
   let disposed = false;
+  /** The stamp of the last event the manager PROCESSED. The clock may have moved on while its commands ran (page furniture does DOM work inside them). */
+  let processedAtMs = Number.NEGATIVE_INFINITY;
 
   const warn = (error: unknown, command: ManagerCommand): void => {
     if (ports.onError) ports.onError(error, command);
@@ -140,7 +143,10 @@ export function createExecutor(manager: SheetManager, ports: ExecutorPorts): She
     cancelTimer = null;
     if (disposed) return;
     const now = ports.now();
-    const wake = manager.nextWakeMs(now);
+    /* ASK FROM THE LAST PROCESSED EVENT'S STAMP, not from the clock. A wake that fell between that stamp and `now` (an event stamped
+       0.3 ms before the rise, its dispatch still running when the clock passed it) is not "behind us": the manager has not seen it. It
+       is armed with a zero delay and its tick is stamped at the wake (below), so the loader's rise and plate cannot be dropped (INT audit F4). */
+    const wake = manager.nextWakeMs(Math.min(now, processedAtMs));
     if (wake === null) return;
     /* THE TICK IS STAMPED NO EARLIER THAN THE WAKE TIME IT WAS SET FOR. A host timer may fire a fraction of a millisecond EARLY (Node and
        browsers both round); the manager would then see a tick just short of the wake time and do nothing, and `rearm` would find that wake
@@ -154,6 +160,7 @@ export function createExecutor(manager: SheetManager, ports: ExecutorPorts): She
     draining = true;
     try {
       for (let event = queue.shift(); event !== undefined && !disposed; event = queue.shift()) {
+        processedAtMs = event.atMs;
         for (const command of manager.dispatch(event)) run(command);
       }
     } finally {

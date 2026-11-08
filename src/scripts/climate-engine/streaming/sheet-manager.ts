@@ -121,6 +121,9 @@ export type ManagerEvent =
   | { readonly type: 'load-failed'; readonly atMs: number; readonly requestId: number; readonly reason: string }
   | { readonly type: 'retry'; readonly atMs: number; readonly sheet: SheetCode; readonly level: Level }
   | { readonly type: 'handover-done'; readonly atMs: number }
+  /** The fly that followed a choice has ended, or the person took the map from it. Camera crossings are live again once the chosen sheet is open
+   *  (INT audit F2: a fly interrupted over the old sheet would otherwise leave the manager unarmed for good). */
+  | { readonly type: 'fly-ended'; readonly atMs: number }
   /** The page has committed `sheet` as its open ward (the answer to `make-current`). */
   | { readonly type: 'opened'; readonly atMs: number; readonly sheet: SheetCode }
   /** The page could not open `sheet`: the old sheet is still on screen. */
@@ -491,12 +494,25 @@ function beginSwitch(d: Draft, target: SheetCode, cameraIsThere: boolean): void 
   touch(d, target);
 }
 
+/** The sheet the user is in could not be opened: its lod0 failed on every attempt, and what is on screen is another sheet. */
+function failedForGood(d: Draft): boolean {
+  if (d.current === null || d.displayed === null || d.current === d.displayed) return false;
+  const lod0 = levelOf(d, d.current, 'lod0');
+  return lod0.status === 'failed' && lod0.attempts >= MAX_ATTEMPTS;
+}
+
 /** The sheet a camera crossing would switch to, and when it becomes allowed to. Null while there is none. */
 function pendingCrossing(cfg: ManagerConfig, d: Draft): { readonly target: SheetCode; readonly readyAtMs: number } | null {
-  if (d.current === null || d.camera === null || !d.armed || d.gesturing) return null;
+  if (d.current === null || d.camera === null || d.gesturing) return null;
+  /* A PICKED SHEET THAT FAILED FOR GOOD leaves the camera over the old one, so the crossing is never armed; panning away would stream
+     nothing. While the failure plate is up, the camera may take over, but only for a sheet other than the one on screen (nudging the map
+     inside it must not dismiss the plate and its Retry). */
+  const stuck = failedForGood(d);
+  if (!d.armed && !stuck) return null;
   const cell = cfg.topology.locate(d.camera.lon, d.camera.lat);
   const target = cfg.topology.codeAt(cell.i, cell.j);
   if (target === null || target === d.current) return null;
+  if (stuck && !d.armed && target === d.displayed) return null;
   if (cfg.topology.depthInto(cell.i, cell.j, d.camera.lon, d.camera.lat) < cfg.hysteresisM) return null;
   return { target, readyAtMs: d.lastMotionMs + cfg.idleMs };
 }
@@ -577,6 +593,9 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
         out.push({ type: 'failure', sheet: event.sheet, level: 'lod0', attempts: 0 });
         d.current = d.displayed; d.armed = false; d.solved = null; d.solvedWithHalo = false;
       }
+      break;
+    case 'fly-ended':
+      if (d.current !== null && d.current === d.displayed && d.opening === null) d.armed = true;     // the chosen sheet is open and the fly is over
       break;
     case 'handover-done':
       if (d.outgoing !== null) { out.push({ type: 'dispose-mesh', sheet: d.outgoing }); d.outgoing = null; }

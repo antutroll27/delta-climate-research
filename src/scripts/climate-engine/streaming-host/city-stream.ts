@@ -71,8 +71,9 @@ export interface CityStreamHooks {
   dropBundle(code: SheetCode): void;
   /** Open `code` as the page's ward. Resolves when it is committed; `afterCommit` runs in the same synchronous block.
    *  `fly` = the person chose this area (the picker, the area select, a retry of one): the camera goes there. A crossing by panning has the camera
-   *  over it already. */
-  showSheet(code: SheetCode, prepared: PreparedBuildings | null, ao: Uint8Array | null, first: boolean, afterCommit: () => void, fly?: boolean): Promise<void>;
+   *  over it already. `rebuild` = `code` is the ward already on screen, given a new mesh (a tier demotion, a restored GL context): no fly, no grow.
+   *  The promise may resolve LATE (the app also waits for the buildings and the first solve); `afterCommit` marks the commit itself. */
+  showSheet(code: SheetCode, prepared: PreparedBuildings | null, ao: Uint8Array | null, first: boolean, afterCommit: () => void, fly?: boolean, rebuild?: boolean): Promise<void>;
   setHaloSupply(supply: (() => NeighbourLayers) | null): void;
   /** Solve the open sheet again (a halo arrived after an edge-rule solve). */
   resolve(): void;
@@ -96,6 +97,8 @@ export interface CityStream {
   select(code: string): void;
   /** The loader's Retry: load `level` of `code` again. */
   retry(code: SheetCode, level: Level): void;
+  /** The fly that followed a choice has ended, or the person took the map from it: camera crossings are live again (INT audit F2). */
+  flyEnded(): void;
   /** The manager's state now (the picker's). */
   managerState(): ManagerState;
   /** The map camera, from the page's own `move` / `moveend` events. */
@@ -154,7 +157,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
     dispatch(event) {
       const commands = inner.dispatch(event);
       for (const c of commands) if (c.type !== 'make-current') tap(c);
-      if (!disposed) hooks.dispatched?.(inner.state());
+      if (!disposed) { try { hooks.dispatched?.(inner.state()); } catch (error) { hooks.warn('page furniture failed', error); } }   // a throwing view must not lose this event's commands (F5)
       return commands;
     },
   };
@@ -329,7 +332,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
       const t = await getTexts(code, { priority: 'high' });
       const built = await worker.mesh(code, t.ward, tier, await loadedTerrain(code), AO_REQUEST);
       if (disposed || open !== code) return;
-      await hooks.showSheet(code, built.mesh, built.ao, false, () => { syncNeighbours(); syncSeams(); });
+      await hooks.showSheet(code, built.mesh, built.ao, false, () => { syncNeighbours(); syncSeams(); }, false, true);
     })().catch((error) => hooks.warn(`could not rebuild sheet ${code}`, error));
   }
 
@@ -380,13 +383,33 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
         }
         /* The halo supply swaps INSIDE the page's synchronous commit, so the sim never sees one sheet's ring on another's
            ward, and a failed open leaves the old supply with the old sheet (audit S3). */
-        await hooks.showSheet(c.sheet, built.mesh, built.ao, first, () => {
+        /* THE AREA IS "OPENED" FOR THE MANAGER AT THE COMMIT when no loader was ever shown for it. The page's open also waits (up to 4 s) for the
+           buildings and the first heat solve; if the manager is told only after that, its loader clock keeps running over an area that is
+           already drawn and "Entering…" and the plate come up on top of it (INT audit F1). A loader that WAS shown holds until that wait
+           ends, so its end is the true end. */
+        let committed = false, opened = false, shownAtCommit = false;
+        const finish = (): void => {
+          if (opened) return;
+          opened = true;
+          if (token === switchToken && !disposed) executor.send({ type: 'opened', sheet: c.sheet });
+        };
+        const loaderShown = (): boolean => { const l = inner.state().loader; return l !== null && l.sheet === c.sheet && l.phase !== 'quiet'; };
+        const openThis = hooks.showSheet(c.sheet, built.mesh, built.ao, first, () => {
           open = c.sheet; switches++;
           supply(c.sheet, halos.get(c.sheet));
           syncNeighbours(); syncSeams();
           tap(c);                                          // the building rise is planned HERE, in the commit's own block: it starts with the buildings
+          committed = true;
+          shownAtCommit = loaderShown();
+          if (!shownAtCommit) queueMicrotask(finish);      // after the page's own commit block has finished
         }, fly);
-        if (token === switchToken && !disposed) executor.send({ type: 'opened', sheet: c.sheet });
+        try { await openThis; }
+        catch (error) {
+          if (!committed) throw error;                     // never drawn: the open failed
+          hooks.warn(`sheet ${c.sheet} opened, but its hold failed`, error);      // drawn: a late failure (the heat-solve stage, the wait) reverts nothing (F5)
+        }
+        if (shownAtCommit) stage(c.sheet, 'sim');         // the first solve burst landed (or the wait ended): the plate's last real stage (nothing to tick if none was shown)
+        finish();
       })().catch((error) => {
         hooks.warn(`could not open sheet ${c.sheet}`, error);
         if (token === switchToken && !disposed) { executor.send({ type: 'open-failed', sheet: c.sheet }); hooks.failure(c.sheet, error instanceof Error ? error.message : String(error)); }
@@ -428,6 +451,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
       send({ type: 'select', sheet: code });
     },
     retry: (code, level) => send({ type: 'retry', sheet: code, level }),
+    flyEnded: () => send({ type: 'fly-ended' }),
     managerState: () => inner.state(),
     camera(lon, lat, gesturing, headingDeg) {
       const t = now();

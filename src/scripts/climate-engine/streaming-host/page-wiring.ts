@@ -16,7 +16,7 @@ import { createPageFurniture, headerOf, type AreaWriter, type PageFurniture } fr
 import { parseAreaNames, type AreaNames } from '../streaming/loader-model.ts';
 import { SELECT_SYNC_EVENT } from '../shell/select-field.ts';
 import { SHEETS, sheetByCode, sheetKey, sheetOf, type SheetCode } from '../scope/sheets.ts';
-import type { CityStream } from './city-stream.ts';
+import type { ChoosableStream } from '../streaming/late-stream.ts';
 import indexCss from '../../../styles/obos-v2/screens/sheet-index.css?inline';
 import wiringCss from './page-wiring.css?inline';
 
@@ -46,14 +46,15 @@ const keyOf = (code: SheetCode): string => sheetKey(sheetByCode(code)!);
 
 /**
  * @param stageEl `.stage`: inside the v2 root, so the plate's and the picker's tokens resolve.
- * @param stream late-bound: the wiring exists before the controller, because the controller's hooks call it.
+ * @param stream late-bound (streaming/late-stream.ts): the wiring exists before the controller, because the controller's hooks call it, and a choice
+ *   made in between is kept, never thrown at.
  */
-export function wirePage(stageEl: HTMLElement, stream: () => CityStream): PageWiring {
+export function wirePage(stageEl: HTMLElement, stream: ChoosableStream): PageWiring {
   const doc = stageEl.ownerDocument;
   ensureStyle(doc, 'si-style', indexCss);
   ensureStyle(doc, 'pw-style', wiringCss);
 
-  const loader = createLoaderView({ host: stageEl, firstEntry: true, onRetry: (r: RetryRequest) => stream().retry(r.sheet, r.level) });
+  const loader = createLoaderView({ host: stageEl, firstEntry: true, onRetry: (r: RetryRequest) => stream.retry(r.sheet, r.level) });
   loader.setAreaNames(AREA_NAMES);
 
   const pickerHost = doc.createElement('div');
@@ -61,7 +62,7 @@ export function wirePage(stageEl: HTMLElement, stream: () => CityStream): PageWi
   pickerHost.setAttribute('data-sheet-index', '');
   (stageEl.querySelector('.st-title') ?? stageEl).appendChild(pickerHost);     // the title card's own column: it flows with the card on a desktop and a phone
   const picker = mountSheetIndex(pickerHost, {
-    onSelect: (code) => stream().select(code),
+    onSelect: (code) => stream.select(code),
     shiftArrows: pickerHost,       // NOT the document: MapLibre's own Shift + arrow (rotate, pitch) must keep working on the map
     cityName: 'Amsterdam',
   });
@@ -86,7 +87,7 @@ export function wirePage(stageEl: HTMLElement, stream: () => CityStream): PageWi
     const row = sheetOf(target.value as never);
     if (row === null) return;
     event.stopImmediatePropagation();
-    stream().select(row.code);
+    stream.select(row.code);
   };
   doc.addEventListener('change', onAreaSelect, true);
 

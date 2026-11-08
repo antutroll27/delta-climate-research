@@ -148,3 +148,23 @@ test('a host timer that fires a fraction of a millisecond early still ends the m
   timer.live = false; timer.fn(); await f.settle();
   assert.ok(f.log.some((l) => l.startsWith('loader:F4/rise')), 'the loader rise was commanded by that early tick');
 });
+
+
+test('F4 (INT audit): a wake that falls between an event\'s stamp and the clock at re-arm is not dropped (the stall the early-timer test only approximated)', async () => {
+  const f = new Fake();
+  f.exec.send({ type: 'start', sheet: 'E4' });
+  await f.finish('E4', 'lod0'); await f.finish('E4', 'halo');
+  f.t = 1000;
+  f.exec.send({ type: 'select', sheet: 'F4' });                  // quiet window: rise due at 1400, plate at 2200
+  /* An event is stamped at 1399.7; its dispatch (page furniture, DOM work) runs on, and the clock reads 1400.5 when the executor re-arms. */
+  let reads = 0;
+  f.ports.now = () => (f.slowStamp !== undefined && reads++ >= 1 ? f.slowStamp : f.t);
+  f.t = 1399.7; f.slowStamp = 1400.5;
+  f.exec.send({ type: 'network-changed', network: 'fast' });
+  await f.settle();
+  f.slowStamp = undefined; f.t = 1400.5;
+  const live = f.timers.filter((x) => x.live).map((x) => x.at).sort((a, b) => a - b);
+  assert.ok(live.some((at) => at <= 1400.5), `a timer for the 1400 rise is armed (armed: ${live.join(', ')})`);
+  for (const timer of f.timers.filter((x) => x.live && x.at <= 1400.5)) { timer.live = false; timer.fn(); await f.settle(); }
+  assert.ok(f.log.some((l) => l.startsWith('loader:F4/rise')), `the rise fired at its wake, not at the plate's (log: ${f.log.filter((l) => l.startsWith('loader')).join(' ')})`);
+});

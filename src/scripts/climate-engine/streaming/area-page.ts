@@ -104,8 +104,15 @@ export function createPageFurniture(parts: {
 }): PageFurniture {
   const { loader, picker, writer, names } = parts;
   let lastPicker = '';
+  /** The area on screen: what the header, the address and the Area select say. */
+  let shown: SheetCode | null = null;
   return {
-    command: (c) => loader.command(c),
+    command(c) {
+      loader.command(c);
+      /* A pick that did not open leaves the native Area select naming it. The header, crumb and address were never moved (they are written at a
+         commit); the select is put back so all of them agree again (INT audit F7). */
+      if (c.type === 'failure' && shown !== null) writer.areaSelect(shown);
+    },
     stage: (code, s) => loader.stage(code, s),
     facts(code, f) {
       loader.setFacts(code, { buildings: f.buildings, ...(f.trees === undefined ? {} : { trees: f.trees }) });
@@ -120,6 +127,7 @@ export function createPageFurniture(parts: {
       picker.update(indexStateOf(state));
     },
     areaShown(code, drawn) {
+      shown = code;
       writer.header(headerOf(code, names));
       picker.setDrawnCount(code, drawn);
       writer.areaSelect(code);

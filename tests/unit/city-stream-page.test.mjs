@@ -21,7 +21,7 @@ async function until(cond, label, ms = 6000) {
 
 const NAMES = parseAreaNames({ areas: { E4: { name: 'Canal Ring', stadsdeel: 'Centrum' }, F4: { name: 'Middenmeer', stadsdeel: 'Oost' } } });
 
-function rig({ gated = false } = {}) {
+function rig({ gated = false, holdMs = 5 } = {}) {
   const log = { header: [], areaSelect: [], address: [], show: [], picker: [], drawn: [], command: [], visibleSeen: false, stages: [] };
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
@@ -61,7 +61,7 @@ function rig({ gated = false } = {}) {
       log.show.push({ code, first, fly });
       furniture.areaShown(code, 1);                               // the app's commit ends by restating the area ...
       afterCommit();                                              // ... and the controller's own block follows it
-      await wait(5);
+      await wait(holdMs);                                         // the app's own wait for the buildings and the first solve (up to 4 s)
     },
     setHaloSupply: () => undefined, resolve: () => undefined,
     loader: () => undefined, failure: () => undefined, warn: () => undefined,
@@ -101,7 +101,8 @@ test('a pick on the index becomes a select: the loader shows and ends, and the h
     assert.deepEqual(r.log.show.at(-1), { code: 'F4', first: false, fly: true }, 'a chosen area flies the camera; the first open does too');
     assert.ok(r.log.stages.some((s) => s === 'F4/ward') && r.log.stages.some((s) => s === 'F4/surface') && r.log.stages.some((s) => s === 'F4/vector'), 'real stages were reported');
     assert.ok(r.log.drawn.some(([code, n]) => code === 'F4' && n === 1), 'the picker was told what F4 drew');
-    assert.ok(!r.log.command.includes('make-current') || r.log.command.indexOf('make-current') >= 0, 'make-current reaches the loader');
+    assert.ok(r.log.command.includes('make-current'), 'make-current reaches the loader');
+    assert.ok(r.log.command.lastIndexOf('make-current') < r.log.command.lastIndexOf('loader'), 'and the loader\'s end follows the commit');
 
     /* the rise: planned at the commit, after a shown loader, over the page's grow length, and it plays */
     const plan = r.loaderModel.state().rise;
@@ -114,15 +115,17 @@ test('a pick on the index becomes a select: the loader shows and ends, and the h
   } finally { r.stream.dispose(); r.restore(); }
 });
 
-test('an area that opens inside the fast window never shows the loader, and a crossing by panning does not fly the camera', async () => {
-  const r = rig();
+test('an area that opens inside the fast window never shows the loader (however long the page\'s post-commit hold runs), and a crossing by panning does not fly the camera', async () => {
+  const r = rig({ holdMs: 1500 });
   try {
     r.stream.start('E4');
     await until(() => r.stream.report().open === 'E4', 'E4 open');
     r.stream.camera(4.885, 52.364, false, null);                 // the camera is over E4 (arms the crossing) ...
     r.stream.camera(4.9262, 52.364, false, null);                // ... then settles over F4's centre; the manager waits its idle gap
     await until(() => r.stream.report().open === 'F4' && r.stream.report().displayed === 'F4', 'F4 opened by the camera');
+    await wait(1700);                                            // through the hold, the 400 ms rise and the 1.2 s plate
     assert.equal(r.log.visibleSeen, false, 'nothing of the loader was ever drawn');
+    assert.equal(r.loaderModel.state().mode, 'idle');
     assert.deepEqual(r.log.show.at(-1), { code: 'F4', first: false, fly: false });
     assert.equal(r.log.address.at(-1), '/heat-map/nl/amsterdam/canal-ring/?stream=1&area=F4', 'the address follows the camera too');
     assert.equal(r.loaderModel.state().rise.afterLoader, false, 'a quick rise, still a rise');
