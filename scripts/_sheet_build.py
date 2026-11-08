@@ -7,7 +7,7 @@ that is not such a sheet (`require_sheet`, audit B2: nothing may fall back to a 
 What differs from Canal Ring's hand-run pipeline (`fetch-city.py`), and nothing else:
 
   * 3D BAG: the clip is the lattice's half-open lon/lat box (`_src_3dbag.build_rows`), tiles come from the city cache, and an
-    implausible ground is repaired from the AHN4 ring (`repair_grounds`, switchable: Canal Ring's shipped file has none).
+    implausible ground is repaired from the AHN4 ring (`repair_grounds`, switchable; Canal Ring's shipped file is ground-repaired too since #88).
   * AHN: read through a city-wide VRT over the 1 km cache (`_vrt`), audit S2.
   * CHM: through a VRT over both cached COGs, so the F column's straddle of lon 4.92187 E is no obstacle, audit S3.
   * Overture: the city-wide parquet, read once and pre-filtered per sheet.
