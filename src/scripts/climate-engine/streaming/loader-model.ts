@@ -210,13 +210,12 @@ export function stageValue(stage: TileStage, facts: SheetFacts | undefined): str
   }
 }
 
-/** The stages that CAN happen for `sheet`. "Massing" is the neighbour's grey blocks already on screen, which only a sheet next door to the one on
- *  screen ever has; for a far pick the row would sit unticked for the whole load and read as a stuck step (INT audit F8). Hidden, not invented. */
+/** The stages that WILL happen for `sheet`. "Massing" is the neighbour's grey blocks already on screen: nothing starts that load once the area is
+ *  picked (the manager draws a ring around the area on screen, not around the target), so the row is real only if the massing is resident now. A far
+ *  pick has none (INT audit F8); neither has a diagonal neighbour on `low` (ring edge4) or one the GPU budget trimmed (INT re-audit R7). Hidden, not invented. */
 export function stagesApplicable(state: LoaderState, sheet: SheetCode | null = state.sheet): readonly TileStage[] {
   if (sheet === null || state.shown === null || state.shown === sheet) return TILE_STAGES;
   if (stagesOf(state, sheet).includes('massing')) return TILE_STAGES;
-  const a = sheetByCode(state.shown), b = sheetByCode(sheet);
-  if (a !== undefined && b !== undefined && Math.abs(a.i - b.i) <= 1 && Math.abs(a.j - b.j) <= 1) return TILE_STAGES;
   return TILE_STAGES.filter((s) => s !== 'massing');
 }
 

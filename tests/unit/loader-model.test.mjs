@@ -316,9 +316,9 @@ class City {
   /** `hold`: how long the page's open keeps running after its commit (the app waits for the buildings and the first solve, up to 4 s). The page
    *  opens at the commit when no loader was shown for the area, and when one was, only after the hold (city-stream.ts). INT audit F1: a harness
    *  that opened every area instantly could not see a loader drawing over an area that is already on screen. */
-  constructor(options = { firstEntry: false }, hold = 0) {
+  constructor(options = { firstEntry: false }, hold = 0, tier = 'full') {
     this.hold = hold; this.pendingOpen = null;
-    this.m = createSheetManager('full');
+    this.m = createSheetManager(tier);
     this.loader = createLoaderModel(options);
     this.t = 0;
     this.pending = new Map();
@@ -367,11 +367,11 @@ class City {
   visibleNow() { return isVisible(this.state, this.t); }
 }
 
-function openAt(code) {
-  const c = new City({ firstEntry: false });
+function openAt(code, tier = 'full') {
+  const c = new City({ firstEntry: false }, 0, tier);
   c.event({ type: 'start', sheet: code });
   c.land(code, 'lod0'); c.land(code, 'halo');
-  for (const key of [...c.pending.keys()]) { const [s, l] = key.split('/'); c.land(s, l); }
+  while (c.pending.size > 0) { const [s, l] = c.pending.keys().next().value.split('/'); c.land(s, l); }     // the low lane runs two at a time: land until the ring is complete
   return c;
 }
 
@@ -546,4 +546,26 @@ test('INT audit F8: "Massing" is not a stage of a far pick (hidden, not invented
   n.at(10_000).event({ type: 'select', sheet: 'F4' });           // a ring neighbour
   assert.deepEqual(stagesApplicable(n.state, 'F4'), ['massing', 'ward', 'surface', 'vector', 'sim']);
   assert.ok(progressOf(n.state, 'F4') < 1);
+});
+
+test('INT re-audit R7: "Massing" is a row only where massing is really there: a diagonal neighbour on `low` (ring edge4) has none, so no unticked row', () => {
+  const low = openAt('E4', 'low');                              // low: only the four edge neighbours are drawn as massing
+  low.at(10_000).event({ type: 'select', sheet: 'F5' });         // a DIAGONAL neighbour of E4
+  assert.deepEqual(stagesApplicable(low.state, 'F5'), ['ward', 'surface', 'vector', 'sim'], 'nothing will ever tick a massing row for F5');
+  for (const stage of ['ward', 'surface', 'vector', 'sim']) low.loader.dispatch({ type: 'stage', atMs: 10_100, sheet: 'F5', stage });
+  assert.equal(progressOf(low.state, 'F5'), 1);
+  const edge = openAt('E4', 'low');
+  edge.at(10_000).event({ type: 'select', sheet: 'F4' });        // an EDGE neighbour: its massing is on screen
+  assert.deepEqual(stagesApplicable(edge.state, 'F4'), ['massing', 'ward', 'surface', 'vector', 'sim']);
+  const full = openAt('E4', 'full');
+  full.at(10_000).event({ type: 'select', sheet: 'F5' });        // ring8: the diagonal has massing
+  assert.deepEqual(stagesApplicable(full.state, 'F5'), ['massing', 'ward', 'surface', 'vector', 'sim']);
+});
+
+test('INT re-audit R7: a neighbour whose massing the GPU budget trimmed (never loaded, or evicted for the budget) shows no Massing row either', () => {
+  const c = openAt('E4', 'full');
+  assert.ok(stagesOf(c.state, 'F4').includes('massing'), 'premise: the ring loaded F4\'s massing');
+  c.loader.dispatch({ type: 'command', atMs: 9_000, command: { type: 'evict', sheet: 'F4', level: 'lod1', reason: 'budget' } });
+  c.at(10_000).event({ type: 'select', sheet: 'F4' });
+  assert.deepEqual(stagesApplicable(c.state, 'F4'), ['ward', 'surface', 'vector', 'sim']);
 });
