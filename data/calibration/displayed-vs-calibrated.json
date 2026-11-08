@@ -1,6 +1,6 @@
 {
   "note": "Displayed (shipped TsHeatSim field, ward mean; Ward 68 polygon-masked) vs calibrated (fit-ward-scale predict at the shipped constants, as model-accuracy.json scores it), same rows, same statistics. Evidence for a decision; nothing in the model was changed to produce it.",
-  "generated": "2026-10-05",
+  "generated": "2026-11-08",
   "rows": 294,
   "scored": {
     "q_day": 0.419,
@@ -20,9 +20,9 @@
       "calibrated": {
         "n_scenes": 50,
         "n_overpasses": 20,
-        "bias_K": 0.41,
-        "rmse_K": 2.662,
-        "loo_overpass_rmse_K": 2.777
+        "bias_K": 0.32,
+        "rmse_K": 2.683,
+        "loo_overpass_rmse_K": 2.812
       },
       "displayed_settled": {
         "n_scenes": 50,
@@ -39,8 +39,8 @@
         "loo_overpass_rmse_K": 2.812
       },
       "solver_minus_equation_K": -0.007,
-      "app_equation_minus_calibrated_K": -0.092,
-      "displayed_minus_calibrated_K": -0.099,
+      "app_equation_minus_calibrated_K": -0.002,
+      "displayed_minus_calibrated_K": -0.009,
       "band": {
         "label": "night \u00b13.0 K (ACCURACY.night.bandK)",
         "K": 3.0,
@@ -53,9 +53,9 @@
           "calibrated": {
             "n_scenes": 14,
             "n_overpasses": 5,
-            "bias_K": -1.623,
-            "rmse_K": 2.424,
-            "loo_overpass_rmse_K": 2.223
+            "bias_K": -1.714,
+            "rmse_K": 2.433,
+            "loo_overpass_rmse_K": 2.13
           },
           "displayed_settled": {
             "n_scenes": 14,
@@ -72,16 +72,16 @@
             "loo_overpass_rmse_K": 2.128
           },
           "solver_minus_equation_K": -0.008,
-          "app_equation_minus_calibrated_K": -0.092,
-          "displayed_minus_calibrated_K": -0.101
+          "app_equation_minus_calibrated_K": -0.002,
+          "displayed_minus_calibrated_K": -0.01
         },
         "pre-monsoon (Mar-Jun)": {
           "calibrated": {
             "n_scenes": 18,
             "n_overpasses": 8,
-            "bias_K": 1.748,
-            "rmse_K": 3.064,
-            "loo_overpass_rmse_K": 2.993
+            "bias_K": 1.719,
+            "rmse_K": 3.063,
+            "loo_overpass_rmse_K": 3.014
           },
           "displayed_settled": {
             "n_scenes": 18,
@@ -98,8 +98,8 @@
             "loo_overpass_rmse_K": 3.013
           },
           "solver_minus_equation_K": -0.003,
-          "app_equation_minus_calibrated_K": -0.03,
-          "displayed_minus_calibrated_K": -0.033
+          "app_equation_minus_calibrated_K": -0.002,
+          "displayed_minus_calibrated_K": -0.005
         },
         "monsoon (Jul-Sep)": {
           "calibrated": {
@@ -131,9 +131,9 @@
           "calibrated": {
             "n_scenes": 13,
             "n_overpasses": 5,
-            "bias_K": 0.227,
-            "rmse_K": 1.514,
-            "loo_overpass_rmse_K": 1.873
+            "bias_K": 0.017,
+            "rmse_K": 1.636,
+            "loo_overpass_rmse_K": 2.042
           },
           "displayed_settled": {
             "n_scenes": 13,
@@ -150,17 +150,17 @@
             "loo_overpass_rmse_K": 2.039
           },
           "solver_minus_equation_K": -0.009,
-          "app_equation_minus_calibrated_K": -0.212,
-          "displayed_minus_calibrated_K": -0.221
+          "app_equation_minus_calibrated_K": -0.002,
+          "displayed_minus_calibrated_K": -0.012
         }
       },
       "ward_68_only": {
         "calibrated": {
           "n_scenes": 16,
           "n_overpasses": 16,
-          "bias_K": 0.616,
-          "rmse_K": 2.856,
-          "loo_overpass_rmse_K": 2.974
+          "bias_K": 0.576,
+          "rmse_K": 2.865,
+          "loo_overpass_rmse_K": 2.993
         },
         "displayed_settled": {
           "n_scenes": 16,
@@ -177,15 +177,15 @@
           "loo_overpass_rmse_K": 2.993
         },
         "solver_minus_equation_K": -0.022,
-        "app_equation_minus_calibrated_K": -0.042,
-        "displayed_minus_calibrated_K": -0.063,
+        "app_equation_minus_calibrated_K": -0.002,
+        "displayed_minus_calibrated_K": -0.023,
         "by_season": {
           "winter (Dec-Feb)": {
             "calibrated": {
               "n_scenes": 5,
               "n_overpasses": 5,
-              "bias_K": -1.808,
-              "rmse_K": 2.509,
+              "bias_K": -1.824,
+              "rmse_K": 2.523,
               "loo_overpass_rmse_K": null
             },
             "displayed_settled": {
@@ -203,15 +203,15 @@
               "loo_overpass_rmse_K": null
             },
             "solver_minus_equation_K": -0.023,
-            "app_equation_minus_calibrated_K": -0.018,
-            "displayed_minus_calibrated_K": -0.041
+            "app_equation_minus_calibrated_K": -0.002,
+            "displayed_minus_calibrated_K": -0.025
           },
           "pre-monsoon (Mar-Jun)": {
             "calibrated": {
               "n_scenes": 5,
               "n_overpasses": 5,
-              "bias_K": 1.927,
-              "rmse_K": 3.428,
+              "bias_K": 1.917,
+              "rmse_K": 3.429,
               "loo_overpass_rmse_K": null
             },
             "displayed_settled": {
@@ -229,8 +229,8 @@
               "loo_overpass_rmse_K": null
             },
             "solver_minus_equation_K": -0.011,
-            "app_equation_minus_calibrated_K": -0.011,
-            "displayed_minus_calibrated_K": -0.022
+            "app_equation_minus_calibrated_K": -0.001,
+            "displayed_minus_calibrated_K": -0.012
           },
           "monsoon (Jul-Sep)": {
             "calibrated": {
@@ -262,8 +262,8 @@
             "calibrated": {
               "n_scenes": 4,
               "n_overpasses": 4,
-              "bias_K": 0.407,
-              "rmse_K": 1.34,
+              "bias_K": 0.279,
+              "rmse_K": 1.383,
               "loo_overpass_rmse_K": null
             },
             "displayed_settled": {
@@ -281,8 +281,8 @@
               "loo_overpass_rmse_K": null
             },
             "solver_minus_equation_K": -0.03,
-            "app_equation_minus_calibrated_K": -0.13,
-            "displayed_minus_calibrated_K": -0.161
+            "app_equation_minus_calibrated_K": -0.002,
+            "displayed_minus_calibrated_K": -0.032
           }
         }
       },

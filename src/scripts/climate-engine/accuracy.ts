@@ -8,7 +8,8 @@
  *
  * NIGHT IS THE EXCEPTION: its figures come from `data/calibration/model-accuracy.json`
  * → `ward_scale.strata.night` (written by `scripts/measure-accuracy.py`). Do NOT copy
- * `phases.night.reported_band_K` from that file — its 3.5 is the superseded
+ * `phases.night.reported_band_K` from that file — its 3.5 (3.0 since the 2026-11-08
+ * scorer correction, by coincidence) is the superseded
  * mask-scale block, scoring a fit that does not ship.
  *
  * MEASURED AT WARD SCALE, WHICH IS NEW. The previous figures scored the model
@@ -29,12 +30,21 @@
  * that a 50 km reanalysis cell cannot resolve. No amount of tuning moves the
  * daytime ceiling — that limit is the forcing data.
  *
- * WHERE WE SIT AGAINST IT. Night is 0.50 K off its ceiling, and the model runs
- * 0.41 K warmer than the measured surface on average (bias +0.41 K, model
+ * WHERE WE SIT AGAINST IT. Night is 0.52 K off its ceiling, and the model runs
+ * 0.32 K warmer than the measured surface on average (bias +0.32 K, model
  * minus measured). Day, in the older evidence set, was 1.08 K off, so the
  * daytime structure is genuinely incomplete and that gap is ours, not the
  * data's. Two different situations; the notes below say so rather than
  * averaging them into one reassuring sentence.
+ *
+ * NIGHT FIGURE CORRECTED 2026-11-08 (RMSE 2.662 -> 2.683 K, LOO 2.777 -> 2.812 K,
+ * bias +0.41 -> +0.32 K). The page's night evaporation taper (`nightLatent`) is
+ * evaluated on a fixed reference cell, (store + pull)/k; the Python scorer had left
+ * the store out and used (Q*built + pull)/k, so the published figure described a
+ * model slightly different from the one that runs. `_physics.night_latent` is now
+ * the single definition and the scorer matches the page. Nothing in the model
+ * changed; the displayed night mean (+0.31 K, 2.68 K, LOO 2.81 K) is unchanged.
+ * The band stays +/-3.0 K (it covers 2.812 K). See docs/evidence/2026-11-08-night-figure-parity.md.
  *
  * BALLYGUNGE IS KMC WARD 68 (re-measured 2026-10-03). Every ward-scale figure
  * here that is copied from model-accuracy.json — all of night, and the peak
@@ -54,7 +64,7 @@
  *
  * So the product reports night as calibrated for the city-wide level (ward-to-ward
  * differences at night are NOT validated: air temperature plus a fixed offset scores
- * as well, see NIGHT_AS_SHIPPED) and day as indicative.
+ * as well, see NIGHT_AIR_OFFSET_LOO_RMSE_K) and day as indicative.
  *
  * Regenerate with: python3 scripts/build-ward-observations.py
  *                  python3 scripts/fit-ward-scale.py
@@ -79,30 +89,11 @@ export interface PhaseAccuracy {
 }
 
 /**
- * THE NIGHT FIGURES FOR THE MODEL AS SHIPPED (2026-11-07 science audit,
- * /Volumes/OBOSLab/research/kolkata-skill-check/REPORT.md, Q2 and Q1).
- *
- * WHY A SECOND SET OF NIGHT FIGURES EXISTS. data/calibration/model-accuracy.json
- * (RMSE 2.662, leave-one-overpass-out 2.777, bias +0.41, from measure-accuracy.py)
- * is scored with the PYTHON mirror of the physics. The shipped TypeScript model
- * evaluates the night dewpoint taper on a fixed reference cell, the mirror on the
- * ward's own, so on the same 50 ward-scenes the shipped model scores a little
- * differently. The calibration data is NOT touched: ACCURACY.night.modelRmseK and
- * looOverpassRmseK stay the artefact's (a test holds them to it) and the structured
- * ward record keeps them. The PROSE a visitor reads about the night quotes THESE,
- * the figures of the model they are actually looking at. The ±3.0 K band covers
- * both sets (a test holds that too).
- *
- * airOffsetLooRmseK: "air temperature plus a fixed offset" scored the same
- * leave-one-overpass-out way. It does as well as the model at night.
+ * Night, leave-one-overpass-out, for "air temperature plus a fixed offset" (n = 50 ward-scenes over
+ * 20 overpasses; kolkata-skill-check REPORT.md Q2, 2.38 K). The model scores ACCURACY.night.looOverpassRmseK
+ * (2.81 K) on the same rows, so at night it has no skill over air temperature plus an offset.
  */
-export const NIGHT_AS_SHIPPED = {
-  overpasses: 20,
-  rmseK: 2.683,
-  looOverpassRmseK: 2.812,
-  biasK: 0.32,
-  airOffsetLooRmseK: 2.38,
-} as const;
+export const NIGHT_AIR_OFFSET_LOO_RMSE_K = 2.38;
 
 /**
  * Peak ECOSTRESS, leave-one-overpass-out, for "air temperature plus a fixed offset" (n = 23 over 8
@@ -111,11 +102,21 @@ export const NIGHT_AS_SHIPPED = {
  */
 export const PEAK_AIR_OFFSET_LOO_RMSE_K = 3.42;
 
-export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
+/** The night stratum also carries what its note quotes; a test holds each to model-accuracy.json. */
+export interface NightAccuracy extends PhaseAccuracy {
+  /** ECOSTRESS overpasses the scenes come from */
+  readonly overpasses: number;
+  /** mean model-minus-measured bias, K; positive = the model runs warm */
+  readonly biasK: number;
+}
+
+export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> & { readonly night: NightAccuracy } = {
   night: {
     n: 50,
+    overpasses: 20,
     ceilingRmseK: 2.166,
-    modelRmseK: 2.662,
+    modelRmseK: 2.683,
+    biasK: 0.32,
     /**
      * Leave-one-overpass-out RMSE, from data/calibration/model-accuracy.json
      * ward_scale.strata.night. THIS is the number the band must cover.
@@ -129,21 +130,26 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
      * understating the error the page named. Today's ±3.0 is a re-measurement, not a
      * reversion: after the 2026-09-24 forcing-date correction the out-of-sample error
      * was 2.801 K, which it covers (known-limitations §15). Re-measured 2026-10-03 with
-     * Ballygunge as the KMC Ward 68 polygon it is 2.777 K, still covered. Of
+     * Ballygunge as the KMC Ward 68 polygon it was 2.777 K; the 2026-11-08 scorer
+     * correction (the night taper now on the page's reference cell) makes it 2.812 K,
+     * still covered by ±3.0 K, with 0.19 K to spare. Of
      * every possible defect on a site whose product is its error bars, an error
      * bar that is too small is the worst one.
      */
-    looOverpassRmseK: 2.777,
+    looOverpassRmseK: 2.812,
     bandK: 3.0,
     confidence: 'quantitative',
-    note: 'Night surface temperature tracks air temperature closely, and at night that '
-        + 'is most of what this model knows. Over 50 ward-scenes '
-        + `(${NIGHT_AS_SHIPPED.overpasses} ECOSTRESS overpasses) the model as shipped is off by `
-        + `${NIGHT_AS_SHIPPED.rmseK.toFixed(2)} K, ${NIGHT_AS_SHIPPED.looOverpassRmseK.toFixed(2)} K out of sample, `
-        + `and runs ${NIGHT_AS_SHIPPED.biasK.toFixed(2)} K warmer than the measured surface. `
+    /* A getter, so the figures in the sentence are this object's own fields (a test holds those to the artefact). */
+    get note(): string {
+      return 'Night surface temperature tracks air temperature closely, and at night that '
+        + `is most of what this model knows. Over ${this.n} ward-scenes `
+        + `(${this.overpasses} ECOSTRESS overpasses) the model as shipped is off by `
+        + `${this.modelRmseK.toFixed(2)} K, ${this.looOverpassRmseK.toFixed(2)} K out of sample, `
+        + `and runs ${this.biasK.toFixed(2)} K warmer than the measured surface. `
         + 'Air temperature plus a fixed offset does as well '
-        + `(${NIGHT_AS_SHIPPED.airOffsetLooRmseK.toFixed(2)} K out of sample). So the band describes the `
-        + 'city-wide night level; ward-to-ward differences at night are not yet validated.',
+        + `(${NIGHT_AIR_OFFSET_LOO_RMSE_K.toFixed(2)} K out of sample). So the band describes the `
+        + 'city-wide night level; ward-to-ward differences at night are not yet validated.';
+    },
   },
   peak: {
     n: 29,
@@ -796,7 +802,8 @@ export function bandLabel(phase: 'peak' | 'night'): string {
  * That table is the 2026-08-02 campaign, scored with Ballygunge as the OLD 1400 m
  * box and before the sun-up bar and the forcing-date correction. The artefact
  * today (Ballygunge = KMC Ward 68 polygon, 2026-10-03) reads morning_ecostress
- * LOO 6.29 K n=9, peak_ecostress 2.36 K n=23, night 2.78 K n=50.
+ * LOO 6.29 K n=9, peak_ecostress 2.36 K n=23, night 2.81 K n=50 (2.78 K before the 2026-11-08
+ * scorer correction).
  * TRANSITION_RMSE_K keeps the campaign's 7.54 K, the larger and so the more
  * cautious of the two; moving it is a reviewed change.
  *
