@@ -59,12 +59,32 @@ def fetch_buildings(area: Area) -> None:
         paths.append(bag.fetch_tile(t, raw))
         print(f"  [{i:2d}/{len(tiles)}] {t.tile_id}", flush=True)
     scratch = os.path.join(raw, "scratch")
-    raws = itertools.chain.from_iterable(bag.read_tile(p, scratch) for p in paths)
-    rows, st, mix = bag.build_rows(area, raws)
+    raws = list(itertools.chain.from_iterable(bag.read_tile(p, scratch) for p in paths))
+    # GROUND PLAUSIBILITY (P2b audit B1): 3D BAG's ground for a few buildings is implausibly low (repeated -6.729, -3.310, -4.784 m NAP values), which makes them
+    # 3-9 m too tall. Repair only where the neighbours disagree; see _src_3dbag.ground_decision. The AHN4 DTM/DSM are the area's own cached tiles.
+    ahn = os.path.join(_city.raw_dir(area.city), "ahn")
+    dtm, tf = dem.mosaic("dtm_05m", area, ahn)
+    dsm, _ = dem.mosaic("dsm_05m", area, ahn)
+    tr = bag.rd_transformer()[0]
+    scope = []
+    for rb in raws:
+        c = rb.footprint.centroid
+        cx, cy = _city.to_local(area, *tr.transform(c.x, c.y))
+        scope.append(abs(cx) <= area.size_m / 2.0 and abs(cy) <= area.size_m / 2.0)
+    raws, ground = bag.repair_grounds(raws, dtm, tf, dsm, scope)
+    print(f"  ground plausibility: {ground.buildings} buildings in the square, {ground.repaired} repaired "
+          f"({ground.widened} from a widened ring, up to {ground.max_drop_m:.1f} m lower), outcomes {dict(ground.outcomes)}")
+    rows, st, mix = bag.build_rows(area, iter(raws))
     _, op_desc, op_acc = bag.rd_transformer()
     hs = [r["h"] for r in rows]
     p50, p95 = bag.percentiles(hs, (50.0, 95.0))
     doc = bag.make_buildings_doc(area, rows, st, mix, TODAY)
+    if ground.repaired:
+        doc["heightNote"] += (f" GROUND PLAUSIBILITY: for {ground.repaired} building(s) 3D BAG's ground was more than {bag.GROUND_DROP_M:g} m below the median of the "
+                              f"{bag.GROUND_MIN_NEIGHBOURS}+ buildings within {bag.GROUND_NEIGHBOUR_R_M:g} m (or, with fewer neighbours, a building older than the AHN4 "
+                              f"survey whose AHN4 height agrees); their ground is the 5th percentile of the AHN4 DTM ring around the footprint (hSource "
+                              f"'3dbag-p70-ahn4-ground'). Never raises a height; never leaves a part under {bag.MIN_REPAIRED_HEIGHT_M:g} m; never applied to "
+                              f"buildings from {bag.AHN4_FLIGHT_YEAR} on.")
     tiers = doc["heightTiers"]
     write_json(out_path(area, "buildings"), doc)
     size_mb = os.path.getsize(out_path(area, "buildings")) / 1e6

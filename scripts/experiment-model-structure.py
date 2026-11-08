@@ -114,14 +114,15 @@ def _terms(sc: _physics.Scene, ratio: float, c: float, q_day: float
     return sun, Q, k, pull
 
 
-def _et(sc: _physics.Scene, l_et: float, Q: float, k: float, pull: float,
-        rural_built: float) -> float:
-    """The ET coefficient for this scene, including the night taper."""
+def _et(sc: _physics.Scene, l_et: float, k: float, pull: float) -> float:
+    """The ET coefficient for this scene, including the night taper.
+
+    Every candidate here carries no nocturnal storage, so the taper's reference cell
+    (built = 0, the product's own) has store = 0.
+    """
     L = l_et * _physics.evap_scale(sc.rh)
     if sc.phase == "night":
-        dry_veg = (Q * rural_built + pull) / k
-        headroom = (dry_veg - _physics.dewpoint(sc.tAir, sc.rh)) / _physics.DEWPOINT_TAPER_K
-        L = L * _physics.NIGHT_ET_FRACTION * min(1.0, max(0.0, headroom))
+        L = _physics.night_latent(L, k, pull, sc.tAir, sc.rh, 0.0)
     return L
 
 
@@ -159,7 +160,7 @@ def make_predict(free: tuple[str, ...], saturating: bool = False, svf: bool = Fa
             f = vals["svf_urban"] if surface == "urban" else vals["svf_rural"]
             tSky = _physics.sky_temp(sc.tAir, sc.rh, sc.cloud, vals["c"])
             pull = kRad * (f * tSky + (1 - f) * sc.tAir) + h * sc.wind * sc.tAir
-        L = _et(sc, vals["l_et"], Q, k, pull, lc["rural"]["built"])
+        L = _et(sc, vals["l_et"], k, pull)
         cover = lc[surface]
         veg = cover["veg"]
         if saturating:

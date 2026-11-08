@@ -408,13 +408,14 @@
     "canal-ring": {
       "grid": 280,
       "footprint_m": 2800,
-      "veg_std": 0.2652,
-      "albedo_std": 0.03,
+      "veg_std": 0.2675,
+      "albedo_std": 0.0303,
       "level": "measured",
-      "fvc_mean": 0.3503,
-      "albedo_mean": 0.1067,
+      "fvc_mean": 0.3485,
+      "albedo_mean": 0.0993,
       "sunElevationFloorDeg": 40.0,
-      "scenes": 27
+      "scenes": 22,
+      "reader": "reprojected onto the area's lon/lat grid (scripts/_sentinel.py read_box); the UTM-envelope reader turned the raster by up to 73 m at a corner"
     },
     "ams-d2": {
       "grid": 280,

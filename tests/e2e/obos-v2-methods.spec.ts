@@ -20,7 +20,8 @@ test.describe('@v2 data and methods', () => {
     /* the figures are the record's: 0.93 km² and 2,207 of 7,931 are the Ward 68 record, read at build */
     await expect(page.locator('[data-v2-for="in/kolkata/ballygunge"][data-v2-record]')).toContainText('km²');
     await expect(page.locator('[data-v2-card="how-sure"]')).toContainText('±3.0 °C');
-    await expect(page.locator('[data-v2-card="how-sure"]')).not.toContainText(/validated/i);
+    /* "ward detail unvalidated" is the honest night caveat; any other "validated" (a claim, or "not yet validated") still fails */
+    await expect(page.locator('[data-v2-card="how-sure"]')).not.toContainText(/(?<!un)validated/i);
     /* S8 (item 5): the ledger prints TWO accuracy bands, the night one and the 13:00 peak one, each NAMED by its phase: they are method figures (two validation sets), not a
        reading. No other ± is anywhere on the page, the receipts panel (open) and the ward record included. */
     const ledger = await page.locator('[data-v2-card="how-sure"] li').evaluateAll((els) => els.filter((e) => /±/.test(e.textContent ?? ''))

@@ -517,6 +517,10 @@ lists the five limits, each with the fix that narrows it. The bands are the arte
 | building height unverified | ward-scale only | a survey or a drone pass | per roof |
 | never compared with real rooftops | no measured error | the pre-registered validation study | a measured spread, with its n |
 
+The two "narrows to" figures (about ±10 % for the roof walk, about ±5 % for the ground station) are written for
+Kolkata only, and neither is measured anywhere. The card prints them for Kolkata and prints the same fix with
+no figure for every other city (`ladderFix` in `solar-copy.ts`; no city but Kolkata ships a solar screen today).
+
 Each line is a button that opens a pre-filled email to the technical-queries address with the ward, the
 building index and the limit named; the survey and the measured rung do not exist yet and the button
 does not pretend they do. A one-page **installer brief** prints from the card (the browser's own print,
@@ -1092,7 +1096,8 @@ wind and cloud can change within-ward contrast.
 
 **`model-accuracy.json` still carries `phases.night.reported_band_K: 3.5`.** That is the older mask-scale
 block: it scores the unshipped `fit-physics.py` point, and nothing reads it. The published night band comes
-from `ward_scale.strata.night`.
+from `ward_scale.strata.night`. (Since the 2026-11-08 scorer correction the
+block reads 3.0 by coincidence; it is still the superseded block.)
 
 ## 17. Landsat rows were scored at the wrong wind (corrected 2026-10-05)
 
@@ -1177,6 +1182,13 @@ Displayed minus calibrated, mean over the stratum: night +0.18 K, morning_ecostr
 (peak). Ward 68 sits highest because it is the most built (0.36). Almost all of it is the solver's own
 departure from its undamped equation (`solver_minus_equation_K`); the app's equation differs from the
 published scorer by under 0.1 K (the night-ET taper uses a fixed reference surface in the app).
+
+**Correction, 2026-11-08.** The "under 0.1 K" gap was the night-ET taper: the app evaluates it on a fixed reference
+cell, `(store + pull) / k`, and the Python scorer did not (it used `(Q·built + pull) / k`, no store). The scorer now
+matches the app, which moves the *calibrated* night row of the table above from +0.41 / 2.66 / 2.78 K to
+**+0.32 / 2.68 / 2.81 K** (the other three rows are day strata and do not move); the app-minus-scorer gap at night is
+now 0.002 K. The displayed columns are unchanged. The ±3.0 K night band still holds, now by 0.19 K for the
+calibrated column. See `docs/evidence/2026-11-08-night-figure-parity.md`.
 
 **The ventilation factor is the whole gap.** Re-running the same harness with the factor set to 1 (a scratch
 counterfactual, not committed) puts displayed within 0.1 K of calibrated on every stratum: night +0.31 / 2.68 /
@@ -1277,3 +1289,31 @@ Every view forces the physics with the current month (Now, 13:00, 22:00 and the 
 the caveat applies in all of them. Compare and the paired brief print no band, so they carry no caveat.
 Bengaluru wards are not in the measurement, so they get none either. A refit only needs the harness re-run:
 it rewrites the file, and the caveat follows.
+
+## 19. Night has no skill over air temperature; Amsterdam is cold by day (two audits, 2026-11-07)
+
+Two read-only Opus science audits: `/Volumes/OBOSLab/research/kolkata-skill-check/REPORT.md` and
+`/Volumes/OBOSLab/research/amsterdam-validation/AUDIT.md`. Neither changed a constant or any calibration data.
+
+**Kolkata, night.** The published figures reproduce to the digit (n = 50 ward-scenes, 20 ECOSTRESS overpasses,
+RMSE 2.662 K, leave-one-overpass-out 2.777 K, before the 2026-11-08 correction). But air temperature plus a fixed offset scores 2.38 K out of
+sample against the model's 2.81 K, and the model's own surface-minus-air signal correlates at r = +0.08 with
+the measured one. The ward ordering is right (Ballygunge > Barrackpore > Baruipur) but too strong. The model
+wins on raw RMSE only because it carries the +1.7 K surface-over-air offset. So the ±3.0 K band describes the
+city-wide night level; ward-to-ward differences at night are not validated. By day the model has real skill at
+peak heat (2.36 K out of sample against 3.42 K for air, r = 0.71).
+
+**The figures on the page.** Since the 2026-11-08 scorer correction the published night figures are the ones the
+page's own model produces: RMSE 2.68 K, 2.81 K out of sample, bias +0.32 K. The audit above predates it. See
+`docs/evidence/2026-11-08-night-figure-parity.md`.
+
+**Amsterdam, day.** Over ECOSTRESS and Landsat, summers 2019-2026, the model reads cooler than the measured
+surface from late morning to afternoon: Landsat 10:50 bias -7.0 K (95% CI -7.9 to -6.1, 24 dates), ECOSTRESS after
+11:30 -5.2 K (-6.1 to -4.4, 98 dates), and more on clear days (-7.6 to -8.6 K with cloud <= 0.2). Two sensors
+agree, so it is not a retrieval artefact. The cause is the model's sun response and ventilation term, not the
+data: measured surface-minus-air rises 15-22 K per unit effective sun, the model gives 4.4-7.4, and Kolkata never
+pinned that response down (its measured slope is only 0.5-2.4 K per unit sun). At night the 18 clean passes agree
+(RMSE about 1.8 K) but "LST = air temperature" scores 1.63 K, so there is no skill there either. Amsterdam keeps
+"Heat accuracy not yet validated for this city" and now states the daytime cold bias beside it
+(`CITY_CAVEATS` in `scope/accuracy-claim.ts`, keyed on the city key). A joint Kolkata + Amsterdam refit of the
+shortwave and ventilation terms would settle it; that is the founder's call.

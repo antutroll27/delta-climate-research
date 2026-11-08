@@ -83,6 +83,10 @@ test.describe('Amsterdam, canal ring', () => {
     await expect(page.locator('#lst')).toContainText(/\d\d\.\d|\d\.\d/, { timeout: 180_000 });
     await expect(page.locator('#conf')).toHaveText('Heat accuracy not yet validated for this city', { timeout: 30_000 });
     expect(await page.locator('#lst .band').count()).toBe(0);
+    /* ITS ONE MEASURED FINDING rides beside the unchanged line (scope/accuracy-claim.ts CITY_CAVEATS): visible, and on the chip's tooltip */
+    await expect(page.locator('#seasonNote')).toBeVisible();
+    await expect(page.locator('#seasonNote')).toHaveText(/Satellite checks \(ECOSTRESS and Landsat, summers 2019–2026\) show this model reads cooler than the measured surface by day, by about 5–7 °C from late morning to afternoon, more on clear days\./);
+    await expect(page.locator('#conf')).toHaveAttribute('title', /reads cooler than the measured surface by day/);
     const text = await visibleText(page);
     expect(text, 'a ± reached the page').not.toContain('±');
     expect(text.match(/[€₹$£¥]|\bEUR\b|\bINR\b|\bRs\.?\s?\d/g) ?? [], 'a currency figure reached the page').toEqual([]);

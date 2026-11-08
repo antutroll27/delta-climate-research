@@ -11,7 +11,7 @@ import { heatAccuracyClaim } from '../../../scripts/climate-engine/scope/accurac
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
 /* The tier, not the existence of a ward record, decides whether this city may print a band (scope/accuracy-claim.ts). */
-const claim = heatAccuracyClaim(scope.tier);
+const claim = heatAccuracyClaim(scope.tier, scope.city.id);
 const records = allWardRecords();
 const sibs = areaKeysInCity(scope.key).map(resolve).map((s) => ({ key: s.key, name: s.area.name, publishes: s.area.publishes, rec: records.find((r) => r.id === s.area.id) ?? null }));
 /* GROUPING (B-S7 audit F9): counts are grouped en-GB, never in the Indian locale (the "no currency written by hand" guard bans it). That prints the same digits as v1's
@@ -64,6 +64,7 @@ const shareAlike = sibs.find((s) => s.rec?.boundary)?.rec?.boundary?.shareAlike 
 <article class="card" data-v2-card="how-sure" data-sections="methods">
   <span class="micro">How sure</span>
   <p class="body-s">{claim.line}</p>
+  {claim.caveat && <p class="body-s">{claim.caveat}</p>}
 </article>)}
 <article class="card" data-v2-card="licences" data-sections="methods">
   <span class="micro">Building footprints and every licence</span>

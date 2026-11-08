@@ -29,9 +29,24 @@ import {
 } from '../accuracy.ts';
 import { checkedRows, caveatRows, type Row } from '../v2/method-copy.ts';
 import type { CityTier } from './resolve.ts';
+import type { CityKey } from './registry.ts';
 
 /** The single replacement line, shown wherever a band would have been. */
 export const NOT_VALIDATED_LINE = 'Heat accuracy not yet validated for this city';
+
+/**
+ * What a satellite check HAS found in a city whose accuracy is still not validated,
+ * keyed on the registry's city key and never on a string match. Only a measured
+ * finding belongs here. Amsterdam: ECOSTRESS and Landsat, summers 2019-2026, the
+ * model reads cooler than the measured surface by day (science audit
+ * 2026-11-07, /Volumes/OBOSLab/research/amsterdam-validation/AUDIT.md section 3).
+ * The statement above it does not change.
+ */
+const CITY_CAVEATS: Readonly<Partial<Record<CityKey, string>>> = Object.freeze({
+  amsterdam: 'Satellite checks (ECOSTRESS and Landsat, summers 2019–2026) show this model reads '
+    + 'cooler than the measured surface by day, by about 5–7 °C from late morning to afternoon, '
+    + 'more on clear days.',
+});
 
 export type Phase = 'peak' | 'night';
 export type Confidence = 'quantitative' | 'indicative';
@@ -115,7 +130,9 @@ export interface HeatAccuracyFigures {
 
 export type HeatAccuracyClaim =
   | { readonly kind: 'band'; readonly footLine: string; readonly figures: HeatAccuracyFigures }
-  | { readonly kind: 'none'; readonly footLine: string; readonly line: string; readonly detail: string };
+  | { readonly kind: 'none'; readonly footLine: string; readonly line: string; readonly detail: string;
+      /** a measured finding for this city, shown beside `line`; null where there is none */
+      readonly caveat: string | null };
 
 const fig = (t: string): string => `<b>${t}</b>`;
 
@@ -128,7 +145,8 @@ const FIGURES: HeatAccuracyFigures = Object.freeze({
       return { html: `Outside validation · ${fig(`~±${TRANSITION_RMSE_K.toFixed(1)} °C`)} at this hour${seasonChip}`, confidence: 'indicative' };
     }
     return a.confidence === 'quantitative'
-      ? { html: `Calibrated · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}${seasonChip}`, confidence: a.confidence }
+      /* The night band is a CITY-WIDE level, not ward detail (accuracy.ts NIGHT_AIR_OFFSET_LOO_RMSE_K), and the chip says so. */
+      ? { html: `Night level calibrated · ward detail unvalidated · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}${seasonChip}`, confidence: a.confidence }
       /* THE PEAK BAND IS THE EARLIER EVIDENCE SET (accuracy.ts PEAK_EVIDENCE_BASIS):
          measured before Ballygunge became KMC Ward 68, kept because it is the wider,
          safer band, and said so ON the chip — a tooltip nobody hovers was the only
@@ -166,7 +184,7 @@ const FIGURES: HeatAccuracyFigures = Object.freeze({
   limits: (area?: string): readonly Row[] => caveatRows(area),
 
   ledger: Object.freeze({
-    night: `calibrated · ±${ACCURACY.night.bandK.toFixed(1)} °C · n = ${ACCURACY.night.n} · model error ${ACCURACY.night.modelRmseK} K · ceiling ${ACCURACY.night.ceilingRmseK} K`,
+    night: `night level calibrated, ward detail unvalidated · ±${ACCURACY.night.bandK.toFixed(1)} °C · n = ${ACCURACY.night.n} · calibration-run error ${ACCURACY.night.modelRmseK} K · ceiling ${ACCURACY.night.ceilingRmseK} K`,
     peak: `indicative · ±${ACCURACY.peak.bandK.toFixed(1)} °C · n = ${ACCURACY.peak.n}. ${PEAK_EVIDENCE_BASIS}`,
     patternR: SPATIAL.rModel.toFixed(2),
     patternVegR: SPATIAL.rVegOnly.toFixed(2),
@@ -183,22 +201,36 @@ const FIGURES: HeatAccuracyFigures = Object.freeze({
   }),
 });
 
+const NONE_DETAIL = `${NOT_VALIDATED_LINE}. OBOS publishes accuracy bands only where the model has been scored `
+  + 'against satellite surface temperature, and that was done over three Kolkata wards. '
+  + 'The map here is buildings, terrain and a physical model with no local measurement behind it.';
 const NONE: HeatAccuracyClaim = Object.freeze({
   kind: 'none',
   footLine: 'Modelled surface temperature, not air temperature.',
   line: NOT_VALIDATED_LINE,
-  detail: `${NOT_VALIDATED_LINE}. OBOS publishes accuracy bands only where the model has been scored `
-    + 'against satellite surface temperature, and that was done over three Kolkata wards. '
-    + 'The map here is buildings, terrain and a physical model with no local measurement behind it.',
+  detail: NONE_DETAIL,
+  caveat: null,
 });
+/** A city that has a satellite finding to state beside the same unvalidated line. */
+function noneWithCaveat(caveat: string): HeatAccuracyClaim {
+  return Object.freeze({ ...NONE, detail: `${NONE_DETAIL} ${caveat}`, caveat }) as HeatAccuracyClaim;
+}
+const NONE_BY_CITY: Readonly<Partial<Record<CityKey, HeatAccuracyClaim>>> = Object.freeze(
+  Object.fromEntries(Object.entries(CITY_CAVEATS).map(([k, c]) => [k, noneWithCaveat(c)])),
+);
 const BAND: HeatAccuracyClaim = Object.freeze({
   kind: 'band',
   footLine: 'Satellite-checked surface temperature, not air temperature.',
   figures: FIGURES,
 });
 
-export function heatAccuracyClaim(tier: CityTier | undefined | null): HeatAccuracyClaim {
-  return tier === 'validated' ? BAND : NONE;
+/**
+ * `cityId` is optional and only ever ADDS a measured caveat to a `none` claim: it can
+ * never turn one into a `band`. It is the registry's city key (`scope.city.id`).
+ */
+export function heatAccuracyClaim(tier: CityTier | undefined | null, cityId?: CityKey | null): HeatAccuracyClaim {
+  if (tier === 'validated') return BAND;
+  return (cityId != null ? NONE_BY_CITY[cityId] : undefined) ?? NONE;
 }
 
 /**

@@ -24,7 +24,7 @@ import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import { isCurrentSnapshot, type HeatSimHost, type HeatSimRequest, type HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
 import { parseMetar, type Metar } from '../../lib/weather/metar.ts';
-import { describeWeather, fallbackAmbient, observedNow, rankStations, type ObservedNow } from '../../lib/weather/observed.ts';
+import { describeWeather, fallbackAmbient, fixed, observedNow, placeWords, rankStations, type ObservedNow } from '../../lib/weather/observed.ts';
 import { METAR_STATIONS } from '../../data/metar-stations.ts';
 import { unmeasuredNote, isTransitionHour } from './accuracy';
 import { solarElevationFactor, solarDayHours } from './sky';
@@ -76,7 +76,7 @@ import { heatAccuracyClaim, heightsNote } from './scope/accuracy-claim.ts';
 import { areaPageTitle, areaPageDescription } from './scope/page-meta.ts';
 import { fmtMoney, fmtRate, currencyMark, noCostBasisLine, planScoreLine } from './money.ts';
 import { pvRanges, tierOf } from './solar-ranges.ts';
-import { wardSummary, validatedSentence, noteFor, sharePct, ESTIMATE_TAG, paybackText, oldestAsOf } from './solar-copy.ts';
+import { wardSummary, validatedSentence, noteFor, sharePct, ladderFix, ESTIMATE_TAG, paybackText, oldestAsOf } from './solar-copy.ts';
 import { costBasisFor } from './solar-cost.ts';
 import { CITY_MAP_CREDIT, joinMapCredits } from '../../data/city-credits.ts';
 import { wardRoi, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
@@ -956,6 +956,12 @@ export function mountHeatMap(): () => void {
      tier in prose ("Screening estimate · not bankable · …"), so it cannot stay
      frozen while the chip above it says the roof has been checked. */
   const SOL_NOTE_DEFAULT = el('bcSolNote')?.textContent ?? '';
+  /* The ladder's two "narrows to" sentences, as the markup wrote them (Kolkata's). A city whose
+     bands nobody measured gets the same fix without the figure (`ladderFix`). */
+  const FIX_DEFAULT = {
+    roof: el('bcSure')?.querySelector('[data-fix="roof"]')?.textContent ?? '',
+    irradiance: el('bcSure')?.querySelector('[data-fix="irradiance"]')?.textContent ?? '',
+  } as const;
   /* The BRIEF's footer, captured the same way and for the same reason: it says
      "Screening estimate · not bankable" in the markup, and a sheet whose chip reads
      `validated` while its footer still opens "Screening estimate" is the page
@@ -1002,6 +1008,10 @@ export function mountHeatMap(): () => void {
     setText('bcSureRoof', `Capacity ${r.kwpLow.toFixed(1)}–${r.kwpHigh.toFixed(1)} kWp today.`);
     setText('bcSureCanopy', `Shading ${pct(pv.loss[i])} headline, ${pct(pv.loss_strict[i])} floor.`);
     setText('bcSureIrr', `Yield ${yLo.toLocaleString()}–${yHi.toLocaleString()} kWh per kWp today.`);
+    for (const rung of ['roof', 'irradiance'] as const) {
+      const fix = el('bcSure')?.querySelector(`[data-fix="${rung}"]`);
+      if (fix) fix.textContent = ladderFix(rung, SCOPE.city.id, FIX_DEFAULT[rung]);
+    }
     const v = pv.tiers.validated;
     const tier = tierOf(pv);
     const rung = v === null ? SURE_VALID_DEFAULT : validatedSentence(v);
@@ -3231,7 +3241,7 @@ export function mountHeatMap(): () => void {
       /* Short on purpose: the rail must keep the legend above its fold at 1280x720
          (solar-pane.spec). Every clause is still here: what, where, how far, when,
          what the model does, and that the ward is not the airport. */
-      parts.push('may differ over the ward');
+      parts.push(`may differ over ${esc(placeWords(splitKey(state.ward).city, resolve(state.ward).area.name).over)}`);
       /* The pictograph is an image with a name, not decoration: screen readers get
          "Rain", sighted readers the glyph, and the sentence never depends on it. */
       line.innerHTML = `<i class="wx-ico" role="img" aria-label="${esc(wx.iconLabel)}" title="${esc(wx.iconLabel)}">${wx.icon}</i>`
@@ -3249,7 +3259,9 @@ export function mountHeatMap(): () => void {
     const L = state.live;
     /* A METAR carries whole degrees; printing "31.0" would claim a tenth it does not have. */
     const dp = observed ? 0 : 1;
-    setText('liveT', L ? L.tAir.toFixed(dp) : '—'); setText('liveFeel', L ? L.feels.toFixed(dp) : '—');
+    /* `(-0.4).toFixed(0)` is "-0": round first, then read a zero as zero (an Amsterdam winter reaches it). */
+    const shown = (x: number): string => fixed(x, dp);
+    setText('liveT', L ? shown(L.tAir) : '—'); setText('liveFeel', L ? shown(L.feels) : '—');
     paintWeatherLine(L);
     setText('liveRH', L ? String(Math.round(L.rh)) : '—'); setText('liveWind', L ? L.wind.toFixed(1) : '—');
     /* The dot claims "live"; it may only do so while the reading still is.
@@ -3377,8 +3389,9 @@ export function mountHeatMap(): () => void {
   const lstColor = (t: number) => t >= 40 ? 'var(--red)' : t >= 37 ? 'var(--orange)' : t >= 33 ? 'var(--bronze)' : 'var(--cyan)';
 
   /**
-   * Show how much to trust the number on screen. Night is calibratable against
-   * ECOSTRESS (data ceiling 1.87 K); daytime is not (3.33 K), because noon
+   * Show how much to trust the number on screen. Night is calibrated against
+   * ECOSTRESS for the city-wide level only (ward-to-ward detail is not validated;
+   * accuracy.ts NIGHT_AIR_OFFSET_LOO_RMSE_K); daytime is only indicative, because noon
    * surface temperature depends on local insolation, cloud timing and soil
    * moisture that 50 km reanalysis forcing cannot resolve. Presenting the
    * daytime figure as decision-grade would be the real inaccuracy, so it is
@@ -3405,11 +3418,17 @@ export function mountHeatMap(): () => void {
        Kolkata; a geometry-tier city has none of its own, so it gets one honest line
        and no band, in any weather (scope/accuracy-claim.ts). Read from the CURRENT
        ward, not the boot scope: the ward can change in place. */
-    const claim = heatAccuracyClaim(resolve(state.ward).tier);
+    const claim = heatAccuracyClaim(resolve(state.ward).tier, resolve(state.ward).city.id);
     paintPatternNote(claim);
     if (claim.kind === 'none') {
+      /* The seasonal line is Kolkata's and stays off. The one note a non-validated city may carry
+         is its own measured finding (accuracy-claim.ts CITY_CAVEATS), shown where the season line goes. */
       const seasonOff = el('seasonNote');
-      if (seasonOff) { seasonOff.textContent = ''; (seasonOff as HTMLElement).hidden = true; }
+      if (seasonOff) {
+        seasonOff.textContent = claim.caveat ?? '';
+        (seasonOff as HTMLElement).hidden = claim.caveat == null;
+        (seasonOff as HTMLElement).removeAttribute('title');
+      }
       const noneTag = el('conf');
       if (noneTag) {
         noneTag.textContent = claim.line;
@@ -3501,7 +3520,7 @@ export function mountHeatMap(): () => void {
       pn.setAttribute('title', claim.detail);
     }
   }
-  paintPatternNote(heatAccuracyClaim(resolve(state.ward).tier));
+  paintPatternNote(heatAccuracyClaim(resolve(state.ward).tier, resolve(state.ward).city.id));
   /* Push the bounds to every consumer AND to the legend, so the printed numbers
      can never disagree with the colours above them. */
   function syncRamp(p: SimParams) {
@@ -3572,7 +3591,7 @@ export function mountHeatMap(): () => void {
       // error against ECOSTRESS for the phase on screen. See accuracy.ts.
       // ...and no band at all on a wet ward, which no measurement covers (applyConfidence),
       // nor in a city whose tier carries no measurement (heatAccuracyClaim).
-      const claim = heatAccuracyClaim(resolve(state.ward).tier);
+      const claim = heatAccuracyClaim(resolve(state.ward).tier, resolve(state.ward).city.id);
       const unvalidated = claim.kind !== 'band'
         || (state.sunNow != null && M.outsideValidation(state.live, state.phase === 'peak') !== null);
       lst.innerHTML = `${st.meanC.toFixed(1)}<span class="u">°C</span>`

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
-import { ACCURACY } from '../../src/scripts/climate-engine/accuracy.ts';
+import { ACCURACY, NIGHT_AIR_OFFSET_LOO_RMSE_K, SPATIAL, PEAK_AIR_OFFSET_LOO_RMSE_K } from '../../src/scripts/climate-engine/accuracy.ts';
 import { DEFAULT_PARAMS, STORE_NIGHT } from '../../src/scripts/climate-engine/types.ts';
 import { skyTemperatureC } from '../../src/scripts/climate-engine/sky.ts';
 
@@ -83,6 +83,8 @@ test('every published night figure is the one the artefact measured', () => {
   assert.equal(ACCURACY.night.ceilingRmseK, night.ceiling_rmse_K, 'night ceiling drifted');
   assert.equal(ACCURACY.night.modelRmseK, night.rmse_K, 'night RMSE drifted');
   assert.equal(ACCURACY.night.looOverpassRmseK, night.loo_overpass_rmse_K, 'night LOO drifted');
+  assert.equal(ACCURACY.night.biasK, night.bias_K, 'night bias drifted');
+  assert.equal(ACCURACY.night.overpasses, night.n_overpasses, 'night overpass count drifted');
 });
 
 test('the night band is the smallest half-kelvin step that covers both errors', () => {
@@ -90,16 +92,26 @@ test('the night band is the smallest half-kelvin step that covers both errors', 
   assert.equal(ACCURACY.night.bandK, Math.ceil(need * 2) / 2);
 });
 
-test('every number quoted in the night note is the field it quotes', () => {
+test('the night note quotes the artefact figures, and the band covers them', () => {
   const note = ACCURACY.night.note;
+  const N = ACCURACY.night;
   const has = (s) => assert.ok(note.includes(s), `the night note lacks "${s}":\n${note}`);
-  const bias = art.night.bias_K;
-  has(`over ${ACCURACY.night.n} ward-scenes`);
-  has(`${ACCURACY.night.modelRmseK} K against a best-achievable ${ACCURACY.night.ceilingRmseK} K`);
-  has(`bias ${bias >= 0 ? '+' : '−'}${Math.abs(bias).toFixed(2)} K`);
-  const side = bias >= 0 ? 'warmer' : 'colder';
-  has(`${side} than the measured surface`);
-  has(`runs ${Math.abs(bias).toFixed(2)} K ${side}`);
-  has(`+/-${ACCURACY.night.bandK.toFixed(1)} K`);
-  has(`leave-one-overpass-out error of ${ACCURACY.night.looOverpassRmseK} K`);
+  has(`Over ${N.n} ward-scenes (${art.night.n_overpasses} ECOSTRESS overpasses)`);
+  has(`the model as shipped is off by ${art.night.rmse_K.toFixed(2)} K, ${art.night.loo_overpass_rmse_K.toFixed(2)} K out of sample`);
+  has(`runs ${art.night.bias_K.toFixed(2)} K warmer than the measured surface`);
+  has(`Air temperature plus a fixed offset does as well (${NIGHT_AIR_OFFSET_LOO_RMSE_K.toFixed(2)} K out of sample)`);
+  has('ward-to-ward differences at night are not yet validated');
+  assert.equal(N.bandK, 3.0);
+  assert.ok(N.bandK >= Math.max(art.night.rmse_K, art.night.loo_overpass_rmse_K));
+  /* the bias is positive, so "warmer" is the right word */
+  assert.ok(art.night.bias_K > 0);
+  /* air temperature plus an offset does as well as the model at night: the claim the note makes */
+  assert.ok(NIGHT_AIR_OFFSET_LOO_RMSE_K <= N.looOverpassRmseK);
+});
+
+test('the spatial note opens with the peak skill over air temperature, from the artefact figure', () => {
+  assert.ok(SPATIAL.note.startsWith('Ward means are checked against ECOSTRESS; at peak daytime heat the model beats air temperature (2.36 vs 3.42 K out of sample).'), SPATIAL.note);
+  assert.equal(PEAK_AIR_OFFSET_LOO_RMSE_K, 3.42);
+  assert.ok(ACCURACY.peak.looOverpassRmseK < PEAK_AIR_OFFSET_LOO_RMSE_K);
+  assert.ok(!/calibrated/i.test(SPATIAL.note), 'no ward-level "calibrated" claim beside the night caveat');
 });

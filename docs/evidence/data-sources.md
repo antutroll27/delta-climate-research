@@ -842,6 +842,27 @@ gebieden (CC0 1.0): wijk names". Do not imply the Gemeente endorses the product.
   more than 1.5 m lower (the pit outruns its footprint). It only ever raises. Six buildings qualify; 14 mesh cells change
   (10 by more than 0.5 m; the pit cell −4.52 → −0.66 m), the lowest mesh cell is now −2.53 m NAP. The rule and the building
   list are in `canal-ring-terrain.json` `postAhn4Patch`.
+- **54 Canal Ring buildings stand too tall because 3D BAG gives them an implausible ground value (source fault; left as shipped, a
+  correction is planned).** In 3D BAG v20250903, 54 of the 21,342 served buildings carry a `b3_h_maaiveld` more than 3 m below the
+  median ground of the buildings within 75 m (at least 5 neighbours). The values repeat, which marks a fault in the source's ground
+  step rather than real ground: −3.310 m NAP on 20 buildings, −4.784 m on 12, −6.729 m on 8, −4.12 m on 3, and one to two
+  buildings each at −2.80, −3.77, −5.13 and −5.58 m. Across all 47 raw tiles it is 58 of 37,150 buildings (0.16 %); 54 of them
+  are in the Canal Ring. Amsterdam's polders do lie below −5 m, so this is a test against the neighbours, not a floor in NAP.
+
+  How big the error is. Our rule is 3D BAG's documented one (`b3_h_70p` minus `b3_h_maaiveld`), applied as published, so each
+  served height is the true height plus the ground error. For the 50 of the 54 that have an AHN4 cross-check (`hCheck`), served h
+  runs above it by +2.6 to +9.0 m (median +5.4 m). 18 of the 54 are confirmed directly against the AHN4 ground model, which lies
+  at least 3 m above their 3D BAG ground in a 0.5 to 4 m ring around the footprint (for example `…0012182448`: ring median
+  +1.53 m against −6.729 m; `…0100092374`: +2.31 m). The other 36 lie outside the AHN4 clip or have too few ring cells, so they
+  rest on the neighbour test alone.
+
+  What we do and do not do. AHN4 is used only as a cross-check and is never blended into h. That cross-check (guard G5) flags a
+  building only when |h − hCheck| exceeds 5 m, so it flags 32 of the 54, not all of them. Nothing was edited in the shipped data.
+  A plausibility correction is planned, pending the founder's decision: where ground is more than 3 m below the 75 m neighbour
+  median, or below the AHN4 ring median, replace it with the 5th percentile of the AHN4 ground ring (the statistic 3D BAG itself
+  uses) and tag the building's `hSource`. The method was run by `/Volumes/OBOSLab/tmp/ams-followups-audit/scripts/ground.py` and
+  re-run on 2026-11-07 with the same counts (58 city-wide, 54 served, 18 confirmed, 32 flagged).
+
 - **Tree species.** Kolkata's draw has palms; Amsterdam's does not. The founder's rule is no palms outside the tropics, so a
   Köppen C/D city draws one generic `broadleaf` (the 10 m placement knows a canopy height, not a species). Positions,
   heights and the 16,710 count are unchanged; only the label differs, and `canal-ring-trees.json` carries its own

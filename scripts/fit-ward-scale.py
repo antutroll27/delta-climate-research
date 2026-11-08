@@ -157,9 +157,10 @@ def predict(p: dict[str, float], r: Row, night_release: bool) -> float:
     # the one that ships is not calibration, so the cap belongs in both places.
     L = p["l_et"] * _physics.evap_scale(r.rh)
     if night:
-        dry = (Q * r.built + pull) / k
-        headroom = (dry - _physics.dewpoint(r.tAir, r.rh)) / _physics.DEWPOINT_TAPER_K
-        L = L * _physics.NIGHT_ET_FRACTION * min(1.0, max(0.0, headroom))
+        # The taper's reference cell is the product's: built = 0, so its store is the
+        # model's floor `release_base` (zero for a candidate with no storage term).
+        L = _physics.night_latent(L, k, pull, r.tAir, r.rh,
+                                  p["release_base"] if night_release else 0.0)
 
     stored = 0.0
     if night and night_release:

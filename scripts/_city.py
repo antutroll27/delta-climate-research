@@ -258,7 +258,7 @@ def bounds_local_crs(a: Area, pad_m: float = 0.0) -> tuple[float, float, float, 
 # ── file contracts (TypedDict at the JSON boundary ONLY) ───────────────────
 
 #: "3dbag-p70-ahn4-ground": 3D BAG's roof, but the ground came from the AHN4 DTM ring outside the footprint, because 3D BAG's own
-#: `b3_h_maaiveld` failed the plausibility rule (`_src_3dbag.ground_verdict`). Sheets only; Canal Ring's shipped file has none.
+#: `b3_h_maaiveld` failed the plausibility rule (`_src_3dbag.ground_decision`).
 HSource = Literal["3dbag-p70", "3dbag-p70-ahn4-ground", "plateau-measured", "plateau-lod1", "fill"]
 
 
