@@ -34,6 +34,23 @@ const MAX_HALF_GAP_MS = 30 * 60_000;
 const UNSEEN_ONSET_MS = 15 * 60_000;
 const MS_PER_KT = 0.514444;
 
+/**
+ * What the weather line calls the place it describes. Kolkata's and Bengaluru's areas are wards and keep "the ward" (the words the
+ * line has always printed); any other city names its own area ("the Canal Ring"), because Amsterdam's 2.8 km square spans three
+ * stadsdelen and is no ward. `centre` completes "8 km from ...", `over` completes "may differ over ...".
+ */
+const WARD_CITIES: ReadonlySet<string> = new Set(['kolkata', 'bengaluru']);
+export function placeWords(cityId: string, areaName: string): { readonly centre: string; readonly over: string } {
+  return WARD_CITIES.has(cityId) ? { centre: 'the ward', over: 'the ward' }
+    : { centre: `the ${areaName} centre`, over: `the ${areaName}` };
+}
+
+/** `x.toFixed(dp)` with a zero read as zero: `(-0.4).toFixed(0)` is "-0", which a reading must never print. */
+export function fixed(x: number, dp: number): string {
+  const t = x.toFixed(dp);
+  return Number(t) === 0 ? (0).toFixed(dp) : t;
+}
+
 export interface RankedStation { readonly icao: string; readonly km: number }
 
 /** Great-circle distance, km (haversine, mean Earth radius 6371.0088 km). */
@@ -227,9 +244,12 @@ const INTENSITY = { light: 'Light', moderate: 'Moderate', heavy: 'Heavy' } as co
 export function describeWeather(o: ObservedNow): WeatherWords {
   const m = o.latest;
   const wetGroup = m.weather.find((w) => !w.vicinity && w.phenomena.some((p) => p === 'RA' || p === 'DZ'));
-  const nearby = o.vicinity.length
-    ? ` · ${o.vicinity.some((v) => v.includes('TS')) ? 'thunderstorm' : 'showers'} nearby`
-    : '';
+  /* The nearby phenomenon is named for what it is, one word, in priority order: VCTS thunderstorm, VCSH showers, VCFG fog. Any other VC
+     group (VCBLSN, VCSS, VCPO...) is said as plain "weather" rather than miscalled showers. */
+  const vc = o.vicinity.map((v) => v.slice(2));
+  const nearbyWord = vc.some((v) => v.includes('TS')) ? 'thunderstorm' : vc.some((v) => v.includes('SH')) ? 'showers'
+    : vc.some((v) => v.includes('FG')) ? 'fog' : 'weather';
+  const nearby = vc.length ? ` · ${nearbyWord} nearby` : '';
   if (wetGroup) {
     const kind = wetGroup.descriptor === 'TS' ? 'thunderstorm with rain'
       : wetGroup.descriptor === 'SH' ? 'rain showers'
@@ -242,6 +262,22 @@ export function describeWeather(o: ObservedNow): WeatherWords {
   }
   const dryingOut = o.ambient.observed && o.ambient.observed.wet > 0.05 ? 'surfaces drying' : '';
   if (o.thunder) return { icon: '⛈', iconLabel: 'Thunderstorm', text: `Thunderstorm${nearby}`, effect: dryingOut };
+  /* Frozen precipitation and fog are what a Dutch winter report says; the sky words below would otherwise call them "Mostly cloudy".
+     Falling snow only: BL (blowing) and DR (drifting) lift snow already on the ground, and are not snowfall. No "surfaces drying"
+     effect with any of these: that is a rain note. */
+  const own = m.weather.filter((w) => !w.vicinity);
+  const FROZEN = { SN: 'snow', SG: 'snow', PL: 'ice pellets', GR: 'hail', GS: 'small hail' } as const;
+  const frozen = own.find((w) => w.descriptor !== 'BL' && w.descriptor !== 'DR' && w.phenomena.some((p) => p in FROZEN));
+  if (frozen) {
+    const p = frozen.phenomena.find((q): q is keyof typeof FROZEN => q in FROZEN)!;
+    const word = FROZEN[p];
+    const label = word.charAt(0).toUpperCase() + word.slice(1);
+    return { icon: p === 'GR' || p === 'GS' || p === 'PL' ? '🌨' : '❄', iconLabel: label, text: `${INTENSITY[frozen.intensity]} ${word}${nearby}`, effect: '' };
+  }
+  /* Fog is FG not shallow (MI), patchy (BC) or partial (PR): those cover part of the aerodrome and keep the sky words. */
+  if (own.some((w) => w.phenomena.includes('FG') && w.descriptor !== 'MI' && w.descriptor !== 'BC' && w.descriptor !== 'PR')) {
+    return { icon: '🌫', iconLabel: 'Fog', text: `Fog${nearby}`, effect: '' };
+  }
   const c = o.cloud;
   const sky = c === null ? { icon: '🌡', label: 'Sky not reported', text: 'Sky not reported' }
     : c === 0 ? { icon: '☀', label: 'Clear', text: 'Clear' }

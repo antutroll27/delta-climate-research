@@ -44,7 +44,7 @@ import { METAR_STALE_MIN } from '../../../lib/weather/observed.ts';
   <ul class="rule">
     <li><Sym shape="disc" c="wind" size={18} /><span><b>The airport sets "now".</b> Air temperature, humidity, wind and cloud from the newest report drive the modelled surface.</span></li>
     <li><Sym shape="disc" c="wind" kind="modelled" size={18} /><span><b>Older than {METAR_STALE_MIN} minutes</b>, and the Met Norway forecast stands in, carrying any rain the airport reported.</span></li>
-    <li><Sym shape="bowl" c="water" size={18} /><span><b>Rain at the airport is applied to the ward</b>, and the weather line says conditions over the ward may differ.</span></li>
+    <li><Sym shape="bowl" c="water" size={18} /><span><b>Rain at the airport is applied to <span data-wx="over">the ward</span></b>, and the weather line says conditions over <span data-wx="over">the ward</span> may differ.</span></li>
   </ul>
   <div class="tile"><div class="wx-lab">Ground &amp; rooftop surface <span class="kind modelled">modelled</span></div>
     <p class="hero md"><span data-wx-mirror-lst>—</span></p><p class="foot"><span data-wx-mirror="lstPhase"></span>. A surface, not the air.</p></div>

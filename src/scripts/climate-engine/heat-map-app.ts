@@ -24,7 +24,7 @@ import { createGpuHost, createStaticHost, createWorkerHost } from './sim-host';
 import { isCurrentSnapshot, type HeatSimHost, type HeatSimRequest, type HeatSimSnapshot } from './sim-protocol';
 import * as M from './heat-map-model';
 import { parseMetar, type Metar } from '../../lib/weather/metar.ts';
-import { describeWeather, fallbackAmbient, observedNow, rankStations, type ObservedNow } from '../../lib/weather/observed.ts';
+import { describeWeather, fallbackAmbient, fixed, observedNow, placeWords, rankStations, type ObservedNow } from '../../lib/weather/observed.ts';
 import { METAR_STATIONS } from '../../data/metar-stations.ts';
 import { unmeasuredNote, isTransitionHour } from './accuracy';
 import { solarElevationFactor, solarDayHours } from './sky';
@@ -3143,7 +3143,7 @@ export function mountHeatMap(): () => void {
       /* Short on purpose: the rail must keep the legend above its fold at 1280x720
          (solar-pane.spec). Every clause is still here: what, where, how far, when,
          what the model does, and that the ward is not the airport. */
-      parts.push('may differ over the ward');
+      parts.push(`may differ over ${esc(placeWords(splitKey(state.ward).city, resolve(state.ward).area.name).over)}`);
       /* The pictograph is an image with a name, not decoration: screen readers get
          "Rain", sighted readers the glyph, and the sentence never depends on it. */
       line.innerHTML = `<i class="wx-ico" role="img" aria-label="${esc(wx.iconLabel)}" title="${esc(wx.iconLabel)}">${wx.icon}</i>`
@@ -3161,7 +3161,9 @@ export function mountHeatMap(): () => void {
     const L = state.live;
     /* A METAR carries whole degrees; printing "31.0" would claim a tenth it does not have. */
     const dp = observed ? 0 : 1;
-    setText('liveT', L ? L.tAir.toFixed(dp) : '—'); setText('liveFeel', L ? L.feels.toFixed(dp) : '—');
+    /* `(-0.4).toFixed(0)` is "-0": round first, then read a zero as zero (an Amsterdam winter reaches it). */
+    const shown = (x: number): string => fixed(x, dp);
+    setText('liveT', L ? shown(L.tAir) : '—'); setText('liveFeel', L ? shown(L.feels) : '—');
     paintWeatherLine(L);
     setText('liveRH', L ? String(Math.round(L.rh)) : '—'); setText('liveWind', L ? L.wind.toFixed(1) : '—');
     /* The dot claims "live"; it may only do so while the reading still is.

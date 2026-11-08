@@ -129,4 +129,44 @@ test.describe('observed weather', () => {
     await expect(page.locator('#conf')).toHaveText('Heat accuracy not yet validated for this city', { timeout: 30_000 });
     await expect(page.locator('#lst .band')).toHaveCount(0);
   });
+  /* AMSTERDAM, 2026-11-07: real Schiphol reports (tests/fixtures/metar/metar-eham-*.json), served as /api/metar serves them. The sun,
+     the report's age and the zone label (CET, not "GMT+1") all follow the page clock, set by the stubbed Date header as above. */
+  const EHAM = JSON.parse(readFileSync(join(FIX, 'metar-eham-20261107T1500Z.json'), 'utf8')) as { icaoId: string; rawOb: string; reportTime: string }[];
+  async function stubAmsterdam(page: Page, serverNow: string) {
+    await page.route(/\/api\/live\?/, (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      headers: { date: new Date(serverNow).toUTCString(), age: '0' }, body: METNO,
+    }));
+    await page.route(/\/api\/metar\?/, (route) => {
+      const ids = new URL(route.request().url()).searchParams.get('ids');
+      expect(ids).toBe('EHAM');
+      route.fulfill({
+        status: 200, contentType: 'application/json',
+        headers: { date: new Date(serverNow).toUTCString() },
+        body: JSON.stringify({
+          source: 'aviationweather.gov', fetchedAt: new Date(serverNow).toISOString(),
+          reports: EHAM.filter((r) => Date.parse(r.reportTime) <= Date.parse(serverNow) + 30 * 60_000)
+            .map((r) => ({ icao: r.icaoId, raw: r.rawOb })),
+        }),
+      });
+    });
+  }
+
+  test('Amsterdam reads Schiphol: whole degrees, 8 km, the report in CET', async ({ page }) => {
+    await stubAmsterdam(page, '2026-11-07T14:58:00Z');
+    await page.goto('/heat-map/nl/amsterdam/canal-ring/');
+    await expect(page.locator('#liveSrc')).toHaveText('Air now · Schiphol airport (8 km)', { timeout: 90_000 });
+    await expect(page.locator('#liveT')).toHaveText('7');
+    await expect(page.locator('#wxLine')).toContainText('Mostly cloudy at Schiphol airport (8 km) at 15:55 CET');
+    await expect(page.locator('#wxLine')).toContainText('may differ over the Canal Ring');
+    await expect(page.locator('#wxLine')).not.toContainText('the ward');
+  });
+
+  test('Amsterdam in a drizzle (3 Nov, -DZRA): the airport\'s rain is said and applied', async ({ page }) => {
+    await stubAmsterdam(page, '2026-11-03T04:58:00Z');
+    await page.goto('/heat-map/nl/amsterdam/canal-ring/');
+    await expect(page.locator('#liveSrc')).toHaveText('Air now · Schiphol airport (8 km)', { timeout: 90_000 });
+    await expect(page.locator('#liveT')).toHaveText('9');
+    await expect(page.locator('#wxLine')).toContainText('Light rain at Schiphol airport (8 km) at 05:55 CET · surfaces cooling');
+  });
 });
