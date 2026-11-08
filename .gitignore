@@ -110,3 +110,9 @@ tmp/
 preview-obos/
 attic/heat-fx/
 docs/audits/
+
+# Amsterdam streamed-area layer files (founder decision D7 pending: not committed). Files already tracked stay tracked;
+# remove these two lines when D7 says the layers are committed.
+/data/cities/amsterdam/ams-*-*.json
+/data/cities/amsterdam/ams-*/build.json
+/public/heat-map/data/ams-*
