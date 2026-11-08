@@ -123,6 +123,11 @@ export interface ObservedNow {
   readonly episodes: readonly RainEpisode[];
   /** the station's cloud fraction 0–1, or null when it reported none */
   readonly cloud: number | null;
+  /**
+   * K subtracted from the report's air before the model sees it (night-air.ts); 0 when none.
+   * `ambient.tAir` is `latest.tempC − airAdjustK`; the report itself is never altered.
+   */
+  readonly airAdjustK: number;
   readonly ambient: Ambient;
 }
 
@@ -144,6 +149,12 @@ export function observedNow(
   ranked: readonly RankedStation[],
   nowMs: number,
   fallback: Fallback = {},
+  /**
+   * K to take off a station's air for the MODEL (the night-air table, night-air.ts), by ICAO.
+   * Applied to the temperature the model runs on only: humidity is computed from the report's
+   * own air and dew point, `feels` from the reading, and the report is left as it was written.
+   */
+  airAdjustK: (icao: string) => number = () => 0,
 ): ObservedNow | null {
   for (const { icao, km } of ranked) {
     const station = stationInfo(icao);
@@ -165,8 +176,9 @@ export function observedNow(
     const thunder = thunderAtStation(latest);
     const convective: Convective = thunder ? 'thunder' : convectiveCloud(latest) ? 'cumuliform' : 'none';
     const episodes = rainEpisodes(reports);
+    const adjustK = airAdjustK(icao);
     const ambient: Ambient = {
-      tAir: latest.tempC, rh, wind,
+      tAir: latest.tempC - adjustK, rh, wind,
       cloud: cloud !== null ? cloud * 100 : fallback.cloudPct ?? 0,
       windFrom: latest.wind?.dirDeg ?? undefined,
       feels: heatIndexC(latest.tempC, rh),
@@ -175,7 +187,7 @@ export function observedNow(
     };
     return {
       station, km, latest, ageMin, raining: rainingAtStation(latest), thunder, convective,
-      vicinity: vicinityWeather(latest).map((w) => w.raw), episodes, cloud, ambient,
+      vicinity: vicinityWeather(latest).map((w) => w.raw), episodes, cloud, airAdjustK: adjustK, ambient,
     };
   }
   return null;

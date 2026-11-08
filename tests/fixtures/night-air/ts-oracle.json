@@ -1,0 +1,398 @@
+{
+ "note": "TS oracle for scripts/check-night-air-parity.py; regenerate with scripts/dump-night-air-parity.mjs",
+ "rows": [
+  {
+   "rid": "kmm-000",
+   "month": 1,
+   "sun": 0,
+   "offsetK": 3.17,
+   "airUsed": 15.83
+  },
+  {
+   "rid": "kmm-001",
+   "month": 1,
+   "sun": 0,
+   "offsetK": 3.17,
+   "airUsed": 15.83
+  },
+  {
+   "rid": "kmm-002",
+   "month": 1,
+   "sun": 0,
+   "offsetK": 3.17,
+   "airUsed": 15.83
+  },
+  {
+   "rid": "kmm-006",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 30.94
+  },
+  {
+   "rid": "kmm-007",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 31.94
+  },
+  {
+   "rid": "kmm-008",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 31.94
+  },
+  {
+   "rid": "kmm-009",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 31.94
+  },
+  {
+   "rid": "kmm-013",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 24.96
+  },
+  {
+   "rid": "kmm-014",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 24.96
+  },
+  {
+   "rid": "kmm-015",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 24.96
+  },
+  {
+   "rid": "kmm-016",
+   "month": 11,
+   "sun": 0,
+   "offsetK": 3.95,
+   "airUsed": 24.05
+  },
+  {
+   "rid": "kmm-020",
+   "month": 12,
+   "sun": 0,
+   "offsetK": 4.04,
+   "airUsed": 11.96
+  },
+  {
+   "rid": "kmm-021",
+   "month": 12,
+   "sun": 0,
+   "offsetK": 4.04,
+   "airUsed": 11.96
+  },
+  {
+   "rid": "kmm-022",
+   "month": 12,
+   "sun": 0,
+   "offsetK": 4.04,
+   "airUsed": 11.96
+  },
+  {
+   "rid": "kmm-023",
+   "month": 1,
+   "sun": 0,
+   "offsetK": 3.17,
+   "airUsed": 14.83
+  },
+  {
+   "rid": "kmm-024",
+   "month": 1,
+   "sun": 0,
+   "offsetK": 3.17,
+   "airUsed": 14.83
+  },
+  {
+   "rid": "kmm-025",
+   "month": 1,
+   "sun": 0,
+   "offsetK": 3.17,
+   "airUsed": 14.83
+  },
+  {
+   "rid": "kmm-026",
+   "month": 3,
+   "sun": 0,
+   "offsetK": 2.14,
+   "airUsed": 25.86
+  },
+  {
+   "rid": "kmm-030",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 28.94
+  },
+  {
+   "rid": "kmm-031",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 28.94
+  },
+  {
+   "rid": "kmm-032",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 28.94
+  },
+  {
+   "rid": "kmm-036",
+   "month": 9,
+   "sun": 0,
+   "offsetK": 1.75,
+   "airUsed": 28.25
+  },
+  {
+   "rid": "kmm-037",
+   "month": 9,
+   "sun": 0,
+   "offsetK": 1.75,
+   "airUsed": 28.25
+  },
+  {
+   "rid": "kmm-038",
+   "month": 9,
+   "sun": 0,
+   "offsetK": 1.75,
+   "airUsed": 29.25
+  },
+  {
+   "rid": "kmm-039",
+   "month": 9,
+   "sun": 0,
+   "offsetK": 1.75,
+   "airUsed": 29.25
+  },
+  {
+   "rid": "kmm-040",
+   "month": 9,
+   "sun": 0,
+   "offsetK": 1.75,
+   "airUsed": 29.25
+  },
+  {
+   "rid": "kmm-042",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 22.96
+  },
+  {
+   "rid": "kmm-043",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 22.96
+  },
+  {
+   "rid": "kmm-044",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 22.96
+  },
+  {
+   "rid": "kmm-045",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 21.96
+  },
+  {
+   "rid": "kmm-046",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 21.96
+  },
+  {
+   "rid": "kmm-047",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 21.96
+  },
+  {
+   "rid": "kmm-048",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 24.96
+  },
+  {
+   "rid": "kmm-049",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 24.96
+  },
+  {
+   "rid": "kmm-050",
+   "month": 10,
+   "sun": 0,
+   "offsetK": 2.04,
+   "airUsed": 24.96
+  },
+  {
+   "rid": "kmm-053",
+   "month": 12,
+   "sun": 0,
+   "offsetK": 4.04,
+   "airUsed": 10.96
+  },
+  {
+   "rid": "kmm-054",
+   "month": 12,
+   "sun": 0,
+   "offsetK": 4.04,
+   "airUsed": 10.96
+  },
+  {
+   "rid": "kmm-058",
+   "month": 1,
+   "sun": 0,
+   "offsetK": 3.17,
+   "airUsed": 14.83
+  },
+  {
+   "rid": "kmm-059",
+   "month": 1,
+   "sun": 0,
+   "offsetK": 3.17,
+   "airUsed": 14.83
+  },
+  {
+   "rid": "kmm-060",
+   "month": 1,
+   "sun": 0,
+   "offsetK": 3.17,
+   "airUsed": 14.83
+  },
+  {
+   "rid": "kmm-065",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 25.94
+  },
+  {
+   "rid": "kmm-066",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 25.94
+  },
+  {
+   "rid": "kmm-067",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 25.94
+  },
+  {
+   "rid": "kmm-068",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 26.94
+  },
+  {
+   "rid": "kmm-069",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 26.94
+  },
+  {
+   "rid": "kmm-070",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 26.94
+  },
+  {
+   "rid": "kmm-071",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 26.94
+  },
+  {
+   "rid": "kmm-072",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 26.94
+  },
+  {
+   "rid": "kmm-073",
+   "month": 4,
+   "sun": 0,
+   "offsetK": 1.06,
+   "airUsed": 26.94
+  }
+ ],
+ "probes": [
+  {
+   "utc": "2025-11-10T06:00:00",
+   "month": 11,
+   "sun": 0.7713791885134531,
+   "offsetK": 0
+  },
+  {
+   "utc": "2025-11-10T11:55:00",
+   "month": 11,
+   "sun": 0,
+   "offsetK": 3.95
+  },
+  {
+   "utc": "2025-11-10T12:05:00",
+   "month": 11,
+   "sun": 0,
+   "offsetK": 3.95
+  },
+  {
+   "utc": "2025-01-31T18:29:00",
+   "month": 1,
+   "sun": 0,
+   "offsetK": 3.17
+  },
+  {
+   "utc": "2025-01-31T18:30:00",
+   "month": 2,
+   "sun": 0,
+   "offsetK": 3.14
+  },
+  {
+   "utc": "2025-06-15T00:30:00",
+   "month": 6,
+   "sun": 0.23835979699183968,
+   "offsetK": 0
+  },
+  {
+   "utc": "2025-06-15T22:00:00",
+   "month": 6,
+   "sun": 0,
+   "offsetK": 1.37
+  },
+  {
+   "utc": "2026-03-05T23:46:24",
+   "month": 3,
+   "sun": 0,
+   "offsetK": 2.14
+  }
+ ]
+}

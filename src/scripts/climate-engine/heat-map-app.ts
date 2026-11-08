@@ -25,6 +25,7 @@ import { isCurrentSnapshot, type HeatSimHost, type HeatSimRequest, type HeatSimS
 import * as M from './heat-map-model';
 import { parseMetar, type Metar } from '../../lib/weather/metar.ts';
 import { describeWeather, fallbackAmbient, fixed, observedNow, placeWords, rankStations, type ObservedNow } from '../../lib/weather/observed.ts';
+import { nightAirOffsetK, sunAt } from '../../lib/weather/night-air.ts';
 import { METAR_STATIONS } from '../../data/metar-stations.ts';
 import { unmeasuredNote, isTransitionHour } from './accuracy';
 import { solarElevationFactor, solarDayHours } from './sky';
@@ -2857,9 +2858,14 @@ export function mountHeatMap(): () => void {
     const byStation: Record<string, Metar[]> = {};
     for (const m of cached?.reports ?? []) (byStation[m.station] ??= []).push(m);
     const ranked = rankStations(city, w.lat, w.lon);
+    /* At night the model is given the airport's air put back on the basis it was calibrated
+       on (night-air.ts: a measured month table, air against air). The product's own branch
+       rule decides what is night, at this ward and this instant. Day is untouched. */
+    const nowMs = now(), sun = sunAt(nowMs, w.lat, w.lon);
     observed = cached
-      ? observedNow(byStation, ranked, now(),
-        { cloudPct: metno?.cloud ?? null, rh: metno?.rh ?? null, windMs: metno?.wind ?? null })
+      ? observedNow(byStation, ranked, nowMs,
+        { cloudPct: metno?.cloud ?? null, rh: metno?.rh ?? null, windMs: metno?.wind ?? null },
+        (icao) => nightAirOffsetK(icao, nowMs, sun))
       : null;
     /* A stale airport hands "now" to met.no WITH the rain's memory: the surface keeps
        drying from where it was rather than snapping back to the dry model. */
@@ -3153,6 +3159,7 @@ export function mountHeatMap(): () => void {
       /* Short on purpose: the rail must keep the legend above its fold at 1280x720
          (solar-pane.spec). Every clause is still here: what, where, how far, when,
          what the model does, and that the ward is not the airport. */
+      if (observed.airAdjustK !== 0) parts.push(`model air ${observed.airAdjustK.toFixed(1)} K lower at night`);
       parts.push(`may differ over ${esc(placeWords(splitKey(state.ward).city, resolve(state.ward).area.name).over)}`);
       /* The pictograph is an image with a name, not decoration: screen readers get
          "Rain", sighted readers the glyph, and the sentence never depends on it. */
