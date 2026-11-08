@@ -51,6 +51,9 @@ export function lkiBand(value: unknown): LkiBand | null {
   return 'very_bad';
 }
 
+/** The credit line of the MODELLED line, printed beside the source credit whenever the card shows it: the model is RIVM's, via Luchtmeetnet, and its value is not shown as published (rounded up). */
+export const LKI_MODEL_CREDIT = 'Modelled line: RIVM model calculation (a forecast, not a measurement), via www.luchtmeetnet.nl. Indicative; the model value is rounded up to a whole number by the rule Luchtmeetnet publishes, so it is not shown exactly as published.';
+
 /** The span a modelled LKI row is current for, from its stamp (the hour's start): one clock hour. Client-safe, so the judge and the validator share it with the reader. */
 export const LKI_MODEL_HOUR_MS = 3_600_000;
 

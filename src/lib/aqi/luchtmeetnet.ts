@@ -53,11 +53,12 @@
  *   station data's (the Open data page covers the API's calculated lat/lon values), so the same credit is used.
  */
 import { zoneClock } from './clock.ts';
-import { getText, type Fetch } from './http.ts';
+import { getText, SourceError, type Fetch } from './http.ts';
 import { LKI_MODEL_HOUR_MS, lkiBand, lkiClass } from './lki.ts';
 import type { LocalAirPayload, LocalCredit, LocalStation, NlComponent, NlModel, NlReading, NotReportingReason } from './local-types.ts';
 import { LOCAL_SCHEMA } from './local-types.ts';
 import { LOCAL_LIVE_MS } from './local-areas.ts';
+import { cooling, COOLDOWN_MS, currentModelRow, modelStale, newNlCache, stationFresh, type ModelRun, type NlCache, type StationRows } from './nl-cache.ts';
 import { CANAL_RING, nlLadder } from './nl-stations.ts';
 
 export const LM_BASE = 'https://api.luchtmeetnet.nl/open_api';
@@ -75,7 +76,7 @@ export const LUCHTMEETNET_CREDIT: LocalCredit = {
   licence_url: 'https://creativecommons.org/licenses/by-nd/4.0/',
   licence_link_text: 'CC BY-ND 4.0',
   terms_url: 'https://www.luchtmeetnet.nl/informatie/download-data/open-data',
-  note: 'Unvalidated hourly values from the Dutch air quality monitoring networks, shown as published; they are indicative and may be corrected. Luchtmeetnet does not endorse this page.',
+  note: 'Measured values: unvalidated hourly values from the Dutch air quality monitoring networks, shown as published; they are indicative and may be corrected. Luchtmeetnet does not endorse this page.',
 };
 
 const COMPONENTS: readonly NlComponent[] = ['PM25', 'PM10', 'NO2', 'O3'];
@@ -163,21 +164,27 @@ export function modelUrl(at: { lat: number; lon: number }): string {
 export interface ModelRow { value: number; hourMs: number }
 
 /**
- * The model row that is CURRENT at `now`, or null: the newest row whose hour has begun (stamp <= now, no slack: see the header) and not
- * ended (now < stamp + 1 h), formula LKI, a value that has a class (above 0, up to 11), stamped on the hour with an explicit offset.
- * Rows from the future (forecast hours) and rows from hours already over are ignored. Throws LuchtmeetnetFormatError on a body that is not
- * the `{data: […]}` shape, like its siblings.
+ * Every valid row of a model answer, in the answer's order: formula LKI, a value that has a class (above 0, up to 11), stamped on the hour with an
+ * explicit offset. No clock is applied here: the RUN is what is cached, and the current-hour row is picked from it at request time. Throws
+ * LuchtmeetnetFormatError on a body that is not the `{data: […]}` shape, like its siblings.
  */
-export function parseModel(text: string, now: Date): ModelRow | null {
-  let best: ModelRow | null = null;
+export function parseModelRun(text: string): ModelRow[] {
+  const out: ModelRow[] = [];
   for (const r of dataArray(text)) {
     const ms = stampMs(r['timestamp_measured']);
     const v = r['value'];
     if (r['formula'] !== 'LKI' || ms === null || ms % MODEL_HOUR_MS !== 0 || lkiClass(v) === null) continue;
-    if (ms > now.getTime() || now.getTime() - ms >= MODEL_HOUR_MS) continue;
-    if (best === null || ms > best.hourMs) best = { value: v as number, hourMs: ms };
+    out.push({ value: v as number, hourMs: ms });
   }
-  return best;
+  return out;
+}
+
+/**
+ * The model row that is CURRENT at `now`, or null: the newest row whose hour has begun (stamp <= now, no slack: see the header) and not
+ * ended (now < stamp + 1 h). Rows from the future (forecast hours) and rows from hours already over are ignored.
+ */
+export function parseModel(text: string, now: Date): ModelRow | null {
+  return currentModelRow(parseModelRun(text), now.getTime());
 }
 
 /** The `model` block for a row, or null; the class and band are derived here by the operator's rule (lki.ts). */
@@ -188,15 +195,6 @@ function modelBlock(row: ModelRow | null): NlModel | null {
   return lki === null || band === null ? null : { value: row.value, lki, band, hour_start: new Date(row.hourMs).toISOString() };
 }
 
-/** Read the modelled LKI at `at` for the current hour. Never rejects: any failure is null (the line is simply absent). */
-async function readModel(at: { lat: number; lon: number }, d: AmsterdamDeps): Promise<NlModel | null> {
-  try {
-    return modelBlock(parseModel(await getText(modelUrl(at), d.fetch, d.signal), d.now));
-  } catch {
-    return null;
-  }
-}
-
 /** A promise that gives up after `ms` with null, so a hung optional request cannot hold the measured card. */
 function within<T>(p: Promise<T | null>, ms: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -204,7 +202,102 @@ function within<T>(p: Promise<T | null>, ms: number): Promise<T | null> {
   return Promise.race([p, late]).finally(() => clearTimeout(timer));
 }
 
-export interface AmsterdamDeps { fetch: Fetch; now: Date; signal?: AbortSignal; from?: { lat: number; lon: number } }
+export interface AmsterdamDeps {
+  fetch: Fetch; now: Date; signal?: AbortSignal; from?: { lat: number; lon: number };
+  /** The shared caches and the cooldown (nl-cache.ts). Absent: a fresh, private set, i.e. no sharing (what a direct call and the unit tests want). */
+  nl?: NlCache;
+}
+
+/**
+ * One Luchtmeetnet request. During the cooldown none is made. A 429 starts the cooldown for every caller and is logged (the path, never the
+ * query); the error is rethrown so the caller treats the source as unreadable. The request is NOT tied to the caller's signal (a shared read
+ * must not be poisoned by one caller going away): `getText` has its own timeout, and a caller stops WAITING with `waitFor`.
+ */
+async function lmGet(url: string, d: AmsterdamDeps, nl: NlCache): Promise<string> {
+  if (cooling(nl, d.now.getTime())) throw new SourceError(429, 'cooling down after a rate-limit reply');
+  try {
+    return await getText(url, d.fetch);
+  } catch (e) {
+    if (e instanceof SourceError && e.status === 429) {
+      nl.coolUntil = d.now.getTime() + COOLDOWN_MS;
+      console.error('luchtmeetnet 429', url.split('?')[0], `cooling down ${COOLDOWN_MS / 1000} s`);
+    }
+    throw e;
+  }
+}
+
+/** Wait for a shared promise, but stop waiting when the caller's signal aborts (the shared read carries on for the others). */
+function waitFor<T>(p: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return p;
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => reject(new SourceError(0, 'caller gave up'));
+    if (signal.aborted) { abort(); return; }
+    signal.addEventListener('abort', abort, { once: true });
+    p.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
+async function readStation(id: string, d: AmsterdamDeps, nl: NlCache): Promise<StationRows> {
+  const at = d.now.getTime();
+  let lki: LkiRow[];
+  try { lki = parseLki(await lmGet(lkiUrl(id, d.now), d, nl), id, d.now); } catch { return { at, lki: null, meas: [] }; }
+  const top = lki[0];
+  let meas: MeasurementRow[] = [];
+  if (top && at - top.endMs <= LIVE_MS) {
+    try { meas = parseMeasurements(await lmGet(measurementsUrl(id, d.now), d, nl), id, d.now); } catch { /* the LKI stands without the substances beside it */ }
+  }
+  return { at, lki, meas };
+}
+
+/** A station's RAW rows: from the shared cache while they are the answer, else one shared read. Cooling down, the last rows read (if any) stand and nothing is asked. */
+function stationRows(id: string, d: AmsterdamDeps, nl: NlCache): Promise<StationRows> {
+  const now = d.now.getTime();
+  const hit = nl.stations.get(id);
+  if (hit && stationFresh(hit, now, LIVE_MS)) return Promise.resolve(hit);
+  if (cooling(nl, now)) return Promise.resolve(hit ?? { at: now, lki: null, meas: [] });
+  let p = nl.stationsInflight.get(id);
+  if (!p) {
+    p = readStation(id, d, nl)
+      .then((e) => {
+        /* a read that hit the cooldown must not replace rows that are still good with "unreadable" */
+        if (e.lki === null && hit && cooling(nl, now)) return hit;
+        nl.stations.set(id, e);
+        return e;
+      })
+      .finally(() => { nl.stationsInflight.delete(id); });
+    nl.stationsInflight.set(id, p);
+  }
+  return p;
+}
+
+const modelKey = (at: { lat: number; lon: number }): string => `${at.lat.toFixed(6)},${at.lon.toFixed(6)}`;
+
+/** The modelled LKI of the current hour at `at`, or null. The whole RUN is cached; the row is picked by the request's clock. Never rejects. */
+async function modelLine(at: { lat: number; lon: number }, d: AmsterdamDeps, nl: NlCache): Promise<NlModel | null> {
+  const key = modelKey(at), now = d.now.getTime();
+  const have = nl.models.get(key);
+  let run: ModelRun | undefined = have;
+  if (!have || modelStale(have, now)) {
+    if (cooling(nl, now)) run = have;
+    else {
+      let p = nl.modelsInflight.get(key);
+      if (!p) {
+        p = lmGet(modelUrl(at), d, nl)
+          .then((text): ModelRun => ({ at: now, rows: parseModelRun(text) }), (): ModelRun => ({ at: now, rows: null }))
+          .catch((): ModelRun => ({ at: now, rows: null }))
+          .then((r) => {
+            if (r.rows === null && have && cooling(nl, now)) return have;
+            nl.models.set(key, r);
+            return r;
+          })
+          .finally(() => { nl.modelsInflight.delete(key); });
+        nl.modelsInflight.set(key, p);
+      }
+      try { run = await waitFor(p, d.signal); } catch { run = have; }
+    }
+  }
+  return run?.rows ? modelBlock(currentModelRow(run.rows, now)) : null;
+}
 
 function notReporting(area: string, now: Date, reason: NotReportingReason, station: LocalStation | null, last: number | null): LocalAirPayload {
   return { schema: LOCAL_SCHEMA, area_id: area, served_at: now.toISOString(), credit: LUCHTMEETNET_CREDIT, standard: 'nl-lki',
@@ -222,33 +315,31 @@ export function readingsAt(rows: readonly MeasurementRow[], hourEndMs: number): 
 /** Read Amsterdam's current LKI for `area`. Never throws: an unreadable source is the "not reporting" payload. */
 export async function readAmsterdam(area: string, d: AmsterdamDeps): Promise<LocalAirPayload> {
   const centre = d.from ?? CANAL_RING;
+  const nl = d.nl ?? newNlCache();
   const ladder = nlLadder(centre);
   const nearest = ladder[0]?.station ?? null;
   if (!nearest) return notReporting(area, d.now, 'no_station', null, null);
-  /* The model is asked at once, beside the ladder, and only waited for when a measured figure is ready to carry it. It never reaches a not-reporting answer. */
-  const modelP = readModel(centre, d);
+  /* The model is asked for at once, beside the ladder, through its own cache (a fresh run costs nothing), and only waited for when a measured
+     figure is ready to carry it. It never reaches a not-reporting answer. */
+  const modelP = modelLine(centre, d, nl).catch(() => null);
   let answered = false;
   let newestSeen: number | null = null;
   for (let i = 0; i < ladder.length; i++) {
     const { ref, station } = ladder[i]!;
-    let lki: LkiRow[];
-    try {
-      lki = parseLki(await getText(lkiUrl(ref.id, d.now), d.fetch, d.signal), ref.id, d.now);
-    } catch {
-      continue; // this rung could not be read; the next one may
-    }
+    let rows: StationRows;
+    try { rows = await waitFor(stationRows(ref.id, d, nl), d.signal); } catch { continue; }
+    if (rows.lki === null) continue; // this rung could not be read; the next one may
     answered = true;
-    const top = lki[0];
+    const top = rows.lki[0];
     if (!top) continue;
     newestSeen = newestSeen === null ? top.endMs : Math.max(newestSeen, top.endMs);
+    /* judged NOW, whatever the clock said when the rows were read */
     if (d.now.getTime() - top.endMs > LIVE_MS) continue;
-    let readings: NlReading[] = [];
-    try {
-      readings = readingsAt(parseMeasurements(await getText(measurementsUrl(ref.id, d.now), d.fetch, d.signal), ref.id, d.now), top.endMs);
-    } catch { /* the LKI stands without the substances beside it */ }
+    const readings = readingsAt(rows.meas, top.endMs);
     const band = lkiBand(top.value);
     if (band === null) continue; // unreachable: parseLki kept only classed values
     const model = await within(modelP, MODEL_WAIT_MS);
+    /* `station` was built for THIS area's centre just above; the cache holds no distance and no fallback flag. */
     return { schema: LOCAL_SCHEMA, area_id: area, served_at: d.now.toISOString(), credit: LUCHTMEETNET_CREDIT, standard: 'nl-lki', state: 'live',
       station: i === 0 ? station : { ...station, fallback: true }, observed_at: new Date(top.endMs).toISOString(), observed_at_local: AMS.isoAt(top.endMs),
       lki: { value: top.value, band }, readings, ...(model ? { model } : {}) };

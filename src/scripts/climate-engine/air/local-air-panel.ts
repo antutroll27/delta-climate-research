@@ -16,7 +16,7 @@
  * to a dash. Pure; no DOM.
  */
 import { JP_BASIS_NOTE, JP_POLLUTANTS, JP_ROADSIDE_NOTE, JP_ROW_NOTE, JP_STANDARDS } from '../../../lib/aqi/jp-standards.ts';
-import { LKI_COLOUR, LKI_KEY, LKI_LABEL } from '../../../lib/aqi/lki.ts';
+import { LKI_COLOUR, LKI_KEY, LKI_LABEL, LKI_MODEL_CREDIT } from '../../../lib/aqi/lki.ts';
 import { localAirArea, LOCAL_LIVE_MS, LOCAL_STANDARD_TZ } from '../../../lib/aqi/local-areas.ts';
 import type { JpReading, LkiBand, LocalAirPayload, LocalStation, NlModel, NlReading } from '../../../lib/aqi/local-types.ts';
 import { judge } from '../../../lib/aqi/local-judge.ts';
@@ -55,7 +55,9 @@ const link = (url: string, text: string): string =>
 
 function creditHtml(p: LocalAirPayload): string {
   const c = p.credit;
-  const edit = c.edit === null ? '' : `<br>${esc(c.edit)}`;
+  /* The modelled line is RIVM's model, rounded up: its credit is said whenever the line is on the card. */
+  const model = p.state === 'live' && p.standard === 'nl-lki' && p.model ? `<br>${esc(LKI_MODEL_CREDIT)}` : '';
+  const edit = (c.edit === null ? '' : `<br>${esc(c.edit)}`) + model;
   /* The licence is indicated with a hyperlink to its text (CC BY-ND 4.0 §3(a)(1)(C)), and the terms page it was read on is shown. */
   const at = c.licence.indexOf(c.licence_link_text);
   const licence = at < 0 || c.licence_link_text === '' ? esc(c.licence)
@@ -80,7 +82,7 @@ const bandWord = (b: unknown): string => (has(LKI_LABEL, b) ? `${LKI_LABEL[b as 
 const LKI_NOTE = 'The LKI (luchtkwaliteitsindex) is the Dutch national air-quality index, published by Luchtmeetnet. Each of nitrogen dioxide, '
   + 'PM10, PM2.5 and ozone is turned into a number from 1 (little pollution) to 11 (much); the highest number is the index; if all the substances have the same number, the index is one point higher. It is sorted into five classes. '
   + 'Other indices, such as the US AQI or the European index, use other scales and other substances, so their numbers are not interchangeable with this one. '
-  + 'This card shows the Dutch regulator\'s own figure, as published, for the nearest monitor that measures all four substances.';
+  + 'The headline is the Dutch regulator\'s own measured figure, as published, for the nearest monitor that measures all four substances. A separate, labelled modelled line (RIVM\'s model, via Luchtmeetnet) may sit beneath it; it is a forecast calculation, not a measurement.';
 
 function nlSubstances(readings: readonly NlReading[]): string {
   if (readings.length === 0) return '';
@@ -89,14 +91,14 @@ function nlSubstances(readings: readonly NlReading[]): string {
 }
 
 /**
- * THE MODELLED LINE, set apart from the measurement and worded so it cannot be read as one: "Modelled for this area (RIVM model via Luchtmeetnet): 4 · Matig · Moderate",
- * then what it is (a forecast calculation by RIVM, published by Luchtmeetnet, for the area's centre, for the hour from its start) and that the decimal was rounded
- * up as Luchtmeetnet does. The class dot is the LKI's, as on the measured line. No station, no distance: a model has neither.
+ * THE MODELLED LINE, set apart from the measurement and worded so it cannot be read as one: "Modelled at the centre of this area (RIVM model via Luchtmeetnet): 4 · Matig · Moderate",
+ * then what it is (a forecast calculation by RIVM, published by Luchtmeetnet, for the current hour as Luchtmeetnet's own location page selects it, naming the stamp
+ * of the row without calling it the start or the end of the hour) and that the decimal was rounded up as Luchtmeetnet does. The class dot is the LKI's, as on the measured line. No station, no distance: a model has neither.
  */
 function nlModelLine(m: NlModel, place: string): string {
   const from = nowrap(`<b>${esc(localTime(m.hour_start, 'nl-lki'))}</b>`);
-  return `<p class="meta aq-model">Modelled for this area (RIVM model via Luchtmeetnet): <b>${num(m.lki)}</b> <span class="cat"><span class="dot" style="background:${bandColour(m.band)}"></span>${bandWord(m.band)}</span></p>`
-    + `<p class="meta">A forecast calculation by RIVM for the centre of ${esc(place)}, not a measurement · for the hour from ${from} · rounded up to a whole number, as Luchtmeetnet does</p>`;
+  return `<p class="meta aq-model">Modelled at the centre of this area (RIVM model via Luchtmeetnet): <b>${num(m.lki)}</b> <span class="cat"><span class="dot" style="background:${bandColour(m.band)}"></span>${bandWord(m.band)}</span></p>`
+    + `<p class="meta">A forecast calculation by RIVM for the centre of ${esc(place)}, not a measurement · for the current hour (row stamped ${from}) · rounded up to a whole number, as Luchtmeetnet does</p>`;
 }
 
 function nlLive(p: Extract<Live, { standard: 'nl-lki' }>, title: string, place: string): string {
@@ -213,7 +215,7 @@ export function localPaneHtml(p: LocalAirPayload, place: string, now: Date = new
     s += nlTable(c.readings) + `<p class="pane-h">The five LKI classes</p>${lkiKey()}`
       + `<p class="pane-note">The LKI is Luchtmeetnet's own published figure for this monitor and hour, shown unaltered. It is the highest of the four substances' index numbers (NO₂, PM10, PM2.5, O₃). When some but not all of the substances tie for the highest, the index is that number. Luchtmeetnet adds one point only when all the substances share the same number. `
       + `Values are unvalidated hourly data and may be corrected later. Air quality is a separate layer: it does not enter the heat model.</p>`
-      + (c.model ? `<p class="pane-note">The modelled line is a forecast calculation by RIVM (published by Luchtmeetnet) for the centre of this area, for the clock hour shown; it is not a measurement and no monitor stands behind it. `
+      + (c.model ? `<p class="pane-note">The modelled line is a forecast calculation by RIVM (published by Luchtmeetnet) for the centre of this area, for the current hour, the row Luchtmeetnet's own location page would pick; it is not a measurement and no monitor stands behind it. `
         + `Luchtmeetnet publishes it as a decimal and rounds decimal LKI values up to the whole number, as this card does. It never replaces, and is not mixed into, the measured figure above.</p>` : '');
   } else if (c.state === 'live') {
     s += `<p class="pane-note">Values are the latest provisional hour from the Ministry of the Environment's national stations (国設局) only; other stations belong to local governments and are not shown. `

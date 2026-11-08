@@ -6,8 +6,8 @@
  * SERVER-SIDE ONLY, NO KEYS. Both sources are keyless; nothing here reads an environment variable. The browser
  * gets the payload and never contacts either government server.
  *
- * NOT READY, NOT SERVED. An area answers only while its city is drawable, or it is one of Amsterdam's streamed sheets
- * (local-areas.ts `localAirReady`); before that it is a 404 like any unknown area, so no figure leaves the server for a card that is
+ * NOT READY, NOT SERVED. An area answers only while its city is drawable, or it is one of Amsterdam's streamed sheets AND streaming is on
+ * (local-areas.ts `localAirReady`; `streamingEnabled` below); before that it is a 404 like any unknown area, so no figure leaves the server for a card that is
  * not on a page. Every Amsterdam area is read from its OWN centre (nl-stations.ts `amsterdamCentre`).
  *
  * CACHING. A LIVE answer is held in-process for CACHE_TTL_MS and shared by concurrent requests; a not-reporting
@@ -15,18 +15,31 @@
  * answer for 5 minutes (+5 stale-while-revalidate); the browser re-judges the age on every paint, so a number is
  * never shown past its window.
  */
+import { LKI_MODEL_HOUR_MS } from './lki.ts';
 import { judge, secondsLeft } from './local-judge.ts';
 import { readAmsterdam } from './luchtmeetnet.ts';
+import { TILED_CITY_READY } from '../../scripts/climate-engine/scope/registry.ts';
 import { localAirArea, localAirReady, type DrawableFn } from './local-areas.ts';
 import type { LocalAirPayload } from './local-types.ts';
+import { newNlCache, type NlCache } from './nl-cache.ts';
 import { amsterdamCentre } from './nl-stations.ts';
 import { readTokyo } from './soramame.ts';
 import type { Fetch } from './http.ts';
 
+/**
+ * ARE THE STREAMED AREAS SERVED BY THE API? Only where whole-city streaming is on, by the SAME truth the page uses: a build made with
+ * PUBLIC_OBOS_STREAM_DEV=1 (the dev flag heat-map-app.ts reads; the same variable reaches the function at run time on a deployment that sets it), or
+ * `TILED_CITY_READY` (scope/registry.ts), the constant that publishes the tiled city. Turning streaming on publicly therefore opens the API too,
+ * with no second switch to forget; production with streaming off serves Canal Ring (and Tokyo) only.
+ */
+export function streamingEnabled(env: Readonly<Record<string, string | undefined>> = {}, tiledCityReady: boolean = TILED_CITY_READY): boolean {
+  return tiledCityReady || env['PUBLIC_OBOS_STREAM_DEV'] === '1';
+}
+
 interface Res { status(c: number): Res; setHeader(k: string, v: string): void; json(b: unknown): void }
 
 export const CACHE_TTL_MS = 10 * 60_000;
-/** A not-reporting answer is held this long in the function, so an outage cannot walk the ladder on every page view and spend Luchtmeetnet's 100 requests / 5 minutes. The CDN never holds it. */
+/** TOKYO's not-reporting answer is held this long in the function. (Amsterdam's outage is bounded one level down, by the shared per-station negative entries of nl-cache.ts.) The CDN never holds it. */
 export const BACKOFF_MS = 60_000;
 export const BUDGET_MS = 20_000;
 const NO_CACHE = 'no-store';
@@ -37,15 +50,18 @@ const NO_CACHE = 'no-store';
  * current. Nothing left means `no-store`.
  */
 export function liveCacheControl(p: Extract<LocalAirPayload, { state: 'live' }>, now: Date): string {
-  const left = secondsLeft(p, now);
+  /* A modelled line is for one clock hour: no cache holds the body past the end of that hour (the next read picks the next hour's row). */
+  const modelLeft = p.standard === 'nl-lki' && p.model ? Math.max(0, Math.floor((Date.parse(p.model.hour_start) + LKI_MODEL_HOUR_MS - now.getTime()) / 1000)) : Infinity;
+  const left = Math.min(secondsLeft(p, now), modelLeft);
   if (left <= 0) return NO_CACHE;
   const shared = Math.min(300, left);
   return `public, max-age=${Math.min(60, left)}, s-maxage=${shared}, stale-while-revalidate=${Math.min(300, left - shared)}`;
 }
 
 interface Entry { at: number; payload: LocalAirPayload }
-export interface LocalCache { entries: Map<string, Entry>; inflight: Map<string, Promise<LocalAirPayload>> }
-export const newLocalCache = (): LocalCache => ({ entries: new Map(), inflight: new Map() });
+/** `entries`/`inflight`: the area payloads (Tokyo's only). `nl`: Amsterdam's separate station and model caches and its cooldown (nl-cache.ts). */
+export interface LocalCache { entries: Map<string, Entry>; inflight: Map<string, Promise<LocalAirPayload>>; nl: NlCache }
+export const newLocalCache = (): LocalCache => ({ entries: new Map(), inflight: new Map(), nl: newNlCache() });
 const SHARED = newLocalCache();
 
 export interface LocalDeps {
@@ -54,6 +70,8 @@ export interface LocalDeps {
   drawable?: DrawableFn;
   cache?: LocalCache;
   budgetMs?: number;
+  /** Injected by tests: are the streamed Amsterdam areas served? Default: `streamingEnabled()` with no environment, i.e. TILED_CITY_READY alone (api/air-quality.ts passes `process.env`; this file reads none). */
+  streaming?: boolean;
 }
 
 const realFetch: Fetch = (url, init) => fetch(url, init);
@@ -66,12 +84,16 @@ async function read(area: string, now: Date, d: LocalDeps): Promise<LocalAirPayl
   /* Every Amsterdam area is measured from ITS OWN centre (the sheet record's). A registered area with no centre is a table fault, never a quiet fall back to Canal Ring's. */
   const from = amsterdamCentre(area.split('/')[2] ?? '');
   if (from === null) throw new RangeError(`air-quality: ${area} has no centre in the sheet table`);
-  return readAmsterdam(area, { ...deps, from });
+  return readAmsterdam(area, { ...deps, from, nl: (d.cache ?? SHARED).nl });
 }
 
-/** Cached live answer, a shared in-flight read, or a new read. Only a live answer enters the cache. */
+/**
+ * Cached live answer, a shared in-flight read, or a new read (Tokyo). AMSTERDAM IS NOT CACHED HERE: its payload is assembled on every request from
+ * the shared station and model caches (cheap, and no TTL stacks on another), each area from its own centre.
+ */
 function payloadFor(area: string, now: Date, d: LocalDeps): Promise<LocalAirPayload> {
   const c = d.cache ?? SHARED;
+  if (localAirArea(area)?.standard === 'nl-lki') return read(area, now, d);
   const hit = c.entries.get(area);
   /* A cached hour is re-judged on THIS request's clock: one that has since passed its window is not handed back (the CPCB path
      rebuilds every hit against its own `now` for the same reason). It is dropped and the source asked again. */
@@ -91,7 +113,8 @@ function payloadFor(area: string, now: Date, d: LocalDeps): Promise<LocalAirPayl
 }
 
 export async function handleLocal(area: string, res: Res, d: LocalDeps = {}): Promise<void> {
-  if (!localAirReady(area, d.drawable)) { res.status(404).json({ error: 'unknown area' }); return; }
+  /* The 31 streamed areas are served only where streaming is on (the dev build's flag, or TILED_CITY_READY): production with streaming off serves Canal Ring (and Tokyo) only. */
+  if (!localAirReady(area, d.drawable) || (localAirArea(area)?.streamed === true && !(d.streaming ?? streamingEnabled()))) { res.status(404).json({ error: 'unknown area' }); return; }
   const now = (d.now ?? (() => new Date()))();
   const payload = await payloadFor(area, now, d);
   res.setHeader('Cache-Control', payload.state === 'live' ? liveCacheControl(payload, now) : NO_CACHE);

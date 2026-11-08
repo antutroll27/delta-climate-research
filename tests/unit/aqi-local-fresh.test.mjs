@@ -96,11 +96,11 @@ test('F5: a not-reporting answer is held 60 s in the function (CDN still no-stor
   assert.deepEqual([a.body.state, a.body.reason], ['not_reporting', 'source_down']);
   assert.equal(a.headers['Cache-Control'], 'no-store');
   const n = calls.length;
-  assert.equal(n, 5, 'one LKI request per rung');
+  assert.equal(n, 5, 'one LKI request per rung (4), one model request');
   for (let i = 0; i < 20; i++) await call(new Date(at(40).getTime() + i * 2_900), cache, down); // 20 page views inside 58 s
   assert.equal(calls.length, n, 'no further request to the source inside the back-off');
   const b = await call(new Date(at(40).getTime() + 61_000), cache, down);
-  assert.equal(calls.length, 2 * n, 'after 60 s it asks again');
+  assert.equal(calls.length, n + 4, 'after 60 s the four stations are asked again; the failed model read waits its own 5 minutes');
   assert.equal(b.headers['Cache-Control'], 'no-store');
   const recovered = await call(new Date(at(40).getTime() + 125_000), cache, fetchOf(calls));
   assert.equal(recovered.body.state, 'live', 'and a recovered source is live again');

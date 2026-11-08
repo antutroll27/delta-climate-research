@@ -24,7 +24,7 @@ const NOW = new Date('2026-11-06T13:43:52Z');
 const ids = AMSTERDAM_SHEET_IDS;
 
 const res = () => { const r = { code: 0, headers: {}, body: null, status(c) { r.code = c; return r; }, setHeader(k, v) { r.headers[k] = v; }, json(b) { r.body = b; } }; return r; };
-const call = async (area, local, query = {}) => { const r = res(); await handle({ method: 'GET', query: { area, ...query } }, r, { key: '', local }); return r; };
+const call = async (area, local, query = {}) => { const r = res(); await handle({ method: 'GET', query: { area, ...query } }, r, { key: '', local: { streaming: true, ...local } }); return r; };
 
 /** A fetch that serves `bodies[url]`; any other URL is a 503. */
 function replay(bodies) {

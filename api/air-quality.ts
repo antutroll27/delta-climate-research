@@ -37,7 +37,7 @@ import { fixedClock } from '../src/lib/aqi/clock.ts';
 import { cityTz, isAreaKey } from '../src/scripts/climate-engine/scope/registry.ts';
 import { cityAqi, cityFor } from '../src/lib/aqi/city.ts';
 import { isLocalAirArea } from '../src/lib/aqi/local-areas.ts';
-import { handleLocal, type LocalDeps } from '../src/lib/aqi/local-handler.ts';
+import { handleLocal, streamingEnabled, type LocalDeps } from '../src/lib/aqi/local-handler.ts';
 import { newArchiveMemo, readRelay, RelayQuietError, type ArchiveMemo } from '../src/lib/aqi/cpcb-archive.ts';
 import { currentFromFeed, fetchFeed, FeedError, pickServed, type FeedStation } from '../src/lib/aqi/cpcb-feed.ts';
 import type { Raw } from '../src/lib/aqi/hours.ts';
@@ -311,5 +311,5 @@ export async function handle(req: Req, res: Res, d: Deps): Promise<void> {
 }
 
 export default async function handler(req: Req, res: Res): Promise<void> {
-  await handle(req, res, { key: process.env.OPENAQ_API_KEY ?? '', cpcbFeed: feedEnabled(process.env), source: feedSource(process.env) });
+  await handle(req, res, { key: process.env.OPENAQ_API_KEY ?? '', cpcbFeed: feedEnabled(process.env), source: feedSource(process.env), local: { streaming: streamingEnabled(process.env) } });
 }

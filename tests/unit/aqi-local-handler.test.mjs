@@ -82,13 +82,14 @@ test('a live answer is held for 10 minutes and shared by concurrent requests; th
   const cache = newLocalCache();
   const f = replay(nlMap());
   const deps = (now) => ({ fetch: f.fetch, now: () => now, drawable: ready, cache });
+  const station = () => f.calls.filter((u) => !u.includes('/concentrations?')).length;
   const [a, b] = await Promise.all([call('nl/amsterdam/canal-ring', deps(NL_NOW)), call('nl/amsterdam/canal-ring', deps(NL_NOW))]);
   assert.equal(f.calls.length, 3, 'one LKI, one measurements and one modelled-LKI request for two visitors');
   assert.deepEqual(a.body, b.body);
   await call('nl/amsterdam/canal-ring', deps(new Date(NL_NOW.getTime() + 9 * 60_000)));
-  assert.equal(f.calls.length, 3, 'inside the window: from memory');
+  assert.equal(station(), 2, 'inside the window: the station is read from memory');
   await call('nl/amsterdam/canal-ring', deps(new Date(NL_NOW.getTime() + 11 * 60_000)));
-  assert.ok(f.calls.length > 3, 'past the window: asked again');
+  assert.ok(station() > 2, 'past the window: asked again');
 });
 
 test('an extra query parameter is refused before anything is read, as on the CPCB path', async () => {

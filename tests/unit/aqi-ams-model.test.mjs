@@ -302,21 +302,25 @@ test('JUDGE: the modelled line lives for its own clock hour only; the measured c
 
 /* ── the card ────────────────────────────────────────────────────────────────────────────────────── */
 
-test('CARD WORDING: "Modelled for this area (RIVM model via Luchtmeetnet): N", the class, "a forecast calculation by RIVM … not a measurement"; it names the area; it never reads as a measurement', async () => {
+test('CARD WORDING: "Modelled at the centre of this area (RIVM model via Luchtmeetnet): N", the class, "a forecast calculation by RIVM … not a measurement"; it names the area; it never reads as a measurement', async () => {
   const p = await livePayload();
   const html = localCardHtml(p, 'Havens-West', new Date('2026-11-08T20:40:00Z'));
-  assert.match(html, /Modelled for this area \(RIVM model via Luchtmeetnet\): <b>4<\/b>/);
+  assert.match(html, /Modelled at the centre of this area \(RIVM model via Luchtmeetnet\): <b>4<\/b>/);
   assert.match(html, /Matig/);
   assert.match(html, /A forecast calculation by RIVM for the centre of Havens-West, not a measurement/);
-  assert.match(html, /for the hour from <span style="white-space:nowrap"><b>21:00 CET<\/b>/);
+  assert.match(html, /for the current hour \(row stamped <span style="white-space:nowrap"><b>21:00 CET<\/b><\/span>\)/);
+  assert.ok(!/hour from|start of the hour|end of the hour/.test(html), 'it does not claim whether the stamp opens or closes its hour');
+  assert.match(html, /Modelled line: RIVM model calculation \(a forecast, not a measurement\), via www\.luchtmeetnet\.nl/);
+  assert.match(html, /not shown exactly as published/);
+  assert.ok(!/Modelled line: RIVM/.test(localCardHtml((({ model, ...m }) => m)(p), 'Havens-West', new Date('2026-11-08T20:40:00Z'))), 'no model line, no model credit');
   assert.match(html, /rounded up to a whole number, as Luchtmeetnet does/);
   assert.match(html, /Air quality · Havens-West/);
   /* the measured line is still first and still the headline */
-  assert.ok(html.indexOf('class="num">3<') < html.indexOf('Modelled for this area'));
+  assert.ok(html.indexOf('class="num">3<') < html.indexOf('Modelled at the centre'));
   assert.equal((html.match(/class="num"/g) ?? []).length, 1, 'exactly one hero number: the measured one');
   assert.ok(!/3\.54|3\.55/.test(html), 'the decimal is not printed');
   const pane = localPaneHtml(p, 'Havens-West', new Date('2026-11-08T20:40:00Z'));
-  assert.match(pane, /Modelled for this area \(RIVM model via Luchtmeetnet\)/);
+  assert.match(pane, /Modelled at the centre of this area \(RIVM model via Luchtmeetnet\)/);
   assert.match(pane, /not a measurement and no monitor stands behind it/);
 });
 
@@ -341,7 +345,7 @@ test('THE CARD FOLLOWS THE OPEN AREA: loadAir for any streamed id asks the API f
     assert.deepEqual(asked, [`/api/air-quality?area=${encodeURIComponent(key)}`]);
     assert.equal(decodeURIComponent(asked[0].split('area=')[1]), key);
     assert.match(paint.block, new RegExp(`Air quality · Area ${s.code}`));
-    assert.match(paint.block, /Modelled for this area \(RIVM model via Luchtmeetnet\)/);
+    assert.match(paint.block, /Modelled at the centre of this area \(RIVM model via Luchtmeetnet\)/);
     /* an answer for another area is the failure view, never painted as this one's */
     const wrong = key === 'nl/amsterdam/canal-ring' ? 'nl/amsterdam/ams-f4' : 'nl/amsterdam/canal-ring';
     const other = await loadLocalAir(key, 'X', { ...io, fetch: async () => ({ ok: true, json: async () => ({ ...body, area_id: wrong }) }) });
@@ -357,7 +361,7 @@ test('CARD: a malformed model block in the API answer costs only the modelled li
   const good = await paintWith(GOOD_MODEL);
   const junk = await paintWith({ ...GOOD_MODEL, lki: 9 });
   const none = await paintWith(undefined);
-  assert.match(good.block, /Modelled for this area/);
+  assert.match(good.block, /Modelled at the centre of this area/);
   assert.ok(!/Modelled/.test(junk.block) && !/Not loaded/.test(junk.block));
   assert.equal(junk.block, none.block);
   assert.equal(junk.pane, none.pane);
