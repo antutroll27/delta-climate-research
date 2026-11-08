@@ -130,8 +130,29 @@ def main(argv: list[str]) -> int:
     return 0
 
 
+def _flat(v: object) -> list[float]:
+    if isinstance(v, (int, float)):
+        return [float(v)]
+    if isinstance(v, dict):
+        return [x for k in sorted(v) for x in _flat(v[k])]
+    if isinstance(v, (list, tuple)):
+        return [x for e in v for x in _flat(e)]
+    return []
+
+
+def _max_diff(cur: Golden, pinned: Golden, line: str) -> str:
+    """The size of a mismatch named by `compare`, so a CI log tells a last-bit difference from a real one."""
+    key, rest = line.split(": ", 1)
+    field = rest.split(" ", 1)[0]
+    if key not in cur or field not in cur[key]:
+        return "n/a"
+    a, b = _flat(cur[key][field]), _flat(pinned[key][field])  # type: ignore[literal-required]
+    return "length differs" if len(a) != len(b) else repr(max(abs(x - y) for x, y in zip(a, b)))
+
+
 def self_test(cur: Golden, pinned: Golden) -> int:
-    assert compare(cur, pinned) == [], "the live frame must match its golden"
+    bad = compare(cur, pinned)
+    assert bad == [], "the live frame must match its golden: " + "; ".join(f"{b} (max |d| {_max_diff(cur, pinned, b)})" for b in bad)
     # one ulp in one coordinate must be caught: the gate is exact, not a tolerance
     import copy
     import math
