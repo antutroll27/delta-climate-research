@@ -85,7 +85,7 @@ export interface CityStreamHooks {
   /** A real stage of `code`'s load finished (the loader's progress; never invented). */
   stage?(code: SheetCode, stage: TileStage): void;
   /** What was DRAWN for `code` (its building count, its trees), once its bundle is loaded: the loader's plate and the picker print these. */
-  facts?(code: SheetCode, facts: { readonly buildings: number; readonly trees?: number }): void;
+  facts?(code: SheetCode, facts: { readonly buildings: number; readonly trees?: number; readonly ward: WardData }): void;
   /** The manager's state moved (after every event it was sent). The picker redraws from it. */
   dispatched?(state: ManagerState): void;
 }
@@ -267,7 +267,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
     const roads = t.roads === null ? { ways: [] } : (JSON.parse(t.roads) as RoadsData);
     hooks.installBundle(job.sheet, { ward, terrain, water, roads, trees, surface, prepared });
     bundles.add(job.sheet);
-    try { hooks.facts?.(job.sheet, { buildings: ward.count, ...(trees === null ? {} : { trees: trees.trees.length }) }); } catch (error) { hooks.warn('page furniture failed', error); }
+    try { hooks.facts?.(job.sheet, { buildings: ward.count, ward, ...(trees === null ? {} : { trees: trees.trees.length }) }); } catch (error) { hooks.warn('page furniture failed', error); }
   }
 
   async function loadHalo(job: LoadJob): Promise<void> {

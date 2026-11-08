@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createCityStream } from '../../src/scripts/climate-engine/streaming-host/city-stream.ts';
-import { createPageFurniture, areaFromUrl, searchWithArea, headerOf } from '../../src/scripts/climate-engine/streaming/area-page.ts';
+import { createPageFurniture, areaFromUrl, searchWithArea, headerOf, surveyOf } from '../../src/scripts/climate-engine/streaming/area-page.ts';
 import { createLoaderModel, isVisible, parseAreaNames, riseValue, stagesOf, RISE_MS } from '../../src/scripts/climate-engine/streaming/loader-model.ts';
 import { AMSTERDAM_INDEX_TABLES, activate, buildIndexModel } from '../../src/scripts/climate-engine/streaming/sheet-index.ts';
 import { SKIP_FAST_MS } from '../../src/scripts/climate-engine/loader-progress.ts';
@@ -144,4 +144,13 @@ test('the header falls back to the area table when there is no name, and says "A
   assert.equal(h.code, 'F5');
   assert.ok(!/sheet/i.test(`${h.name} ${h.zone}`));
   assert.match(h.zone, /Area F5$/);
+});
+
+test('the first-entry survey: building centroids across the area\'s box, heights relative to the tallest', () => {
+  const s = surveyOf({ sizeM: 2800, b: [[10, -1400, -1400, -1396, -1400, -1396, -1396], [20, 0, 0, 4, 0, 4, 4, 0, 4], [0, 1396, 1396, 1400, 1396, 1400, 1400]] });
+  assert.equal(s.x.length, 3);
+  assert.ok(s.x[0] < 0.01 && s.y[0] < 0.01, 'a footprint at the south-west corner');
+  assert.ok(Math.abs(s.x[1] - 0.5) < 0.01 && Math.abs(s.y[1] - 0.5) < 0.01, 'one at the centre');
+  assert.ok(s.x[2] > 0.99 && s.y[2] > 0.99, 'one at the north-east corner');
+  assert.deepEqual([...s.h], [0.5, 1, 0]);
 });

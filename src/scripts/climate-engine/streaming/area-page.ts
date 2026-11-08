@@ -57,6 +57,29 @@ export interface LoaderLike {
   command(command: ManagerCommand): void;
   stage(code: SheetCode, stage: TileStage): void;
   setFacts(code: SheetCode, facts: SheetFacts): void;
+  /** The first-entry sweep's points (optional: a loader without it simply draws no survey). */
+  setSurvey?(code: SheetCode, points: SurveyPoints): void;
+}
+
+/** Building centroids across the area's box, 0..1 east and north, and each height 0..1 of the tallest: what the first-entry sweep draws. */
+export interface SurveyPoints { readonly x: Float32Array; readonly y: Float32Array; readonly h: Float32Array }
+
+/** The ward file's rows are `[height, x0, y0, x1, y1, ...]` in metres east and north of the centre, over a square of side `sizeM`. */
+export function surveyOf(ward: { readonly sizeM: number; readonly b: readonly (readonly number[])[] }): SurveyPoints {
+  const n = ward.b.length;
+  const x = new Float32Array(n), y = new Float32Array(n), h = new Float32Array(n);
+  let tallest = 0;
+  for (let i = 0; i < n; i++) {
+    const row = ward.b[i]!;
+    let sx = 0, sy = 0, count = 0;
+    for (let k = 1; k + 1 < row.length; k += 2) { sx += row[k]!; sy += row[k + 1]!; count++; }
+    x[i] = count === 0 ? 0.5 : Math.min(1, Math.max(0, sx / count / ward.sizeM + 0.5));
+    y[i] = count === 0 ? 0.5 : Math.min(1, Math.max(0, sy / count / ward.sizeM + 0.5));
+    h[i] = row[0] ?? 0;
+    if (h[i]! > tallest) tallest = h[i]!;
+  }
+  if (tallest > 0) for (let i = 0; i < n; i++) h[i] = h[i]! / tallest;
+  return { x, y, h };
 }
 export interface PickerLike {
   update(state: IndexViewState): void;
@@ -66,7 +89,7 @@ export interface PickerLike {
 export interface PageFurniture {
   command(command: ManagerCommand): void;
   stage(code: SheetCode, stage: TileStage): void;
-  facts(code: SheetCode, facts: { readonly buildings: number; readonly trees?: number }): void;
+  facts(code: SheetCode, facts: { readonly buildings: number; readonly trees?: number; readonly ward?: { readonly sizeM: number; readonly b: readonly (readonly number[])[] } }): void;
   dispatched(state: ManagerState): void;
   /** `code` is now the open area, with `drawn` buildings on screen. */
   areaShown(code: SheetCode, drawn: number): void;
@@ -87,6 +110,7 @@ export function createPageFurniture(parts: {
     facts(code, f) {
       loader.setFacts(code, { buildings: f.buildings, ...(f.trees === undefined ? {} : { trees: f.trees }) });
       picker.setDrawnCount(code, f.buildings);
+      if (f.ward !== undefined) loader.setSurvey?.(code, surveyOf(f.ward));
     },
     dispatched(state) {
       /* The manager's state moves on every camera event (about ten a second); the picker shows three things of it. */
