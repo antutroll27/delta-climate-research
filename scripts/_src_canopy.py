@@ -79,8 +79,16 @@ def chm_path(area: Area, rule: KolkataRule) -> str:
     return f"/vsis3/{rule.bucket}/{rule.prefix}/chm/{keys.pop()}.tif"
 
 
-def read_chm_metre(area: Area, path: str) -> F32:
-    """The square at 1 m (size x size), north-up, metres. One windowed read of the COG."""
+def read_chm_metre(area: Area, path: str, boundless: bool = False) -> F32:
+    """The square at 1 m (size x size), north-up, metres. One windowed read of the COG.
+
+    NEVER `boundless=True` WITH A FILL OF 0 on this raster. The CHM is uint8 metres with 0 = bare ground and no nodata tag. rasterio's boundless
+    path wraps the dataset in a VRT whose nodata is the fill value, 0, and GDAL's warper then treats every bare pixel as nodata and
+    nudges its value off it: every 0 comes out as exactly 1.0 (measured on Canal Ring's window: 62 % of pixels are 0 and 5.8 % are 1 at
+    native resolution; the boundless read has 0 % zeros and 68 % ones). The mean height reads 3.28 m against a native 2.66 m (+23 %), cover >= 3 m
+    is untouched (0.2786 against 0.2780), 10 m cells >= 2 m grow 31,234 against 27,710 and the tree count 3.7 %. The window always lies inside
+    the mosaic, so there is nothing to fill: `boundless=False` reads 2.657 m, and the VRT read of a sheet agrees to 0.1 %.
+    `boundless=True` is kept only to reproduce Canal Ring's pre-fix file (`build-city-sheets.py --e4-identity`)."""
     import rasterio
     from rasterio.enums import Resampling
     from rasterio.warp import transform_bounds
@@ -93,7 +101,7 @@ def read_chm_metre(area: Area, path: str) -> F32:
         l, b, r, t = transform_bounds("EPSG:4326", src.crs, west, south, east, north)
         win = from_bounds(l, b, r, t, src.transform)
         arr = src.read(1, window=win, out_dtype="float32", out_shape=(n, n),
-                       boundless=True, fill_value=0.0, resampling=Resampling.average)
+                       boundless=boundless, fill_value=0.0 if boundless else None, resampling=Resampling.average)
     out = np.asarray(arr, dtype=np.float32)
     out[~np.isfinite(out)] = 0.0
     np.clip(out, 0.0, None, out=out)
@@ -173,10 +181,14 @@ def drop_in_buildings(trees: list[CityTree], bdoc: CityBuildingsFile) -> tuple[l
     return [t for i, t in enumerate(trees) if i not in gone], len(gone)
 
 
-def build_canopy(area: Area, ctx: CityContextFile, bdoc: CityBuildingsFile) -> tuple[CityCanopyFile, str]:
+def build_canopy(area: Area, ctx: CityContextFile, bdoc: CityBuildingsFile, chm_override: str | None = None,
+                 boundless: bool = False) -> tuple[CityCanopyFile, str]:
+    """`chm_override` is a raster path that already holds the whole box (a VRT over both cached CHM COGs, audit S3); without
+    it the one tile that holds the square is read over /vsis3, and a box that straddles two tiles is refused. `boundless` is the legacy,
+    biased read (see `read_chm_metre`)."""
     rule = kolkata_rule()
-    path = chm_path(area, rule)
-    chm = read_chm_metre(area, path)
+    path = chm_path(area, rule) if chm_override is None else chm_override
+    chm = read_chm_metre(area, path, bool(boundless))
     cover = float((chm >= COVER_H).mean())
     grid = block_mean(chm, CELL_M)
     draw = area.species_draw()
@@ -236,4 +248,33 @@ def self_test() -> None:
         (a["x"], a["y"], a["h"], a["r"]) == (b["x"], b["y"], b["h"], b["r"]) for a, b in zip(tropical, temperate, strict=True))
     assert {t["species"] for t in temperate} == {"broadleaf"} and {"palm", "neem", "gulmohar"} <= {t["species"] for t in tropical}
     assert all("palm" not in a.species_draw() for a in _city.AREAS.values() if a.koppen[:1] in ("C", "D"))
+    # S3: BARE GROUND STAYS BARE. A uint8 CHM with 0 = bare and no nodata tag, read for Canal Ring's own box: the default read must keep the bare
+    # pixels at 0 (not nudge them to 1.0) and the window mean must equal the native-resolution mean (a +23 % bias was found in the boundless read).
+    import tempfile
+    import rasterio
+    from rasterio.transform import from_origin
+    from rasterio.warp import transform_bounds
+    from rasterio.windows import from_bounds
+    area = _city.AREAS["canal-ring"]
+    w, s, e, n = _city.bounds(area)
+    x0, y0, x1, y1 = transform_bounds("EPSG:4326", "EPSG:3857", w - 0.01, s - 0.01, e + 0.01, n + 0.01)
+    res = 1.1943
+    cols, rows = int((x1 - x0) / res) + 1, int((y1 - y0) / res) + 1
+    rng = np.random.default_rng(3)
+    chm = np.zeros((rows, cols), dtype=np.uint8)
+    for _ in range(300):
+        r0, c0 = int(rng.integers(0, rows - 60)), int(rng.integers(0, cols - 60))
+        chm[r0:r0 + int(rng.integers(5, 60)), c0:c0 + int(rng.integers(5, 60))] = int(rng.integers(3, 30))
+    with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as td:
+        path = os.path.join(td, "chm.tif")
+        with rasterio.open(path, "w", driver="GTiff", height=rows, width=cols, count=1, dtype="uint8", crs="EPSG:3857",
+                           transform=from_origin(x0, y1, res, res), tiled=True, blockxsize=512, blockysize=512, compress="deflate") as dst:
+            dst.write(chm, 1)
+        got = read_chm_metre(area, path)
+        with rasterio.open(path) as src:
+            l, b, r, t = transform_bounds("EPSG:4326", src.crs, w, s, e, n)
+            native = src.read(1, window=from_bounds(l, b, r, t, src.transform).round_offsets().round_lengths()).astype(np.float32)
+        assert abs(float(got.mean()) - float(native.mean())) < 0.01 * float(native.mean()) + 0.02, (got.mean(), native.mean())
+        assert abs(float((got == 0).mean()) - float((native == 0).mean())) < 0.03, "bare pixels must stay at 0"
+        assert float((got == 1.0).mean()) < 0.02 + float((native == 1).mean()), "a bare pixel must not be nudged to 1.0"
     print("_src_canopy self-test: ok (place_trees == fetch-canopy._generate on 19,600 cells)")

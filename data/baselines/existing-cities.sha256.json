@@ -1,6 +1,6 @@
 {
- "commit": "f0eeaa5f33170638b05c80fcbe026083a9d6a44e",
- "fileCount": 162,
+ "commit": "content:2affeaaac2b5fbbdca904b25e009e3a4747326c10ba8365d0ed7111b3cf0b8e0",
+ "fileCount": 174,
  "files": {
   "data/bangalore/dc-urs-inputs.json": "48eba3e5f244fffc65c4d66ee2f2778c08f555eaff8aa4ef477eb852f08db1ec",
   "data/bangalore/dcurs-lst-scenes.json": "161cf1fa3aff71b4170fafafa54c2e12feeeca35a868538951f56810d2e7ca93",
@@ -90,6 +90,12 @@
   "data/calibration/ward-observations.json": "9a4ba05e487f08a0376ad46d7c22dfdae4755ad2233de043d546f2278d32ec93",
   "data/calibration/ward-observations.npz": "2252a7b86520eb9ea73ab31379440ad38f039e918d93a90904d0191e0f3a7654",
   "data/calibration/ward-scale-fit.json": "2fa7857880d625799146ceabb853102aa02e08a07fbccedac51925c1df7d111d",
+  "data/cities/amsterdam/canal-ring-buildings.json": "dbbd3831be75c3afd287c0bafef16120b17260734c18abfbbe37ec0661af9149",
+  "data/cities/amsterdam/canal-ring-canopy.json": "336d8b1598d2a83481a4fe19a925243abc7ee9f366331c0a7ba900a749fddf34",
+  "data/cities/amsterdam/canal-ring-context.json": "05b56089f8550ada18b42e61f2a7e39457ff92edb96e42c400d6369087357530",
+  "data/cities/amsterdam/canal-ring-surface-scenes.json": "5b4c40def417815918f76185ffcadd1e4fa2355dbea0a53b18051567f79f98b6",
+  "data/cities/amsterdam/canal-ring-terrain.json": "a6d72fb15f57d109627fe3245d4254befc9559affb8bc29b8c2d42dc2bd8fa36",
+  "data/cities/amsterdam/frame-guard.json": "4467f8ce823900fd28b763deca322be73dc76bb17da5920e0bc11d3f9004ee87",
   "data/dc-urs/far.json": "abca6158439674ca864edb61dfc4c0fdcc423e85275da63f8a89a978c5282ee5",
   "data/dc-urs/golden-cases.json": "f918159434dcc5d447db44268d58289545e87022a171e636c60b2a3b81d1a21a",
   "data/dc-urs/inputs.json": "4df84198c00613e8e96b95f08f457a8421519ed104ff1a2930f9a973fc471c82",
@@ -143,6 +149,12 @@
   "public/heat-map/data/baruipur-trees.json": "d9a60cf8b4fb3d593186eee0e78eb949dd1d5cbbe9806cc27a3d43a288f5d0e4",
   "public/heat-map/data/baruipur-water.json": "b4eec17c38acf1395dc340a596cd720773ff41496fbfa249467cda188d4ece6c",
   "public/heat-map/data/baruipur.json": "5edb62a2c02029669ca6a6b9923c45829554d7cbf8c37391b961f7bd887e54dd",
+  "public/heat-map/data/canal-ring-roads.json": "0efb166987fc4c53d4567309291a02e2376a1dea5101296e5462146620e49851",
+  "public/heat-map/data/canal-ring-surface.png": "8b17a88a1601dd7091368adda546aee5abd0f9ed472b8faab93fd5eb2f58816e",
+  "public/heat-map/data/canal-ring-terrain.json": "99bdec94b5b065bbbb7218c3b39ea2cddefb300a3b86403f14929b2842d948ce",
+  "public/heat-map/data/canal-ring-trees.json": "0c2d9c327b26021633761fb0f858107982d12177c42cd61b394528c141b90b64",
+  "public/heat-map/data/canal-ring-water.json": "96f4eb1348a067e6a39c7bc86c91799ed31e842c786ebe65904a4bc8cc2bd038",
+  "public/heat-map/data/canal-ring.json": "e1a4e895136f2543ef3c4df7f4f9b989a9e0eca3f7dd070d000a7378c77146e4",
   "public/heat-map/data/indiranagar-roads.json": "bb5b45253185892300cf4189e2fbb477ef8f3f4c497d4c3affcc50a5c4d88ea8",
   "public/heat-map/data/indiranagar-surface.png": "797ebe8ca902f177474cac9e52df66001fd275dcc154f6172cb840914c503e45",
   "public/heat-map/data/indiranagar-terrain.json": "67fd1259a46a6ec0d3f22f3529eb7569346b7d1915db8392a9fac48c1c33653d",
@@ -166,7 +178,7 @@
   "public/heat-map/models/whitefield.glb": "3a6fea171ce815fc7dd980f356012dcab9b1057e5854746443d9d87a1659f6f9"
  },
  "note": "sha256 of every frozen artefact as it is at `commit`; see scripts/check-existing-cities-unchanged.py",
- "ref": "origin/main",
+ "ref": "content",
  "schema": 1,
  "surfaceMeta": {
   "topLevel": {
@@ -181,6 +193,7 @@
    "ballygunge": "ec9dbf29934a96e4bf38755a924e62e960b0354cea18a60c45e5b3e4218f40cb",
    "barrackpore": "c76ccc23ae0885586a8be2b8bf0997850564763c575df83322d588754ca5a89d",
    "baruipur": "1c3ec86181fa336087609d05c8581f9eafd2eadbbab311e0344caa158872f560",
+   "canal-ring": "084e71d3b871cf2b93a05fc896cbe86966d0ea8d4285f74580a81911b13519a1",
    "indiranagar": "10af64dd55c554f3b01aa8ba1b880ddd2aae2cf0416677363efbddd26f555ae6",
    "mg-road": "245721c9d86f462f138b5587ee7aadad4aae18a810de6b46fe6578944a6455de",
    "whitefield": "c13fcfb19df49002128462df331b62d58e12dc4a867eed2202e0df475f57f351"

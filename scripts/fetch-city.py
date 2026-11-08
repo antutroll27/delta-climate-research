@@ -59,23 +59,33 @@ def fetch_buildings(area: Area) -> None:
         paths.append(bag.fetch_tile(t, raw))
         print(f"  [{i:2d}/{len(tiles)}] {t.tile_id}", flush=True)
     scratch = os.path.join(raw, "scratch")
-    raws = itertools.chain.from_iterable(bag.read_tile(p, scratch) for p in paths)
-    rows, st, mix = bag.build_rows(area, raws)
+    raws = list(itertools.chain.from_iterable(bag.read_tile(p, scratch) for p in paths))
+    # GROUND PLAUSIBILITY (P2b audit B1): 3D BAG's ground for a few buildings is implausibly low (repeated -6.729, -3.310, -4.784 m NAP values), which makes them
+    # 3-9 m too tall. Repair only where the neighbours disagree; see _src_3dbag.ground_decision. The AHN4 DTM/DSM are the area's own cached tiles.
+    ahn = os.path.join(_city.raw_dir(area.city), "ahn")
+    dtm, tf = dem.mosaic("dtm_05m", area, ahn)
+    dsm, _ = dem.mosaic("dsm_05m", area, ahn)
+    tr = bag.rd_transformer()[0]
+    scope = []
+    for rb in raws:
+        c = rb.footprint.centroid
+        cx, cy = _city.to_local(area, *tr.transform(c.x, c.y))
+        scope.append(abs(cx) <= area.size_m / 2.0 and abs(cy) <= area.size_m / 2.0)
+    raws, ground = bag.repair_grounds(raws, dtm, tf, dsm, scope)
+    print(f"  ground plausibility: {ground.buildings} buildings in the square, {ground.repaired} repaired "
+          f"({ground.widened} from a widened ring, up to {ground.max_drop_m:.1f} m lower), outcomes {dict(ground.outcomes)}")
+    rows, st, mix = bag.build_rows(area, iter(raws))
     _, op_desc, op_acc = bag.rd_transformer()
     hs = [r["h"] for r in rows]
     p50, p95 = bag.percentiles(hs, (50.0, 95.0))
-    tiers: dict[str, int] = {}
-    for r in rows:
-        tiers[r["hSource"]] = tiers.get(r["hSource"], 0) + 1
-    doc = CityBuildingsFile(
-        city=area.city, area=area.id, name=area.name, centre=[area.centre.lat, area.centre.lon],
-        sizeM=float(area.size_m), release=f"3D BAG {bag.RELEASE}", retrieved=TODAY, count=len(rows),
-        source=(f"3D BAG (tudelft3d + 3DGI), {bag.RELEASE}, BAG footprints; heights from the AHN point clouds "
-                "(AHN5 © Het Waterschapshuis, CC BY 4.0; AHN4 and AHN3, CC0), CC BY 4.0"),
-        heightSource="3D BAG LoD1.2 roof 70th percentile minus ground level (NAP)",
-        heightNote=bag.height_note(op_desc, op_acc),
-        fillFraction=round(st.fill_rows / max(1, len(rows)), 4), heightTiers=tiers, pointCloudMix=mix,
-        crossCheck="AHN nDSM cross-check not yet run (guard G5, Task A9)", b=rows)
+    doc = bag.make_buildings_doc(area, rows, st, mix, TODAY)
+    if ground.repaired:
+        doc["heightNote"] += (f" GROUND PLAUSIBILITY: for {ground.repaired} building(s) 3D BAG's ground was more than {bag.GROUND_DROP_M:g} m below the median of the "
+                              f"{bag.GROUND_MIN_NEIGHBOURS}+ buildings within {bag.GROUND_NEIGHBOUR_R_M:g} m (or, with fewer neighbours, a building older than the AHN4 "
+                              f"survey whose AHN4 height agrees); their ground is the 5th percentile of the AHN4 DTM ring around the footprint (hSource "
+                              f"'3dbag-p70-ahn4-ground'). Never raises a height; never leaves a part under {bag.MIN_REPAIRED_HEIGHT_M:g} m; never applied to "
+                              f"buildings from {bag.AHN4_FLIGHT_YEAR} on.")
+    tiers = doc["heightTiers"]
     write_json(out_path(area, "buildings"), doc)
     size_mb = os.path.getsize(out_path(area, "buildings")) / 1e6
     print(f"\nwrote {out_path(area, 'buildings')} ({size_mb:.1f} MB)")
@@ -195,7 +205,7 @@ def validate_buildings_file(area: Area, doc: CityBuildingsFile) -> list[str]:
         if max(abs(v) for v in b["p"]) > lim:
             bad.append(f"row {i}: vertex outside +-{lim:.0f} m")
             break
-        if b["hSource"] not in ("3dbag-p70", "fill"):
+        if b["hSource"] not in ("3dbag-p70", "3dbag-p70-ahn4-ground", "fill"):
             bad.append(f"row {i}: hSource {b['hSource']}")
             break
     if sum(doc["heightTiers"].values()) != doc["count"]:
@@ -204,6 +214,7 @@ def validate_buildings_file(area: Area, doc: CityBuildingsFile) -> list[str]:
 
 
 def self_test() -> None:
+    import numpy as np
     import shapely
     from shapely.geometry import Polygon
 
@@ -267,6 +278,11 @@ def self_test() -> None:
     rows2, st2, _ = bag.build_rows(area, iter([two, out]))
     assert st2.inside_square == 1 and st2.multipart_buildings == 1 and sorted(x["h"] for x in rows2) == [5.0, 20.0], st2
 
+    # An invalid (bow-tie) part ring makes GEOS raise on the intersection; the row is rebuilt on repaired copies and the repair is counted.
+    bow = Polygon([(cx + 100, cy + 100), (cx + 112, cy + 108), (cx + 112, cy + 100), (cx + 100, cy + 108)])
+    tie = bag.RawBuilding("NL.IMBAG.Pand.tie", near, (bag.Part(0, bow, 5.5), bag.Part(1, right, 20.5)), 0.5, True, False, "ahn5", 2023)
+    rows3, st3, _ = bag.build_rows(area, iter([tie]))
+    assert st3.invalid_repaired >= 1 and st3.rows >= 1 and rows3, st3
     # The committed file, when present, passes its own contract.
     path = out_path(area, "buildings")
     note = "no committed buildings file yet"
@@ -290,6 +306,7 @@ def self_test() -> None:
         problems = ovt.validate_context_file(area, cdoc)
         assert not problems, problems
         note += f"; context file ({len(cdoc['water'])} water, {len(cdoc['green'])} green, {len(cdoc['roads'])} roads) satisfies the contract"
+    bag.self_test()
     dem.self_test()
     ovt.self_test()
     canopy.self_test()

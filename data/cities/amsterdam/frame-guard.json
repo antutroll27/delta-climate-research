@@ -1,9 +1,9 @@
 {
  "city": "amsterdam",
  "area": "canal-ring",
- "measuredAt": "2026-11-06",
+ "measuredAt": "2026-11-08",
  "inputs": {
-  "canal-ring-buildings.json": "d913c72f225643024d224b391a8e08d48d7be0b6e79f383d02611e1acfd03874",
+  "canal-ring-buildings.json": "dbbd3831be75c3afd287c0bafef16120b17260734c18abfbbe37ec0661af9149",
   "canal-ring-terrain.json": "a6d72fb15f57d109627fe3245d4254befc9559affb8bc29b8c2d42dc2bd8fa36",
   "canal-ring-context.json": "05b56089f8550ada18b42e61f2a7e39457ff92edb96e42c400d6369087357530"
  },
@@ -90,13 +90,13 @@
    "statistic": "Spearman rho between 3D BAG h and nDSM p70",
    "rule": "north-up >= 0.8 and mirrored <= 0.3",
    "status": "pass",
-   "north": 0.9806756292757486,
-   "mirrored": 0.02438097588406753,
+   "north": 0.9827650381289957,
+   "mirrored": 0.024148886983226692,
    "detail": {
     "buildingsCompared": 21072,
     "buildingsComparedMirrored": 20071,
     "flaggedOver": 5.0,
-    "flagged": 220,
+    "flagged": 190,
     "medianAbsDevM": 0.22,
     "note": "AHN4 (2020-22) vs AHN5-dominated 3D BAG heights: a one-to-three-year gap, so some disagreement is real change"
    }
@@ -121,8 +121,8 @@
    "statistic": "mean vegetation fraction inside parks minus outside, from the exported PNG (row 0 = north)",
    "rule": "north-up > 0 and >= 2x mirrored",
    "status": "pass",
-   "north": 0.43791454694525017,
-   "mirrored": 0.005818800199073715,
+   "north": 0.5121512975552139,
+   "mirrored": -0.012369019749236154,
    "detail": {
     "parkCells": 4605,
     "cells": 78400
