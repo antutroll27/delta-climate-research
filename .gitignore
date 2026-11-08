@@ -112,12 +112,15 @@ attic/heat-fx/
 docs/audits/
 
 # Amsterdam streamed-area layer files (founder decision D7 pending: not committed). Files already tracked stay tracked.
-# When D7 says the layers are committed, remove the FIRST THREE patterns below (the layer files and the per-area build.json).
-# KEEP /dist-stream/ and /test-results/: they are build and test output, whatever D7 decides.
+# The dev streaming build reads them from Cloudflare R2 (public/heat-map/data/ams-r2-manifest.json, which IS committed), so the 186 local copies
+# under /public/heat-map/data/ams-* are no longer needed by it (they stay on disk, ignored; a manifest with baseUrl null serves them locally).
+# When D7 says the layers are committed, remove the FIRST THREE patterns below (the layer files and the per-area build.json) and the manifest
+# exception. KEEP /dist-stream/ and /test-results/: they are build and test output, whatever D7 decides.
 # KNOWN, NOT CHANGED: `astro build` copies every file in public/, ignored or not, so a dist built on a machine that has the 186 local files carries
 # them. A Vercel build from git never has them (they are ignored, so never pushed). Do not deploy a hand-built dist from such a machine.
 /data/cities/amsterdam/ams-*-*.json
 /data/cities/amsterdam/ams-*/build.json
 /public/heat-map/data/ams-*
+!/public/heat-map/data/ams-r2-manifest.json
 /dist-stream/
 /test-results/

@@ -222,6 +222,9 @@ for (const [country, entry] of Object.entries(REGISTRY)) {
   }
 }
 
+/** The dev streaming build's pointer to the Amsterdam layer files on R2 (streaming/data-source.ts); same flat directory as the files it lists. */
+export const STREAM_MANIFEST = `${DATA}ams-r2-manifest.json`;
+
 /**
  * The artefact URLs of a SHEET of a streamed city, by area id: the same flat directory and file names as `paths()`, for an
  * area that is not `drawable` (the sheets other than Canal Ring are nameable, not reachable, until TILED_CITY_READY) and so

@@ -81,7 +81,7 @@ import { costBasisFor } from './solar-cost.ts';
 import { CITY_MAP_CREDIT, joinMapCredits } from '../../data/city-credits.ts';
 import { wardRoi, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
 import { mountPaybackSheet, type PaybackSheet } from './solar-payback-sheet.ts';
-import { areaPath, paths, cityPaths, streamedAreaPaths, wardMaskPath, type AreaPaths } from './scope/paths.ts';
+import { areaPath, paths, cityPaths, wardMaskPath, type AreaPaths } from './scope/paths.ts';
 import { asWardMask, buildingInWard, fieldHistogram, fieldStats, wardRows, type WardMask } from './ward-mask.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
@@ -4494,13 +4494,26 @@ export function mountHeatMap(): () => void {
   map.on('style.load', onStyleLoad);
 
 
-  const streamPaths = (key: AreaKey): AreaPaths => streamedAreaPaths(splitKey(key).area);
+  /** Streamed areas' file URLs: R2 for every area but Canal Ring (streaming/data-source.ts, one helper with the controller's `sheetUrls`). Loaded with the dev wiring. */
+  let streamedAreaUrls: ((areaId: string) => AreaPaths) | null = null;
+  const streamPaths = (key: AreaKey): AreaPaths => streamedAreaUrls!(splitKey(key).area);
 
   async function startStream(): Promise<void> {
-    const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }, { measured }, { wirePage }, { areaFromUrl }, { streamedAreaMeans }, { createLateStream }] = await Promise.all([
+    const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }, { measured }, { wirePage }, { areaFromUrl }, { streamedAreaMeans }, { createLateStream }, dataSource] = await Promise.all([
       import('./streaming-host/city-stream'), import('./streaming-host/sheet-worker-client'), import('./streaming/halo-sim-host'),
-      glMeterReady, import('./streaming-host/page-wiring'), import('./streaming/area-page'), import('./surface-raster'), import('./streaming/late-stream'),
+      glMeterReady, import('./streaming-host/page-wiring'), import('./streaming/area-page'), import('./surface-raster'), import('./streaming/late-stream'), import('./streaming/data-source'),
     ]);
+    /* WHERE THE LAYER FILES COME FROM: the manifest (public/heat-map/data/ams-r2-manifest.json) names Cloudflare R2 for every area but Canal Ring. A manifest
+       that cannot be read is not a reason to guess: every other area then fails into the loader's failed state, with the reason. */
+    try {
+      const response = await fetch(dataSource.MANIFEST_URL, { cache: 'no-cache' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      dataSource.configureStreamData({ kind: 'manifest', manifest: dataSource.asR2Manifest(await response.json()) });
+    } catch (error) {
+      console.warn('streaming: the area data manifest could not be read', error);
+      dataSource.configureStreamData({ kind: 'unavailable', reason: error instanceof Error ? error.message : String(error) });
+    }
+    streamedAreaUrls = dataSource.streamedAreaUrls;
     /* The page furniture (the loader view, the area picker, the header/URL projections) is made first: the controller's hooks feed it. */
     const stageEl = document.querySelector<HTMLElement>('.stage');
     const lateStream = createLateStream();            // a click before the controller exists is kept, not thrown at (INT audit F6)

@@ -30,7 +30,8 @@ import { gpuMB, DEFAULT_CONFIG, createSheetManager, type Level, type ManagerComm
 import type { TileStage } from '../streaming/loader-model.ts';
 import { AMSTERDAM_TOPOLOGY as TOPOLOGY, DIRECTIONS, type Direction } from '../streaming/sheet-topology.ts';
 import type { NetworkClass } from '../streaming/sheet-budgets.ts';
-import { streamedAreaPaths, type AreaPaths } from '../scope/paths.ts';
+import type { AreaPaths } from '../scope/paths.ts';
+import { streamedAreaUrls } from '../streaming/data-source.ts';
 import { sheetByCode, type SheetCode } from '../scope/sheets.ts';
 import type { Prepared, SheetWorker } from './sheet-worker-client.ts';
 import type { MassingMesh } from '../streaming/prism-mesh.ts';
@@ -43,9 +44,9 @@ const AO_REQUEST = { n: 1024, nearM: CLAY.aoNearM } as const;
 
 export type SheetUrls = Pick<AreaPaths, 'ward' | 'terrain' | 'water' | 'roads' | 'trees' | 'surface'>;
 
-/** The artefact URLs of a sheet (scope/paths.ts: the flat directory, by area id; a sheet other than E4 is not `drawable`). */
+/** The artefact URLs of a sheet (streaming/data-source.ts: R2 for every area but Canal Ring, which is same-origin; throws for an area the manifest lacks). */
 export function sheetUrls(code: SheetCode): SheetUrls {
-  return streamedAreaPaths(sheetByCode(code)!.id);
+  return streamedAreaUrls(sheetByCode(code)!.id);
 }
 
 /** Everything the page's own `loadWard` needs for a sheet, so it can open it from cache. */

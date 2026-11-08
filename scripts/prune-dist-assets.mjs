@@ -6,6 +6,8 @@ import { resolve } from 'node:path';
 // them. Removing them after each build keeps a directly deployed dist/ aligned
 // with the actual runtime asset set.
 const unusedModelAssets = [
+  // the dev streaming build's pointer to the Amsterdam layer files on R2 (streaming/data-source.ts); the production page never reads it
+  'heat-map/data/ams-r2-manifest.json',
   'models/._river-1k.glb',
   'models/river-2k.glb',
   'models/river-4k.glb',
