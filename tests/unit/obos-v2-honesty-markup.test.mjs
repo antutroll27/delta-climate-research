@@ -385,3 +385,10 @@ test('F8: airKind and weatherSource agree in all four states, and airKind is der
   assert.match(src, /import \{ weatherSource \} from '\.\/weather-panel\.ts';/);
   assert.ok(!/observed && reading/.test(src), 'heat-v2.ts no longer carries its own copy of the rule');
 });
+
+test('the scope badge says Calibrated, never Validated: the methods ledger says "night level calibrated, ward detail unvalidated" (founder, 2026-11-09)', () => {
+  const sw = readFileSync('src/components/ClimateEngine/shell/ScopeSwitcher.astro', 'utf8');
+  assert.match(sw, /validated: 'Calibrated',/);
+  assert.doesNotMatch(sw, /:\s*'Validated'/);
+  assert.ok(!V2('ScenarioCards.astro').includes('Open a validated area'));
+});

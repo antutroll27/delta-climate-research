@@ -85,7 +85,9 @@ const NO_DATA_NOTE = 'no data yet';
  * a fourth tier fails to compile here rather than rendering a blank badge.
  */
 const TIER_LABEL: Record<CityTier, string> = {
-  validated: 'Validated',
+  /* 'Calibrated', not 'Validated' (founder, 2026-11-09): the methods ledger says "night level calibrated, ward detail
+     unvalidated", and a badge must not claim more than the ledger. The tier VALUE stays `validated`. */
+  validated: 'Calibrated',
   zone: 'Zone transfer',
   geometry: 'Geometry only',
 };
