@@ -38,6 +38,7 @@ import _types  # noqa: E402
 GOLDEN_REL: Final = os.path.join("tests", "fixtures", "frame-lat", "python.json")
 PADS: Final = (0.0, 50.0)
 LATTICE_STEP_DEG: Final = 0.004
+LOCAL_CRS_TOL_M: Final = 1e-6
 
 
 class AreaFrame(TypedDict):
@@ -92,9 +93,16 @@ def compare(current: Golden, pinned: Golden) -> list[str]:
         if key not in current:
             bad.append(f"{key}: pinned but no longer produced")
             continue
-        for field in ("mPerDeg", "bounds", "local", "boundsLocalCrs"):
-            if current[key][field] != pinned[key][field]:                       
+        for field in ("mPerDeg", "bounds", "local"):
+            if current[key][field] != pinned[key][field]:
                 bad.append(f"{key}: {field} is not bit-identical to the pinned frame")
+        # boundsLocalCrs goes through PROJ, whose x86_64 Linux and arm64 macOS builds differ in the last bits
+        # (measured on CI 2026-11-09: 1.28e-09 m on canal-ring, every other field bit-identical). It is held
+        # to LOCAL_CRS_TOL_M, a thousandth of a millimetre, which no change of frame could hide under.
+        cb, pb = current[key]["boundsLocalCrs"], pinned[key]["boundsLocalCrs"]
+        if (cb is None) != (pb is None) or (cb is not None and pb is not None and (
+                len(cb) != len(pb) or any(abs(x - y) > LOCAL_CRS_TOL_M for x, y in zip(cb, pb)))):
+            bad.append(f"{key}: boundsLocalCrs moved more than {LOCAL_CRS_TOL_M} m from the pinned frame")
     return bad
 
 
@@ -125,7 +133,7 @@ def main(argv: list[str]) -> int:
             print("FAIL", b)
         return 1
     existing = [k for k in pinned if k in cur]
-    print(f"check-frame-lat: ok -- {len(existing)} existing areas bit-identical to the pre-frame_lat golden "
+    print(f"check-frame-lat: ok -- {len(existing)} existing areas match the pre-frame_lat golden (bit-identical; PROJ bounds within {LOCAL_CRS_TOL_M} m) "
           f"({', '.join(sorted(existing))})")
     return 0
 
@@ -160,13 +168,22 @@ def self_test(cur: Golden, pinned: Golden) -> int:
     key = next(iter(bent))
     bent[key]["local"][7][0] = math.nextafter(bent[key]["local"][7][0], math.inf)
     assert compare(bent, pinned) == [f"{key}: local is not bit-identical to the pinned frame"]
+    # a projected bound that moves 1 mm is caught; one inside the PROJ build difference is not
+    proj_key = next(k for k, v in cur.items() if v["boundsLocalCrs"] is not None)
+    shifted = copy.deepcopy(cur)
+    assert shifted[proj_key]["boundsLocalCrs"] is not None
+    shifted[proj_key]["boundsLocalCrs"][0] += 1e-3  # type: ignore[index]
+    assert compare(shifted, pinned) == [f"{proj_key}: boundsLocalCrs moved more than {LOCAL_CRS_TOL_M} m from the pinned frame"]
+    jitter = copy.deepcopy(pinned)
+    jitter[proj_key]["boundsLocalCrs"][0] += 1.3e-9  # type: ignore[index]
+    assert compare(jitter, pinned) == []
     # a vanished area is caught; a new area is not a regression
     gone = {k: v for k, v in cur.items() if k != key}
     assert compare(gone, pinned) == [f"{key}: pinned but no longer produced"]
     extra = dict(cur)
     extra["x/new"] = cur[key]
     assert compare(extra, pinned) == []
-    print("check-frame-lat --self-test: ok (exact comparison, ulp caught, vanished area caught, new area allowed)")
+    print("check-frame-lat --self-test: ok (exact comparison, ulp caught, 1 mm projected shift caught, PROJ build jitter allowed, vanished area caught, new area allowed)")
     return 0
 
 
