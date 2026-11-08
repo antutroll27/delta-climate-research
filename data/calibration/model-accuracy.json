@@ -10,8 +10,8 @@
     "night": {
       "n": 20,
       "ceiling_rmse_K": 1.87,
-      "model_rmse_K": 3.01,
-      "reported_band_K": 3.5,
+      "model_rmse_K": 2.96,
+      "reported_band_K": 3.0,
       "confidence": "quantitative",
       "why": "air temperature explains night surface temperature well (r ~ 0.9), so a calibrated model is meaningful here"
     },
@@ -81,14 +81,14 @@
       "night": {
         "n_scenes": 50,
         "n_overpasses": 20,
-        "rmse_K": 2.662,
-        "bias_K": 0.41,
-        "loo_overpass_rmse_K": 2.777,
+        "rmse_K": 2.683,
+        "bias_K": 0.32,
+        "loo_overpass_rmse_K": 2.812,
         "ci95_K": [
-          1.598,
-          3.697
+          1.644,
+          3.703
         ],
-        "ci95_halfwidth_K": 1.05,
+        "ci95_halfwidth_K": 1.03,
         "hour_range": [
           0.7,
           23.84

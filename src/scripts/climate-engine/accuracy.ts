@@ -8,7 +8,8 @@
  *
  * NIGHT IS THE EXCEPTION: its figures come from `data/calibration/model-accuracy.json`
  * → `ward_scale.strata.night` (written by `scripts/measure-accuracy.py`). Do NOT copy
- * `phases.night.reported_band_K` from that file — its 3.5 is the superseded
+ * `phases.night.reported_band_K` from that file — its 3.5 (3.0 since the 2026-11-08
+ * scorer correction, by coincidence) is the superseded
  * mask-scale block, scoring a fit that does not ship.
  *
  * MEASURED AT WARD SCALE, WHICH IS NEW. The previous figures scored the model
@@ -29,12 +30,21 @@
  * that a 50 km reanalysis cell cannot resolve. No amount of tuning moves the
  * daytime ceiling — that limit is the forcing data.
  *
- * WHERE WE SIT AGAINST IT. Night is 0.50 K off its ceiling, and the model runs
- * 0.41 K warmer than the measured surface on average (bias +0.41 K, model
+ * WHERE WE SIT AGAINST IT. Night is 0.52 K off its ceiling, and the model runs
+ * 0.32 K warmer than the measured surface on average (bias +0.32 K, model
  * minus measured). Day, in the older evidence set, was 1.08 K off, so the
  * daytime structure is genuinely incomplete and that gap is ours, not the
  * data's. Two different situations; the notes below say so rather than
  * averaging them into one reassuring sentence.
+ *
+ * NIGHT FIGURE CORRECTED 2026-11-08 (RMSE 2.662 -> 2.683 K, LOO 2.777 -> 2.812 K,
+ * bias +0.41 -> +0.32 K). The page's night evaporation taper (`nightLatent`) is
+ * evaluated on a fixed reference cell, (store + pull)/k; the Python scorer had left
+ * the store out and used (Q*built + pull)/k, so the published figure described a
+ * model slightly different from the one that runs. `_physics.night_latent` is now
+ * the single definition and the scorer matches the page. Nothing in the model
+ * changed; the displayed night mean (+0.31 K, 2.68 K, LOO 2.81 K) is unchanged.
+ * The band stays +/-3.0 K (it covers 2.812 K). See docs/evidence/2026-11-08-night-figure-parity.md.
  *
  * BALLYGUNGE IS KMC WARD 68 (re-measured 2026-10-03). Every ward-scale figure
  * here that is copied from model-accuracy.json — all of night, and the peak
@@ -115,7 +125,7 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
   night: {
     n: 50,
     ceilingRmseK: 2.166,
-    modelRmseK: 2.662,
+    modelRmseK: 2.683,
     /**
      * Leave-one-overpass-out RMSE, from data/calibration/model-accuracy.json
      * ward_scale.strata.night. THIS is the number the band must cover.
@@ -129,11 +139,13 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
      * understating the error the page named. Today's ±3.0 is a re-measurement, not a
      * reversion: after the 2026-09-24 forcing-date correction the out-of-sample error
      * was 2.801 K, which it covers (known-limitations §15). Re-measured 2026-10-03 with
-     * Ballygunge as the KMC Ward 68 polygon it is 2.777 K, still covered. Of
+     * Ballygunge as the KMC Ward 68 polygon it was 2.777 K; the 2026-11-08 scorer
+     * correction (the night taper now on the page's reference cell) makes it 2.812 K,
+     * still covered by ±3.0 K, with 0.19 K to spare. Of
      * every possible defect on a site whose product is its error bars, an error
      * bar that is too small is the worst one.
      */
-    looOverpassRmseK: 2.777,
+    looOverpassRmseK: 2.812,
     bandK: 3.0,
     confidence: 'quantitative',
     note: 'Night surface temperature tracks air temperature closely, and at night that '
@@ -796,7 +808,8 @@ export function bandLabel(phase: 'peak' | 'night'): string {
  * That table is the 2026-08-02 campaign, scored with Ballygunge as the OLD 1400 m
  * box and before the sun-up bar and the forcing-date correction. The artefact
  * today (Ballygunge = KMC Ward 68 polygon, 2026-10-03) reads morning_ecostress
- * LOO 6.29 K n=9, peak_ecostress 2.36 K n=23, night 2.78 K n=50.
+ * LOO 6.29 K n=9, peak_ecostress 2.36 K n=23, night 2.81 K n=50 (2.78 K before the 2026-11-08
+ * scorer correction).
  * TRANSITION_RMSE_K keeps the campaign's 7.54 K, the larger and so the more
  * cautious of the two; moving it is a reviewed change.
  *

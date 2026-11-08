@@ -23,7 +23,7 @@
       "bias_K": 1.715,
       "rmse_K": 3.06,
       "loo_overpass_rmse_K": 3.013,
-      "calibrated_rmse_K": 3.064,
+      "calibrated_rmse_K": 3.063,
       "ward_68": {
         "bias_K": 1.905,
         "rmse_K": 3.42,
