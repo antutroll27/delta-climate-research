@@ -10,7 +10,7 @@
   "name": "Canal Ring",
   "stadsdeel": "Centrum",
   "drawn": 21342,
-  "trees": 16710,
+  "trees": 16121,
   "source": "public/heat-map/data/canal-ring.json `count` and canal-ring-trees.json (the shipped files)"
  },
  "areas": [
