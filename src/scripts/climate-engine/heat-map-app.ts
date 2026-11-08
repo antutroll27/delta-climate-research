@@ -3824,7 +3824,7 @@ export function mountHeatMap(): () => void {
    * Compare URL the same way, for the same reason.
    */
   function updateAddressBar() {
-    if (STREAM_DEV) return;     // a streamed sheet has no page of its own (TILED_CITY_READY is false): the URL stays on Canal Ring
+    if (STREAM_DEV) return;     // a streamed area has no page of its own (TILED_CITY_READY is false): the dev wiring writes `?area=F4` on Canal Ring's page (streaming-host/page-wiring.ts)
     history.replaceState(null, '', `${areaPath(state.ward)}${window.location.search}${window.location.hash}`);
   }
 
@@ -4070,10 +4070,16 @@ export function mountHeatMap(): () => void {
     const key = `${CO}/${CY}/${id ?? ''}`;
     return isAreaKey(key) ? key : null;
   };
+  /* A streamed area is opened THROUGH THE STREAM CONTROLLER (the manager, the loader, the picker), never by `loadWard` directly: the strip's
+     Canal Ring tab and the Area select both land here in the dev streaming build. Everything else is exactly what it was. */
+  const openArea = (key: AreaKey): void => {
+    const row = STREAM_DEV && streamControl ? sheetOf(key) : null;
+    if (row) streamControl!.select(row.code); else void loadWard(key);
+  };
   document.querySelectorAll('#strip .ward').forEach(t => onEl(t, 'click', () => {
     nudgeOrbit();
     const key = areaKeyFromTab((t as HTMLElement).dataset.w);
-    if (key) void loadWard(key);
+    if (key) openArea(key);
   }));
 
   /* THE SCOPE SWITCHER ASKS; THIS ANSWERS.
@@ -4088,7 +4094,7 @@ export function mountHeatMap(): () => void {
        page can dispatch one — and this is the door into a fetch. */
     if (!isAreaKey(key)) return;
     nudgeOrbit();
-    void loadWard(key);
+    openArea(key);
   };
   document.addEventListener(OPEN_AREA_EVENT, onOpenArea);
   cleanup.push(() => document.removeEventListener(OPEN_AREA_EVENT, onOpenArea));
