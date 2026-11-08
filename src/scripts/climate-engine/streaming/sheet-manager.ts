@@ -96,6 +96,9 @@ export interface ManagerState {
   /** Camera crossings are live only once the camera has been seen inside `current`: after a `select` the camera is still
    *  over the old sheet, and must not drag the user straight back to it. */
   readonly armed: boolean;
+  /** The sheet whose choice-fly ended while it was still OPENING (a shown loader holds the page's open for the buildings and the first solve, so the
+   *  person can grab the map before the manager is told). Applied as `armed` when that open completes (INT re-audit R2). */
+  readonly flyEndedFor: SheetCode | null;
   /** The last camera event said a gesture is on (pointer down, inertia, a flyTo). A held pointer sends no motion, so this
    *  flag, not silence, is what keeps a crossing from firing mid-gesture. */
   readonly gesturing: boolean;
@@ -179,7 +182,7 @@ export const DEFAULT_CONFIG: ManagerConfig = Object.freeze({
 
 export function initialState(tier: ExploreDeviceTier, network: NetworkClass = 'fast'): ManagerState {
   return Object.freeze({
-    tier, network, pressure: 'none', current: null, displayed: null, outgoing: null, opening: null, displayedTier: null, outgoingTier: null, solved: null, solvedWithHalo: false, heading: null, armed: false, gesturing: false, camera: null,
+    tier, network, pressure: 'none', current: null, displayed: null, outgoing: null, opening: null, displayedTier: null, outgoingTier: null, solved: null, solvedWithHalo: false, heading: null, armed: false, flyEndedFor: null, gesturing: false, camera: null,
     lastMotionMs: 0, loader: null, sheets: new Map(), seq: 0, nextRequestId: 1,
   });
 }
@@ -196,7 +199,7 @@ interface Draft {
   tier: ExploreDeviceTier; network: NetworkClass; pressure: MemoryPressure;
   current: SheetCode | null; displayed: SheetCode | null; outgoing: SheetCode | null; opening: { sheet: SheetCode; keepOutgoing: boolean } | null; displayedTier: ExploreDeviceTier | null;
   outgoingTier: ExploreDeviceTier | null; solved: SheetCode | null; solvedWithHalo: boolean;
-  heading: Direction | null; armed: boolean; gesturing: boolean; camera: { lon: number; lat: number } | null; lastMotionMs: number;
+  heading: Direction | null; armed: boolean; flyEndedFor: SheetCode | null; gesturing: boolean; camera: { lon: number; lat: number } | null; lastMotionMs: number;
   loader: { sheet: SheetCode; sinceMs: number; phase: LoaderPhase } | null;
   sheets: Map<SheetCode, SheetEntry>; seq: number; nextRequestId: number;
 }
@@ -453,6 +456,8 @@ function commitOpen(d: Draft, out: ManagerCommand[]): void {
   if (d.outgoing !== null) out.push({ type: 'dispose-mesh', sheet: d.outgoing });           // a hand-over that never finished
   const previous = d.displayed, previousTier = d.displayedTier;
   d.displayed = cur; d.displayedTier = d.tier; d.outgoing = null; d.outgoingTier = null; d.opening = null;
+  if (d.flyEndedFor === cur) d.armed = true;             // the fly ended while this was still opening: the crossings are live now (INT re-audit R2)
+  d.flyEndedFor = null;
   if (open.keepOutgoing && previous !== null) { d.outgoing = previous; d.outgoingTier = previousTier; }
   touch(d, cur);
 }
@@ -482,6 +487,7 @@ function beginSwitch(d: Draft, target: SheetCode, cameraIsThere: boolean): void 
   d.current = target;
   d.opening = null;                                  // an open in flight for another sheet is abandoned: its answer is ignored
   d.armed = cameraIsThere;
+  d.flyEndedFor = null;                              // a fly's end belongs to the choice it followed
   d.solved = null;
   d.solvedWithHalo = false;
   /* ARRIVING IS A NEW ASK. A level that failed for good while the user was elsewhere would otherwise sit 'failed' with
@@ -536,7 +542,7 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
     case 'start':
       if (!cfg.topology.has(event.sheet)) { out.push({ type: 'refuse', sheet: event.sheet, reason: 'unknown-sheet' }); break; }
       for (const mesh of new Set([d.displayed, d.outgoing])) if (mesh !== null) out.push({ type: 'dispose-mesh', sheet: mesh });   // N1: no leaked mesh
-      d.current = null; d.displayed = null; d.outgoing = null; d.opening = null; d.displayedTier = null; d.outgoingTier = null; d.solved = null; d.solvedWithHalo = false; d.loader = null;
+      d.current = null; d.displayed = null; d.outgoing = null; d.opening = null; d.displayedTier = null; d.outgoingTier = null; d.solved = null; d.solvedWithHalo = false; d.loader = null; d.flyEndedFor = null;
       d.lastMotionMs = now;
       beginSwitch(d, event.sheet, false);
       break;
@@ -591,11 +597,13 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
       if (d.opening?.sheet === event.sheet && d.current === event.sheet) {
         d.opening = null;
         out.push({ type: 'failure', sheet: event.sheet, level: 'lod0', attempts: 0 });
-        d.current = d.displayed; d.armed = false; d.solved = null; d.solvedWithHalo = false;
+        d.current = d.displayed; d.armed = false; d.flyEndedFor = null; d.solved = null; d.solvedWithHalo = false;
       }
       break;
     case 'fly-ended':
-      if (d.current !== null && d.current === d.displayed && d.opening === null) d.armed = true;     // the chosen sheet is open and the fly is over
+      if (d.current === null) break;
+      if (d.current === d.displayed && d.opening === null) d.armed = true;     // the chosen sheet is open and the fly is over
+      else if (d.current !== d.displayed) d.flyEndedFor = d.current;           // still opening: remember, and arm at the commit (R2)
       break;
     case 'handover-done':
       if (d.outgoing !== null) { out.push({ type: 'dispose-mesh', sheet: d.outgoing }); d.outgoing = null; }

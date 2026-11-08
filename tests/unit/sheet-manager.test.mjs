@@ -313,6 +313,36 @@ test('INT audit F2a: a fly interrupted over the old sheet is ended by `fly-ended
   assert.equal(g.state().armed, false, 'F4 is not open yet: the old fly\'s end must not arm a crossing back');
 });
 
+test('INT re-audit R2: a fly-ended that arrives while the picked sheet is still OPENING (a loader was shown, the open is held) arms the crossings when the open completes', () => {
+  const h = settled('E4');
+  const e4 = cellOf('E4'), e5 = cellOf('E5');
+  h.camera(at(e4.i, e4.j));
+  h.autoOpen = false;
+  h.select('F4'); h.finish('F4', 'lod0');                        // make-current sent, the page is holding the open
+  assert.equal(h.state().opening.sheet, 'F4');
+  h.advance(200).send({ type: 'fly-ended' });                    // the person grabs the map during the fly, before the page answers
+  assert.equal(h.state().armed, false, 'nothing armed while F4 is not open: a crossing back must not fire');
+  h.advance(1500).send({ type: 'opened', sheet: 'F4' });         // the held open completes
+  assert.equal(h.state().displayed, 'F4');
+  assert.equal(h.state().armed, true, 'the end of the fly is remembered and arms the crossings at the commit');
+  h.camera(at(e5.i, e5.j));
+  h.advance(1000).tick();
+  assert.equal(h.state().current, 'E5', 'panning on streams the area under the camera');
+});
+
+test('INT re-audit R2: a fly-ended remembered for one pick does not leak into the next (a new choice starts unarmed)', () => {
+  const h = settled('E4');
+  const e4 = cellOf('E4');
+  h.camera(at(e4.i, e4.j));
+  h.autoOpen = false;
+  h.select('F4'); h.finish('F4', 'lod0');
+  h.send({ type: 'fly-ended' });
+  h.select('G5'); h.finish('G5', 'lod0');                        // another pick before F4 opened
+  h.send({ type: 'opened', sheet: 'G5' });
+  assert.equal(h.state().displayed, 'G5');
+  assert.equal(h.state().armed, false, 'F4\'s fly ended; G5\'s has not');
+});
+
 test('INT audit F2b: a picked sheet that failed for good lets the camera take over for ANOTHER sheet, but not for the one on screen', () => {
   const h = settled('E4');
   const e4 = cellOf('E4'), e5 = cellOf('E5');
