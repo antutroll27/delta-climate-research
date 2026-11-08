@@ -5,7 +5,11 @@ import { resolve } from 'node:path';
 // ignored source assets for experimentation, but no production code requests
 // them. Removing them after each build keeps a directly deployed dist/ aligned
 // with the actual runtime asset set.
+// The dev streaming build's pointer to the Amsterdam layer files on R2 (streaming/data-source.ts). The production page never reads it, so it is
+// pruned; a build made with PUBLIC_OBOS_STREAM_DEV=1 (the compile-time flag that includes the streaming code) fetches it, so that build keeps it.
+const STREAM_DEV = process.env.PUBLIC_OBOS_STREAM_DEV === '1';
 const unusedModelAssets = [
+  ...(STREAM_DEV ? [] : ['heat-map/data/ams-r2-manifest.json']),
   'models/._river-1k.glb',
   'models/river-2k.glb',
   'models/river-4k.glb',

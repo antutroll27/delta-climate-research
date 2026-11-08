@@ -302,7 +302,7 @@ def _row(area: Area, tr: Transformer, poly: Polygon, src_id: str, h: float, hsrc
         flat += [round(x, 2), round(y, 2)]
         ll = back.get((round(x, 3), round(y, 3)))
         if ll is None:                                        # a vertex the simplifier created (buffer(0) only)
-            mx, my = _city.m_per_deg(area.centre.lat)
+            mx, my = _city.frame_m_per_deg(area)
             lon_c = area.centre.lon + x / mx
             lat_c = area.centre.lat + y / my
             ll = (lon_c, lat_c)
@@ -312,7 +312,10 @@ def _row(area: Area, tr: Transformer, poly: Polygon, src_id: str, h: float, hsrc
 
 
 def build_rows(area: Area, raws: Iterator[RawBuilding]) -> tuple[list[CityBuilding], BuildStats, dict[str, int]]:
-    """Clip to the square by CENTROID, convert, apply the height rule. Returns rows + stats + point-cloud mix."""
+    """Clip to the square by CENTROID, convert, apply the height rule. Returns rows + stats + point-cloud mix.
+
+    The clip is the closed local-frame square, except for a sheet (`area.box` set): its half-open lon/lat lattice cell, so a
+    centroid on a seam belongs to exactly one sheet."""
     tr, _, _ = rd_transformer()
     half = area.size_m / 2.0
     seen: set[str] = set()
@@ -326,9 +329,14 @@ def build_rows(area: Area, raws: Iterator[RawBuilding]) -> tuple[list[CityBuildi
         n_raw += 1
         c = b.footprint.centroid
         lon, lat = tr.transform(c.x, c.y)
-        cx, cy = _city.to_local(area, lon, lat)
-        if abs(cx) > half or abs(cy) > half:
-            continue
+        if area.box is not None:                              # a SHEET: the lattice's half-open box, the one G9a partitions by
+            w, s, e, n = _city.bounds(area)
+            if not (w <= lon < e and s <= lat < n):
+                continue
+        else:
+            cx, cy = _city.to_local(area, lon, lat)
+            if abs(cx) > half or abs(cy) > half:
+                continue
         n_in += 1
         holes += len(b.footprint.interiors)
         key = f"{b.pc_source or 'none'}-{b.pc_year or 'none'}"

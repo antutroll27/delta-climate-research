@@ -71,6 +71,16 @@ export const ADMITTED_GRIDS: readonly AdmittedGrid[] = [
      0.057 % change in what one cell of diffusion means — two orders of magnitude
      inside any calibration uncertainty this repo records. */
   { n: 247, sizeM: 1800, version: 'hm-grid-247-1800-v1' },
+  /* THE HALO PAIR (whole-city streaming, P2a; NO CONSUMER YET -- P3 adds the halo solve). A tiled city's sheet is
+     solved on its 384-cell core PLUS a 60-cell ring of real neighbour ground on every side: 384 + 2 x 60 = 504 cells
+     over 2,800 + 2 x 437.5 = 3,675 m. 3,675 / 504 = 175 / 24 m, EXACTLY the 7.2917 m of 1400 / 192 and 2800 / 384, so
+     a halo cell is the same measurement as a Kolkata cell and a sheet's own cells sit on the city lattice cell for cell.
+     60 cells and not 48 because the P0 seam experiment (city-streaming/P0-RESULTS.md) measured 0.037 K of seam error at
+     48 cells against the 0.05 K pass mark at the production calm-wind floor, and 0.010 K at 60: a 4x margin. That margin
+     holds only while no params builder lets wind fall below 0.3 (tests/unit/halo-wind-floor.test.mjs).
+     No ward is 3,675 m wide, so this row is reachable only by asking for it; it is not a second option for an existing
+     ward size. */
+  { n: 504, sizeM: 3675, version: 'hm-grid-504-3675-v1' },
 ];
 
 /** Cells per side for a ward of this size, or undefined if unsupported. */

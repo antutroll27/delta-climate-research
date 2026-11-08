@@ -115,6 +115,61 @@ export function pinCellsSouthUp(rle: readonly number[] | undefined, n: number): 
 }
 
 /**
+ * The decode half of `loadSurfaceRaster`, on a blob already fetched: the PNG into two float layers, rows flipped to the
+ * simulation's south-up order. Exported so a streamed sheet (streaming-host/), whose artefacts are not registered areas and
+ * so have no `paths()`, decodes with exactly the code the registered areas use. Throws on a non-square texture, as it
+ * always has; the caller decides whether that is a null.
+ */
+export async function decodeSurfaceBlob(blob: Blob, label: string): Promise<SurfaceRaster | null> {
+  const bitmap = await createImageBitmap(blob);
+  const n = bitmap.width;
+  // Square by construction. A non-square texture means the exporter changed
+  // shape without this reader following, and sampling would silently skew.
+  if (n !== bitmap.height) {
+    bitmap.close();
+    throw new Error(`surface texture for ${label} is ${bitmap.width}×${bitmap.height}, not square`);
+  }
+  const canvas = new OffscreenCanvas(n, n);
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) { bitmap.close(); return null; }
+  context.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  const { data } = context.getImageData(0, 0, n, n);
+
+  const veg = new Float32Array(n * n);
+  const albedo = new Float32Array(n * n);
+  /* ROW ORDER IS FLIPPED HERE, and it is not cosmetic.
+
+     The PNG is north-up: scripts/export-surface-rasters.py reads a north-up COG
+     through rasterio and saves it unrotated, so its row 0 is the window's NORTH
+     edge. That is the right convention for a geospatial raster and should stay.
+
+     Every grid in the simulation is the opposite: `ward-raster.ts`'s `sampleY`
+     is `-half + gridY * cellM`, so row 0 is the SOUTH edge — and `toCell`,
+     `cellIndexAt`, `water-depth` and `cooling-surfaces` all agree with it.
+
+     Reading the PNG row-major into that grid put vegetation and albedo in the
+     MIRROR IMAGE of the cell they belong to. Every eqCell(albedo, veg, built)
+     was combining a cell's real built fraction with another cell's greenery.
+     Measured on the committed Ballygunge artefacts: corr(veg, built) is +0.071
+     as it was loaded and −0.398 once flipped. Dense building means low
+     vegetation, so only the negative one is physical.
+
+     Flip the READER, not the exporter: the reader is the side that knows the
+     simulation's row order, and flipping the PNG would make the artefact
+     disagree with every other geospatial tool that opens it. */
+  for (let row = 0; row < n; row++) {
+    const src = row * n, dst = (n - 1 - row) * n;
+    for (let col = 0; col < n; col++) {
+      const s = (src + col) * 4;
+      veg[dst + col] = (data[s] / 255) * (VEG_HI - VEG_LO) + VEG_LO;
+      albedo[dst + col] = (data[s + 1] / 255) * (ALB_HI - ALB_LO) + ALB_LO;
+    }
+  }
+  return { n, veg, albedo };
+}
+
+/**
  * Decode the exported PNG into two float layers.
  *
  * R carries vegetation fraction, G carries albedo, each 8-bit over its own
@@ -131,52 +186,7 @@ export async function loadSurfaceRaster(key: AreaKey, signal?: AbortSignal): Pro
   try {
     const response = await fetch(p.surface, { signal });
     if (!response.ok) return null;
-    const bitmap = await createImageBitmap(await response.blob());
-    const n = bitmap.width;
-    // Square by construction. A non-square texture means the exporter changed
-    // shape without this reader following, and sampling would silently skew.
-    if (n !== bitmap.height) {
-      bitmap.close();
-      throw new Error(`surface texture for ${key} is ${bitmap.width}×${bitmap.height}, not square`);
-    }
-    const canvas = new OffscreenCanvas(n, n);
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) { bitmap.close(); return null; }
-    context.drawImage(bitmap, 0, 0);
-    bitmap.close();
-    const { data } = context.getImageData(0, 0, n, n);
-
-    const veg = new Float32Array(n * n);
-    const albedo = new Float32Array(n * n);
-    /* ROW ORDER IS FLIPPED HERE, and it is not cosmetic.
-
-       The PNG is north-up: scripts/export-surface-rasters.py reads a north-up COG
-       through rasterio and saves it unrotated, so its row 0 is the window's NORTH
-       edge. That is the right convention for a geospatial raster and should stay.
-
-       Every grid in the simulation is the opposite: `ward-raster.ts`'s `sampleY`
-       is `-half + gridY * cellM`, so row 0 is the SOUTH edge — and `toCell`,
-       `cellIndexAt`, `water-depth` and `cooling-surfaces` all agree with it.
-
-       Reading the PNG row-major into that grid put vegetation and albedo in the
-       MIRROR IMAGE of the cell they belong to. Every eqCell(albedo, veg, built)
-       was combining a cell's real built fraction with another cell's greenery.
-       Measured on the committed Ballygunge artefacts: corr(veg, built) is +0.071
-       as it was loaded and −0.398 once flipped. Dense building means low
-       vegetation, so only the negative one is physical.
-
-       Flip the READER, not the exporter: the reader is the side that knows the
-       simulation's row order, and flipping the PNG would make the artefact
-       disagree with every other geospatial tool that opens it. */
-    for (let row = 0; row < n; row++) {
-      const src = row * n, dst = (n - 1 - row) * n;
-      for (let col = 0; col < n; col++) {
-        const s = (src + col) * 4;
-        veg[dst + col] = (data[s] / 255) * (VEG_HI - VEG_LO) + VEG_LO;
-        albedo[dst + col] = (data[s + 1] / 255) * (ALB_HI - ALB_LO) + ALB_LO;
-      }
-    }
-    return { n, veg, albedo };
+    return await decodeSurfaceBlob(await response.blob(), key);
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') return null;
     return null;
@@ -338,6 +348,15 @@ function measuredMeans(entry: SurfaceMetaEntry | undefined): SurfaceMeans | null
   if (typeof fvc !== 'number' || !Number.isFinite(fvc)) return null;
   if (typeof albedo !== 'number' || !Number.isFinite(albedo)) return null;
   return { fvc, albedo };
+}
+
+/**
+ * The measured means of a STREAMED area (an Amsterdam area that is not a registered, drawable page), from the same
+ * surface-meta.json row the exporter wrote beside its raster, or null where there is none. The streamed loader
+ * (streaming-host/) reads it so the means it hands the model are the exporter's, not recomputed from the texture.
+ */
+export async function streamedAreaMeans(areaId: string): Promise<SurfaceMeans | null> {
+  return measuredMeans((await loadSurfaceMeta())?.[areaId]);
 }
 
 export interface WardSurface {

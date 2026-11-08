@@ -14,7 +14,7 @@ test('every city is present with its wards', () => {
   assert.deepEqual(Object.keys(CITIES).sort(), ['amsterdam', 'bengaluru', 'kolkata']);
   assert.equal(wardsOfCity('kolkata').length, 3);
   assert.equal(wardsOfCity('bengaluru').length, 3);
-  assert.equal(wardsOfCity('amsterdam').length, 1);
+  assert.equal(wardsOfCity('amsterdam').length, 32, 'Canal Ring plus the 31 streamed areas (P2c)');
 });
 
 test('every ward id is unique across cities', () => {

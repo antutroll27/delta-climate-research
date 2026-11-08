@@ -1,0 +1,107 @@
+/* loader-view.css — the whole-city loading screen (city-streaming P4). Design A (rise in place) is the furniture around the
+   map; B is the plate; C adds a survey sweep on first entry. Loaded by loader-view.ts as an inline <style> (one element,
+   once), so it needs no change to the frozen v2 manifests.
+
+   Rules this file keeps:
+   · NOTHING ANIMATES BUT transform AND opacity. Position is set once per show; the progress rule is scaleX.
+   · NO COLOUR LITERALS. Everything reads the v2 tokens (--plate*, --card, --focus-accent, --hx-*), so Dark and Light both work
+     and the v2 colour census would pass if this file moved under src/styles/obos-v2/.
+   · The root never takes pointer events. Only the failure plate (its Retry button) does. */
+
+.cl { position: absolute; inset: 0; z-index: var(--cl-z, 26); pointer-events: none; overflow: hidden; font: 400 15px/1.45 var(--sans);
+  color: var(--plate-ink-1); contain: layout style; --cl-dur: 0.32s; }
+.cl[hidden] { display: none; }
+
+/* ── the screen-reader regions ── */
+.cl-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* ── shared: a layer that is simply opacity-faded in and out ── */
+.cl-fade { opacity: 0; transition: opacity var(--cl-dur) var(--ease); }
+.cl-fade.on { opacity: 1; }
+
+/* ── A: the hairline frame, the code tag, the chip, the step list ── */
+.cl-frame { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+.cl-frame path { fill: none; stroke: var(--plate-ink-1); stroke-width: 1.2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.cl-tag { position: absolute; left: 0; top: 0; background: var(--plate); color: var(--plate-ink-1); box-shadow: var(--plate-shadow); border-radius: 7px;
+  padding: 4px 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em; white-space: nowrap; will-change: transform; }
+.cl-chip { position: absolute; left: 50%; top: 14px; transform: translate(-50%, -6px); background: var(--plate); color: var(--plate-ink-1);
+  box-shadow: var(--plate-shadow); border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 500; white-space: nowrap; max-width: calc(100% - 32px);
+  overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity var(--cl-dur) var(--ease), transform var(--cl-dur) var(--ease); }
+.cl-chip.on { opacity: 1; transform: translate(-50%, 0); }
+.cl-mini { position: absolute; left: 16px; bottom: var(--cl-bottom, 16px); width: min(184px, 48%); background: var(--plate); color: var(--plate-ink-1);
+  box-shadow: var(--plate-shadow); border-radius: 10px; padding: 8px 10px; opacity: 0; transform: translateY(6px);
+  transition: opacity var(--cl-dur) var(--ease), transform var(--cl-dur) var(--ease); }
+.cl-mini.on { opacity: 1; transform: translateY(0); }
+.cl-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.cl-steps li { display: flex; gap: 7px; align-items: center; font-size: 10.5px; color: var(--plate-ink-3); opacity: 0.45; transition: opacity var(--cl-dur) var(--ease); }
+.cl-steps li .dot { width: 7px; height: 7px; border-radius: 50%; border: 1.2px solid currentColor; flex: none; }
+.cl-steps li[hidden], .cl-rows li[hidden] { display: none; }      /* a stage that cannot happen for this area is not drawn (INT audit F8) */
+.cl-steps li.on { opacity: 1; color: var(--plate-ink-1); }
+.cl-steps li.on .dot { background: currentColor; }
+.cl-bar { height: 3px; background: var(--plate-well-2); border-radius: 2px; overflow: hidden; margin-top: 7px; }
+.cl-bar i { display: block; height: 100%; background: var(--plate-ink-1); transform-origin: 0 50%; transform: scaleX(0); transition: transform 0.6s var(--ease); }
+
+/* ── C: the survey sweep (first entry only) ── */
+.cl-sweep { position: absolute; inset: 0; opacity: 0; transition: opacity 0.5s var(--ease); background: color-mix(in oklab, var(--card) 88%, transparent); }
+.cl-sweep.on { opacity: 1; }
+.cl-sweep canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+.cl-tele { position: absolute; left: 16px; top: 16px; font-size: 10px; line-height: 1.35; letter-spacing: 0.05em; color: var(--plate-ink-2); font-variant-numeric: tabular-nums;
+  background: var(--plate); box-shadow: var(--plate-shadow); border-radius: 7px; padding: 5px 8px; white-space: pre; }
+
+/* ── B: the scrim and the plate ── */
+.cl-scrim { position: absolute; inset: 0; background: color-mix(in oklab, var(--card) 74%, transparent); opacity: 0; transition: opacity var(--cl-dur) var(--ease); }
+.cl-scrim.on { opacity: 1; }
+.cl-plate { position: absolute; left: 50%; top: 50%; width: min(calc(100% - 32px), 400px); transform: translate(-50%, calc(-50% + 12px)); opacity: 0; visibility: hidden;
+  background: var(--plate); color: var(--plate-ink-1); box-shadow: var(--plate-shadow); border-radius: 12px; padding: 12px 14px;
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; max-height: calc(100% - 32px); overflow: hidden;
+  transition: opacity var(--cl-dur) var(--ease), transform var(--cl-dur) var(--ease), visibility 0s linear var(--cl-dur); }
+.cl-plate.on { opacity: 1; visibility: visible; transform: translate(-50%, -50%); transition-delay: 0s; }
+.cl-plate.fail { pointer-events: auto; }
+.cl-micro { font-size: 10px; letter-spacing: 0.06em; font-weight: 600; text-transform: uppercase; color: var(--plate-ink-3); }
+.cl-code { font-size: clamp(30px, 7vw, 40px); font-weight: 500; line-height: 1; letter-spacing: -0.01em; }
+.cl-name { font-size: 13px; color: var(--plate-ink-2); margin-top: 4px; }
+.cl-index { width: 92px; height: auto; grid-row: span 2; align-self: start; }
+.cl-index rect { fill: transparent; stroke: var(--plate-line); stroke-width: 0.8; }
+.cl-index rect.ship { stroke: var(--plate-ink-3); }
+.cl-index rect.target { fill: var(--plate-ink-1); stroke: var(--plate-ink-1); }
+.cl-rows { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; margin: 6px 0 0; padding: 0; list-style: none; }
+.cl-rows li { font-size: 11.5px; color: var(--plate-ink-3); opacity: 0.35; display: flex; justify-content: space-between; gap: 6px; border-top: 1px solid var(--plate-line);
+  padding-top: 3px; transition: opacity var(--cl-dur) var(--ease); }
+.cl-rows li b { color: var(--plate-ink-1); font-weight: 500; font-variant-numeric: tabular-nums; }
+.cl-rows li.on { opacity: 1; }
+.cl-plate .cl-bar { grid-column: 1 / -1; }
+.cl-cred { grid-column: 1 / -1; font-size: 10px; color: var(--plate-ink-3); margin-top: 4px; }
+
+/* the failure body replaces the rows, the rule and the credits */
+.cl-fail { grid-column: 1 / -1; display: none; gap: 10px; margin-top: 6px; }
+.cl-plate.fail .cl-fail { display: grid; }
+.cl-plate.fail :is(.cl-rows, .cl-bar, .cl-cred) { display: none; }
+.cl-fail p { margin: 0; font-size: 13px; color: var(--plate-ink-2); }
+.cl-fail strong { display: block; font-size: 16px; font-weight: 500; color: var(--plate-ink-1); margin-bottom: 2px; }
+.cl-retry { font: 500 14px var(--sans); min-height: 44px; border-radius: 10px; padding: 10px 14px; border: 1px solid var(--plate-ink-1); cursor: pointer;
+  background: var(--plate-ink-1); color: var(--plate-on-ink); pointer-events: auto; }
+.cl-retry:focus-visible { outline: 2px solid var(--focus-accent); outline-offset: 2px; }
+
+/* ── phone ── */
+@media (max-width: 700px) {
+  .cl-mini { --cl-bottom: var(--cl-bottom-phone, 96px); bottom: var(--cl-bottom-phone, 96px); width: min(200px, calc(100% - 32px)); }
+  .cl-chip { top: calc(10px + env(safe-area-inset-top, 0px)); }
+  .cl-plate { padding: 12px; }
+  .cl-rows li { font-size: 10.5px; }
+}
+
+/* ── reduced motion: no rise, no slide, no sweep: a quick opacity fade, nothing else moves ── */
+.cl[data-reduced="1"] { --cl-dur: 0.14s; }
+.cl[data-reduced="1"] :is(.cl-chip, .cl-mini, .cl-plate) { transition-property: opacity, visibility; transition-timing-function: linear; transform: none; }
+.cl[data-reduced="1"] .cl-chip { transform: translateX(-50%); }
+.cl[data-reduced="1"] .cl-plate { transform: translate(-50%, -50%); }
+.cl[data-reduced="1"] .cl-bar i { transition: none; }
+.cl[data-reduced="1"] .cl-steps li { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .cl { --cl-dur: 0.14s; }
+  .cl :is(.cl-chip, .cl-mini, .cl-plate) { transition-property: opacity, visibility; transition-timing-function: linear; }
+  .cl .cl-chip { transform: translateX(-50%); }
+  .cl .cl-mini { transform: none; }
+  .cl .cl-plate, .cl .cl-plate.on { transform: translate(-50%, -50%); }
+  .cl .cl-bar i, .cl .cl-steps li { transition: none; }
+}

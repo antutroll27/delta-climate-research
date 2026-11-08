@@ -222,6 +222,23 @@ for (const [country, entry] of Object.entries(REGISTRY)) {
   }
 }
 
+/** The dev streaming build's pointer to the Amsterdam layer files on R2 (streaming/data-source.ts); same flat directory as the files it lists. */
+export const STREAM_MANIFEST = `${DATA}ams-r2-manifest.json`;
+
+/**
+ * The artefact URLs of a SHEET of a streamed city, by area id: the same flat directory and file names as `paths()`, for an
+ * area that is not `drawable` (the sheets other than Canal Ring are nameable, not reachable, until TILED_CITY_READY) and so
+ * gets `null` from `paths()`. Only whole-city streaming (streaming-host/, dev-flagged) asks for these. A sheet ships no
+ * labels, provenance, canopy, layers or PV artefact; those fields are empty strings, and the streamed loader never reads them.
+ */
+export function streamedAreaPaths(areaId: string): AreaPaths {
+  const d = `${DATA}${areaId}`;
+  return {
+    ward: `${d}.json`, terrain: `${d}-terrain.json`, water: `${d}-water.json`, roads: `${d}-roads.json`, labels: '',
+    provenance: '', trees: `${d}-trees.json`, surface: `${d}-surface.png`, canopy: '', layers: '', pv: '',
+  };
+}
+
 /**
  * Every artefact URL for one area, or `null` when the area ships none.
  *

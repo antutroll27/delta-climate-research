@@ -226,7 +226,8 @@
         "Oost": 0.1
       },
       "use": "a display string only; no geometry from this source is redistributed",
-      "licence": "Gemeente Amsterdam open-geodata terms (reuse and commercial use allowed, attribution not required, per READINESS.md summary; the terms page was re-requested here (HTTP 200) but not re-read)"
+      "licence": "Gemeente Amsterdam open-geodata terms (reuse and commercial use allowed, attribution not required). RE-READ IN FULL 2026-11-07 (HTTP 200), and the catalogue record \"Kernregistratie gebieden\" (publisher Gemeente Amsterdam, data.overheid.nl) states CC0 1.0. The API schema itself carries no licence field. See docs/evidence/2026-11-07-amsterdam-stadsdelen-licence.md",
+      "licenceReadOn": "2026-11-07"
     },
     {
       "id": "ahn5-credit",

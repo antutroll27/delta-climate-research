@@ -23,7 +23,7 @@ from __future__ import annotations
 import math
 import os
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Final
 
@@ -35,6 +35,7 @@ from rasterio.enums import Resampling
 from rasterio.features import geometry_mask
 from rasterio.transform import Affine, from_bounds, from_origin
 from rasterio.warp import reproject
+from rasterio.windows import Window
 from scipy import ndimage
 from shapely.geometry import Polygon, mapping
 
@@ -121,6 +122,36 @@ def mosaic(coverage: str, area: Area, raw: str) -> tuple[F32, Affine]:
     return out, transform
 
 
+#: (coverage, area, directory the clip raster is written to) -> (north-up float32 array in RD, its transform).
+Mosaic = Callable[[str, Area, str], tuple[F32, Affine]]
+
+
+def vrt_mosaic(vrts: Mapping[str, str]) -> Mosaic:
+    """A `mosaic` that reads the area's extent out of a city-wide VRT per coverage (`_vrt.write_mosaic_vrt` over the city's 1 km
+    AHN cache) instead of fetching per-area WCS tiles (audit S2). The window is on the same 0.5 m lattice `_grid_extent` snaps
+    to, so the array is pixel-for-pixel what `mosaic` builds from tiles. The 'raw' argument is where the clip raster goes
+    (guards G5/G6 read it); it is never the shared city cache."""
+    def read(coverage: str, area: Area, raw: str) -> tuple[F32, Affine]:
+        minx, miny, maxx, maxy = _grid_extent(area)
+        cols, rows = round((maxx - minx) / PIXEL_M), round((maxy - miny) / PIXEL_M)
+        transform = from_origin(minx, maxy, PIXEL_M, PIXEL_M)
+        with rasterio.open(vrts[coverage]) as src:
+            if abs(src.transform.a - PIXEL_M) > 1e-9 or abs(src.transform.e + PIXEL_M) > 1e-9:
+                raise SystemExit(f"{coverage} VRT resolution {src.transform.a}, expected {PIXEL_M}")
+            c0, r0 = (minx - src.transform.c) / PIXEL_M, (src.transform.f - maxy) / PIXEL_M
+            if abs(c0 - round(c0)) > 1e-6 or abs(r0 - round(r0)) > 1e-6:
+                raise SystemExit(f"{coverage} VRT is not on the 0.5 m lattice _grid_extent snaps to")
+            out = src.read(1, window=Window(round(c0), round(r0), cols, rows), boundless=True, fill_value=WCS_NODATA,
+                           out_dtype="float32").astype(np.float32)
+        out[out == WCS_NODATA] = np.nan
+        os.makedirs(raw, exist_ok=True)
+        with rasterio.open(os.path.join(raw, f"{coverage}_clip.tif"), "w", driver="GTiff", height=rows, width=cols, count=1,
+                           dtype="float32", crs="EPSG:28992", transform=transform, nodata=float("nan"), compress="deflate") as dst:
+            dst.write(out, 1)
+        return out, transform
+    return read
+
+
 def to_mesh(a: F32, transform: Affine, area: Area, n: int, resampling: Resampling) -> F32:
     """Reproject an RD raster onto an n x n EPSG:4326 grid over `_city.bounds(area)`. Row 0 = NORTH."""
     w, s, e, nn = _city.bounds(area)
@@ -195,11 +226,11 @@ def patch_post_ahn4(dtm: F32, transform: Affine, patches: Iterable[GroundPatch])
     return out, raised
 
 
-def build_terrain(area: Area, raw: str, retrieved: str,
-                  patches: tuple[GroundPatch, ...] = ()) -> tuple[CityTerrainFile, list[str]]:
+def build_terrain(area: Area, raw: str, retrieved: str, patches: tuple[GroundPatch, ...] = (),
+                  read_mosaic: Mosaic = mosaic) -> tuple[CityTerrainFile, list[str]]:
     n = _city.TERRAIN_N
-    dtm, tf = mosaic("dtm_05m", area, raw)
-    dsm, _ = mosaic("dsm_05m", area, raw)
+    dtm, tf = read_mosaic("dtm_05m", area, raw)
+    dsm, _ = read_mosaic("dsm_05m", area, raw)
     patch_doc: dict[str, object] | None = None
     if patches:
         before = to_mesh(dtm, tf, area, n, Resampling.average)
@@ -318,4 +349,34 @@ def self_test() -> None:
     cb = [mk("a", 27.7, 1.3), mk("b", 27.7, 1.3), mk("c", 27.7, 26.0), mk("d", 27.7, None), mk("e#1", 20.0, 2.0), mk("f", 20.0, 2.0)]
     years: dict[str, int | None] = {"a": 2022, "b": 1995, "c": 2022, "d": 2022, "e": 2021, "f": AHN4_FLIGHT_YEAR}
     assert post_ahn4_ids(cb, years) == {"a", "e"}, post_ahn4_ids(cb, years)
+    # S2: a VRT over the CITY's 1 km AHN lattice, read for an area whose own tiles would sit elsewhere, gives the pixel-exact array.
+    import dataclasses as _dc
+    import tempfile
+    import _vrt
+    small = _dc.replace(area, id="vrt-selftest", size_m=100)
+    sx0, sy0, sx1, sy1 = _grid_extent(small)
+    cut = math.floor((sx0 + sx1) / 2.0)                                   # a tile boundary on a whole metre, inside the extent
+    with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as td:
+        paths = []
+        for k, (xa, xb) in enumerate(((math.floor(sx0) - 50, cut), (cut, math.ceil(sx1) + 50))):
+            cols_, rows_ = round((xb - xa) / PIXEL_M), round((math.ceil(sy1) + 50 - (math.floor(sy0) - 50)) / PIXEL_M)
+            ys = math.ceil(sy1) + 50
+            xx = xa + (np.arange(cols_) + 0.5) * PIXEL_M
+            yy = ys - (np.arange(rows_) + 0.5) * PIXEL_M
+            arr = (xx[None, :] * 0.001 + yy[:, None] * 0.0001).astype(np.float32)
+            arr[:3, :3] = np.float32(WCS_NODATA)
+            pth = os.path.join(td, f"dtm_05m_{xa}_{math.floor(sy0) - 50}.tif")
+            with rasterio.open(pth, "w", driver="GTiff", height=rows_, width=cols_, count=1, dtype="float32", crs="EPSG:28992",
+                               transform=from_origin(xa, ys, PIXEL_M, PIXEL_M), nodata=WCS_NODATA) as dst:
+                dst.write(arr, 1)
+            paths.append(pth)
+        vrt = os.path.join(td, "dtm.vrt")
+        _vrt.write_mosaic_vrt(vrt, paths)
+        got, gtf = vrt_mosaic({"dtm_05m": vrt})("dtm_05m", small, os.path.join(td, "clip"))
+        cols, rows = round((sx1 - sx0) / PIXEL_M), round((sy1 - sy0) / PIXEL_M)
+        gx = sx0 + (np.arange(cols) + 0.5) * PIXEL_M
+        gy = sy1 - (np.arange(rows) + 0.5) * PIXEL_M
+        want = (gx[None, :] * 0.001 + gy[:, None] * 0.0001).astype(np.float32)
+        assert got.shape == want.shape and gtf.c == sx0 and gtf.f == sy1 and np.array_equal(got, want), "the VRT read is not pixel-exact"
+        assert os.path.isfile(os.path.join(td, "clip", "dtm_05m_clip.tif")), "the clip goes where the caller says, not into the city cache"
     print("_src_dem self-test: ok (0.5 m lattice, <= 4000 px tiles, northward ramp -> row 0 = SOUTH after the flip, nearest fill, post-AHN4 pit patch)")

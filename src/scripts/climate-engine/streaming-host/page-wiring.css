@@ -1,0 +1,16 @@
+/* page-wiring.css — the few rules the streaming dev wiring adds to the page (city-streaming integration). Loaded with the wiring only,
+   so a build without the dev flag never carries it. Tokens only; nothing here animates. */
+
+.stage .si-host { align-self: flex-start; }
+.stage #pname .obos-area-code { display: inline-block; margin-left: .5em; font-size: .42em; font-weight: 600; letter-spacing: .06em; vertical-align: .55em; opacity: .62; font-style: normal; }
+
+/* The picker's bottom sheet lives inside the title card's column (z-index 20), under the phone's readings sheet: lift the column while it is open. */
+.stage .st-title:has(.si[data-open="true"]) { z-index: 60; }
+
+/* The loader's "Entering ..." chip sits at the stage's top centre in its own harness, where the title card is not; here it would print over the
+   card, so it goes to the clear map beside it (desktop) or just under the picker chip (phone). Position only: its motion is untouched. */
+.stage .cl .cl-chip { top: 108px; left: calc(50% + 250px); }
+@media (max-width: 699px), (pointer: coarse) and (max-height: 560px) {
+  .stage .cl .cl-chip { top: calc(142px + env(safe-area-inset-top, 0px)); left: 50%; }
+  .stage .cl { --cl-bottom-phone: 172px; }       /* the progress list sits above the readings sheet, not over its top edge */
+}

@@ -35,7 +35,7 @@ import { applyScenario, scenarioLst } from './dc-urs-scenario';
 import type { DcUrsInputs } from './dc-urs-inputs';
 import { rasterWardBase } from './ward-raster';
 import { loadAreaSurface, loadCanopyRaster, type WardSurface, type CanopyRaster } from './surface-raster';
-import { asTreesFile } from './vegetation-layer';
+import { asTreesFile, type TreesFile } from './vegetation-layer';
 import { buildRegistry, type BuildingMeta } from './explore/building-pick';
 /* Type-only, and it must stay that way: landmark-layer.ts is pure arithmetic over
    a structural clip matrix and imports no three, so this keeps the analytical
@@ -60,7 +60,10 @@ import {
 import { createCoreFieldLayer, CORE_FIELD_SOURCE, WARD_OUTLINE_SOURCE } from './explore/core-field-layer';
 import { CLASSIC, LAB_HOOK } from './explore/look';
 import { paperStyle } from './explore/look-paper';
-import type { ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
+import type { PreparedBuildings, ReliefRenderer, ReliefWardBundle, ReliefVisualState } from './explore/relief-contract';
+import { sheetByCode, sheetKey, sheetOf, type SheetCode } from './scope/sheets';
+import type { CityStream, CityStreamHooks, SheetBundle } from './streaming-host/city-stream';
+import type { NeighbourLayers } from './streaming/halo-solve';
 import {
   attachReliefCustomLayer, isReliefLayerAttached, shouldShowRelief,
 } from './explore/relief-lifecycle';
@@ -79,7 +82,7 @@ import { costBasisFor } from './solar-cost.ts';
 import { CITY_MAP_CREDIT, joinMapCredits } from '../../data/city-credits.ts';
 import { wardRoi, roofMaxKw, MIN_SYSTEM_KW, tariffOk } from './solar-roi.ts';
 import { mountPaybackSheet, type PaybackSheet } from './solar-payback-sheet.ts';
-import { areaPath, paths, cityPaths, wardMaskPath } from './scope/paths.ts';
+import { areaPath, paths, cityPaths, wardMaskPath, type AreaPaths } from './scope/paths.ts';
 import { asWardMask, buildingInWard, fieldHistogram, fieldStats, wardRows, type WardMask } from './ward-mask.ts';
 import { areaRefusal } from './scope/reachability.ts';
 import { isAreaKey, splitKey, type AreaKey } from './scope/registry.ts';
@@ -143,7 +146,7 @@ function bootArea(): AreaKey {
  * replaces was: every reachable call site sits downstream of `loadArea`'s guard
  * below, which refuses an area with no ward row before anything else can run.
  */
-const wardOf = (key: AreaKey): Ward => WARDS[splitKey(key).area];
+const wardOf = (key: AreaKey): Ward => WARDS[splitKey(key).area]!;
 
 /**
  * The BARE area id — for the three places that address something OUTSIDE this app.
@@ -244,6 +247,18 @@ export function mountHeatMap(): () => void {
    * re-resolved per switch in `loadWard`.
    */
   const SCOPE = resolve(INITIAL_AREA);
+  /* ── WHOLE-CITY STREAMING, DEV ONLY (city-streaming P3b) ────────────────────────
+     Two keys must both be turned: a build made with PUBLIC_OBOS_STREAM_DEV=1 (a compile-time constant: in every other build the
+     condition below is `false`, the branch is removed, and none of streaming/ or streaming-host/ is in the bundle), and `?stream=1`
+     on Canal Ring's page. TILED_CITY_READY stays false. What it does: the page opens Canal Ring through the stream controller
+     instead of `loadWard(INITIAL_AREA)`, draws its neighbours as grey massing, moves to the next sheet when the camera has
+     crossed a seam, and solves each sheet on its 504-cell halo grid. `?streamtier=low|balanced|full` forces a device tier. */
+  const STREAM_DEV = import.meta.env.PUBLIC_OBOS_STREAM_DEV === '1'
+    && INITIAL_AREA === 'nl/amsterdam/canal-ring'
+    && new URLSearchParams(window.location.search).get('stream') === '1';
+  /* Installed as early as the page allows (it only sees what is created after it), and only in a dev-streaming build. */
+  const glMeterReady = STREAM_DEV ? import('./streaming-host/gl-meter').then((m) => { m.installGlMeter(); return m; }) : Promise.resolve(null as never);
+
   /**
    * The unit prices, or NULL for a country that has adopted no cost basis (the
    * Netherlands). Resolved ONCE per mount: costs are a COUNTRY fact and every area
@@ -2050,6 +2065,18 @@ export function mountHeatMap(): () => void {
 
   /* ── capability-selected heat sim + field bridge (R=blur ground · G=raw buildings) ── */
   let simHost: HeatSimHost | null = null;
+
+  let wrapHost: ((host: HeatSimHost) => HeatSimHost) | null = null;
+  let streamControl: CityStream | null = null;
+  /** Dev streaming: change the device tier AND tell the controller (set once the controller exists). */
+  let setStreamTier: ((tier: ExploreDeviceTier) => void) | null = null;
+  /** The sheet being opened by the stream controller, for the span of its commit; null otherwise. */
+  let streamCommit: StreamOpen | null = null;
+  /** The loader's building rise (0..1 at a frame time), once the dev wiring exists; `streamRising` while a streamed area is growing in. */
+  let streamRise: ((nowMs: number) => number) | null = null;
+  let streamRising = false;
+  /** Restates the open area on the page furniture (header, Area select, address) at the end of a commit; set by the dev wiring. */
+  let streamShown: ((name: AreaKey, drawn: number) => void) | null = null;
   let simReady: Promise<void> | null = null;
   let simGeneration = 0;
   let simAnimate = !reduceMotion;
@@ -2096,6 +2123,7 @@ export function mountHeatMap(): () => void {
         simHost = makeCpuHost();
         setSimBackend(simHost.backend === 'ts-worker' ? 'CPU SIM' : 'CPU STATIC');
       }
+      if (wrapHost && simHost.backend !== 'ts-main') simHost = wrapHost(simHost);
     }).catch(() => {
       simHost = createStaticHost();
       simAnimate = false;
@@ -2108,7 +2136,9 @@ export function mountHeatMap(): () => void {
     const previous = simHost.backend;
     simHost.dispose();
     simHost = previous === 'gpu-webgl2' ? makeCpuHost() : createStaticHost();
+    if (STREAM_DEV && previous === 'gpu-webgl2' && runtimeTier === 'full') setStreamTier?.('balanced');   // a lost GPU solver is a demotion for the mesh budget too
     if (simHost.backend === 'ts-main') simAnimate = false;
+    else if (wrapHost) simHost = wrapHost(simHost);
     setSimBackend(simHost.backend === 'ts-worker' ? 'CPU SIM' : 'CPU STATIC');
     return true;
   }
@@ -2329,10 +2359,12 @@ export function mountHeatMap(): () => void {
            `resetSim` after the ward loads, while this runs off `capsReady` directly.
            Passing the value measured ZERO `.hdr` requests on a tier-2 machine. */
         deviceTier: () => runtimeTier,
+        ...(STREAM_DEV ? { streamed: { onContextRestored: () => streamControl?.contextRestored() } } : {}),
       });
       relief = instance;
       attachReliefLayer();
-      if (reliefWard) instance.setWard(reliefWard);
+      if (reliefWard) { instance.setWard(reliefWard); reliefWard.prepared = null; reliefWard.aoData = null; }
+      streamControl?.reliefReady();
       { const f = fieldOnGrid(); if (f) instance.updateField({ field: f, coolingMask: cooling?.mask ?? null, ramp }); }
       instance.setVisualState(reliefVisualState());
       instance.setSelection({ building: selected, nearestCooling: nearestCool });
@@ -2448,10 +2480,20 @@ export function mountHeatMap(): () => void {
     trees: ReliefWardBundle['veg']; mask: WardMask | null;
     base: SimLayers; spatial: M.Spatial;
     cooling: CoolingSurfaces; coolingLo: CoolingSurfaces; coolingHi: CoolingSurfaces;
+    /** Streamed sheets only: the buildings, extruded in a worker. Dropped as soon as the renderer has them. */
+    prepared: PreparedBuildings | null;
+    aoData: Uint8Array | null;
   }
   let committedBundle: StagedWard | null = null;
 
-  async function loadWard(name: AreaKey) {
+  /** A streamed sheet opened through `loadWard` (streaming-host/city-stream.ts). */
+  interface StreamOpen { readonly prepared: PreparedBuildings | null; readonly ao: Uint8Array | null; readonly first: boolean; readonly fly: boolean; readonly rebuild: boolean; readonly afterCommit: () => void }
+  const treesStore: Record<string, TreesFile | null> = {};
+  /** Dev read-out: where the main thread spent a streamed sheet's open, in ms (stage = fetch/parse/cooling, commit = renderer + UI). */
+  const streamTimings: { stage: number[]; commit: number[]; after: number[]; reset: number[]; rebuilds: number } = { stage: [], commit: [], after: [], reset: [], rebuilds: 0 };
+  const preparedStore: Record<string, SheetBundle['prepared']> = {};
+
+  async function loadWard(name: AreaKey, stream?: StreamOpen) {
     /* The refusal comes BEFORE the session is opened and before the chip says
        "Loading …", so an unreachable area cannot leave a spinner running for a
        fetch that was never going to happen — and it now SPEAKS.
@@ -2465,17 +2507,21 @@ export function mountHeatMap(): () => void {
        area was indistinguishable from a click that missed: same map, same readings,
        same highlight. `areaRefusal` holds both tests and the sentence for each. */
     const refusal = areaRefusal(name);
-    if (refusal !== null) {
+    if (refusal !== null && !stream) {     // a streamed sheet is not `drawable`, and is opened by the controller regardless
       loadChip.fail(refusal);
       return;
     }
-    const P = paths(name);
+    const P = stream ? streamPaths(name) : paths(name);
     /* Null here is unreachable — `areaRefusal` returns a sentence for exactly that
        case — and the check is what narrows `AreaPaths | null` for the eleven uses
        below without a `!`, which would be a promise to the compiler with nothing
        keeping it. */
     if (P === null) return;
-    const token = wardSession.begin(name);
+    const tStart = performance.now();
+    /* A REBUILD (a tier demotion, a restored GL context) opens the ward that is already on screen again, with a new mesh: the session refuses
+       that unless asked (INT audit F3). It never cuts across a different area that is opening: that one is built at the current tier anyway. */
+    if (stream?.rebuild && wardSession.pendingWard !== null && wardSession.pendingWard !== name) return;
+    const token = wardSession.begin(name, stream?.rebuild ? { reload: true } : undefined);
     if (!token) {
       /* Refused because this ward is already on screen. After a failed switch that is
          the one click the reader will try, and the failure chip was up for good. */
@@ -2486,8 +2532,10 @@ export function mountHeatMap(): () => void {
     prefetchAbort?.abort();
     /* Plain name: `w.name` carries the wordmark's `<em>`, and the chip sets textContent,
        so it printed "Loading MG <em>Road</em>…" (live audit, 2026-09-13). */
-    loadChip.start(`Loading ${resolve(name).area.name}…`);
-    await new Promise(r => setTimeout(r, 30));
+    if (!stream) {      // a streamed area has the loader view, not the chip
+      loadChip.start(`Loading ${resolve(name).area.name}…`);
+      await new Promise(r => setTimeout(r, 30));
+    }
     if (!wardSession.isCurrent(token)) return;
     const optional = async <T>(task: Promise<T>, fallback: T): Promise<T> => {
       try { return await task; }
@@ -2538,8 +2586,10 @@ export function mountHeatMap(): () => void {
         canopyCache[name] !== undefined
           ? Promise.resolve(canopyCache[name])
           : optional(loadCanopyRaster(name, token.signal).then((c) => { canopyCache[name] = c; return c; }), null),
-        optional(fetch(P.trees, { signal: token.signal })
-          .then(async (r) => (r.ok ? asTreesFile(await r.json()) : null)), null),
+        treesStore[name] !== undefined
+          ? Promise.resolve(treesStore[name] ?? null)
+          : optional(fetch(P.trees, { signal: token.signal })
+            .then(async (r) => (r.ok ? asTreesFile(await r.json()) : null)), null),
         pvCache[name] !== undefined
           ? Promise.resolve(pvCache[name] as unknown)
           : optional(fetch(P.pv, { signal: token.signal })
@@ -2568,7 +2618,10 @@ export function mountHeatMap(): () => void {
       const { means, surface } = wardSurface;
       /* THE NEW WARD'S GRID, never `simN()`: that still names the ward on screen. */
       const n = requireGrid(d.sizeM).n;
-      const base = rasterWardBase(d, means, surface, canopy, water);
+      /* A STREAMED SHEET arrives with its raster and spatial index already built by the worker: this was the 0.4 s of
+         main-thread work that followed the ward JSON (city-streaming P0). */
+      const prep = stream ? preparedStore[name] : undefined;
+      const base = prep ? prep.base : rasterWardBase(d, means, surface, canopy, water);
       /* Cooling surfaces are a property of the MEASURED vegetation, so they are
          computed from the ward's base layers and never move when a scenario does —
          planting trees in the model must not invent a park that is not there.
@@ -2579,7 +2632,8 @@ export function mountHeatMap(): () => void {
       staged = {
         name, w: wardOf(name), d, terrain, water, roads, labels, trees,
         mask: maskCache[name] ?? null,
-        base, spatial: M.buildSpatial(d, base, roads),
+        base, spatial: prep ? prep.spatial : M.buildSpatial(d, base, roads),
+        prepared: stream?.prepared ?? null, aoData: stream?.ao ?? null,
         cooling: findCoolingSurfaces(base.veg, n, cellM2),
         coolingLo: findCoolingSurfaces(base.veg, n, cellM2, VEG_BRACKET[0]),
         coolingHi: findCoolingSurfaces(base.veg, n, cellM2, VEG_BRACKET[1]),
@@ -2594,8 +2648,11 @@ export function mountHeatMap(): () => void {
     /* ── COMMIT ── one synchronous block. If any of it throws (a renderer call,
        a projection), the previous ward's bundle is committed again, so the page
        is either wholly on the new ward or wholly on the old one. */
+    const tCommit = performance.now();
     try {
-      commitWard(staged, false);
+      streamCommit = stream ?? null;
+      commitWard(staged, stream?.rebuild === true);      // a rebuild is framed already: the rollback path's "no fly, nothing grows in again"
+      if (stream?.rebuild) streamTimings.rebuilds++;
     } catch (error) {
       const previous = committedBundle;
       if (previous && previous !== staged) {
@@ -2606,13 +2663,18 @@ export function mountHeatMap(): () => void {
       }
       failSwitch(token, name, error);
       return;
+    } finally {
+      streamCommit = null;
     }
     /* A superseded load cannot reach here: nothing above awaited since the check. */
+    const tCommitted = performance.now();
     wardSession.commit(token);
+    stream?.afterCommit();
     void loadDcUrs(name); void loadHeatwave(name);
     void resetSim();
     fetchLive(name);
-    schedulePrefetch(name);
+    if (!stream) schedulePrefetch(name);
+    if (stream) { streamTimings.stage.push(Math.round(tCommit - tStart)); streamTimings.commit.push(Math.round(tCommitted - tCommit)); streamTimings.after.push(Math.round(performance.now() - tCommitted)); }
     /* THE LOADER HOLDS UNTIL THE BUILDINGS ARE ON SCREEN AND THE WARD HAS ITS OWN
        FIGURES, not until the data lands. Between the commit and the first solve the
        readouts are blank (see `blankReadouts`), and the chip is what says why. A
@@ -2625,7 +2687,7 @@ export function mountHeatMap(): () => void {
       Promise.all([buildingsShown, fieldArrival]),
       new Promise<void>((settle) => window.setTimeout(settle, 8000)),
     ]).then(() => {
-      if (wardSession.pendingWard === null && wardSession.committedWard === name) loadChip.done();
+      if (!stream && wardSession.pendingWard === null && wardSession.committedWard === name) loadChip.done();
     });
   }
 
@@ -2641,7 +2703,7 @@ export function mountHeatMap(): () => void {
   function failSwitch(token: WardRequestToken, name: AreaKey, error: unknown): void {
     wardSession.fail(token);
     console.warn(`Ward ${name} could not load:`, error);
-    loadChip.fail(`${resolve(name).area.name} could not load.`);
+    if (!(STREAM_DEV && sheetOf(name) !== null)) loadChip.fail(`${resolve(name).area.name} could not load.`);     // a streamed area's failure is the loader view's plate
     try { projectWard(); } catch (projectError) { console.warn('Ward projection failed:', projectError); }
   }
 
@@ -2693,12 +2755,16 @@ export function mountHeatMap(): () => void {
       wardId: w.id,
       wardData: d, roads: b.roads, water: b.water, terrain: b.terrain,
       mercatorOrigin: { x: mc.x, y: mc.y, z: mc.z ?? 0 },
-      frame: wardMercatorScale(w.lat),
+      frame: wardMercatorScale(w.lat, w.frameLat),
       veg: b.trees,
       boundary: wardMask,
+      prepared: b.prepared, aoData: b.aoData,
     };
     coreField.attach(w, d.sizeM, relief && map.getLayer(relief.layer.id) ? relief.layer.id : undefined, wardMask);
     relief?.setWard(reliefWard);
+    /* The worker's arrays are on the GPU now (or on the way): holding them in the staged bundle would keep the CPU copy
+       alive until the NEXT switch. A renderer that is not loaded yet keeps them until `ensureRelief` hands them over. */
+    if (relief) { reliefWard.prepared = null; reliefWard.aoData = null; b.prepared = null; b.aoData = null; }
     /* `setWard` has just rebuilt the city mesh and the tree group, both of them
        new and therefore fully on. This was one line — the trees — for as long as
        the trees were the only layer with a switch; it is now every row of the
@@ -2745,7 +2811,26 @@ export function mountHeatMap(): () => void {
     document.querySelectorAll('#strip .ward').forEach(t => t.classList.toggle('on', (t as HTMLElement).dataset.w === activeId));
 
     if (restore) {
+      /* A rollback: the ward being returned to was already framed, so no fly and nothing grows in. */
       growProgress = 1; syncReliefVisual();
+    } else if (streamCommit) {
+      /* A STREAMED AREA. The camera flies only when the person CHOSE the area (the picker, the Area select) or it is the first; a crossing
+         by panning has the camera over it already. The buildings always RISE, on the loader's own timeline (design A: the grow uniform
+         follows `streamRise` frame by frame, and is 1 under reduced motion), so an area never pops in. */
+      if (streamCommit.first || streamCommit.fly) {
+        orbit = false; clearTimeout(orbitResume);
+        const dur = relief ? 1400 : 0;
+        map.flyTo({ center: [w.lon, w.lat], zoom: 15.3, pitch: mode === 'iso' ? 0 : 60, bearing: mode === 'iso' ? 0 : -18, duration: dur });
+        orbitResume = window.setTimeout(() => { if (!reduceMotion && mode === 'relief') { orbit = true; requestRuntimeFrame('orbit'); } }, dur + 600);
+        /* THE FLY'S END ARMS THE CAMERA CROSSINGS (INT audit F2): MapLibre fires `moveend` when the fly lands AND when the person takes the map
+           from it, so a pick interrupted over the old area can still be panned away from. A zero-length fly has already ended. */
+        if (dur === 0) streamControl?.flyEnded(); else map.once('moveend', () => streamControl?.flyEnded());
+      }
+      growStart = 0;
+      growProgress = reduceMotion || !streamRise ? 1 : 0;
+      streamRising = !reduceMotion && streamRise !== null;
+      syncReliefVisual();
+      if (streamRising) requestRuntimeFrame('grow');
     } else {
       const dur = relief ? 1400 : 0;
       orbit = false; clearTimeout(orbitResume);
@@ -2760,6 +2845,7 @@ export function mountHeatMap(): () => void {
       }
     }
     committedBundle = b;
+    streamShown?.(name, d.count);
   }
 
   /**
@@ -2798,6 +2884,7 @@ export function mountHeatMap(): () => void {
     };
     latestSimRequest = request;
     let snapshot: HeatSimSnapshot;
+    const tReset = performance.now();
     try {
       snapshot = await simHost.reset(request);
     } catch (error) {
@@ -2807,6 +2894,7 @@ export function mountHeatMap(): () => void {
       else console.warn('Heat simulation unavailable:', error);
       return;
     }
+    if (STREAM_DEV) streamTimings.reset.push(Math.round(performance.now() - tReset));
     if (presentSnapshot(request, snapshot)) {
       lastSimulationAt = performance.now();
       requestRuntimeFrame('render');
@@ -3773,6 +3861,7 @@ export function mountHeatMap(): () => void {
    * Compare URL the same way, for the same reason.
    */
   function updateAddressBar() {
+    if (STREAM_DEV) return;     // a streamed area has no page of its own (TILED_CITY_READY is false): the dev wiring writes `?area=F4` on Canal Ring's page (streaming-host/page-wiring.ts)
     history.replaceState(null, '', `${areaPath(state.ward)}${window.location.search}${window.location.hash}`);
   }
 
@@ -4018,10 +4107,16 @@ export function mountHeatMap(): () => void {
     const key = `${CO}/${CY}/${id ?? ''}`;
     return isAreaKey(key) ? key : null;
   };
+  /* A streamed area is opened THROUGH THE STREAM CONTROLLER (the manager, the loader, the picker), never by `loadWard` directly: the strip's
+     Canal Ring tab and the Area select both land here in the dev streaming build. Everything else is exactly what it was. */
+  const openArea = (key: AreaKey): void => {
+    const row = STREAM_DEV && streamControl ? sheetOf(key) : null;
+    if (row) streamControl!.select(row.code); else void loadWard(key);
+  };
   document.querySelectorAll('#strip .ward').forEach(t => onEl(t, 'click', () => {
     nudgeOrbit();
     const key = areaKeyFromTab((t as HTMLElement).dataset.w);
-    if (key) void loadWard(key);
+    if (key) openArea(key);
   }));
 
   /* THE SCOPE SWITCHER ASKS; THIS ANSWERS.
@@ -4036,7 +4131,7 @@ export function mountHeatMap(): () => void {
        page can dispatch one — and this is the door into a fetch. */
     if (!isAreaKey(key)) return;
     nudgeOrbit();
-    void loadWard(key);
+    openArea(key);
   };
   document.addEventListener(OPEN_AREA_EVENT, onOpenArea);
   cleanup.push(() => document.removeEventListener(OPEN_AREA_EVENT, onOpenArea));
@@ -4300,7 +4395,12 @@ export function mountHeatMap(): () => void {
     const dragging = advanceDrag();
     const orbiting = advanceOrbit(time);
     let growing = false;
-    if (!reduceMotion && growProgress < 1 && growStart) {
+    if (streamRising && streamRise) {
+      growProgress = streamRise(time);
+      growing = growProgress < 1;
+      if (!growing) streamRising = false;
+      syncReliefVisual();
+    } else if (!reduceMotion && growProgress < 1 && growStart) {
       growProgress = Math.min(1, Math.max(0, (time - growStart) / GROW_MS));
       growing = growProgress < 1;
       syncReliefVisual();
@@ -4426,11 +4526,104 @@ export function mountHeatMap(): () => void {
     map.triggerRepaint();
   };
   map.on('style.load', onStyleLoad);
+
+
+  /** Streamed areas' file URLs: R2 for every area but Canal Ring (streaming/data-source.ts, one helper with the controller's `sheetUrls`). Loaded with the dev wiring. */
+  let streamedAreaUrls: ((areaId: string) => AreaPaths) | null = null;
+  const streamPaths = (key: AreaKey): AreaPaths => streamedAreaUrls!(splitKey(key).area);
+
+  async function startStream(): Promise<void> {
+    const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }, { measured }, { wirePage }, { areaFromUrl }, { streamedAreaMeans }, { createLateStream }, dataSource] = await Promise.all([
+      import('./streaming-host/city-stream'), import('./streaming-host/sheet-worker-client'), import('./streaming/halo-sim-host'),
+      glMeterReady, import('./streaming-host/page-wiring'), import('./streaming/area-page'), import('./surface-raster'), import('./streaming/late-stream'), import('./streaming/data-source'),
+    ]);
+    /* WHERE THE LAYER FILES COME FROM: the manifest (public/heat-map/data/ams-r2-manifest.json) names Cloudflare R2 for every area but Canal Ring. A manifest
+       that cannot be read is not a reason to guess: every other area then fails into the loader's failed state, with the reason. */
+    await dataSource.readStreamManifest((url, init) => fetch(url, init));           // a failed read is retried by the controller before every load (a Retry works; INT re-audit R4)
+    streamedAreaUrls = dataSource.streamedAreaUrls;
+    /* The page furniture (the loader view, the area picker, the header/URL projections) is made first: the controller's hooks feed it. */
+    const stageEl = document.querySelector<HTMLElement>('.stage');
+    const lateStream = createLateStream();            // a click before the controller exists is kept, not thrown at (INT audit F6)
+    const wiring = stageEl ? wirePage(stageEl, lateStream) : null;
+    streamRise = wiring ? (t) => wiring.riseValue(t) : null;
+    streamShown = wiring ? (key, drawn) => { const row = sheetOf(key); if (row) wiring.areaShown(row.code, drawn); } : null;
+    cleanup.push(() => { wiring?.dispose(); streamRise = null; streamShown = null; });
+    let supply: (() => NeighbourLayers) | null = null;
+    wrapHost = (host) => createHaloSimHost(host, () => supply?.() ?? null);
+    await initSimHost();                                  // the device tier is final once the capability probe has run
+    const asked = new URLSearchParams(window.location.search).get('streamtier');
+    if (asked === 'low' || asked === 'balanced' || asked === 'full') runtimeTier = asked;
+    const conn = (navigator as Navigator & { connection?: EventTarget & PrefetchConnection }).connection;
+    conn?.addEventListener?.('change', () => stream.networkChanged(hooks.network()));
+    const keyOf = (code: SheetCode): AreaKey => sheetKey(sheetByCode(code)!);
+    const hooks: CityStreamHooks = {
+      tier: () => runtimeTier,                              // the device's, in either look (the classic facade has a packed variant too)
+      network: () => {
+        const c = (navigator as Navigator & { connection?: PrefetchConnection }).connection;
+        return c?.saveData || c?.effectiveType === '2g' || c?.effectiveType === 'slow-2g' ? 'constrained' : 'fast';
+      },
+      relief: () => relief,
+      registeredSurface: (code) => (code === 'E4' ? loadAreaSurface(keyOf(code)) : null),
+      surfaceMeans: (code) => streamedAreaMeans(sheetByCode(code)!.id),
+      installBundle: (code, b) => {
+        const key = keyOf(code);
+        cache[key] = b.ward; terrainCache[key] = b.terrain; waterCache[key] = b.water; roadsCache[key] = b.roads;
+        surfaceCache[key] = b.surface; labelCache[key] = EMPTY_LABELS; provCache[key] = null; canopyCache[key] = null;
+        pvCache[key] = null; maskCache[key] = null; treesStore[key] = b.trees; preparedStore[key] = b.prepared;
+      },
+      dropBundle: (code) => {
+        const key = keyOf(code);
+        for (const store of [cache, roadsCache, waterCache, terrainCache, surfaceCache, labelCache, provCache, canopyCache, pvCache, maskCache, treesStore, preparedStore] as Array<Record<string, unknown>>) delete store[key];
+      },
+      showSheet: async (code, prepared, ao, first, afterCommit, fly = false, rebuild = false) => {
+        await loadWard(keyOf(code), { prepared, ao, first, fly: (fly || first) && !rebuild, rebuild, afterCommit });
+        if (state.ward !== keyOf(code)) throw new Error(`${code} did not open`);
+        /* THE LOADER HOLDS UNTIL THE BUILDINGS ARE ON SCREEN AND THE AREA HAS ITS FIRST FIGURES (the heat solve's first burst), capped, as the
+           page's own chip always did. Only then is the area "opened" for the manager, so the loader's `end` is the true end. */
+        await Promise.race([Promise.all([relief ? relief.buildingsReady() : Promise.resolve(), fieldArrival]), new Promise<void>((r) => window.setTimeout(r, 4000))]);
+        /* the controller reports the 'sim' stage when this resolves, and tells the manager the area is open (at the commit if no loader was shown) */
+      },
+      setHaloSupply: (next) => { supply = next; },
+      resolve: () => { void resetSim(); },
+      loader: () => undefined,                              // the loader view takes the manager's loader and failure commands through `command`
+      failure: () => undefined,
+      warn: (message, error) => console.warn(`streaming: ${message}`, error ?? ''),
+      ...(wiring ? {
+        loaderVisible: (code) => wiring.loaderVisible(code),
+        command: (c) => wiring.command(c),
+        stage: (code, s) => wiring.stage(code, s),
+        facts: (code, f) => wiring.facts(code, f),
+        dispatched: (s) => wiring.dispatched(s),
+      } : {}),
+    };
+    const stream = createCityStream(hooks, spawnSheetWorker());
+    streamControl = stream;
+    setStreamTier = (next) => { if (next !== runtimeTier) { runtimeTier = next; stream.tierChanged(next); } };
+    /* A GESTURE IS THE CENTRE MOVING OR A POINTER DOWN, not `isMoving()`: the idle auto-orbit turns the bearing every frame and
+       fires `move` on each, which would hold a crossing off for ever. */
+    let pointerDown = false, last = map.getCenter(), lastZoom = map.getZoom();
+    const sendCamera = (final: boolean): void => {
+      const c = map.getCenter(), z = map.getZoom();
+      const moved = Math.hypot((c.lng - last.lng) * 67_977, (c.lat - last.lat) * 110_540) > 0.5 || z !== lastZoom;
+      last = c; lastZoom = z;
+      stream.camera(c.lng, c.lat, !final && (pointerDown || moved), null);
+    };
+    for (const type of ['mousedown', 'touchstart'] as const) map.on(type, () => { pointerDown = true; });
+    for (const type of ['mouseup', 'touchend', 'touchcancel'] as const) map.on(type, () => { pointerDown = false; sendCamera(true); });
+    map.on('move', () => sendCamera(false));
+    map.on('moveend', () => sendCamera(true));
+    (window as unknown as { __obosStream?: unknown }).__obosStream = {
+      report: () => stream.report(), measured, timings: () => streamTimings, select: (code: string) => stream.select(code), setTier: (tier: ExploreDeviceTier) => setStreamTier?.(tier), map, state: () => ({ ward: state.ward, mean: state.lastMean }),
+    };
+    wiring?.dispatched(stream.managerState());
+    stream.start(areaFromUrl(window.location.search) ?? 'E4');      // a refresh returns to the area in the address bar
+    lateStream.bind(stream);                                        // and a choice made while the capability probe ran is applied now, over it
+  }
   /* THE WARD FIRST, THEN THE SKY. `mapHasLoaded` unlocks `syncSky`, which refuses
      to touch the style before this moment because doing so stops this very event
      from firing — see the note in `syncSky`. Ordered so the instrument starts
      even if the sky call misbehaves again on a future MapLibre. */
-  const onMapLoad = () => { mapHasLoaded = true; void loadWard(INITIAL_AREA); syncSky(); };
+  const onMapLoad = () => { mapHasLoaded = true; if (STREAM_DEV) void startStream(); else void loadWard(INITIAL_AREA); syncSky(); };
   map.once('load', onMapLoad);
   void capsReady.then((caps) => {
     if (!appDisposed && caps.mode !== 'isotherm') void ensureRelief();   // every tier — see initSimHost
@@ -4459,6 +4652,7 @@ export function mountHeatMap(): () => void {
     closeStreetView();
     relief?.dispose();
     coreField.dispose();
+    streamControl?.dispose();
     simHost?.dispose();
     try { map.remove(); } catch { /* ignore */ }
     if (labWindow.__obosMap === map) delete labWindow.__obosMap;

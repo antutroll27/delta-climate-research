@@ -4,11 +4,17 @@ export interface WardRequestToken {
   signal: AbortSignal;
 }
 
+export interface WardBeginOptions {
+  /** Load the ward again although it is the one on screen or already pending: a REBUILD (a tier demotion, a restored GL context).
+   *  Streamed areas only; an ordinary switch never passes it, so the ward on screen is still refused. Last-request-wins as ever. */
+  readonly reload?: boolean;
+}
+
 /** Owns last-request-wins semantics independently of fetch/render details. */
 export interface WardSession {
   /** Aborts any in-flight load. null when the ward is already pending or committed,
    *  or once disposed — a superseded or late token can then never write. */
-  begin(ward: string): WardRequestToken | null;
+  begin(ward: string, options?: WardBeginOptions): WardRequestToken | null;
   isCurrent(token: WardRequestToken): boolean;
   commit(token: WardRequestToken): boolean;
   /** Records a failure LEAVING the committed ward in place. */
@@ -29,9 +35,9 @@ export function createWardSession(): WardSession {
   }
 
   return {
-    begin(ward) {
+    begin(ward, options) {
       if (disposed) return null;
-      if (active?.token.ward === ward || (!active && committed === ward)) return null;
+      if (options?.reload !== true && (active?.token.ward === ward || (!active && committed === ward))) return null;
       active?.controller.abort();
       const controller = new AbortController();
       const token = { ward, generation: ++generation, signal: controller.signal };

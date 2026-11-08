@@ -17,6 +17,7 @@
  * whose artefacts are absent — see the filter and the reasoning in wards.ts.
  */
 import { requireGrid } from '../scripts/climate-engine/types.ts';
+import { AMSTERDAM_AREA_WARDS } from './sheets/amsterdam-areas.ts';
 
 export interface WardRecord {
   readonly id: string;
@@ -33,6 +34,13 @@ export interface WardRecord {
    */
   readonly lat: number;
   readonly lon: number;
+  /**
+   * The frame's STANDARD PARALLEL, degrees: the latitude whose cosine scales the east axis (Area.frame_lat in
+   * scripts/_city.py). ABSENT = this ward's own `lat`, which is every ward that existed before whole-city streaming
+   * (their frames are bit-identical, tests/unit/frame-lat-default.test.mjs). The sheets of a tiled city set it to
+   * the anchor sheet's latitude so neighbouring frames differ by an exact translation.
+   */
+  readonly frameLat?: number;
   /**
    * Nominal vegetation fraction — and it does NOT mean the same thing in both
    * cities, so it cannot be described in one clause. Bengaluru's rows carry
@@ -147,6 +155,11 @@ const AMSTERDAM_WARDS: readonly WardRecord[] = [
     body: 'Gemeente Amsterdam (stadsdelen Centrum, Zuid, West)',
     lat: 52.3640, lon: 4.8850, veg: 0.349, footprintM: 2800,
     swatch: 'radial-gradient(circle at 40% 40%,#6fcad6,#9fb98a 58%,#093a3e)' },
+  /* THE OTHER 31 STREAMED AREAS (city-streaming P2c): ward-table rows generated from the sheet pipeline's outputs by
+     scripts/build-area-records.py (data/cities/amsterdam/area-records.json), every one `frameLat` = this lattice's standard
+     parallel. They are `sheet: true, drawable: false` in the scope registry and TILED_CITY_READY is false, so none is routed,
+     listed or published; Canal Ring (E4) stays exactly as written above and stays first (`wards[0]` is the city's resolution). */
+  ...AMSTERDAM_AREA_WARDS,
 ];
 
 /**

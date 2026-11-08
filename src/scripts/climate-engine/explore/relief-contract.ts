@@ -11,6 +11,21 @@ import type { BuildingMeta } from './building-pick.ts';
 import type { LandmarkLabel, LandmarkPick } from './landmark-layer.ts';
 import type { ExploreDeviceTier } from './runtime-budget.ts';
 import type { SunPlacement } from './sun-lighting.ts';
+import type { MassingMesh, PackedMesh } from '../streaming/prism-mesh.ts';
+import type { BevelMesh } from '../streaming-host/bevel-core.ts';
+
+/** The buildings of a streamed sheet, extruded off the main thread (streaming-host/sheet-worker.ts). */
+export type PreparedBuildings = PackedMesh | BevelMesh;
+
+/** One sheet of a streamed city drawn beside the open one, as grey massing, at an offset in the open sheet's metres. */
+export interface NeighbourSheet {
+  readonly key: string;
+  /** East and north of the open sheet's centre, metres (a whole number of 2,800 m sheets). */
+  readonly offsetX: number;
+  readonly offsetZ: number;
+  /** Null for a sheet the renderer already holds (only its offset is updated). */
+  readonly mesh: MassingMesh | null;
+}
 
 export interface ReliefWardBundle {
   /**
@@ -33,6 +48,13 @@ export interface ReliefWardBundle {
    * Drawing only — the solve never reads it.
    */
   boundary: Pick<WardMask, 'cells' | 'inWard' | 'ring'> | null;
+  /**
+   * STREAMED CITIES ONLY. The buildings already extruded (in a worker), so `setWard` uploads them instead of extruding on the
+   * main thread. Absent for every other city, which extrudes as it always has.
+   */
+  prepared?: PreparedBuildings | null;
+  /** STREAMED CITIES ONLY: the 1024-texel contact-occlusion bake (RGBA8), made by the worker; absent = bake it here. */
+  aoData?: Uint8Array | null;
 }
 
 export interface ReliefFieldUpdate {
@@ -115,6 +137,12 @@ export interface ReliefRenderer {
   landmarkLabels(width: number, height: number): LandmarkLabel[];
   pickLandmark(x: number, y: number, width: number, height: number,
                radiusPx?: number): LandmarkPick | null;
+  /** STREAMED CITIES ONLY: the grey neighbour sheets drawn around the open one. Replaces the previous set (kept ones are
+   *  re-offset, dropped ones are disposed). */
+  setNeighbours?(sheets: readonly NeighbourSheet[]): void;
+  /** STREAMED CITIES ONLY: which sides of the heat overlay keep the 16 % edge fade, (west, east, north, south) of 1 or 0.
+   *  A side shared with another drawn sheet is 0. */
+  setSeamFade?(west: number, east: number, north: number, south: number): void;
   dispose(): void;
 }
 
@@ -137,4 +165,13 @@ export interface ReliefRendererOptions {
    * classifies as tier 2. Reading it late is what makes the gate mean what it says.
    */
   deviceTier: () => ExploreDeviceTier;
+  /**
+   * STREAMED CITIES ONLY (a dev flag today): draw neighbour massing, accept pre-extruded buildings, and honour the
+   * per-side edge fade. Absent = the renderer every other city has.
+   */
+  streamed?: {
+    /** The WebGL context came back and every mesh (the city's and the neighbours', GPU-only) is gone. The renderer does NOT
+     *  rebuild a streamed city itself (that would be the main-thread bevel, whatever the tier): the page asks its worker. */
+    onContextRestored(): void;
+  };
 }

@@ -75,6 +75,12 @@ export interface HeatOverlayHolders {
   hazeCol: { value: THREE.Color };
   /** × the overlay's opacity, Clay only (look.ts `lookAmounts`). */
   opBoost: { value: number };
+  /**
+   * Streamed cities only: which sides of the square keep the 16 % edge fade, as (west, east, north, south) of 1 or 0.
+   * Absent = all four, the shader every other city has always had (the original text is used unchanged). A side shared with
+   * another drawn sheet is 0: the tint runs to the seam, and the neighbour's grey massing sits beyond it.
+   */
+  seams?: { value: THREE.Vector4 };
 }
 
 export const OVERLAY_VERT = 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }';
@@ -99,6 +105,17 @@ export const OVERLAY_FRAG = /* glsl */ `varying vec2 vUv; uniform sampler2D tT,t
           float k=(1.-ao)*(1.-hz);
           gl_FragColor=vec4(col*a+(1.-a)*uHazeCol*hz, 1.-(1.-a)*k); }`;
 
+/** The distance to the nearest square edge, over the four sides the edge fade is on for. */
+const EDGE_ALL = 'min(min(vUv.x,1.0-vUv.x),min(vUv.y,1.0-vUv.y))';
+/* vUv.x grows east; vUv.y grows SOUTH (the field is sampled at 1 - vUv.y and its row 0 is the south edge). A side with its fade
+   off contributes 1.0, which can never be the minimum. uSeams = (west, east, north, south). */
+const EDGE_SEAMS = 'min(min(mix(1.0,vUv.x,uSeams.x),mix(1.0,1.0-vUv.x,uSeams.y)),min(mix(1.0,vUv.y,uSeams.z),mix(1.0,1.0-vUv.y,uSeams.w)))';
+
+/** OVERLAY_FRAG with the seam-aware edge: the same text with one expression and one uniform swapped in. */
+export const OVERLAY_FRAG_SEAMS: string = OVERLAY_FRAG
+  .replace(`smoothstep(0.0,0.16,${EDGE_ALL})`, `smoothstep(0.0,0.16,${EDGE_SEAMS})`)
+  .replace('uniform vec3 uHazeCol;', 'uniform vec3 uHazeCol; uniform vec4 uSeams;');
+
 /** The editorial ground overlay. `uOp` is the overlay's own (the layer tree's) opacity. */
 export function makeHeatOverlay(h: HeatOverlayHolders): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
@@ -113,8 +130,9 @@ export function makeHeatOverlay(h: HeatOverlayHolders): THREE.ShaderMaterial {
       tT: h.heat, uMin: h.heatMin, uMax: h.heatMax, uOp: { value: 0.5 }, uCool: h.cooling,
       tAO: h.ao, uAOAmt: h.aoAmt, uHaze: h.haze, uHazeCol: h.hazeCol,
       uOpK: h.opBoost, uAOW: h.aoW,
+      ...(h.seams ? { uSeams: h.seams } : {}),
     },
     vertexShader: OVERLAY_VERT,
-    fragmentShader: OVERLAY_FRAG,
+    fragmentShader: h.seams ? OVERLAY_FRAG_SEAMS : OVERLAY_FRAG,
   });
 }

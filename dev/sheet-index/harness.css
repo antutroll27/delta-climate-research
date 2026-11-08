@@ -1,0 +1,9 @@
+/* harness only: a stand-in for the map, so the glass has something to sit over */
+html[data-ui="v2"] .obos-v2 .fake-map { background:
+  linear-gradient(115deg, transparent 0 46%, var(--well-2) 46% 47%, transparent 47%),
+  linear-gradient(35deg, transparent 0 62%, var(--well-2) 62% 63%, transparent 63%),
+  repeating-linear-gradient(0deg, transparent 0 79px, var(--well) 79px 80px),
+  repeating-linear-gradient(90deg, transparent 0 79px, var(--well) 79px 80px), var(--card); }
+html[data-ui="v2"] .obos-v2 .harness-chrome { position: absolute; z-index: 5; inset: 16px auto auto 16px; display: flex; flex-direction: column; gap: 10px; }
+html[data-ui="v2"] .obos-v2 .harness-note { margin: 0; font-size: 11px; color: var(--ink-3); max-width: 280px; }
+@media (max-width: 699px) { html[data-ui="v2"] .obos-v2 .harness-chrome { inset: 12px auto auto 12px; } }

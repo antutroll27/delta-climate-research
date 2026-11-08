@@ -24,6 +24,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Final, NamedTuple, cast
 
+import shapely
 from shapely import wkb as shapely_wkb
 from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon, box
 from shapely.ops import transform as shp_transform
@@ -161,13 +162,32 @@ def _lines(geom: Any) -> list[list[float]]:
     return out
 
 
-def build_context(area: Area, raw: str) -> tuple[CityContextFile, ContextStats]:
-    """Clip the cached water, green land-use and roads to the area square, in the local frame."""
+def read_tables(raw: str) -> dict[str, list[Any]]:
+    """Every row of the cached parquet of each theme (a whole city's, for a tiled city: read it once, then `tables_in_box`)."""
     import duckdb
     con = duckdb.connect()
-    tables: dict[str, list[Any]] = {
-        name: con.execute(f"SELECT * FROM read_parquet('{context_parquet(raw, name)}')").fetchall()
-        for name in CONTEXT_THEMES}
+    return {name: con.execute(f"SELECT * FROM read_parquet('{context_parquet(raw, name)}')").fetchall() for name in CONTEXT_THEMES}
+
+
+def tables_in_box(tables: dict[str, list[Any]], bounds: tuple[float, float, float, float]) -> dict[str, list[Any]]:
+    """The rows whose geometry's bounding box meets a lon/lat box (west, south, east, north). The geometry is the 4th column
+    (water, land use, roads alike: id, subtype, class, geometry, ...). A pre-filter only: `build_context` still clips exactly."""
+    w, s, e, n = bounds
+    out: dict[str, list[Any]] = {}
+    for name, rows in tables.items():
+        geoms = shapely.from_wkb([bytes(r[3]) for r in rows])
+        b = shapely.bounds(geoms)
+        keep = (b[:, 0] <= e) & (b[:, 2] >= w) & (b[:, 1] <= n) & (b[:, 3] >= s)
+        out[name] = [r for r, k in zip(rows, keep, strict=True) if k]
+    return out
+
+
+def build_context(area: Area, raw: str, tables: dict[str, list[Any]] | None = None) -> tuple[CityContextFile, ContextStats]:
+    """Clip the cached water, green land-use and roads to the area square, in the local frame.
+
+    `tables` (rows already read and pre-filtered by `tables_in_box`) replaces the read of the parquet under `raw`."""
+    if tables is None:
+        tables = read_tables(raw)
     half = area.size_m / 2.0
     clip = box(-half, -half, half, half)
 

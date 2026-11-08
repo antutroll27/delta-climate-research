@@ -1,0 +1,1503 @@
+{
+ "schema": 1,
+ "city": "amsterdam",
+ "version": "b9bfc7a634fef43b",
+ "prefix": "amsterdam/b9bfc7a634fef43b",
+ "baseUrl": "https://obos-city-data.antarixmusic.workers.dev",
+ "cacheControl": "public, max-age=31536000, immutable",
+ "totals": {
+  "files": 186,
+  "bytes": 39491121,
+  "uploadBytes": 15140528
+ },
+ "files": {
+  "ams-b3-roads.json": {
+   "sha256": "3ba8a9b4b092e9d1a3a44a7c96cec0e15299e976285a6a41e6ab3ae359dd62cf",
+   "size": 67610,
+   "gzipSize": 22146,
+   "uploadSize": 22146,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b3-surface.png": {
+   "sha256": "90675e1d23f194e21a0267b4ed87567a2c5ce261358c2e9fad81b0e195185ed7",
+   "size": 118271,
+   "gzipSize": null,
+   "uploadSize": 118271,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-b3-terrain.json": {
+   "sha256": "03bf7f8c945cef856b49e2b760c1d1f20559f6cbd1b01de67543e198f34492a7",
+   "size": 50577,
+   "gzipSize": 14853,
+   "uploadSize": 14853,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b3-trees.json": {
+   "sha256": "4e315f532d6a13f99118a1ae1db72c7ff0d943e38d15e570f5735bd214ba41d0",
+   "size": 429359,
+   "gzipSize": 126418,
+   "uploadSize": 126418,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b3-water.json": {
+   "sha256": "49231de7d20933abb2cd72cb082fe551dded708427aa9366ae83427e50937f84",
+   "size": 148697,
+   "gzipSize": 57586,
+   "uploadSize": 57586,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b3.json": {
+   "sha256": "c6a75793163da965aec6d44cf8a81b58869328cd4f4c79b7cbf07790d07b65da",
+   "size": 355617,
+   "gzipSize": 114747,
+   "uploadSize": 114747,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b4-roads.json": {
+   "sha256": "452aee794b469997ecdfe06c00643ae29590ca848651f693de0b5bbe9672d718",
+   "size": 56108,
+   "gzipSize": 18757,
+   "uploadSize": 18757,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b4-surface.png": {
+   "sha256": "3149bac2719160c096cb3b9e13714b0f114fbee8560a28b6b5292871351afe54",
+   "size": 126291,
+   "gzipSize": null,
+   "uploadSize": 126291,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-b4-terrain.json": {
+   "sha256": "6859a0728945081b9699372b64155eb868576c69ed21a43f5b8b7afc2dc75256",
+   "size": 52321,
+   "gzipSize": 14312,
+   "uploadSize": 14312,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b4-trees.json": {
+   "sha256": "aaec04b5483aa40028dca1b438020031289e18912d54953c7c4e4ed864470a26",
+   "size": 198356,
+   "gzipSize": 60858,
+   "uploadSize": 60858,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b4-water.json": {
+   "sha256": "fd6d97c7b9618b56a0bc25d279d071ae3b032967ce0b2b30e169af47532db0f8",
+   "size": 115858,
+   "gzipSize": 45614,
+   "uploadSize": 45614,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b4.json": {
+   "sha256": "57d63252087eb6d8a7a9b6d1bed5701b454cb0b68174633a6c040758271657a3",
+   "size": 355961,
+   "gzipSize": 115360,
+   "uploadSize": 115360,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b5-roads.json": {
+   "sha256": "8dc1f2dc299815ea31cedcfe19711062195cf6c1fb91d1762f099e6bc96ee176",
+   "size": 68285,
+   "gzipSize": 22793,
+   "uploadSize": 22793,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b5-surface.png": {
+   "sha256": "203232881ea2128ac9f743d9f3be8316948f3432c4db23e49fc52f94c8d03443",
+   "size": 127926,
+   "gzipSize": null,
+   "uploadSize": 127926,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-b5-terrain.json": {
+   "sha256": "2f6c9fb1eccb7884efd384bd695a48409bb696f6649f24bd6ac49a6c82af4176",
+   "size": 51872,
+   "gzipSize": 13643,
+   "uploadSize": 13643,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b5-trees.json": {
+   "sha256": "851b27a12d8003e9bf2bfa7b75c95e18e7691db0170f1d9665009a4d4c11e9ce",
+   "size": 44041,
+   "gzipSize": 14858,
+   "uploadSize": 14858,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b5-water.json": {
+   "sha256": "333e7e2fb6edab614063253b2d077886252c9d1f987808daf47af69974c67db2",
+   "size": 48155,
+   "gzipSize": 19230,
+   "uploadSize": 19230,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-b5.json": {
+   "sha256": "51f485a220995a17876d51bed7c28dc6dd8299c9997e2e2c193c872518151407",
+   "size": 448251,
+   "gzipSize": 153244,
+   "uploadSize": 153244,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c3-roads.json": {
+   "sha256": "d6470b04959a9a2b4861f1c82f1217ada4832704e3d5a677b6f99ea0d847df5b",
+   "size": 104404,
+   "gzipSize": 32198,
+   "uploadSize": 32198,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c3-surface.png": {
+   "sha256": "785708b4ee5f565876d89e0484ba36f9816c7d958810bd617d88bcd7ee7e8443",
+   "size": 115899,
+   "gzipSize": null,
+   "uploadSize": 115899,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-c3-terrain.json": {
+   "sha256": "e291eba6f44fccf619685cb19506634c8db9dd7ec92e05a240e5b9d15204d843",
+   "size": 50058,
+   "gzipSize": 12997,
+   "uploadSize": 12997,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c3-trees.json": {
+   "sha256": "b15a2db9557f318c7a89c4489f2878d46d261cdf7269ec551137dd9e570ba37f",
+   "size": 209241,
+   "gzipSize": 63072,
+   "uploadSize": 63072,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c3-water.json": {
+   "sha256": "b3a3e4ada1a874bc7be68b4df460d9a59ff5091a74c46576347118755476926b",
+   "size": 118360,
+   "gzipSize": 43812,
+   "uploadSize": 43812,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c3.json": {
+   "sha256": "e6b03c31790d2a38048a7a6fdea71b4385e1fb5fe240556dcee05fa613b1868f",
+   "size": 410083,
+   "gzipSize": 123616,
+   "uploadSize": 123616,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c4-roads.json": {
+   "sha256": "59909c2d3a4fc702496d79801b05f4e267672a621350d68e07f5609696a946ae",
+   "size": 127820,
+   "gzipSize": 38167,
+   "uploadSize": 38167,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c4-surface.png": {
+   "sha256": "54a93a0cda15c147c07ec9fa7b6d7206d7f1d7af669e0cb636479914606e0d3f",
+   "size": 125038,
+   "gzipSize": null,
+   "uploadSize": 125038,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-c4-terrain.json": {
+   "sha256": "32ff072387e646f1d101ad7d67aee1f3f53e19f3727d17e9223c10b9ea8d1f79",
+   "size": 49108,
+   "gzipSize": 12818,
+   "uploadSize": 12818,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c4-trees.json": {
+   "sha256": "6417763aa041d198a080013b7f7c55fdee28513ecaea94e4cb4db49979ca140b",
+   "size": 401967,
+   "gzipSize": 123027,
+   "uploadSize": 123027,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c4-water.json": {
+   "sha256": "e2aaa0e67e8730849aca4ed70af3c9f8ed1ab45367e82614dfe5906d3e22f576",
+   "size": 78784,
+   "gzipSize": 30366,
+   "uploadSize": 30366,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c4.json": {
+   "sha256": "7c407de2eec9afe1a076b261bc36865f1e3fe45411fb6e5dc8b83dc5e66901c4",
+   "size": 680315,
+   "gzipSize": 211146,
+   "uploadSize": 211146,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c5-roads.json": {
+   "sha256": "8a171373ec851121ff86a1aa1fa688e8ac290e0ecaed62079ec79ad242f5ac34",
+   "size": 121305,
+   "gzipSize": 38530,
+   "uploadSize": 38530,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c5-surface.png": {
+   "sha256": "a9359fa2c5963e7062303b869ce3eee37d30500abc452bafa156bef29f77fb18",
+   "size": 126653,
+   "gzipSize": null,
+   "uploadSize": 126653,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-c5-terrain.json": {
+   "sha256": "aeeb5fbdbf68d5edf4734a3b47e013ba8eb32e82fb49fb9bb88a795998a4dc77",
+   "size": 49853,
+   "gzipSize": 14318,
+   "uploadSize": 14318,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c5-trees.json": {
+   "sha256": "435747dc61ce975dbb11f7d524c7e097f389c2b16f5c08452b006e780890b730",
+   "size": 281242,
+   "gzipSize": 86575,
+   "uploadSize": 86575,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c5-water.json": {
+   "sha256": "e2b74782909a555a5ce7f3420fb9e5913cdd62ab2b118b8655f7e7bc5fd4e7aa",
+   "size": 122608,
+   "gzipSize": 47234,
+   "uploadSize": 47234,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-c5.json": {
+   "sha256": "a6767e0012540fdfb6fc715760ed1659690e67d0fc32224bb4cf1fe0348ca60e",
+   "size": 940012,
+   "gzipSize": 303976,
+   "uploadSize": 303976,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d2-roads.json": {
+   "sha256": "b603418776795a6a3c27e16b16846c76594c9969f261ef627830b80616806639",
+   "size": 147252,
+   "gzipSize": 49802,
+   "uploadSize": 49802,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d2-surface.png": {
+   "sha256": "41d097a4f0a2b4eb99765b040551269db68426e43795e016fd7049a2b11b60f7",
+   "size": 108160,
+   "gzipSize": null,
+   "uploadSize": 108160,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-d2-terrain.json": {
+   "sha256": "b5f6376c83cf1c96865b9c09e9f54e307c5249b67682b8cb883191f0c4cf2246",
+   "size": 50660,
+   "gzipSize": 12083,
+   "uploadSize": 12083,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d2-trees.json": {
+   "sha256": "839fdc91ab10170e924fc72ab1f5ab77ac94636744b2f459ef0da59a3356da44",
+   "size": 140772,
+   "gzipSize": 43352,
+   "uploadSize": 43352,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d2-water.json": {
+   "sha256": "223e5d4e6df10d720147fc2ccb0e32228686381e2ba663d1e79ccc524b1dbc3c",
+   "size": 104720,
+   "gzipSize": 39795,
+   "uploadSize": 39795,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d2.json": {
+   "sha256": "89f4c07b1c57d1fc4e4fbfc93f81dfddb470bf163bed188c449a98dd17a5d0ec",
+   "size": 140662,
+   "gzipSize": 51746,
+   "uploadSize": 51746,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d3-roads.json": {
+   "sha256": "5c2db5f79340ad8a8d796ed7b61e11e5b3dd2df02b884198cc026b23da633ceb",
+   "size": 172609,
+   "gzipSize": 55442,
+   "uploadSize": 55442,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d3-surface.png": {
+   "sha256": "fd9bcc175d641a48561b7d572f6b4e4b35a3c4ff5eacabf6b5633976f3eb7a92",
+   "size": 124399,
+   "gzipSize": null,
+   "uploadSize": 124399,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-d3-terrain.json": {
+   "sha256": "3ed66247c747ee50cda9f31ee273c6d13aa132c673f6b5baab3592460481c212",
+   "size": 50861,
+   "gzipSize": 13420,
+   "uploadSize": 13420,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d3-trees.json": {
+   "sha256": "f2194a76418346fd4bafc104af39879cc6caeb58061b0ffed4d4c2b632e16b11",
+   "size": 283468,
+   "gzipSize": 86644,
+   "uploadSize": 86644,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d3-water.json": {
+   "sha256": "3d54769bdc5c5da218f60ee0ad4268f4c87247319909a229e2adf74c2f59397b",
+   "size": 72409,
+   "gzipSize": 27863,
+   "uploadSize": 27863,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d3.json": {
+   "sha256": "fabe886306f362867e077e1daf7576627b2e87e39fc34396b0d42993e61f2460",
+   "size": 534021,
+   "gzipSize": 166013,
+   "uploadSize": 166013,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d4-roads.json": {
+   "sha256": "2768a98dd9a79f4c9c789c97e629f3cd79f90e695cf0ec8296051d3efd1280b1",
+   "size": 164559,
+   "gzipSize": 49836,
+   "uploadSize": 49836,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d4-surface.png": {
+   "sha256": "fc06931f3f0d1594a08c795aab80e040f1337dae4d3d100c08c245763948b0a6",
+   "size": 130599,
+   "gzipSize": null,
+   "uploadSize": 130599,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-d4-terrain.json": {
+   "sha256": "1f4fe6f69f5e450c408de0359db1d056f8b757dcd2ad1ea0f81ec5bb78749345",
+   "size": 50347,
+   "gzipSize": 13724,
+   "uploadSize": 13724,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d4-trees.json": {
+   "sha256": "eb7cd12cc27b1acbe0c8818ce63eb3d1cb9f0828a9ead474376d7ee593a93c14",
+   "size": 511799,
+   "gzipSize": 155959,
+   "uploadSize": 155959,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d4-water.json": {
+   "sha256": "a7fae4c48bc3a50f7358679b2d4dfeb25893e81e81db5a94f4f1e073433b6e1d",
+   "size": 53577,
+   "gzipSize": 19980,
+   "uploadSize": 19980,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d4.json": {
+   "sha256": "a14a174bc3288286ee818fb615c5b98582200b54a1a37ae441d1ea2e8485dbde",
+   "size": 1195379,
+   "gzipSize": 367046,
+   "uploadSize": 367046,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d5-roads.json": {
+   "sha256": "9df8a023daa24a77d0144bf48144069ec0d7bb1645dcc4a19b7d2e492614931e",
+   "size": 136994,
+   "gzipSize": 44490,
+   "uploadSize": 44490,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d5-surface.png": {
+   "sha256": "e6218110375184a9864b59e234e5075033a30729a8318c8c13e85f73caa063d5",
+   "size": 119884,
+   "gzipSize": null,
+   "uploadSize": 119884,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-d5-terrain.json": {
+   "sha256": "210869f997f74028ee3c202ab752dd7509dca001ee25a3f8db43ad557f441ea3",
+   "size": 51187,
+   "gzipSize": 13772,
+   "uploadSize": 13772,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d5-trees.json": {
+   "sha256": "d6d8033343739a74d3fb8372ace5d3b5e7dab168a6571e2b8f56e023211b409c",
+   "size": 545662,
+   "gzipSize": 161548,
+   "uploadSize": 161548,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d5-water.json": {
+   "sha256": "2cda07ca464fb99b0335e0748c0baca70047c8ecbc94286154e852fbe3e17d01",
+   "size": 95402,
+   "gzipSize": 36937,
+   "uploadSize": 36937,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-d5.json": {
+   "sha256": "c819e19de0cb2d8994f726ccc6c494f5ef2ce9240a846060d87a3539f686afa7",
+   "size": 432417,
+   "gzipSize": 137560,
+   "uploadSize": 137560,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e2-roads.json": {
+   "sha256": "bf07ffc71b55e3ccf407c4b9c24477cf1ba2df3a5f036c444c326676352e4d51",
+   "size": 124855,
+   "gzipSize": 40473,
+   "uploadSize": 40473,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e2-surface.png": {
+   "sha256": "18a939c833273d1640920e04b4e55a8905dc863b87af22c36d8d98a906e3f772",
+   "size": 119772,
+   "gzipSize": null,
+   "uploadSize": 119772,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-e2-terrain.json": {
+   "sha256": "ab30400c940f2277973dc911d3ac35889e820b1648d14da38572ca44d74fdc74",
+   "size": 50116,
+   "gzipSize": 14112,
+   "uploadSize": 14112,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e2-trees.json": {
+   "sha256": "ae0985d61003b87a57909e6ffa90ff0921caeab75bb89b0541240f64077fbd57",
+   "size": 290374,
+   "gzipSize": 90285,
+   "uploadSize": 90285,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e2-water.json": {
+   "sha256": "48e086a86f66c6dadd0e48512e4f05054063708aff5e936699f993e4ecd36217",
+   "size": 119491,
+   "gzipSize": 46773,
+   "uploadSize": 46773,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e2.json": {
+   "sha256": "76595989f8a85314a71f5c4e97450ee2b9f77a9053348d76402869349271e7da",
+   "size": 820882,
+   "gzipSize": 265979,
+   "uploadSize": 265979,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e3-roads.json": {
+   "sha256": "0a6990745d315169d0fd75bdbb4c61005440ddfb6837483182156d7854606035",
+   "size": 169257,
+   "gzipSize": 53946,
+   "uploadSize": 53946,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e3-surface.png": {
+   "sha256": "72eaa5ec6a230575469a7fd65607af81651b358ea72233f3c744ef9ddc5ef2e4",
+   "size": 113574,
+   "gzipSize": null,
+   "uploadSize": 113574,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-e3-terrain.json": {
+   "sha256": "6a7e68a8d84f3cdef7d28f11a28c16ce140de6663d2b8cb26634a7c9549baed6",
+   "size": 51413,
+   "gzipSize": 12565,
+   "uploadSize": 12565,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e3-trees.json": {
+   "sha256": "e242106806697d7b1763106441f52f36436d2cc718c9d02c1f2c4ce16c94c90a",
+   "size": 136641,
+   "gzipSize": 41958,
+   "uploadSize": 41958,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e3-water.json": {
+   "sha256": "a57f3e54a30ecb7aebe32258d04e2e3ad71fe87d63abf7104e6c19bdf830a281",
+   "size": 105262,
+   "gzipSize": 38946,
+   "uploadSize": 38946,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e3.json": {
+   "sha256": "3f1a682431eb211aefae9aa76cbbb189c0469285cc937e9876ee39d814355370",
+   "size": 754560,
+   "gzipSize": 243293,
+   "uploadSize": 243293,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e5-roads.json": {
+   "sha256": "47f26fe24c2bc44a0e00589e2eb0b97b9f3486373c3a78538229c49a30446453",
+   "size": 186878,
+   "gzipSize": 58199,
+   "uploadSize": 58199,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e5-surface.png": {
+   "sha256": "ad6780108d479fd3888dac186d23a79cbea5548491467b1adbf47f274a2255ba",
+   "size": 130260,
+   "gzipSize": null,
+   "uploadSize": 130260,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-e5-terrain.json": {
+   "sha256": "70440af443304796c1be5e2914b21f3f416c90729c547e44dd24849caa852514",
+   "size": 50203,
+   "gzipSize": 13192,
+   "uploadSize": 13192,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e5-trees.json": {
+   "sha256": "04dceea58acb35b916b5954027907d12560cd934ee4eb35e6fd216f857e29e3f",
+   "size": 680666,
+   "gzipSize": 201936,
+   "uploadSize": 201936,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e5-water.json": {
+   "sha256": "a97e3eef3f7959a6307e2eabc82976826db53d6615e5e707ff05cb1a957c32e7",
+   "size": 69748,
+   "gzipSize": 26522,
+   "uploadSize": 26522,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e5.json": {
+   "sha256": "e4ebf74dd45d99541f43996297f535e7b37212e68e2d5173012b076c97027329",
+   "size": 842924,
+   "gzipSize": 274455,
+   "uploadSize": 274455,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e6-roads.json": {
+   "sha256": "7b982c274a907f62719226d4b4f24125065ac07ab56b9af63878fbc2f47e25b7",
+   "size": 118950,
+   "gzipSize": 35697,
+   "uploadSize": 35697,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e6-surface.png": {
+   "sha256": "4d7a08593b9fe68ddce5fc088b1b51becf4f7617bd17db01819428af0f31b445",
+   "size": 119489,
+   "gzipSize": null,
+   "uploadSize": 119489,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-e6-terrain.json": {
+   "sha256": "f8f65415e57e76222e9a42107a2beb86f89cd566eb2e693bc6a8bd105d50c4b4",
+   "size": 51281,
+   "gzipSize": 13271,
+   "uploadSize": 13271,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e6-trees.json": {
+   "sha256": "c3cd23d1a70b598e7b8e947ccdf249c4ec83a86f728b8d96c8b6c1b3124b023d",
+   "size": 411103,
+   "gzipSize": 123868,
+   "uploadSize": 123868,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e6-water.json": {
+   "sha256": "e55af4e1f70f82fd6e73294d05dc736ae7ddbbfc996ab66868426af54a0cb0eb",
+   "size": 183237,
+   "gzipSize": 70239,
+   "uploadSize": 70239,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-e6.json": {
+   "sha256": "bbd22cbbeb8f1f8625677181a309c70ffdc09d2d72c18d598fc829a0697aac73",
+   "size": 657882,
+   "gzipSize": 201814,
+   "uploadSize": 201814,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f2-roads.json": {
+   "sha256": "e3726decf3e3b37f6cc67430573296e88a29260ae9b9e2010e042ccf1809ed80",
+   "size": 110633,
+   "gzipSize": 36007,
+   "uploadSize": 36007,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f2-surface.png": {
+   "sha256": "08df95c7b8de4a8406e392a5286a66d8b2ff6b4bc583cb848b94ed503ebb42d7",
+   "size": 118008,
+   "gzipSize": null,
+   "uploadSize": 118008,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-f2-terrain.json": {
+   "sha256": "b0bd78a77c18f88d316ab1cace4815da16a1c39fab1f0c8cbe33c228b99ba4a0",
+   "size": 51214,
+   "gzipSize": 13979,
+   "uploadSize": 13979,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f2-trees.json": {
+   "sha256": "ee59974a59bef37f9e25ce2c27b4e9623f6f0d1603732a466034ffeb056dc308",
+   "size": 320942,
+   "gzipSize": 96275,
+   "uploadSize": 96275,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f2-water.json": {
+   "sha256": "f6be9271627d8751afc6e57321a0d57d26f6cd79b317c1ad89ce17f4911981ce",
+   "size": 197184,
+   "gzipSize": 75543,
+   "uploadSize": 75543,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f2.json": {
+   "sha256": "e63a4145ed5af3b7b335350689d4831df381ced4c8d29884779bef1bec6ee882",
+   "size": 422914,
+   "gzipSize": 135097,
+   "uploadSize": 135097,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f3-roads.json": {
+   "sha256": "5ba68d496ff995c4ac30e25c8907a51b9c6ef8c8874849a5e75245c6de404447",
+   "size": 193821,
+   "gzipSize": 61482,
+   "uploadSize": 61482,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f3-surface.png": {
+   "sha256": "3a864a387212d60c108c46b6cfd4c77ea40e026afd06ee3ac12aa90f59f0a252",
+   "size": 115533,
+   "gzipSize": null,
+   "uploadSize": 115533,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-f3-terrain.json": {
+   "sha256": "2082adab36eee8bf911e8b90d6965f744e51ef8735eaa4547d733d2e1016c787",
+   "size": 48988,
+   "gzipSize": 12785,
+   "uploadSize": 12785,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f3-trees.json": {
+   "sha256": "68fa36a9037a919575430f87274b54eea5082204d77c250acb4f128ce287c4f7",
+   "size": 520324,
+   "gzipSize": 159193,
+   "uploadSize": 159193,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f3-water.json": {
+   "sha256": "245799eae02cacb61dcc358a52c009d7c45aa3e03b30e0d172e6b06855930b58",
+   "size": 81401,
+   "gzipSize": 31005,
+   "uploadSize": 31005,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f3.json": {
+   "sha256": "b9bd7595a63f8f42abf6e983312f24727ba92026c529aeb074534086cd7a356b",
+   "size": 804430,
+   "gzipSize": 262541,
+   "uploadSize": 262541,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f4-roads.json": {
+   "sha256": "8f6e20277a9cd67c342e025bfb80465c5ccde29462e45b3d34b36e2500fb8f3c",
+   "size": 187729,
+   "gzipSize": 59488,
+   "uploadSize": 59488,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f4-surface.png": {
+   "sha256": "9e685cb0bb8fc1ef04feb50a26a460b405faf9cf0c5fedb51e477fc892249713",
+   "size": 135703,
+   "gzipSize": null,
+   "uploadSize": 135703,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-f4-terrain.json": {
+   "sha256": "b71e50db4edefb54c3b7f72783c9aafb10d21a232c840b872f6f89cd8d5c7052",
+   "size": 49931,
+   "gzipSize": 13732,
+   "uploadSize": 13732,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f4-trees.json": {
+   "sha256": "5b2906369fbc035265f02ffed3662d71b2ace1ba0972cbe243d28afc82ed19a3",
+   "size": 303793,
+   "gzipSize": 92755,
+   "uploadSize": 92755,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f4-water.json": {
+   "sha256": "0a5cf67cacd33e4f48fa5fa638abc90cb8bc14d10644a68c5924e38d3e60b3ff",
+   "size": 83594,
+   "gzipSize": 31791,
+   "uploadSize": 31791,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f4.json": {
+   "sha256": "bf9af64bb3c91d529e12743ea25dedf4ef63fbc74d7900fdaa6b2c3175f34493",
+   "size": 1046930,
+   "gzipSize": 338582,
+   "uploadSize": 338582,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f5-roads.json": {
+   "sha256": "e5e264d9762cdc806e24d46ef87d237058d7217415d1312585dbf020c5c7a1fb",
+   "size": 219971,
+   "gzipSize": 73161,
+   "uploadSize": 73161,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f5-surface.png": {
+   "sha256": "34f4f654c1e8773766fd79fc002d0fefc36e9c94b6f71a1f760b8b142bff221e",
+   "size": 135247,
+   "gzipSize": null,
+   "uploadSize": 135247,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-f5-terrain.json": {
+   "sha256": "b4073b0a4beea5339e91cc03d21d0c2cb4b085fc2005c7d8a5ce0c571669d549",
+   "size": 50528,
+   "gzipSize": 15116,
+   "uploadSize": 15116,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f5-trees.json": {
+   "sha256": "4c10aa6eda742b86c350538646eb8c29ca92bcc038c6ca36c213be6f20d1a5d3",
+   "size": 500442,
+   "gzipSize": 153182,
+   "uploadSize": 153182,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f5-water.json": {
+   "sha256": "fa4a6fb3b17c91d29b5f82fb59958e0bc0512bf68720a25924eee7f289301b88",
+   "size": 162488,
+   "gzipSize": 63344,
+   "uploadSize": 63344,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f5.json": {
+   "sha256": "0ad42c99ef0e75d6409d21fc11f735c141471531c0b4ad606092e83ae40b4d78",
+   "size": 724219,
+   "gzipSize": 235886,
+   "uploadSize": 235886,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f6-roads.json": {
+   "sha256": "520402e023b3cb04b4506addf7f03b228b9fa9dc9fc83f09df5f1725168a442b",
+   "size": 99039,
+   "gzipSize": 33068,
+   "uploadSize": 33068,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f6-surface.png": {
+   "sha256": "4416290cd6210c71b2f0ab183587b35eff2b6f64c0f82e6990bac829ef0bcb58",
+   "size": 120286,
+   "gzipSize": null,
+   "uploadSize": 120286,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-f6-terrain.json": {
+   "sha256": "0e0361ed56a6c84f558142887fe6996048da74ab8fd5a04554a757120d6fd4fa",
+   "size": 50939,
+   "gzipSize": 14386,
+   "uploadSize": 14386,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f6-trees.json": {
+   "sha256": "99e80ffc2c653a5aff003362a021bb553142d168500130efde47cec4108c0f1d",
+   "size": 237258,
+   "gzipSize": 74129,
+   "uploadSize": 74129,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f6-water.json": {
+   "sha256": "cd82a9ad922dfe647104741305cb97c7c1913ba2073cfb52dacc9d29a2e18c90",
+   "size": 185075,
+   "gzipSize": 70633,
+   "uploadSize": 70633,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-f6.json": {
+   "sha256": "3ff8dfd976c198e50de6d0005479ad7de2c152c4287efbc4dbbc06746c48db5f",
+   "size": 168182,
+   "gzipSize": 61912,
+   "uploadSize": 61912,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g3-roads.json": {
+   "sha256": "8556de55bbbbf77f2122ab2a1f06bd3837cba565ca7978d58587a2239babe7c1",
+   "size": 65509,
+   "gzipSize": 21110,
+   "uploadSize": 21110,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g3-surface.png": {
+   "sha256": "b4bf0ef40edf5d3afe265d97b50774feaecefe9ed7abc6688712f9e6c0ed3f85",
+   "size": 102636,
+   "gzipSize": null,
+   "uploadSize": 102636,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-g3-terrain.json": {
+   "sha256": "232b66698eaa96c423e8307ff67ce4e5f817b8c2d64bbdc113d71d8d2c723b99",
+   "size": 51249,
+   "gzipSize": 12362,
+   "uploadSize": 12362,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g3-trees.json": {
+   "sha256": "75d021ffd33422717d6128d57d16943e5a84d4d389e796c952cc3b652f2279c1",
+   "size": 349450,
+   "gzipSize": 105421,
+   "uploadSize": 105421,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g3-water.json": {
+   "sha256": "f96c2b68361f91ccaa12f578c044a2b85592e5ca4236a5db57b50aa75c623e5d",
+   "size": 237238,
+   "gzipSize": 89173,
+   "uploadSize": 89173,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g3.json": {
+   "sha256": "c3c5c862c3d4e1f892ec7eefdd82f163988436a62bbf18c5db77d915e510a457",
+   "size": 262773,
+   "gzipSize": 85264,
+   "uploadSize": 85264,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g4-roads.json": {
+   "sha256": "6ac0d2f84d127c4dd29ed768a01d8d0f29c636fd5ce0f5c379cf802b7ea69d8c",
+   "size": 118288,
+   "gzipSize": 38866,
+   "uploadSize": 38866,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g4-surface.png": {
+   "sha256": "13604b5e83a7fa19dc9a1bea5244fbc5474a144690534f92ccc84b2d4fff3863",
+   "size": 98650,
+   "gzipSize": null,
+   "uploadSize": 98650,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-g4-terrain.json": {
+   "sha256": "92b0ab8ba01c8b116db0f77be0a602b86da4dec28beca8a222aed9a7daa78e61",
+   "size": 50497,
+   "gzipSize": 12487,
+   "uploadSize": 12487,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g4-trees.json": {
+   "sha256": "3f8c8f4ba7de96e522e9d462ec33a0524d6e7d0382b21ffff4e856e77fb0195a",
+   "size": 204708,
+   "gzipSize": 61160,
+   "uploadSize": 61160,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g4-water.json": {
+   "sha256": "d26b92254b23d844514afdfdb747568d49e8cd67c491d640eaee75b599b776bc",
+   "size": 198320,
+   "gzipSize": 74027,
+   "uploadSize": 74027,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g4.json": {
+   "sha256": "2c9ce1d2568cafd5dd843f88d6080e4e2fae0298397451e5ddf3618fd3fe6a09",
+   "size": 226330,
+   "gzipSize": 76293,
+   "uploadSize": 76293,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g5-roads.json": {
+   "sha256": "3ed9be15f5f374a117529425b9dbebe00b8eb5f83bd6dc7d32fbb4ff580d6ce9",
+   "size": 275683,
+   "gzipSize": 92371,
+   "uploadSize": 92371,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g5-surface.png": {
+   "sha256": "af265d6899bb07749aeabc1fb5944c990b50f6783ca82663538c87e764888f90",
+   "size": 132916,
+   "gzipSize": null,
+   "uploadSize": 132916,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-g5-terrain.json": {
+   "sha256": "8316898356a62c9764e64170f3ab38756ff239414b5cca0779c3e30ebf60a095",
+   "size": 50325,
+   "gzipSize": 14939,
+   "uploadSize": 14939,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g5-trees.json": {
+   "sha256": "f27f77727d0dbb4c0f23011ef805e8105ec87092b929d1a20fa5328179a87bdb",
+   "size": 423360,
+   "gzipSize": 127123,
+   "uploadSize": 127123,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g5-water.json": {
+   "sha256": "b1d6782506fe68674da2145307ed3613b410416b7f4dc67e8779e4e18e912f4f",
+   "size": 386725,
+   "gzipSize": 149832,
+   "uploadSize": 149832,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g5.json": {
+   "sha256": "4f04a036009bf3568641956b08163a94d753483774bdd9560b02be61da88cd3e",
+   "size": 891596,
+   "gzipSize": 289621,
+   "uploadSize": 289621,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g6-roads.json": {
+   "sha256": "496b54732a61260a5c6ccfb04f03bd323df7e19b70cbde29f73749e46a2b30c3",
+   "size": 217194,
+   "gzipSize": 72346,
+   "uploadSize": 72346,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g6-surface.png": {
+   "sha256": "9d25d553e005e9382d826b15a9ab97446126c54e9903b1d0922d4cf49b1ef08e",
+   "size": 136939,
+   "gzipSize": null,
+   "uploadSize": 136939,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-g6-terrain.json": {
+   "sha256": "465121113a01c84a08f82e80c347c20a05bd1358f3006529bb274179a76f6239",
+   "size": 51786,
+   "gzipSize": 15192,
+   "uploadSize": 15192,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g6-trees.json": {
+   "sha256": "9a5a3caaa2aeda8c17093ccce4a810b839bd4e3eedba067734c93066d411ab80",
+   "size": 469253,
+   "gzipSize": 142619,
+   "uploadSize": 142619,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g6-water.json": {
+   "sha256": "6f7acebbc418c6c1dff7bbe4fa33b7ca5f37984b618847bbf52da188bd8aa66c",
+   "size": 131684,
+   "gzipSize": 50980,
+   "uploadSize": 50980,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g6.json": {
+   "sha256": "f75922ab80997c7a44195afa66dd8a99f57ce730b4633c7f40e9c9687a6b9a5c",
+   "size": 761334,
+   "gzipSize": 251184,
+   "uploadSize": 251184,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g7-roads.json": {
+   "sha256": "38945d69d1cd75100e7a39b9829d8323a3470241637d834ec1c603e8d584b2fc",
+   "size": 124536,
+   "gzipSize": 41559,
+   "uploadSize": 41559,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g7-surface.png": {
+   "sha256": "9fd9d30feec267a43613d4039db1c0c1ca9741195767cad45c617dfe4d622995",
+   "size": 119280,
+   "gzipSize": null,
+   "uploadSize": 119280,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-g7-terrain.json": {
+   "sha256": "ecec149f3c5ff3c31c7efd7818fbb23371fad63f20e1559f18ac9e6565609857",
+   "size": 50735,
+   "gzipSize": 14132,
+   "uploadSize": 14132,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g7-trees.json": {
+   "sha256": "fec9f3741e58d92c2fb1a145252a5a05815f18218b90b64704139fcdff426394",
+   "size": 313977,
+   "gzipSize": 97005,
+   "uploadSize": 97005,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g7-water.json": {
+   "sha256": "471f888e64af7281cd7d55cfaf4f4bdad4247aa552fa873eb684fbda8e2f9851",
+   "size": 210193,
+   "gzipSize": 78975,
+   "uploadSize": 78975,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-g7.json": {
+   "sha256": "9ade92fb4886cac8ae18f35252f03d7d8abdf20e7c53e31606707f0764486609",
+   "size": 411121,
+   "gzipSize": 136871,
+   "uploadSize": 136871,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h3-roads.json": {
+   "sha256": "269ec4726e6497a4eb338ea24a5c0df4ca4a5190b3a9506f4a46f3795cda18a6",
+   "size": 25181,
+   "gzipSize": 9457,
+   "uploadSize": 9457,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h3-surface.png": {
+   "sha256": "85a53636d7e937d4804652358eb4cc9ce4ab695757b0ed31a735d5e0c027c688",
+   "size": 73041,
+   "gzipSize": null,
+   "uploadSize": 73041,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-h3-terrain.json": {
+   "sha256": "eb83b7b439cacb1711379c4906e73d4499126279fb52759f2ceba9d2d4ef9649",
+   "size": 52253,
+   "gzipSize": 9628,
+   "uploadSize": 9628,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h3-trees.json": {
+   "sha256": "a160e9836c699234748d8ef62c583e84049f58be11df9a8076aa2a2544315033",
+   "size": 17157,
+   "gzipSize": 5807,
+   "uploadSize": 5807,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h3-water.json": {
+   "sha256": "52f08f2e934164b5585e82787a1ebdb5370dd86f1fa29aef91a66bbea94e48d2",
+   "size": 431623,
+   "gzipSize": 158961,
+   "uploadSize": 158961,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h3.json": {
+   "sha256": "bf62d9eb30e291c34cfd41185fa00670f145760ae71a731e8084b28f5d1c42ad",
+   "size": 60916,
+   "gzipSize": 22869,
+   "uploadSize": 22869,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h4-roads.json": {
+   "sha256": "da3eb1694204995c07276b6c7669b1bbee2af5882702b0f83c0724cf23d754ea",
+   "size": 32404,
+   "gzipSize": 10229,
+   "uploadSize": 10229,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h4-surface.png": {
+   "sha256": "ae9783da9826ce9b37d2d0f578eef71aa9ccb61d8c230dee9b33ac2fc0591a8a",
+   "size": 59306,
+   "gzipSize": null,
+   "uploadSize": 59306,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-h4-terrain.json": {
+   "sha256": "fcbb7d786bd853a25b2ab53091b91273f2afb03e2c758e97c3a291eb86870b62",
+   "size": 52111,
+   "gzipSize": 7528,
+   "uploadSize": 7528,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h4-trees.json": {
+   "sha256": "34bcfcd35fb73c02f6bee712cd458d74e06fe167813e538a3693a7cde4e8a92f",
+   "size": 5288,
+   "gzipSize": 1953,
+   "uploadSize": 1953,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h4-water.json": {
+   "sha256": "0e189863121bf28580742041aed8fa2a3724beeeb070bdb57083c6ca2077c081",
+   "size": 49846,
+   "gzipSize": 19120,
+   "uploadSize": 19120,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h4.json": {
+   "sha256": "f43265efa5d17fa2a40054b00e03fac606e5c80587636e2ad54169a489985ed1",
+   "size": 172191,
+   "gzipSize": 53700,
+   "uploadSize": 53700,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h5-roads.json": {
+   "sha256": "b5d9304922cbfe23582bda052a4413e7a0eb456ec7e7fee6c09394250b74d900",
+   "size": 66310,
+   "gzipSize": 23554,
+   "uploadSize": 23554,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h5-surface.png": {
+   "sha256": "379a2e6fab88d4ff3dd69141a3132cea252b941fcb39c19c229c9ef31cf5735a",
+   "size": 105340,
+   "gzipSize": null,
+   "uploadSize": 105340,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-h5-terrain.json": {
+   "sha256": "ea2639dc3a6cd838154f0a25bf25737ac5e3483014e682588eac19d84840df34",
+   "size": 51314,
+   "gzipSize": 14365,
+   "uploadSize": 14365,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h5-trees.json": {
+   "sha256": "745e53a128dc8bd6a930f1cc661742c03ce4bee0c7878b9f29cb03eec1a9495e",
+   "size": 456306,
+   "gzipSize": 135255,
+   "uploadSize": 135255,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h5-water.json": {
+   "sha256": "786e5d102cae306724585bd33cdff2de3fecd7fb0cb7cce644aa44e1e222b175",
+   "size": 370111,
+   "gzipSize": 135827,
+   "uploadSize": 135827,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h5.json": {
+   "sha256": "f5d18f31eaf2ce76a117018b04599f59e969d2019df09ae703023251af0082a6",
+   "size": 121316,
+   "gzipSize": 43290,
+   "uploadSize": 43290,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h6-roads.json": {
+   "sha256": "aa6a679e89c35c38d38a602209b8ecac02943a790b0ea51e7b78073f31fe6eae",
+   "size": 63036,
+   "gzipSize": 21750,
+   "uploadSize": 21750,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h6-surface.png": {
+   "sha256": "b4eda75050ccf496fe1468a3ac3abb9612f4754dc0512e2c031f44b46d24afea",
+   "size": 109854,
+   "gzipSize": null,
+   "uploadSize": 109854,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-h6-terrain.json": {
+   "sha256": "d513c481b95e46c5a678ab4a6dd0ba9a3e92f8354128859bb0351d22ab8a8123",
+   "size": 51514,
+   "gzipSize": 13768,
+   "uploadSize": 13768,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h6-trees.json": {
+   "sha256": "a3389e7c769fb376478e89c8ef1881c834bd619ebafdd267ab917ad19be362e9",
+   "size": 571481,
+   "gzipSize": 168870,
+   "uploadSize": 168870,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h6-water.json": {
+   "sha256": "450e21c25f71e3297a3b37d11e3271556719e15a67ab2c5a4d8da5564c25d171",
+   "size": 276355,
+   "gzipSize": 104734,
+   "uploadSize": 104734,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h6.json": {
+   "sha256": "39add1d635deb49ef75712e461d8ed7b1164d4b80091174063490406a8deab81",
+   "size": 208243,
+   "gzipSize": 68311,
+   "uploadSize": 68311,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h7-roads.json": {
+   "sha256": "2bbfb7c6a98373f59ad0ac2ab8f95c855f382f47e1c85a28084cf0b85af264e3",
+   "size": 27379,
+   "gzipSize": 9433,
+   "uploadSize": 9433,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h7-surface.png": {
+   "sha256": "b1874ad8c30d2f01eb173b947962addfee54f51beb372f6d554e1d7367724661",
+   "size": 89020,
+   "gzipSize": null,
+   "uploadSize": 89020,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-h7-terrain.json": {
+   "sha256": "4d85b1ce6ac72c86b52ec66326ba37aaa90feceffb58d18d8f7f1cb383659a73",
+   "size": 51496,
+   "gzipSize": 12706,
+   "uploadSize": 12706,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h7-trees.json": {
+   "sha256": "6dcb827ecc173bdfc0d8065ec447503b51defe8bd99d379f13e48216baff4505",
+   "size": 205160,
+   "gzipSize": 61990,
+   "uploadSize": 61990,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h7-water.json": {
+   "sha256": "2276ca99c336e1da288b1d520c4a7ce92395c8fa8e99a21944fd9b22070ed773",
+   "size": 156874,
+   "gzipSize": 59868,
+   "uploadSize": 59868,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-h7.json": {
+   "sha256": "fcef30703b15ba5e96fdc25ba47bd9f0da72cc2dec7543818adc5ed7964b5fc3",
+   "size": 270817,
+   "gzipSize": 75661,
+   "uploadSize": 75661,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-i6-roads.json": {
+   "sha256": "fc016e9ad44956d998fffb8fac64b766ee9e925b6b02971fb9912e31f0a2eb36",
+   "size": 113239,
+   "gzipSize": 35059,
+   "uploadSize": 35059,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-i6-surface.png": {
+   "sha256": "63865b2233613817277949264386c0fa27f06b4da8563a59219f0c29e8cccb02",
+   "size": 115542,
+   "gzipSize": null,
+   "uploadSize": 115542,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-i6-terrain.json": {
+   "sha256": "e8aeb9b97970f01983f31da6df1899856b4b8b665e09d12cf55a18af7e84329a",
+   "size": 51561,
+   "gzipSize": 13112,
+   "uploadSize": 13112,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-i6-trees.json": {
+   "sha256": "9d54b3dfd903ad5c680662ceb8e77d9b9f9ac220783c0fb7a377237dd52d3eec",
+   "size": 115632,
+   "gzipSize": 35801,
+   "uploadSize": 35801,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-i6-water.json": {
+   "sha256": "98951a3d013dcb8663e0e52f8dcfd700687c9485f090c070cf052860e227a216",
+   "size": 129613,
+   "gzipSize": 50479,
+   "uploadSize": 50479,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-i6.json": {
+   "sha256": "d810599909c5c653612c0f3eabbefb752a24f181d35c80c1511a6489dd1c67e1",
+   "size": 701495,
+   "gzipSize": 224068,
+   "uploadSize": 224068,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-i7-roads.json": {
+   "sha256": "ee7df340d66672c64c54c47b3cc170494f6399453757ddb092540fb88f44600c",
+   "size": 31253,
+   "gzipSize": 11319,
+   "uploadSize": 11319,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-i7-surface.png": {
+   "sha256": "4e7cf9e00e6725ed76a64db6ae97d2f3b9d91b0a540ce989f6b7b3713530882d",
+   "size": 93427,
+   "gzipSize": null,
+   "uploadSize": 93427,
+   "contentType": "image/png",
+   "contentEncoding": null
+  },
+  "ams-i7-terrain.json": {
+   "sha256": "7fece9836bd3690785198a829014f44566f50d12e479b4acfe9acd640ef87a90",
+   "size": 51659,
+   "gzipSize": 12192,
+   "uploadSize": 12192,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-i7-trees.json": {
+   "sha256": "91e0f1083f682fa9f71be46ce79c5b231bb9dc3df9095e988dcae6ada0e173b0",
+   "size": 102011,
+   "gzipSize": 31701,
+   "uploadSize": 31701,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-i7-water.json": {
+   "sha256": "30f5742cad1a6de4b6ee5e04bc995c5b0c9ef05d7d0a3fe8bc96dc15a48e7f62",
+   "size": 164539,
+   "gzipSize": 64258,
+   "uploadSize": 64258,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  },
+  "ams-i7.json": {
+   "sha256": "512e1f8aeedffffe5cf316265fef42b642b4ceaad2b8291b75081fb5619d9502",
+   "size": 213953,
+   "gzipSize": 70172,
+   "uploadSize": 70172,
+   "contentType": "application/json",
+   "contentEncoding": "gzip"
+  }
+ }
+}
