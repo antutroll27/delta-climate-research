@@ -30,6 +30,9 @@ test.describe('@v2 data and methods', () => {
     expect(await page.evaluate(() => ((document.body.innerText).match(/±/g) ?? []).length), 'no ± on the Data & methods page but the ledger\'s two').toBe(2);
     await expect(page.locator('[data-v2-card="how-sure"] li:has(.micro:text-is("Night"))')).toContainText(/±3\.0 °C/);
     await expect(page.locator('[data-v2-card="how-sure"] li:has(.micro:text-is("13:00 peak"))')).toContainText(/±4\.5 °C/);
+    /* the Kolkata night-air note (audit 2026-11-08): what the Now view does at night, and where the band was measured; it quotes no ± of its own */
+    await expect(page.locator('[data-v2-card="how-sure"] li:has(.micro:text-is("Night air"))')).toContainText(
+      'At night the map adjusts the airport\'s air to the basis it was calibrated on. Accuracy is measured on clear nights, October–April; monsoon nights are not yet tested.');
     /* B-S7 audit F1: the brief opens THIS ward (the app's own Compare query, with /brief/ for /compare/), not the default pair */
     const brief = page.getByRole('link', { name: 'Open the ward brief →' });
     await expect(brief).toHaveAttribute('href', /^\/heat-map\/brief\/\?.*\ba=ballygunge\b/);

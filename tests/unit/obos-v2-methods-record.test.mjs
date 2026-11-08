@@ -17,7 +17,7 @@ test('Data & methods figures are the ward record\'s own (H23)', () => {
 
 test('H23: every accuracy figure the card prints is read from accuracy.ts, none typed', () => {
   /* the card prints the claim's ledger (scope/accuracy-claim.ts), which is the only reader of accuracy.ts */
-  for (const k of ['ledger.night', 'ledger.peak', 'ledger.patternR', 'ledger.patternVegR', 'ledger.patternN', 'ledger.patternNote', 'ledger.heights']) {
+  for (const k of ['ledger.night', 'ledger.nightAir', 'ledger.peak', 'ledger.patternR', 'ledger.patternVegR', 'ledger.patternN', 'ledger.patternNote', 'ledger.heights']) {
     assert.ok(CODE.includes(`claim.figures.${k}`), `MethodsCards does not read ${k}`);
   }
   const CLAIM = readFileSync('src/scripts/climate-engine/scope/accuracy-claim.ts', 'utf8');

@@ -232,6 +232,12 @@ export interface ObservedForcing {
   readonly convective: Convective;
   /** Surface wetness 0–1 at the reading's moment of use (`surfaceWetness`). */
   readonly wet: number;
+  /**
+   * The night-air table's offset for this station and month, K (night-air.ts), CARRIED, not
+   * applied: `tAir` stays the airport's reading. `currentParams` subtracts it in the "Now"
+   * night branch and nowhere else (`nightAirAppliedK`). Absent = 0.
+   */
+  readonly nightAirK?: number;
 }
 export type Convective = 'none' | 'cumuliform' | 'thunder';
 
@@ -841,6 +847,18 @@ function pathwayDelta(table: Readonly<Record<string, number>>, path: string): nu
   return table[path];
 }
 
+/**
+ * K taken off the observed air for the model: the carried night-air offset, in the "Now" view's
+ * night branch (sunNow <= SUN_LIT) and nowhere else. Peak, Night, the pathways and Heatwave have
+ * sunNow null, so they get 0 by construction; and it is decided HERE, from the sun the branch is
+ * decided from, not when the observation was composed (audit 2026-11-08, M1). The weather line
+ * reads this too, so it can only say "below the airport" while the model really is.
+ */
+export function nightAirAppliedK(s: Pick<ScenarioState, 'live' | 'sunNow' | 'heatTairC'>): number {
+  if (s.sunNow == null || s.sunNow > SUN_LIT || s.heatTairC != null) return 0;
+  return s.live?.observed?.nightAirK ?? 0;
+}
+
 /** Scenario forcing → SimParams (§2 D retune, §3.4 facade Q cut, §4 diurnal/pathway). */
 export function currentParams(s: ScenarioState): SimParams {
   const L = s.live, obsTair = L ? L.tAir : fallbackTair(s.climate.airNormals, s.clock), obsRh = L ? L.rh : 60;
@@ -878,7 +896,10 @@ export function currentParams(s: ScenarioState): SimParams {
        canonical 13:00 / 22:00 scenarios, which describe a representative day. */
     const wet = L?.observed?.wet ?? 0;
     if (lit) return wetSurfaceParams({ ...b, sun: s.sunNow * trans, tAir: baseTair, tSky }, wet);
-    const dark: SimParams = { ...b, sun: 0, tAir: baseTair, Q: Q * Q_NIGHT_RATIO, tSky, store: STORE_NIGHT };
+    /* Night-air correction: the airport's air less the month's measured offset, here only. */
+    const tAirN = baseTair - nightAirAppliedK(s);
+    const dark: SimParams = { ...b, sun: 0, tAir: tAirN, Q: Q * Q_NIGHT_RATIO,
+      tSky: tAirN === baseTair ? tSky : skyTemperatureC(tAirN, rh, cloud), store: STORE_NIGHT };
     return wetSurfaceParams({ ...dark, L: nightLatent(dark, rh) }, wet);
   }
 

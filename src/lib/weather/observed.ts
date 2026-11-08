@@ -123,6 +123,12 @@ export interface ObservedNow {
   readonly episodes: readonly RainEpisode[];
   /** the station's cloud fraction 0–1, or null when it reported none */
   readonly cloud: number | null;
+  /**
+   * The night-air table's offset for this station and month, K (night-air.ts); 0 when none.
+   * CARRIED, not applied: `ambient.tAir` is the report's own air. currentParams subtracts it in
+   * the "Now" night branch only; the same number is `ambient.observed.nightAirK`.
+   */
+  readonly nightAirK: number;
   readonly ambient: Ambient;
 }
 
@@ -144,6 +150,12 @@ export function observedNow(
   ranked: readonly RankedStation[],
   nowMs: number,
   fallback: Fallback = {},
+  /**
+   * The night-air table's offset for a station's month (night-air.ts), by ICAO, sun NOT
+   * consulted. Carried on the observation and applied later, where the day/night branch is
+   * decided; the air this function returns is never altered.
+   */
+  nightAirK: (icao: string) => number = () => 0,
 ): ObservedNow | null {
   for (const { icao, km } of ranked) {
     const station = stationInfo(icao);
@@ -165,17 +177,20 @@ export function observedNow(
     const thunder = thunderAtStation(latest);
     const convective: Convective = thunder ? 'thunder' : convectiveCloud(latest) ? 'cumuliform' : 'none';
     const episodes = rainEpisodes(reports);
+    const carriedK = nightAirK(icao);
     const ambient: Ambient = {
       tAir: latest.tempC, rh, wind,
       cloud: cloud !== null ? cloud * 100 : fallback.cloudPct ?? 0,
       windFrom: latest.wind?.dirDeg ?? undefined,
       feels: heatIndexC(latest.tempC, rh),
       validAt: latest.time,
-      observed: { stationCloud: cloud !== null, convective, wet: surfaceWetness(episodes, nowMs) },
+      observed: { stationCloud: cloud !== null, convective, wet: surfaceWetness(episodes, nowMs),
+        /* only a station with a table carries one: every other reading stays exactly as it was */
+        ...(carriedK !== 0 ? { nightAirK: carriedK } : {}) },
     };
     return {
       station, km, latest, ageMin, raining: rainingAtStation(latest), thunder, convective,
-      vicinity: vicinityWeather(latest).map((w) => w.raw), episodes, cloud, ambient,
+      vicinity: vicinityWeather(latest).map((w) => w.raw), episodes, cloud, nightAirK: carriedK, ambient,
     };
   }
   return null;

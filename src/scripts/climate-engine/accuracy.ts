@@ -96,6 +96,16 @@ export interface PhaseAccuracy {
 export const NIGHT_AIR_OFFSET_LOO_RMSE_K = 2.38;
 
 /**
+ * What the Kolkata Now view does to the airport's air at night, and where its band was measured.
+ * The correction (src/lib/weather/night-air.ts) puts the airport reading on the basis the night
+ * constants were calibrated on; the band is the pre-registered pass on clear nights October to
+ * April, so the monsoon is stated as untested, not claimed (audit 2026-11-08 sections 3, 4, m4).
+ * docs/evidence/2026-11-08-kolkata-night-air-correction.md
+ */
+export const NIGHT_AIR_NOTE = 'At night the map adjusts the airport\'s air to the basis it was calibrated on. '
+  + 'Accuracy is measured on clear nights, October–April; monsoon nights are not yet tested.';
+
+/**
  * Peak ECOSTRESS, leave-one-overpass-out, for "air temperature plus a fixed offset" (n = 23 over 8
  * overpasses; kolkata-skill-check REPORT.md Q1, 3.42 K). The model scores ACCURACY.peak.looOverpassRmseK
  * (2.36 K) on the same rows, so by day it beats air temperature, unlike at night.
