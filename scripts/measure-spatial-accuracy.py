@@ -450,12 +450,9 @@ def modelled_field(sc: _physics.Scene, veg: npt.NDArray[np.float32],
 
     L = _physics.L_ET * _physics.evap_scale(sc.rh)
     if night:
-        # The ET taper keys off the ward's mean built fraction, matching
-        # nightLatent()'s use of a single rural reference rather than a per-cell
-        # dewpoint — see the note in heat-map-model.ts.
-        dry_veg = (Q * float(built.mean()) + pull) / k
-        headroom = (dry_veg - _physics.dewpoint(sc.tAir, sc.rh)) / _physics.DEWPOINT_TAPER_K
-        L = L * _physics.NIGHT_ET_FRACTION * min(1.0, max(0.0, headroom))
+        # One taper for the whole field, on nightLatent()'s fixed reference cell
+        # rather than a per-cell dewpoint -- see the note in heat-map-model.ts.
+        L = _physics.night_latent(L, k, pull, sc.tAir, sc.rh, store)
 
     stored = store if night else 0.0
     field: npt.NDArray[np.float32] = (

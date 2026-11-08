@@ -105,6 +105,10 @@ STORE_NIGHT = 0.1043   # refitted 2026-08-09 after the sun-up bar; see types.ts
 NIGHT_ET_FRACTION = 0.10
 Q_NIGHT_RATIO = 0.5
 DEWPOINT_TAPER_K = 1.0
+#: cos z above which the product runs its DAYTIME branch. Mirrors SUN_LIT in
+#: heat-map-model.ts. The branch is the product's own rule, `sunNow > SUN_LIT` at the
+#: ward's latitude -- not the CMR Day/Night flag a satellite row happens to carry.
+SUN_LIT = 0.05
 VIEW_CUT = 0.75
 
 # The two masks the SUHII measurement produced, and the five forcing variables a
@@ -232,6 +236,26 @@ def solar_factor(hour: float, doy: int, lat: float = 22.55) -> float:
     return float(np.maximum(0, cz))
 
 
+def night_latent(L: float, k: float, pull: float, t_air: float, rh: float,
+                 store: float) -> float:
+    """Night latent coefficient, K per unit vegetation. Mirrors nightLatent() in
+    heat-map-model.ts EXACTLY, and is the one definition every offline site shares.
+
+    `L` is the full-strength coefficient (`L_ET * evap_scale(rh)`). The taper is
+    evaluated on a FIXED reference cell, `eqCell(dry, 0.18, 0.6, 0)`: no sun, no
+    built fabric, no ET, so it reduces to (store + pull) / k. It is NOT the ward's
+    own built fraction and it is NOT Q * built -- four Python copies used
+    (Q*built + pull)/k and left `store` out, which put the reference cell up to
+    0.52 K away from the one the product tapers on (humid Kolkata) and 0.18 K in
+    Amsterdam.
+
+    `store` is the nocturnal release at the reference cell (built = 0): the
+    product's STORE_NIGHT, or whatever store the model being scored carries.
+    """
+    headroom = ((store + pull) / k - dewpoint(t_air, rh)) / DEWPOINT_TAPER_K
+    return L * NIGHT_ET_FRACTION * min(1.0, max(0.0, headroom))
+
+
 def _eq(cover: LandCoverClass, sun: float, Q: float, L: float,
         pull: float, k: float, store: float = 0.0) -> float:
     """Equilibrium temperature of one mask, °C. Mirrors eqCell.
@@ -268,12 +292,8 @@ def predict(sc: Scene, lc: LandCoverClasses,
     L = L_ET * evap_scale(rh)
     store = 0.0
     if night:
-        # taper ET to zero as the surface approaches the dewpoint, matching
-        # nightLatent() in heat-map-model.ts
-        dry_veg = (Q * lc["rural"]["built"] + pull) / k
-        headroom = (dry_veg - dewpoint(tAir, rh)) / DEWPOINT_TAPER_K
-        L = L * NIGHT_ET_FRACTION * min(1.0, max(0.0, headroom))
         store = STORE_NIGHT
+        L = night_latent(L, k, pull, tAir, rh, store)
 
     return Prediction(urban=_eq(lc["urban"], sun, Q, L, pull, k, store),
                       rural=_eq(lc["rural"], sun, Q, L, pull, k, store))
