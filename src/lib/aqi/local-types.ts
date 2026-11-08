@@ -81,7 +81,7 @@ export interface NlReading {
 }
 
 /**
- * Luchtmeetnet's MODELLED LKI for the area's centre: a calculated field, NOT a measurement, so it has no station and no distance. It
+ * The MODELLED LKI for the area's centre (an RIVM forecast calculation, published by Luchtmeetnet): NOT a measurement, so it has no station and no distance. It
  * rides beside the measured LKI of a live Amsterdam card and is OPTIONAL: a model that could not be read, is not for the current hour or
  * does not validate is simply absent, and the measured card is exactly what it would have been. (Schema stays 1: an optional field, and
  * the validator ignores keys it does not know, so a client older than this field reads the payload as before.)

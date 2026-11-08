@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { AMSTERDAM_SHEETS } from '../../src/data/sheets/amsterdam.ts';
-import { LKI_MODEL_HOUR_MS, lkiBand, lkiClass } from '../../src/lib/aqi/lki.ts';
+import { LKI_LABEL, LKI_MODEL_HOUR_MS, lkiBand, lkiClass } from '../../src/lib/aqi/lki.ts';
 import { judge, modelCurrent } from '../../src/lib/aqi/local-judge.ts';
 import { isLocalAirPayload, isNlModel, readLocalAirPayload } from '../../src/lib/aqi/local-valid.ts';
 import { lkiUrl, MODEL_WAIT_MS, measurementsUrl, modelUrl, parseModel, readAmsterdam } from '../../src/lib/aqi/luchtmeetnet.ts';
@@ -97,11 +97,51 @@ test('MODEL URL: the area centre, 6 decimals, the documented endpoint', () => {
   assert.match(modelUrl(c), /latitude=52\.414660&longitude=4\.843809$/);
 });
 
+/* The eight recorded answers of the independent check (2026-11-08T21:34Z-22:37Z): a FIXED run window of 21 rows from 21:00Z, byte-identical for an hour,
+   whose first row is in the past after 22:00Z, and one cut to 13 rows (05:00Z on) with no row for the current hour. */
+const SAMPLES = JSON.parse(readFileSync('tests/fixtures/aqi/nl/model-lki-samples-2026-11-08.json', 'utf8')).samples;
+
+test('RECORDED ANSWERS: the row is chosen by the clock, never taken from the top - and an answer with no row for the current hour gives no line', () => {
+  const at = Object.keys(SAMPLES);
+  assert.equal(at.length, 8);
+  const want = { '21:34': '21:00', '21:43': '21:00', '21:52': '21:00', '22:01': '22:00', '22:10': '22:00', '22:19': null, '22:28': '22:00', '22:37': '22:00' };
+  for (const iso of at) {
+    const hhmm = iso.slice(11, 16);
+    const body = JSON.stringify(SAMPLES[iso]);
+    const row = parseModel(body, new Date(iso));
+    if (want[hhmm] === null) { assert.equal(row, null, `${iso}: the answer has no current-hour row`); continue; }
+    assert.equal(new Date(row.hourMs).toISOString().slice(11, 16), want[hhmm], iso);
+    assert.equal(row.value, 3.200000047683716);
+    /* the top row is NOT what is used once the run's first hour is over */
+    if (hhmm >= '22:00') assert.notEqual(row.hourMs, Date.parse(SAMPLES[iso].data[0].timestamp_measured), `${iso}: the first row is in the past`);
+  }
+  /* the truncated answer, read as late as 05:00Z the next morning, would have a row; at 22:19 it has none, and the line is absent from the card */
+  assert.equal(SAMPLES['2026-11-08T22:19:30Z'].data.length, 13);
+  assert.equal(parseModel(JSON.stringify(SAMPLES['2026-11-08T22:19:30Z']), new Date('2026-11-09T05:30:00Z')).hourMs, Date.parse('2026-11-09T05:00:00Z'));
+});
+
+test('RECORDED ANSWERS: through readAmsterdam the truncated answer leaves the measured card identical, the whole ones add the line (3.2 -> 4, Matig)', async () => {
+  const now = (iso) => new Date(iso);
+  const run = async (iso) => {
+    const n = now(iso);
+    return readAmsterdam('nl/amsterdam/canal-ring', { fetch: replay({ ...bothAt(n), [modelUrl(CANAL_RING)]: JSON.stringify(SAMPLES[iso]) }).fetch, now: n });
+  };
+  const whole = await run('2026-11-08T22:37:38Z');
+  const cut = await run('2026-11-08T22:19:30Z');
+  assert.deepEqual(whole.model, { value: 3.200000047683716, lki: 4, band: 'moderate', hour_start: '2026-11-08T22:00:00.000Z' });
+  assert.equal('model' in cut, false);
+  const { model: _m, ...a } = whole; const { served_at: _s1, observed_at: _o1, observed_at_local: _l1, lki: _k1, ...a2 } = a;
+  const { served_at: _s2, observed_at: _o2, observed_at_local: _l2, lki: _k2, ...b2 } = cut;
+  assert.deepEqual(a2, b2, 'apart from the clock, the measured payload is the same with and without the model');
+});
+
 /* ── the modelled LKI: rounding and bands, Luchtmeetnet's rule ───────────────────────────────────── */
 
 test('BAND ROUNDING: decimal LKI values are rounded UP ("naar bovenafgerond"): the page\'s own examples, the class edges, and what has no class', () => {
   assert.equal(lkiClass(0.9), 1, 'the page: 0,9 is number 1');
   assert.equal(lkiClass(3.1), 4, 'the page: 3,1 is number 4');
+  assert.equal(lkiClass(3.46), 4, 'Math.ceil, as the site\'s script does: 3.46 is 4, Matig (not 3, which a floor or round would give)');
+  assert.equal(Math.round(3.46), 3);
   for (const [v, n, band] of [[0.0001, 1, 'good'], [1, 1, 'good'], [3, 3, 'good'], [3.0001, 4, 'moderate'], [3.549999952316284, 4, 'moderate'], [4, 4, 'moderate'], [6, 6, 'moderate'], [6.01, 7, 'insufficient'],
     [8, 8, 'insufficient'], [8.2, 9, 'bad'], [10, 10, 'bad'], [10.01, 11, 'very_bad'], [11, 11, 'very_bad']]) {
     assert.equal(lkiClass(v), n, String(v));
@@ -109,6 +149,15 @@ test('BAND ROUNDING: decimal LKI values are rounded UP ("naar bovenafgerond"): t
   }
   for (const none of [0, -0.5, 11.01, 12, NaN, Infinity, -Infinity, '3', null, undefined, {}]) assert.equal(lkiClass(none), null, String(none));
   assert.equal(LKI_MODEL_HOUR_MS, HOUR);
+});
+
+test('BAND NAMES: 1-3 Goed/Good, 4-6 Matig/Moderate, 7-8 Onvoldoende/Insufficient, 9-10 Slecht/Bad, 11 Zeer slecht/Very bad (the existing lkiBand and labels)', () => {
+  const want = [[1, 3, 'good', 'Goed', 'Good'], [4, 6, 'moderate', 'Matig', 'Moderate'], [7, 8, 'insufficient', 'Onvoldoende', 'Insufficient'], [9, 10, 'bad', 'Slecht', 'Bad'], [11, 11, 'very_bad', 'Zeer slecht', 'Very bad']];
+  for (const [from, to, band, nl, en] of want) for (let n = from; n <= to; n++) {
+    assert.equal(lkiBand(n), band, String(n));
+    assert.equal(lkiBand(lkiClass(n - 0.4)), band, `${n - 0.4} -> ${n}`);
+    assert.deepEqual([LKI_LABEL[band].nl, LKI_LABEL[band].en], [nl, en]);
+  }
 });
 
 test('BAND ROUNDING: the captured model value 3.5499… is printed as 4, "Matig", and the published decimal rides along unrounded', async () => {
@@ -253,12 +302,12 @@ test('JUDGE: the modelled line lives for its own clock hour only; the measured c
 
 /* ── the card ────────────────────────────────────────────────────────────────────────────────────── */
 
-test('CARD WORDING: "Modelled for this area by Luchtmeetnet: N", the class, "a calculation … not a measurement"; it names the area; it never reads as a measurement', async () => {
+test('CARD WORDING: "Modelled for this area (RIVM model via Luchtmeetnet): N", the class, "a forecast calculation by RIVM … not a measurement"; it names the area; it never reads as a measurement', async () => {
   const p = await livePayload();
   const html = localCardHtml(p, 'Havens-West', new Date('2026-11-08T20:40:00Z'));
-  assert.match(html, /Modelled for this area by Luchtmeetnet: <b>4<\/b>/);
+  assert.match(html, /Modelled for this area \(RIVM model via Luchtmeetnet\): <b>4<\/b>/);
   assert.match(html, /Matig/);
-  assert.match(html, /A calculation for the centre of Havens-West, not a measurement/);
+  assert.match(html, /A forecast calculation by RIVM for the centre of Havens-West, not a measurement/);
   assert.match(html, /for the hour from <span style="white-space:nowrap"><b>21:00 CET<\/b>/);
   assert.match(html, /rounded up to a whole number, as Luchtmeetnet does/);
   assert.match(html, /Air quality · Havens-West/);
@@ -267,7 +316,7 @@ test('CARD WORDING: "Modelled for this area by Luchtmeetnet: N", the class, "a c
   assert.equal((html.match(/class="num"/g) ?? []).length, 1, 'exactly one hero number: the measured one');
   assert.ok(!/3\.54|3\.55/.test(html), 'the decimal is not printed');
   const pane = localPaneHtml(p, 'Havens-West', new Date('2026-11-08T20:40:00Z'));
-  assert.match(pane, /Modelled for this area by Luchtmeetnet/);
+  assert.match(pane, /Modelled for this area \(RIVM model via Luchtmeetnet\)/);
   assert.match(pane, /not a measurement and no monitor stands behind it/);
 });
 
@@ -292,7 +341,7 @@ test('THE CARD FOLLOWS THE OPEN AREA: loadAir for any streamed id asks the API f
     assert.deepEqual(asked, [`/api/air-quality?area=${encodeURIComponent(key)}`]);
     assert.equal(decodeURIComponent(asked[0].split('area=')[1]), key);
     assert.match(paint.block, new RegExp(`Air quality · Area ${s.code}`));
-    assert.match(paint.block, /Modelled for this area by Luchtmeetnet/);
+    assert.match(paint.block, /Modelled for this area \(RIVM model via Luchtmeetnet\)/);
     /* an answer for another area is the failure view, never painted as this one's */
     const wrong = key === 'nl/amsterdam/canal-ring' ? 'nl/amsterdam/ams-f4' : 'nl/amsterdam/canal-ring';
     const other = await loadLocalAir(key, 'X', { ...io, fetch: async () => ({ ok: true, json: async () => ({ ...body, area_id: wrong }) }) });
@@ -315,7 +364,7 @@ test('CARD: a malformed model block in the API answer costs only the modelled li
   assert.equal(junk.status, none.status);
 });
 
-test('THE SEAM: the page repaints the Air card for the area the stream opens - paintAir() runs in the area commit of loadWard, off state.ward, and the stream opens areas through loadWard', () => {
+test('THE SEAM: the page repaints the Air card for the area the stream opens - paintAir() runs in commitWard right after state.ward moves, off state.ward, and the stream opens areas through loadWard', () => {
   const text = readFileSync('src/scripts/climate-engine/heat-map-app.ts', 'utf8');
   assert.match(text, /state\.ward = name; state\.climate = resolve\(name\)\.climate;/);
   assert.match(text, /registry = buildRegistry\(d\.b\);\s*paintSolarWard\(\);\s*paintAir\(\);/);

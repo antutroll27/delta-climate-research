@@ -89,14 +89,14 @@ function nlSubstances(readings: readonly NlReading[]): string {
 }
 
 /**
- * THE MODELLED LINE, set apart from the measurement and worded so it cannot be read as one: "Modelled for this area by Luchtmeetnet: 4 · Matig · Moderate",
- * then what it is (a calculation for the area's centre, for the hour from its start) and that the decimal was rounded up as Luchtmeetnet does.
- * The class dot is the LKI's, as on the measured line. No station, no distance: a model has neither.
+ * THE MODELLED LINE, set apart from the measurement and worded so it cannot be read as one: "Modelled for this area (RIVM model via Luchtmeetnet): 4 · Matig · Moderate",
+ * then what it is (a forecast calculation by RIVM, published by Luchtmeetnet, for the area's centre, for the hour from its start) and that the decimal was rounded
+ * up as Luchtmeetnet does. The class dot is the LKI's, as on the measured line. No station, no distance: a model has neither.
  */
 function nlModelLine(m: NlModel, place: string): string {
   const from = nowrap(`<b>${esc(localTime(m.hour_start, 'nl-lki'))}</b>`);
-  return `<p class="meta aq-model">Modelled for this area by Luchtmeetnet: <b>${num(m.lki)}</b> <span class="cat"><span class="dot" style="background:${bandColour(m.band)}"></span>${bandWord(m.band)}</span></p>`
-    + `<p class="meta">A calculation for the centre of ${esc(place)}, not a measurement · for the hour from ${from} · rounded up to a whole number, as Luchtmeetnet does</p>`;
+  return `<p class="meta aq-model">Modelled for this area (RIVM model via Luchtmeetnet): <b>${num(m.lki)}</b> <span class="cat"><span class="dot" style="background:${bandColour(m.band)}"></span>${bandWord(m.band)}</span></p>`
+    + `<p class="meta">A forecast calculation by RIVM for the centre of ${esc(place)}, not a measurement · for the hour from ${from} · rounded up to a whole number, as Luchtmeetnet does</p>`;
 }
 
 function nlLive(p: Extract<Live, { standard: 'nl-lki' }>, title: string, place: string): string {
@@ -213,7 +213,7 @@ export function localPaneHtml(p: LocalAirPayload, place: string, now: Date = new
     s += nlTable(c.readings) + `<p class="pane-h">The five LKI classes</p>${lkiKey()}`
       + `<p class="pane-note">The LKI is Luchtmeetnet's own published figure for this monitor and hour, shown unaltered. It is the highest of the four substances' index numbers (NO₂, PM10, PM2.5, O₃). When some but not all of the substances tie for the highest, the index is that number. Luchtmeetnet adds one point only when all the substances share the same number. `
       + `Values are unvalidated hourly data and may be corrected later. Air quality is a separate layer: it does not enter the heat model.</p>`
-      + (c.model ? `<p class="pane-note">The modelled line is Luchtmeetnet's calculated LKI for the centre of this area, for the clock hour shown; it is not a measurement and no monitor stands behind it. `
+      + (c.model ? `<p class="pane-note">The modelled line is a forecast calculation by RIVM (published by Luchtmeetnet) for the centre of this area, for the clock hour shown; it is not a measurement and no monitor stands behind it. `
         + `Luchtmeetnet publishes it as a decimal and rounds decimal LKI values up to the whole number, as this card does. It never replaces, and is not mixed into, the measured figure above.</p>` : '');
   } else if (c.state === 'live') {
     s += `<p class="pane-note">Values are the latest provisional hour from the Ministry of the Environment's national stations (国設局) only; other stations belong to local governments and are not shown. `

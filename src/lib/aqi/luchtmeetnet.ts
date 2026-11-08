@@ -21,34 +21,36 @@
  * a source that cannot be read is "not reporting". The newest LKI is the only one ever shown.
  *
  * THE MODELLED LKI (an optional second line; nothing above changes because of it). `GET /open_api/concentrations?formula=lki&latitude=…&longitude=…`
- * is the endpoint behind luchtmeetnet.nl's "Mijn locatie" (the site calls it as `/ascii/concentrations`): the API documentation
- * (api-docs.luchtmeetnet.nl, "Concentrations (ASCII)", read 2026-11-09) calls it "a list of the current and predicted concentrations of a
- * component at a certain location", i.e. CALCULATED air quality ("the calculated air quality maps"), not a measurement, and the site says the
- * graph "shows the predicted concentration ... at your location for the next 24 hours". Its rows run from the current hour into the future
- * (observed 2026-11-08T20:36Z: 19 hourly rows, 20:00Z to 14:00Z next day, floats such as 3.549999952316284, no start/end fields).
+ * is the endpoint behind luchtmeetnet.nl's "Mijn locatie" (the site calls it as `/ascii/concentrations`). WHAT IT IS: a FORECAST PRODUCT, not a
+ * measurement and not an interpolation of stations. The API documentation (api-docs.luchtmeetnet.nl, "Concentrations (ASCII)", read 2026-11-09) calls
+ * it "the current and predicted concentrations of a component at a certain location"; the site's pages (informatie/verwachting/mijn-locatie,
+ * as read by the independent check of 2026-11-08, /Volumes/OBOSLab/research/ams-area-air/MODEL-ENDPOINT-CHECK.md) say RIVM calculates it at 125 m
+ * with the OPS model plus TREDM for roads, on KNMI weather, about four runs a day. So the card calls it a model estimate by RIVM, published by
+ * Luchtmeetnet. Its O3 was 0.0 against a measured 15.9 at the same place: it is not anchored to the stations.
  *
- *   WHAT `timestamp_measured` MEANS HERE: THE START OF THE CLOCK HOUR THE VALUE IS FOR. The docs are silent on this endpoint and the
- *   /measurements convention (the END of the hour) does NOT carry over. Evidence, in order of weight:
- *   1. luchtmeetnet.nl's own "Mijn locatie" script (chunk mijn-locatie-110b313d0e348113cdf2.js, read 2026-11-09) picks the headline row with
- *      `e.find(e => dayjs(e.timestamp_measured).isSame(dayjs(), "hour"))` and shows `Math.ceil(n.value)`: the row stamped 20:00 is "now"
- *      from 20:00 to 20:59, so the stamp is the hour's start. Its 24-hour table builds `now.add(h, "hour")` and matches rows the same way.
- *   2. The site's page "Tijdnotatie" (cms download-data/tijdnotatie) says a value for hour X to X+1 "is opgeslagen onder uur X" (stored under hour X)
- *      and that downloadable data states that date_from. That page is about stored measurements (the /measurements API itself stamps the END,
- *      as above), so it is consistent with, not proof for, this endpoint.
- *   3. MEASURED, not read: the forecast values are held in 3-hour blocks that start on UTC multiples of 3 AT the stamp (21,22,23 | 00,01,02 |
- *      03,04,05 ... in the 2026-11-08T20:36Z answer), a forward hold from the stamp, as a 3-hourly model on the UTC grid is held; an
- *      end-of-hour stamp would put the blocks at 22,23,00. This is an inference from the grid, not a statement by Luchtmeetnet. The snapshots
- *      and the comparison against the stations' measured hours are in docs/evidence/2026-11-09-ams-area-air.md.
- *   Luchtmeetnet states none of this for the endpoint. Whichever way the stamp reads, a row is never shown before its stamp (no forecast hour
- *   is ever "current") and never later than one hour after it.
- *   So a row is CURRENT for [stamp, stamp + 1 h) and a row stamped later than `now` is a FORECAST HOUR and is never shown as current. The
- *   FUTURE_SLACK_MS above exists for END-stamped rows (an hour that has just closed); it is deliberately NOT applied here, because the
- *   same slack would put an hour that has not begun on the card. The live window is the hour itself, not LIVE_MS.
+ * THE ROWS are a fixed run window, NOT a window that rolls with the clock: `start`/`end` are ignored, the first row can already be in the PAST
+ * (a run stayed byte-identical from 21:34Z to 22:37Z with its first row at 21:00Z), rows run on ~19-21 hours, values come in 3-hour blocks, and
+ * one answer in eight (22:19Z) was cut to 13 rows with no row for the current hour. So the row is CHOSEN BY THE CLOCK, never taken from the
+ * top, and an answer with no row for the current hour gives NO line (tests pin all eight recorded answers).
+ *
+ *   WHICH ROW IS "NOW": luchtmeetnet.nl's own "Mijn locatie" script (chunk mijn-locatie-110b313d0e348113cdf2.js, read 2026-11-09) picks the
+ *   headline row with `e.find(e => dayjs(e.timestamp_measured).isSame(dayjs(), "hour"))` and shows `Math.ceil(n.value)`: the row whose stamp
+ *   falls in the current clock hour is "now". We do the same: the stamp is read as the START of the hour it is for, so a row is CURRENT for
+ *   [stamp, stamp + 1 h). A row stamped later than `now` is a FORECAST HOUR and is never shown as current. The FUTURE_SLACK_MS above exists
+ *   for END-stamped rows (an hour that has just closed); it is deliberately NOT applied here, because the same slack would put an hour that has
+ *   not begun on the card. The live window is the hour itself, not LIVE_MS.
+ *   WHAT IS NOT SETTLED: Luchtmeetnet does not say, for this endpoint, whether a stamp is the start or the end of its hour, and the /measurements
+ *   convention (END of the hour) does not carry over by documentation. A comparison with the stations' measured hours cannot settle it (18
+ *   pairs over two hours, 2026-11-08T20-22Z: the stamp read as START was closer in 10, as END in 8, MAE 9.42 vs 9.39 µg/m3, because the model
+ *   is not anchored to the stations; docs/evidence/2026-11-09-ams-area-air.md). The 3-hour blocks (21,22,23 | 00,01,02 …) fit a forward hold
+ *   from the stamp but prove nothing. We follow the operator's own page, and the card says the hour it prints; whichever way the stamp reads, no
+ *   row is shown before its stamp and none later than one hour after it.
  *
  *   THE ROUNDING is Luchtmeetnet's, not ours (lki.ts `lkiClass`): decimal LKI values are rounded UP ("Decimale LKI-waarden worden naar
- *   bovenafgerond", the LKI page) and the site's own script does `Math.ceil`. The card prints that whole number and its class; the decimal
- *   rides in the payload as published. The 'no rounding' rule at the top is about the measured values (CC BY-ND 4.0); this is the
- *   operator's own published rounding of a field the operator publishes as a decimal, applied as the operator applies it.
+ *   bovenafgerond", the LKI page; the site's script does `Math.ceil`): 3.46 is 4. The card prints that whole number and its class; the decimal
+ *   rides in the payload as published. The 'no rounding' rule at the top is about the measured values (CC BY-ND 4.0); this is the operator's
+ *   own published rounding of a field the operator publishes as a decimal, applied as the operator applies it. The licence is the same as the
+ *   station data's (the Open data page covers the API's calculated lat/lon values), so the same credit is used.
  */
 import { zoneClock } from './clock.ts';
 import { getText, type Fetch } from './http.ts';
