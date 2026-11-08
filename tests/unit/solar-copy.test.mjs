@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  wardSummary, validatedSentence, noteFor, sharePct,
+  wardSummary, validatedSentence, noteFor, sharePct, ladderFix,
   ESTIMATE_TAG, BANNED_PAYBACK_WORDS, paybackText, savingText, capFirst, subsidyLine, assumptionsLine, sizingText, surplusText, flatCaveat, oldestAsOf,
 } from '../../src/scripts/climate-engine/solar-copy.ts';
 import { computeRoi } from '../../src/scripts/climate-engine/solar-roi.ts';
@@ -219,4 +219,14 @@ test('BANNED_PAYBACK_WORDS matches what it must, and no sentence of any kind mat
 test('the tag is exact, and "quote" appears in no sentence but the tag', () => {
   assert.equal(ESTIMATE_TAG, 'screened · estimate, not a quote');
   for (const s of EVERY_SENTENCE) assert.doesNotMatch(s, /quot/i, s);
+});
+
+test('ladderFix: Kolkata keeps the written band, any other city prints the fix with no figure', () => {
+  const written = 'A ten-minute walk of the roof with a phone narrows it to about ±10%.';
+  assert.equal(ladderFix('roof', 'kolkata', written), written);
+  for (const rung of ['roof', 'irradiance']) {
+    const s = ladderFix(rung, 'amsterdam', written);
+    assert.ok(!/[±%\d]/.test(s), `no figure outside Kolkata: ${s}`);
+    assert.match(s, /No band is measured for this city yet\./);
+  }
 });

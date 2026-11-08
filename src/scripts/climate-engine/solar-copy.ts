@@ -1,6 +1,7 @@
 import type { PvFile } from './types';
 import type { Owner, RoiResult } from './solar-roi.ts';
 import { citedLeaves, type SolarCostBasis } from './solar-cost.ts';
+import type { CityKey } from './scope/registry.ts';
 
 type Validated = NonNullable<PvFile['tiers']['validated']>;
 
@@ -28,6 +29,24 @@ export function wardSummary(pv: Pick<PvFile, 'tiers'>): string {
 export function validatedSentence(v: Validated): string {
   return `Compared with ${plural(v.n, 'real rooftop')} over ${plural(v.months, 'month')}: `
     + `median ratio ${v.median_ratio.toFixed(2)}, ${Math.round(v.within_15pct_share * 100)}% within 15%.`;
+}
+
+/** THE TWO "NARROWS TO" BANDS ON THE LADDER (about ±10 % for a roof walk, about ±5 % for a
+    ground station) were written for Kolkata, the only city with a solar screen. They are an
+    engineering expectation (docs/evidence/known-limitations.md, "The ladder on the card"), not a
+    measurement, and nothing in the repository establishes either one for another city. Any other
+    city prints the fix with no number. */
+const BAND_CITIES: ReadonlySet<CityKey> = new Set<CityKey>(['kolkata']);
+
+export type LadderRung = 'roof' | 'irradiance';
+
+/** The sentence for a rung's fix. Kolkata keeps the markup's own sentence (passed in as `written`);
+    every other city gets the same fix with no figure. */
+export function ladderFix(rung: LadderRung, cityId: CityKey, written: string): string {
+  if (BAND_CITIES.has(cityId)) return written;
+  return rung === 'roof'
+    ? 'A ten-minute walk of the roof with a phone would narrow it. No band is measured for this city yet.'
+    : 'A ground station inside that cell would narrow it. No band is measured for this city yet.';
 }
 
 /** A SHARE OF A WHOLE, FLOORED AT "under 1%". `Math.round` turns anything under

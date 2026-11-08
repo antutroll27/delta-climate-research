@@ -72,9 +72,9 @@ interface Props { scope: ResolvedScope }
       <details class="bc-sure" id="bcSure">
         <summary>How sure, and what would make it surer</summary>
         <ul>
-          <li data-limit="roof">Roof obstacles unknown: tanks, stair rooms, parapets. <b id="bcSureRoof"></b> A ten-minute walk of the roof with a phone narrows it to about ±10%. <button type="button" class="bc-ask" data-limit="roof" aria-label="Ask about roof obstacles">Ask about this</button></li>
+          <li data-limit="roof">Roof obstacles unknown: tanks, stair rooms, parapets. <b id="bcSureRoof"></b> <span data-fix="roof">A ten-minute walk of the roof with a phone narrows it to about ±10%.</span> <button type="button" class="bc-ask" data-limit="roof" aria-label="Ask about roof obstacles">Ask about this</button></li>
           <li data-limit="canopy">Canopy over the roof: usable or not. <b id="bcSureCanopy"></b> One photo from the roof settles it. <button type="button" class="bc-ask" data-limit="canopy" aria-label="Ask about canopy over the roof">Ask about this</button></li>
-          <li data-limit="irradiance">Sunlight from a coarse satellite cell. <b id="bcSureIrr"></b> The ground station inside that cell narrows yield to about ±5%, city-wide. <button type="button" class="bc-ask" data-limit="irradiance" aria-label="Ask about sunlight data">Ask about this</button></li>
+          <li data-limit="irradiance">Sunlight from a coarse satellite cell. <b id="bcSureIrr"></b> <span data-fix="irradiance">The ground station inside that cell narrows yield to about ±5%, city-wide.</span> <button type="button" class="bc-ask" data-limit="irradiance" aria-label="Ask about sunlight data">Ask about this</button></li>
           <li data-limit="height">Building height unverified for this roof. A survey or a drone pass fixes it. <button type="button" class="bc-ask" data-limit="height" aria-label="Ask about building height">Ask about this</button></li>
           <li data-limit="validation" id="bcSureValid">Never compared with real rooftops yet. The validation study is under way. <button type="button" class="bc-ask" data-limit="validation">Join the study</button></li>
         </ul>
