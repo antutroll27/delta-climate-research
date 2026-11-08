@@ -145,7 +145,7 @@ const FIGURES: HeatAccuracyFigures = Object.freeze({
       return { html: `Outside validation · ${fig(`~±${TRANSITION_RMSE_K.toFixed(1)} °C`)} at this hour${seasonChip}`, confidence: 'indicative' };
     }
     return a.confidence === 'quantitative'
-      /* The night band is a CITY-WIDE level, not ward detail (accuracy.ts NIGHT_AS_SHIPPED), and the chip says so. */
+      /* The night band is a CITY-WIDE level, not ward detail (accuracy.ts NIGHT_AIR_OFFSET_LOO_RMSE_K), and the chip says so. */
       ? { html: `Night level calibrated · ward detail unvalidated · ${fig(`±${a.bandK.toFixed(1)} °C`)} · ${fig(`n=${a.n}`)}${seasonChip}`, confidence: a.confidence }
       /* THE PEAK BAND IS THE EARLIER EVIDENCE SET (accuracy.ts PEAK_EVIDENCE_BASIS):
          measured before Ballygunge became KMC Ward 68, kept because it is the wider,

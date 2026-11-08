@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ACCURACY, NIGHT_AS_SHIPPED, TRANSITION_HOURS, TRANSITION_RMSE_K, SEASONAL_CAVEATS, SEASONAL_WARDS, seasonalCaveatLine } from '../../src/scripts/climate-engine/accuracy.ts';
+import { ACCURACY, TRANSITION_HOURS, TRANSITION_RMSE_K, SEASONAL_CAVEATS, SEASONAL_WARDS, seasonalCaveatLine } from '../../src/scripts/climate-engine/accuracy.ts';
 import { checkedRows, caveatRows, transitionChip } from '../../src/scripts/climate-engine/v2/method-copy.ts';
 import { heatAccuracyClaim } from '../../src/scripts/climate-engine/scope/accuracy-claim.ts';
 
@@ -10,9 +10,9 @@ test('every figure in "How this was checked" is the accuracy.ts export', () => {
   const rows = checkedRows();
   const n = ACCURACY.night, p = ACCURACY.peak;
   assert.deepEqual(rows.map((r) => r.k), ['Night', 'Day', 'Band']);
-  assert.equal(rows[0].v, `±${n.bandK.toFixed(1)} °C over ${n.n} ward-scenes of NASA ECOSTRESS. Calibration-run error ${n.modelRmseK} K against a best possible ${n.ceilingRmseK} K. This calibrates the city-wide night level, not ward-to-ward differences.`);
+  assert.equal(rows[0].v, `±${n.bandK.toFixed(1)} °C over ${n.n} ward-scenes of NASA ECOSTRESS. In-sample error ${n.modelRmseK} K against a best possible ${n.ceilingRmseK} K. This calibrates the city-wide night level, not ward-to-ward differences.`);
   assert.equal(rows[1].v, `±${p.bandK.toFixed(1)} °C, indicative only: n = ${p.n}, an earlier evidence set.`);
-  assert.equal(rows[2].v, `Covers the leave-one-overpass-out error (${n.looOverpassRmseK} K at night in the calibration run, ${NIGHT_AS_SHIPPED.looOverpassRmseK.toFixed(2)} K for the model as shipped), not the in-sample fit.`);
+  assert.equal(rows[2].v, `Covers the leave-one-overpass-out error (${n.looOverpassRmseK} K at night), not the in-sample fit.`);
 });
 
 test('the dawn caveat quotes the chip the app prints, from the same constants', () => {

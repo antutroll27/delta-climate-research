@@ -3291,7 +3291,7 @@ export function mountHeatMap(): () => void {
   /**
    * Show how much to trust the number on screen. Night is calibrated against
    * ECOSTRESS for the city-wide level only (ward-to-ward detail is not validated;
-   * accuracy.ts NIGHT_AS_SHIPPED); daytime is only indicative, because noon
+   * accuracy.ts NIGHT_AIR_OFFSET_LOO_RMSE_K); daytime is only indicative, because noon
    * surface temperature depends on local insolation, cloud timing and soil
    * moisture that 50 km reanalysis forcing cannot resolve. Presenting the
    * daytime figure as decision-grade would be the real inaccuracy, so it is
