@@ -20,6 +20,9 @@
  * NO STALE FIGURE. A rung whose newest LKI is older than LIVE_MS is not reporting, and the next rung is tried;
  * a source that cannot be read is "not reporting". The newest LKI is the only one ever shown.
  *
+ * CACHES AND THE BUDGET: nothing here is fetched per area. Station rows and model runs come through the shared, separate caches of nl-cache.ts (raw
+ * rows only; distance and fallback are built per area per request), and a 429 stops every request for COOLDOWN_MS. See that file's header.
+ *
  * THE MODELLED LKI (an optional second line; nothing above changes because of it). `GET /open_api/concentrations?formula=lki&latitude=…&longitude=…`
  * is the endpoint behind luchtmeetnet.nl's "Mijn locatie" (the site calls it as `/ascii/concentrations`). WHAT IT IS: a FORECAST PRODUCT, not a
  * measurement and not an interpolation of stations. The API documentation (api-docs.luchtmeetnet.nl, "Concentrations (ASCII)", read 2026-11-09) calls
@@ -237,14 +240,17 @@ function waitFor<T>(p: Promise<T>, signal: AbortSignal | undefined): Promise<T> 
   });
 }
 
-async function readStation(id: string, d: AmsterdamDeps, nl: NlCache): Promise<StationRows> {
+async function readStation(id: string, d: AmsterdamDeps, nl: NlCache, prev: StationRows | undefined): Promise<StationRows> {
   const at = d.now.getTime();
   let lki: LkiRow[];
   try { lki = parseLki(await lmGet(lkiUrl(id, d.now), d, nl), id, d.now); } catch { return { at, lki: null, meas: [] }; }
   const top = lki[0];
   let meas: MeasurementRow[] = [];
   if (top && at - top.endMs <= LIVE_MS) {
+    /* the same newest hour as the last read: its substances are already in hand (a station being looked at every minute for a due hour costs one request, not two) */
+    if (prev?.measFor === top.endMs) return { at, lki, meas: prev.meas, measFor: top.endMs };
     try { meas = parseMeasurements(await lmGet(measurementsUrl(id, d.now), d, nl), id, d.now); } catch { /* the LKI stands without the substances beside it */ }
+    return { at, lki, meas, measFor: top.endMs };
   }
   return { at, lki, meas };
 }
@@ -257,7 +263,7 @@ function stationRows(id: string, d: AmsterdamDeps, nl: NlCache): Promise<Station
   if (cooling(nl, now)) return Promise.resolve(hit ?? { at: now, lki: null, meas: [] });
   let p = nl.stationsInflight.get(id);
   if (!p) {
-    p = readStation(id, d, nl)
+    p = readStation(id, d, nl, hit)
       .then((e) => {
         /* a read that hit the cooldown must not replace rows that are still good with "unreadable" */
         if (e.lki === null && hit && cooling(nl, now)) return hit;

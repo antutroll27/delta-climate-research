@@ -63,3 +63,17 @@ re-derived independently (Python, same haversine) with 0 differences over the 32
 
 Not changed. The check says a station label `T+00:00` is really the hour [T-1h, T) in true UTC. That is the reading the module already uses (end of hour = `timestamp_measured`,
 the row's own `timestamp_measured_start`/`_end` differ by one hour, e.g. 12:00 and 13:00 for the label 13:00). The two readings coincide; the card's "Hour to" time is the same either way.
+
+## 4. Request budget (audit B1), measured
+
+`tests/unit/aqi-ams-budget.test.mjs` drives the real handler with a simulated clock and a fake upstream that counts every request; 32 areas polled every 10 s.
+Busiest 5-minute window per instance: healthy cold start 40; outage (all 503), from cold 62, and 62 in the busiest window over 30 minutes; late publication (rows 3 h old) 62;
+a due new hour (stations one hour behind) 56; model answer cut short every time 40; Luchtmeetnet answering 429 to everything 2. Designed ceiling 68
+(6 stations once a minute = 30, their substance reads 6, 32 model locations once = 32). Before the fix an outage cost about 950 per 5 minutes per instance.
+Per instance only: N warm instances multiply it. The 31 streamed ids are additionally served only where streaming is on.
+
+## 5. Why the model line used to disappear after each hour (S4), and the fix
+
+The first version cached the chosen row inside the area payload for 10 minutes and the judge dropped it when its hour ended, so for up to ~20 minutes after :00 the card
+had no line. Now the whole run is cached and the row is chosen by the request's clock, so the line changes hour exactly at the boundary; it is absent only when the run
+has no row for the current hour (then it is re-read, at most once per 5 minutes). The CDN header is capped at the end of the model's hour.

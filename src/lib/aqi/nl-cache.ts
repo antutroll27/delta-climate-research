@@ -48,6 +48,8 @@ export interface StationRows {
   lki: LkiRow[] | null;
   /** The substance rows of the same answer window; empty when none were read. */
   meas: MeasurementRow[];
+  /** The hour (end, ms) the substance rows were read for; a re-read of the LKI that finds the same newest hour reuses them instead of asking again. */
+  measFor?: number;
 }
 
 export interface ModelRun {
