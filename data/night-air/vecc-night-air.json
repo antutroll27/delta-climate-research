@@ -1,0 +1,96 @@
+{
+ "schema": 1,
+ "icao": "VECC",
+ "city": "kolkata",
+ "what": "mean(VECC METAR air - NASA POWER T2M) per IST month over night instants; the correction SUBTRACTS it from the airport air",
+ "unit": "K",
+ "months": "IST calendar month, index 0 = January",
+ "offsets_k": [
+  3.17,
+  3.14,
+  2.14,
+  1.06,
+  0.51,
+  1.37,
+  1.07,
+  1.17,
+  1.75,
+  2.04,
+  3.95,
+  4.04
+ ],
+ "n_instants": [
+  2446,
+  2255,
+  2282,
+  1976,
+  2118,
+  1322,
+  1388,
+  1445,
+  1418,
+  1480,
+  1600,
+  1668
+ ],
+ "offsets_no_exclusion_k": [
+  3.17,
+  3.14,
+  2.14,
+  1.1,
+  0.51,
+  1.37,
+  1.07,
+  1.17,
+  1.8,
+  2.12,
+  3.94,
+  4.0
+ ],
+ "n_instants_no_exclusion": [
+  2530,
+  2255,
+  2326,
+  2115,
+  2118,
+  1322,
+  1388,
+  1445,
+  1467,
+  1584,
+  1627,
+  1725
+ ],
+ "max_abs_exclusion_effect_k": 0.08,
+ "night_rule": "sun <= SUN_LIT (0.05); sun = solar_factor(solar hour at 88.37E, UTC day of year, 22.55N)",
+ "air": "whole-degree temperature parsed from the METAR text (what metar.ts reads)",
+ "power_match": "_power.power_stamp(report utc, 88.37): nearest local-solar hour",
+ "window": [
+  "2024-01-01",
+  "2026-05-31"
+ ],
+ "exclusion": {
+  "rule": "night instants within +/-12 h of any validation night scene",
+  "scenes": 50,
+  "dates": 20,
+  "night_instants_dropped": 504,
+  "source": "tests/fixtures/daytime-refit/rows-p2.json kolkata-mmd-292, stratum night"
+ },
+ "counts": {
+  "reports": 42499,
+  "usable_instants": 42234,
+  "night_instants": 21902,
+  "no_temperature": 205,
+  "no_power": 12,
+  "outside_window": 48,
+  "iem_tenths_vs_text_over_half_degree": 0
+ },
+ "inputs": {
+  "iem/vecc-raw.csv": "848817e0047edd292cea3fd881ef662322217af28f29776635c3d5d9675b6b83",
+  "power/kolkata.json": "786cc3c2498b66966a92a1111302fce499b3d053f5c1281002fddbc56d3fa102",
+  "rows-p2.json": "1f308a46a2099bb431457b9cf418069bd1262eff6d20ae8c8ffef68b985c52cd"
+ },
+ "licence": "IEM ASOS archive: public domain, attribution requested; NASA POWER: public domain",
+ "built_by": "scripts/build-night-air-table.py",
+ "never_fitted_to": "satellite LST"
+}

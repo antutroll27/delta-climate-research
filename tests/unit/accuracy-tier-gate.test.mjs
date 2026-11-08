@@ -316,6 +316,9 @@ test('Kolkata keeps its chip, tooltip and pattern words byte for byte', () => {
   /* the methods ledger, as MethodsCards printed it */
   const L = F.ledger, sp = ACC.SPATIAL, h = ACC.HEIGHTS;
   assert.equal(L.night, `night level calibrated, ward detail unvalidated · ±${n.bandK.toFixed(1)} °C · n = ${n.n} · calibration-run error ${n.modelRmseK} K · ceiling ${n.ceilingRmseK} K`);
+  assert.equal(L.nightAir, ACC.NIGHT_AIR_NOTE);
+  assert.match(L.nightAir, /clear nights, October–April; monsoon nights are not yet tested\./);
+  assert.doesNotMatch(L.nightAir, /±|\d/, 'the note quotes no band of its own: the ±3.0 stays where the ledger already prints it');
   assert.equal(L.peak, `indicative · ±${p.bandK.toFixed(1)} °C · n = ${p.n}. ${ACC.PEAK_EVIDENCE_BASIS}`);
   assert.deepEqual([L.patternR, L.patternVegR, L.patternN, L.patternNote], [sp.rModel.toFixed(2), sp.rVegOnly.toFixed(2), sp.n, sp.note]);
   assert.equal(L.heights, `${h.nBuildings} of ${h.minBuildings} buildings needed · ${h.verdict}. ${ACC.HEIGHTS_EVIDENCE_BASIS}`);

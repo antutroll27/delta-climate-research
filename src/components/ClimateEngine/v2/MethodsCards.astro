@@ -55,6 +55,7 @@ const shareAlike = sibs.find((s) => s.rec?.boundary)?.rec?.boundary?.shareAlike 
   <ul class="method">
     <li><span class="micro">Measured</span><span class="foot">{first.quantity.measured}. Not: {first.quantity.isNot.map((x, i) => <Fragment>{i > 0 && ', '}<s>{x}</s></Fragment>)}. {first.quantity.note}</span></li>
     <li><span class="micro">Night</span><span class="foot">{claim.figures.ledger.night}</span></li>
+    <li><span class="micro">Night air</span><span class="foot">{claim.figures.ledger.nightAir}</span></li>
     <li><span class="micro">13:00 peak</span><span class="foot">{claim.figures.ledger.peak}</span></li>
     <li><span class="micro">Pattern</span><span class="foot">r {claim.figures.ledger.patternR} block by block, below a vegetation map's r {claim.figures.ledger.patternVegR} · n = {claim.figures.ledger.patternN}. {claim.figures.ledger.patternNote}</span></li>
     <li><span class="micro">Heights</span><span class="foot">{claim.figures.ledger.heights}</span></li>
