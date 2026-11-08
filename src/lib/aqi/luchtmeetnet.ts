@@ -19,11 +19,41 @@
  *
  * NO STALE FIGURE. A rung whose newest LKI is older than LIVE_MS is not reporting, and the next rung is tried;
  * a source that cannot be read is "not reporting". The newest LKI is the only one ever shown.
+ *
+ * THE MODELLED LKI (an optional second line; nothing above changes because of it). `GET /open_api/concentrations?formula=lki&latitude=…&longitude=…`
+ * is the endpoint behind luchtmeetnet.nl's "Mijn locatie" (the site calls it as `/ascii/concentrations`): the API documentation
+ * (api-docs.luchtmeetnet.nl, "Concentrations (ASCII)", read 2026-11-09) calls it "a list of the current and predicted concentrations of a
+ * component at a certain location", i.e. CALCULATED air quality ("the calculated air quality maps"), not a measurement, and the site says the
+ * graph "shows the predicted concentration ... at your location for the next 24 hours". Its rows run from the current hour into the future
+ * (observed 2026-11-08T20:36Z: 19 hourly rows, 20:00Z to 14:00Z next day, floats such as 3.549999952316284, no start/end fields).
+ *
+ *   WHAT `timestamp_measured` MEANS HERE: THE START OF THE CLOCK HOUR THE VALUE IS FOR. The docs are silent on this endpoint and the
+ *   /measurements convention (the END of the hour) does NOT carry over. Evidence, in order of weight:
+ *   1. luchtmeetnet.nl's own "Mijn locatie" script (chunk mijn-locatie-110b313d0e348113cdf2.js, read 2026-11-09) picks the headline row with
+ *      `e.find(e => dayjs(e.timestamp_measured).isSame(dayjs(), "hour"))` and shows `Math.ceil(n.value)`: the row stamped 20:00 is "now"
+ *      from 20:00 to 20:59, so the stamp is the hour's start. Its 24-hour table builds `now.add(h, "hour")` and matches rows the same way.
+ *   2. The site's page "Tijdnotatie" (cms download-data/tijdnotatie) says a value for hour X to X+1 "is opgeslagen onder uur X" (stored under hour X)
+ *      and that downloadable data states that date_from. That page is about stored measurements (the /measurements API itself stamps the END,
+ *      as above), so it is consistent with, not proof for, this endpoint.
+ *   3. MEASURED, not read: the forecast values are held in 3-hour blocks that start on UTC multiples of 3 AT the stamp (21,22,23 | 00,01,02 |
+ *      03,04,05 ... in the 2026-11-08T20:36Z answer), a forward hold from the stamp, as a 3-hourly model on the UTC grid is held; an
+ *      end-of-hour stamp would put the blocks at 22,23,00. This is an inference from the grid, not a statement by Luchtmeetnet. The snapshots
+ *      and the comparison against the stations' measured hours are in docs/evidence/2026-11-09-ams-area-air.md.
+ *   Luchtmeetnet states none of this for the endpoint. Whichever way the stamp reads, a row is never shown before its stamp (no forecast hour
+ *   is ever "current") and never later than one hour after it.
+ *   So a row is CURRENT for [stamp, stamp + 1 h) and a row stamped later than `now` is a FORECAST HOUR and is never shown as current. The
+ *   FUTURE_SLACK_MS above exists for END-stamped rows (an hour that has just closed); it is deliberately NOT applied here, because the
+ *   same slack would put an hour that has not begun on the card. The live window is the hour itself, not LIVE_MS.
+ *
+ *   THE ROUNDING is Luchtmeetnet's, not ours (lki.ts `lkiClass`): decimal LKI values are rounded UP ("Decimale LKI-waarden worden naar
+ *   bovenafgerond", the LKI page) and the site's own script does `Math.ceil`. The card prints that whole number and its class; the decimal
+ *   rides in the payload as published. The 'no rounding' rule at the top is about the measured values (CC BY-ND 4.0); this is the
+ *   operator's own published rounding of a field the operator publishes as a decimal, applied as the operator applies it.
  */
 import { zoneClock } from './clock.ts';
 import { getText, type Fetch } from './http.ts';
-import { lkiBand } from './lki.ts';
-import type { LocalAirPayload, LocalCredit, LocalStation, NlComponent, NlReading, NotReportingReason } from './local-types.ts';
+import { LKI_MODEL_HOUR_MS, lkiBand, lkiClass } from './lki.ts';
+import type { LocalAirPayload, LocalCredit, LocalStation, NlComponent, NlModel, NlReading, NotReportingReason } from './local-types.ts';
 import { LOCAL_SCHEMA } from './local-types.ts';
 import { LOCAL_LIVE_MS } from './local-areas.ts';
 import { CANAL_RING, nlLadder } from './nl-stations.ts';
@@ -119,6 +149,59 @@ export function parseMeasurements(text: string, station: string, now: Date): Mea
   return out;
 }
 
+const MODEL_HOUR_MS = LKI_MODEL_HOUR_MS;
+/** How long a finished measured card waits for a model request still in flight, ms; past it the card goes out without the line. */
+export const MODEL_WAIT_MS = 3_000;
+
+/** The URL of the modelled LKI at a point. Coordinates to 6 decimals (about 0.1 m; the model is a km-scale field). */
+export function modelUrl(at: { lat: number; lon: number }): string {
+  return `${LM_BASE}/concentrations?formula=lki&latitude=${at.lat.toFixed(6)}&longitude=${at.lon.toFixed(6)}`;
+}
+
+export interface ModelRow { value: number; hourMs: number }
+
+/**
+ * The model row that is CURRENT at `now`, or null: the newest row whose hour has begun (stamp <= now, no slack: see the header) and not
+ * ended (now < stamp + 1 h), formula LKI, a value that has a class (above 0, up to 11), stamped on the hour with an explicit offset.
+ * Rows from the future (forecast hours) and rows from hours already over are ignored. Throws LuchtmeetnetFormatError on a body that is not
+ * the `{data: […]}` shape, like its siblings.
+ */
+export function parseModel(text: string, now: Date): ModelRow | null {
+  let best: ModelRow | null = null;
+  for (const r of dataArray(text)) {
+    const ms = stampMs(r['timestamp_measured']);
+    const v = r['value'];
+    if (r['formula'] !== 'LKI' || ms === null || ms % MODEL_HOUR_MS !== 0 || lkiClass(v) === null) continue;
+    if (ms > now.getTime() || now.getTime() - ms >= MODEL_HOUR_MS) continue;
+    if (best === null || ms > best.hourMs) best = { value: v as number, hourMs: ms };
+  }
+  return best;
+}
+
+/** The `model` block for a row, or null; the class and band are derived here by the operator's rule (lki.ts). */
+function modelBlock(row: ModelRow | null): NlModel | null {
+  if (row === null) return null;
+  const lki = lkiClass(row.value);
+  const band = lkiBand(lki);
+  return lki === null || band === null ? null : { value: row.value, lki, band, hour_start: new Date(row.hourMs).toISOString() };
+}
+
+/** Read the modelled LKI at `at` for the current hour. Never rejects: any failure is null (the line is simply absent). */
+async function readModel(at: { lat: number; lon: number }, d: AmsterdamDeps): Promise<NlModel | null> {
+  try {
+    return modelBlock(parseModel(await getText(modelUrl(at), d.fetch, d.signal), d.now));
+  } catch {
+    return null;
+  }
+}
+
+/** A promise that gives up after `ms` with null, so a hung optional request cannot hold the measured card. */
+function within<T>(p: Promise<T | null>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((r) => { timer = setTimeout(() => r(null), ms); });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
+
 export interface AmsterdamDeps { fetch: Fetch; now: Date; signal?: AbortSignal; from?: { lat: number; lon: number } }
 
 function notReporting(area: string, now: Date, reason: NotReportingReason, station: LocalStation | null, last: number | null): LocalAirPayload {
@@ -136,9 +219,12 @@ export function readingsAt(rows: readonly MeasurementRow[], hourEndMs: number): 
 
 /** Read Amsterdam's current LKI for `area`. Never throws: an unreadable source is the "not reporting" payload. */
 export async function readAmsterdam(area: string, d: AmsterdamDeps): Promise<LocalAirPayload> {
-  const ladder = nlLadder(d.from ?? CANAL_RING);
+  const centre = d.from ?? CANAL_RING;
+  const ladder = nlLadder(centre);
   const nearest = ladder[0]?.station ?? null;
   if (!nearest) return notReporting(area, d.now, 'no_station', null, null);
+  /* The model is asked at once, beside the ladder, and only waited for when a measured figure is ready to carry it. It never reaches a not-reporting answer. */
+  const modelP = readModel(centre, d);
   let answered = false;
   let newestSeen: number | null = null;
   for (let i = 0; i < ladder.length; i++) {
@@ -160,9 +246,10 @@ export async function readAmsterdam(area: string, d: AmsterdamDeps): Promise<Loc
     } catch { /* the LKI stands without the substances beside it */ }
     const band = lkiBand(top.value);
     if (band === null) continue; // unreachable: parseLki kept only classed values
+    const model = await within(modelP, MODEL_WAIT_MS);
     return { schema: LOCAL_SCHEMA, area_id: area, served_at: d.now.toISOString(), credit: LUCHTMEETNET_CREDIT, standard: 'nl-lki', state: 'live',
       station: i === 0 ? station : { ...station, fallback: true }, observed_at: new Date(top.endMs).toISOString(), observed_at_local: AMS.isoAt(top.endMs),
-      lki: { value: top.value, band }, readings };
+      lki: { value: top.value, band }, readings, ...(model ? { model } : {}) };
   }
   return notReporting(area, d.now, answered ? 'no_current_hour' : 'source_down', nearest, newestSeen);
 }

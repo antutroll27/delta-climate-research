@@ -80,6 +80,25 @@ export interface NlReading {
   observed_at: string;
 }
 
+/**
+ * Luchtmeetnet's MODELLED LKI for the area's centre: a calculated field, NOT a measurement, so it has no station and no distance. It
+ * rides beside the measured LKI of a live Amsterdam card and is OPTIONAL: a model that could not be read, is not for the current hour or
+ * does not validate is simply absent, and the measured card is exactly what it would have been. (Schema stays 1: an optional field, and
+ * the validator ignores keys it does not know, so a client older than this field reads the payload as before.)
+ */
+export interface NlModel {
+  /** The model's LKI as published: a decimal, e.g. 3.549999952316284. */
+  value: number;
+  /** The whole-number LKI of `value` by Luchtmeetnet's own rule (rounded up; lki.ts `lkiClass`), 1-11. This is the number the card prints. */
+  lki: number;
+  band: LkiBand;
+  /**
+   * The START of the clock hour the value is for, UTC ISO (`timestamp_measured` of the model row, which Luchtmeetnet's own page treats as
+   * the hour it falls in; luchtmeetnet.ts). The value is current for [hour_start, hour_start + 1 h) and for no other time.
+   */
+  hour_start: string;
+}
+
 export type JpPollutant = 'pm25' | 'no2' | 'ox';
 
 export interface JpReading {
@@ -110,6 +129,8 @@ export type LocalAirPayload = Common & (
       observed_at_local: string;
       lki: { value: number; band: LkiBand };
       readings: NlReading[];
+      /** Luchtmeetnet's modelled LKI at the area centre; absent when it is not available for the current hour. Never a substitute for `lki`. */
+      model?: NlModel;
     }
   | {
       standard: 'jp-eqs';

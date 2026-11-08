@@ -155,9 +155,11 @@ test('readAmsterdam: Vondelpark\'s LKI as published, with the four substances of
   assert.deepEqual(p.readings.map((r) => [r.formula, r.value]), [['PM25', 16.2], ['PM10', 22.9], ['NO2', 15.5], ['O3', 25.1]]);
   assert.ok(p.readings.every((r) => r.observed_at === p.observed_at));
   assert.equal(p.credit, LUCHTMEETNET_CREDIT);
-  assert.equal(calls.length, 2, 'one LKI request, one measurements request');
+  assert.equal(calls.length, 3, 'one LKI request, one measurements request, one (optional) modelled-LKI request');
+  assert.deepEqual(calls.map((c) => c.url.split('?')[0].split('/').pop()).sort(), ['concentrations', 'lki', 'measurements']);
   for (const c of calls) {
     assert.ok(c.url.startsWith('https://api.luchtmeetnet.nl/open_api/'));
+    if (c.url.includes('/concentrations?')) continue;
     assert.match(c.url, /&start=2026-11-06T07:43:52Z&end=2026-11-06T13:43:52Z$/, 'an explicit window: without one the API redirects to another host');
     assert.equal(c.headers['User-Agent'], USER_AGENT);
     assert.ok(!/@/.test(JSON.stringify(c.headers)));
