@@ -52,7 +52,9 @@
  * [0.07, 0.60]). The peak entry's n, RMSE, ceiling and band are NOT Ward 68's;
  * see the comment on it.
  *
- * So the product reports night quantitatively and day as indicative.
+ * So the product reports night as calibrated for the city-wide level (ward-to-ward
+ * differences at night are NOT validated: air temperature plus a fixed offset scores
+ * as well, see NIGHT_AS_SHIPPED) and day as indicative.
  *
  * Regenerate with: python3 scripts/build-ward-observations.py
  *                  python3 scripts/fit-ward-scale.py
@@ -75,6 +77,39 @@ export interface PhaseAccuracy {
   /** short, user-facing reason — shown in the readout's tooltip */
   readonly note: string;
 }
+
+/**
+ * THE NIGHT FIGURES FOR THE MODEL AS SHIPPED (2026-11-07 science audit,
+ * /Volumes/OBOSLab/research/kolkata-skill-check/REPORT.md, Q2 and Q1).
+ *
+ * WHY A SECOND SET OF NIGHT FIGURES EXISTS. data/calibration/model-accuracy.json
+ * (RMSE 2.662, leave-one-overpass-out 2.777, bias +0.41, from measure-accuracy.py)
+ * is scored with the PYTHON mirror of the physics. The shipped TypeScript model
+ * evaluates the night dewpoint taper on a fixed reference cell, the mirror on the
+ * ward's own, so on the same 50 ward-scenes the shipped model scores a little
+ * differently. The calibration data is NOT touched: ACCURACY.night.modelRmseK and
+ * looOverpassRmseK stay the artefact's (a test holds them to it) and the structured
+ * ward record keeps them. The PROSE a visitor reads about the night quotes THESE,
+ * the figures of the model they are actually looking at. The ±3.0 K band covers
+ * both sets (a test holds that too).
+ *
+ * airOffsetLooRmseK: "air temperature plus a fixed offset" scored the same
+ * leave-one-overpass-out way. It does as well as the model at night.
+ */
+export const NIGHT_AS_SHIPPED = {
+  overpasses: 20,
+  rmseK: 2.683,
+  looOverpassRmseK: 2.812,
+  biasK: 0.32,
+  airOffsetLooRmseK: 2.38,
+} as const;
+
+/**
+ * Peak ECOSTRESS, leave-one-overpass-out, for "air temperature plus a fixed offset" (n = 23 over 8
+ * overpasses; kolkata-skill-check REPORT.md Q1, 3.42 K). The model scores ACCURACY.peak.looOverpassRmseK
+ * (2.36 K) on the same rows, so by day it beats air temperature, unlike at night.
+ */
+export const PEAK_AIR_OFFSET_LOO_RMSE_K = 3.42;
 
 export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
   night: {
@@ -101,12 +136,14 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
     looOverpassRmseK: 2.777,
     bandK: 3.0,
     confidence: 'quantitative',
-    note: 'Night surface temperature tracks air temperature closely, which is why '
-        + 'night is the quantitative view: over 50 ward-scenes the model\'s error is '
-        + '2.662 K against a best-achievable 2.166 K, and it runs 0.41 K warmer than '
-        + 'the measured surface on average (bias +0.41 K). The displayed band is '
-        + '+/-3.0 K because it must cover the leave-one-overpass-out error of 2.777 K, '
-        + 'not the in-sample fit.',
+    note: 'Night surface temperature tracks air temperature closely, and at night that '
+        + 'is most of what this model knows. Over 50 ward-scenes '
+        + `(${NIGHT_AS_SHIPPED.overpasses} ECOSTRESS overpasses) the model as shipped is off by `
+        + `${NIGHT_AS_SHIPPED.rmseK.toFixed(2)} K, ${NIGHT_AS_SHIPPED.looOverpassRmseK.toFixed(2)} K out of sample, `
+        + `and runs ${NIGHT_AS_SHIPPED.biasK.toFixed(2)} K warmer than the measured surface. `
+        + 'Air temperature plus a fixed offset does as well '
+        + `(${NIGHT_AS_SHIPPED.airOffsetLooRmseK.toFixed(2)} K out of sample). So the band describes the `
+        + 'city-wide night level; ward-to-ward differences at night are not yet validated.',
   },
   peak: {
     n: 29,
@@ -147,7 +184,7 @@ export const ACCURACY: Record<'peak' | 'night', PhaseAccuracy> = {
         + '±3.3 K and ours was 4.42 K. The current measurement, over Ward 68 and the two '
         + 'other wards, is 2.23 K across 23 ward-scenes (2.36 K out of sample); the band '
         + 'is kept wider than that until a reviewed recalibration, because overstating '
-        + 'our error is the safe direction. Use the night view for quantitative comparison.',
+        + 'our error is the safe direction. Night is calibrated for the city-wide level only.',
   },
 };
 
@@ -468,15 +505,16 @@ export const SPATIAL = {
    * "illustrative", which told them where NOT to trust the map and nothing about
    * where they could. The scale sweep earned the middle tier.
    */
-  note: 'Ward-level surface temperature is calibrated against ECOSTRESS. The pattern WITHIN a '
-      + 'ward is not: block by block it scores r = 0.27, still below the r = 0.31 of a '
+  note: 'Ward means are checked against ECOSTRESS; at peak daytime heat the model beats air '
+      + `temperature (${ACCURACY.peak.looOverpassRmseK.toFixed(2)} vs ${PEAK_AIR_OFFSET_LOO_RMSE_K.toFixed(2)} K out of sample). `
+      + 'The pattern WITHIN a ward does not hold up: block by block it scores r = 0.27, still below the r = 0.31 of a '
       + 'vegetation map given the same treatment, and coarsening the comparison does not '
       + 'close that gap at any scale. At neighbourhood scale (~300-500 m) it reaches '
       + 'r = 0.4, but only about 0.2 in KMC Ward 68, whose dense, uniform fabric leaves '
       + 'the satellite little pattern to match. The colour range inside a ward is close '
       + 'to what the satellite measures (0.97x), though about 0.8x in Ward 68, where '
       + 'contrasts are slightly understated. '
-      + 'Ward figures are measured, neighbourhood contrast is indicative, block-by-block '
+      + 'Ward means are checked, neighbourhood contrast is indicative, block-by-block '
       + 'detail is illustrative.',
 } as const;
 

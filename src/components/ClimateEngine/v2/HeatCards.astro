@@ -7,7 +7,7 @@ import { heatAccuracyClaim } from '../../../scripts/climate-engine/scope/accurac
 interface Props { scope: ResolvedScope }
 const { scope } = Astro.props;
 /* The tier decides whether this city may print Kolkata's bands, caveats and "checked" wording (scope/accuracy-claim.ts). */
-const claim = heatAccuracyClaim(scope.tier);
+const claim = heatAccuracyClaim(scope.tier, scope.city.id);
 ---
 <article class="card" data-v2-card="heat-legend" data-sections="heat">
   <div class="row"><span class="micro">What the colours mean</span><span class="kind modelled">modelled</span></div>

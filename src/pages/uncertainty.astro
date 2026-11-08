@@ -70,7 +70,7 @@ const jsonLd = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Un
         <tr><td>Anomaly RMSE</td><td><span class="n">{SPATIAL.anomalyRmseK.toFixed(2)} K</span></td><td>error once ward-mean bias is removed</td></tr>
       </tbody>
     </table></div>
-    <p>So: the ward-level number is calibrated; the placement of heat <em>inside</em> a ward is not yet better than a vegetation map. That is stated on the map itself, and it is why the two hypotheses below were tested.</p>
+    <p>So: ward means are checked against ECOSTRESS (at night that is the city-wide level; ward-to-ward differences at night are not yet validated), and the placement of heat <em>inside</em> a ward is not yet better than a vegetation map. That is stated on the map itself, and it is why the two hypotheses below were tested.</p>
 
     <h2>Two hypotheses, pre-registered, both rejected</h2>
     <p>The solver is two-dimensional — <code>sun</code> and <code>kRad</code> are scalars, so building geometry cannot enter it. Two ways of letting it in were tested with the direction of the expected effect written down before any number was computed. Both failed, and both are published here rather than buried.</p>

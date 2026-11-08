@@ -1,5 +1,5 @@
 // src/scripts/climate-engine/v2/method-copy.ts — OBOS v2 spec §4.3, H23 [H]. Owner: Track A (plan S3.3). Every figure is an accuracy.ts export; none is typed here.
-import { ACCURACY, TRANSITION_HOURS, TRANSITION_RMSE_K, SEASONAL_CAVEATS, SEASONAL_WARDS, seasonalCaveatLine } from '../accuracy.ts';
+import { ACCURACY, NIGHT_AS_SHIPPED, TRANSITION_HOURS, TRANSITION_RMSE_K, SEASONAL_CAVEATS, SEASONAL_WARDS, seasonalCaveatLine } from '../accuracy.ts';
 
 export interface Row { readonly k: string; readonly v: string }
 
@@ -11,9 +11,9 @@ export function transitionChip(): string { return `Outside validation · ~±${TR
 export function checkedRows(): readonly Row[] {
   const n = ACCURACY.night, p = ACCURACY.peak;
   return [
-    { k: 'Night', v: `±${n.bandK.toFixed(1)} °C over ${n.n} ward-scenes of NASA ECOSTRESS. In-sample error ${n.modelRmseK} K against a best possible ${n.ceilingRmseK} K.` },
+    { k: 'Night', v: `±${n.bandK.toFixed(1)} °C over ${n.n} ward-scenes of NASA ECOSTRESS. Calibration-run error ${n.modelRmseK} K against a best possible ${n.ceilingRmseK} K. This calibrates the city-wide night level, not ward-to-ward differences.` },
     { k: 'Day', v: `±${p.bandK.toFixed(1)} °C, indicative only: n = ${p.n}, an earlier evidence set.` },
-    { k: 'Band', v: `Covers the leave-one-overpass-out error (${n.looOverpassRmseK} K at night), not the in-sample fit.` },
+    { k: 'Band', v: `Covers the leave-one-overpass-out error (${n.looOverpassRmseK} K at night in the calibration run, ${NIGHT_AS_SHIPPED.looOverpassRmseK.toFixed(2)} K for the model as shipped), not the in-sample fit.` },
   ];
 }
 

@@ -1281,3 +1281,37 @@ Every view forces the physics with the current month (Now, 13:00, 22:00 and the 
 the caveat applies in all of them. Compare and the paired brief print no band, so they carry no caveat.
 Bengaluru wards are not in the measurement, so they get none either. A refit only needs the harness re-run:
 it rewrites the file, and the caveat follows.
+
+## 19. Night has no skill over air temperature; Amsterdam is cold by day (two audits, 2026-11-07)
+
+Two read-only Opus science audits: `/Volumes/OBOSLab/research/kolkata-skill-check/REPORT.md` and
+`/Volumes/OBOSLab/research/amsterdam-validation/AUDIT.md`. Neither changed a constant or any calibration data.
+
+**Kolkata, night.** The published figures reproduce to the digit (n = 50 ward-scenes, 20 ECOSTRESS overpasses,
+RMSE 2.662 K, leave-one-overpass-out 2.777 K). But air temperature plus a fixed offset scores 2.38 K out of
+sample against the model's 2.78 K, and the model's own surface-minus-air signal correlates at r = +0.08 with
+the measured one. The ward ordering is right (Ballygunge > Barrackpore > Baruipur) but too strong. The model
+wins on raw RMSE only because it carries the +1.7 K surface-over-air offset. So the ±3.0 K band describes the
+city-wide night level; ward-to-ward differences at night are not validated. By day the model has real skill at
+peak heat (2.36 K out of sample against 3.42 K for air, r = 0.71).
+
+**The figures on the page.** The two sets differ because the calibration harness scores the Python mirror of the
+physics and the page runs the TypeScript model, whose night dewpoint taper differs by up to 0.52 K a row. Scored
+with the shipped TypeScript the night figures are RMSE 2.68 K, 2.81 K out of sample, bias +0.32 K (the displayed
+scoring in section 18 agrees: 2.68 / 2.81 K). The page prose now quotes these, as `NIGHT_AS_SHIPPED` in
+`accuracy.ts`. `model-accuracy.json` and the structured fields it feeds (`modelRmseK` 2.662, `looOverpassRmseK`
+2.777, the ward record) are unchanged, and where they are printed (the methods rows and ledger) they are labelled
+"calibration run". The ±3.0 K band covers both sets. The chip reads "Night level calibrated · ward detail
+unvalidated". Reconciling the mirror with the TypeScript taper and regenerating `model-accuracy.json` is a
+separate reviewed change, not done here.
+
+**Amsterdam, day.** Over ECOSTRESS and Landsat, summers 2019-2026, the model reads cooler than the measured
+surface from late morning to afternoon: Landsat 10:50 bias -7.0 K (95% CI -7.9 to -6.1, 24 dates), ECOSTRESS after
+11:30 -5.2 K (-6.1 to -4.4, 98 dates), and more on clear days (-7.6 to -8.6 K with cloud <= 0.2). Two sensors
+agree, so it is not a retrieval artefact. The cause is the model's sun response and ventilation term, not the
+data: measured surface-minus-air rises 15-22 K per unit effective sun, the model gives 4.4-7.4, and Kolkata never
+pinned that response down (its measured slope is only 0.5-2.4 K per unit sun). At night the 18 clean passes agree
+(RMSE about 1.8 K) but "LST = air temperature" scores 1.63 K, so there is no skill there either. Amsterdam keeps
+"Heat accuracy not yet validated for this city" and now states the daytime cold bias beside it
+(`CITY_CAVEATS` in `scope/accuracy-claim.ts`, keyed on the city key). A joint Kolkata + Amsterdam refit of the
+shortwave and ventilation terms would settle it; that is the founder's call.
