@@ -1,0 +1,21 @@
+---
+/**
+ * SheetIndex.astro: the mount point for the sheet index (city-streaming P5). Renders ONE empty host; the chip, the index plate (desktop)
+ * and the bottom sheet (phone) are built by src/scripts/climate-engine/streaming-host/sheet-index-view.ts from the generated sheet table,
+ * so a change in how many sheets ship changes nothing here.
+ *
+ * NOT RENDERED BY ANY PAGE YET (phase P5 adds a surface, not a wiring). To wire it (P3b), place `<SheetIndex />` in the stage chrome for a
+ * tiled city only, add `@import './screens/sheet-index.css';` to src/styles/obos-v2/screens.css, and in the page script:
+ *
+ *   import { mountSheetIndex } (the view, in streaming-host/) and { indexStateOf, selectEventOf } (the model, in streaming/);
+ *   add this file's one importer to ALLOWED in tests/unit/streaming-dormant.test.mjs.
+ *   const ui = mountSheetIndex(document.querySelector('[data-sheet-index]')!, {
+ *     onSelect: (code) => carryOut(manager.dispatch(selectEventOf(code, performance.now()))),
+ *   });
+ *   // after EVERY dispatch (and once after `start`):
+ *   ui.update(indexStateOf(manager.state()));
+ *   // when an area's bundle has loaded, tell the picker what was DRAWN (the picker never shows the lattice count; with no count it shows none):
+ *   ui.setDrawnCount(code, bundle.wardData.b.length);   // E4 is not in sheets-build.json, so Canal Ring's bundle must supply its own
+ */
+---
+<div class="si-host" data-sheet-index></div>
