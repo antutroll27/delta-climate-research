@@ -328,6 +328,9 @@ class City {
       if (c.type === 'cancel') this.pending.delete(`${c.sheet}/${c.level}`);
       this.loader.dispatch({ type: 'command', atMs: this.t, command: c });
     }
+    /* TWO-PHASE OPEN (P3b audit S3): the manager marks a sheet displayed only when the page says it opened it, and the loader's
+       `end` comes with that. The page opens synchronously here, as it does in the app's commit. */
+    for (const c of cmds) if (c.type === 'make-current') this.event({ type: 'opened', sheet: c.sheet });
     // the executor re-arms a timer from nextWakeMs; a tick at that moment is what the page does
     return cmds;
   }

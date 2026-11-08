@@ -350,6 +350,15 @@ function measuredMeans(entry: SurfaceMetaEntry | undefined): SurfaceMeans | null
   return { fvc, albedo };
 }
 
+/**
+ * The measured means of a STREAMED area (an Amsterdam area that is not a registered, drawable page), from the same
+ * surface-meta.json row the exporter wrote beside its raster, or null where there is none. The streamed loader
+ * (streaming-host/) reads it so the means it hands the model are the exporter's, not recomputed from the texture.
+ */
+export async function streamedAreaMeans(areaId: string): Promise<SurfaceMeans | null> {
+  return measuredMeans((await loadSurfaceMeta())?.[areaId]);
+}
+
 export interface WardSurface {
   readonly means: SurfaceMeans;
   readonly surface: SurfaceRaster | null;

@@ -20,13 +20,14 @@
 import type { ExploreDeviceTier } from '../explore/runtime-budget.ts';
 import type { NeighbourSheet, PreparedBuildings, ReliefRenderer } from '../explore/relief-contract.ts';
 import type { RoadsData, WardData, WaterData } from '../heat-map-model.ts';
-import { decodeSurfaceBlob, type WardSurface } from '../surface-raster.ts';
+import { assertSurfaceMatches, decodeSurfaceBlob, type SurfaceMeans, type WardSurface } from '../surface-raster.ts';
 import { asTerrainField, type TerrainField } from '../terrain.ts';
 import { asTreesFile, type TreesFile } from '../vegetation-layer.ts';
 import { createExecutor, type ExecutorPorts, type LoadJob, type PageEvent, type SheetExecutor } from '../streaming/host-executor.ts';
 import { haloAssetBytes, neighboursOf, quantiseLayers, type HaloAsset, type QuantisedLayers } from '../streaming/halo-asset.ts';
 import type { NeighbourLayers } from '../streaming/halo-solve.ts';
-import { gpuMB, DEFAULT_CONFIG, createSheetManager, type ManagerState, type SheetManager } from '../streaming/sheet-manager.ts';
+import { gpuMB, DEFAULT_CONFIG, createSheetManager, type Level, type ManagerCommand, type ManagerState, type SheetManager } from '../streaming/sheet-manager.ts';
+import type { TileStage } from '../streaming/loader-model.ts';
 import { AMSTERDAM_TOPOLOGY as TOPOLOGY, DIRECTIONS, type Direction } from '../streaming/sheet-topology.ts';
 import type { NetworkClass } from '../streaming/sheet-budgets.ts';
 import { streamedAreaPaths, type AreaPaths } from '../scope/paths.ts';
@@ -64,21 +65,39 @@ export interface CityStreamHooks {
   relief(): ReliefRenderer | null;
   /** The page's own surface loader for the sheet it already knows how to load (E4), or null for the others. */
   registeredSurface(code: SheetCode): Promise<WardSurface> | null;
+  /** The exporter's measured means for an area that has a surface-meta row but is not a registered page (every area but E4), or null. */
+  surfaceMeans?(code: SheetCode): Promise<SurfaceMeans | null>;
   installBundle(code: SheetCode, bundle: SheetBundle): void;
   dropBundle(code: SheetCode): void;
-  /** Open `code` as the page's ward. Resolves when it is committed; `afterCommit` runs in the same synchronous block. */
-  showSheet(code: SheetCode, prepared: PreparedBuildings | null, ao: Uint8Array | null, first: boolean, afterCommit: () => void): Promise<void>;
+  /** Open `code` as the page's ward. Resolves when it is committed; `afterCommit` runs in the same synchronous block.
+   *  `fly` = the person chose this area (the picker, the area select, a retry of one): the camera goes there. A crossing by panning has the camera
+   *  over it already. */
+  showSheet(code: SheetCode, prepared: PreparedBuildings | null, ao: Uint8Array | null, first: boolean, afterCommit: () => void, fly?: boolean): Promise<void>;
   setHaloSupply(supply: (() => NeighbourLayers) | null): void;
   /** Solve the open sheet again (a halo arrived after an edge-rule solve). */
   resolve(): void;
   loader(code: SheetCode, phase: 'rise' | 'plate' | 'end'): void;
   failure(code: SheetCode, message: string): void;
   warn(message: string, error?: unknown): void;
+  /** OPTIONAL page furniture (the loader view, the area picker). Every manager command the loader cares about, in order, as the manager issued it:
+   *  `loader`, `failure`, `cancel`, `evict` when it is issued; `make-current` at the page's commit (so the building rise starts when the buildings do). */
+  command?(command: ManagerCommand): void;
+  /** A real stage of `code`'s load finished (the loader's progress; never invented). */
+  stage?(code: SheetCode, stage: TileStage): void;
+  /** What was DRAWN for `code` (its building count, its trees), once its bundle is loaded: the loader's plate and the picker print these. */
+  facts?(code: SheetCode, facts: { readonly buildings: number; readonly trees?: number }): void;
+  /** The manager's state moved (after every event it was sent). The picker redraws from it. */
+  dispatched?(state: ManagerState): void;
 }
 
 export interface CityStream {
   start(code: SheetCode): void;
+  /** The person chose an area (the picker, the area select). The camera follows the open. */
   select(code: string): void;
+  /** The loader's Retry: load `level` of `code` again. */
+  retry(code: SheetCode, level: Level): void;
+  /** The manager's state now (the picker's). */
+  managerState(): ManagerState;
   /** The map camera, from the page's own `move` / `moveend` events. */
   camera(lon: number, lat: number, gesturing: boolean, headingDeg: number | null): void;
   tierChanged(tier: ExploreDeviceTier): void;
@@ -127,7 +146,20 @@ class Memo<V> {
 
 export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, options: { now?: () => number } = {}): CityStream {
   const now = options.now ?? ((): number => performance.now());
-  const manager: SheetManager = createSheetManager(hooks.tier(), hooks.network());
+  const inner: SheetManager = createSheetManager(hooks.tier(), hooks.network());
+  /* The manager seen through a tap: the page furniture gets each command at the moment it is issued (before the ports carry it
+     out) and the new state after every event. `make-current` is held back to the commit (see `makeCurrent`). */
+  const manager: SheetManager = {
+    ...inner,
+    dispatch(event) {
+      const commands = inner.dispatch(event);
+      for (const c of commands) if (c.type !== 'make-current') tap(c);
+      if (!disposed) hooks.dispatched?.(inner.state());
+      return commands;
+    },
+  };
+  const tap = (c: ManagerCommand): void => { try { hooks.command?.(c); } catch (error) { hooks.warn('page furniture failed', error); } };
+  const stage = (code: SheetCode, s: TileStage): void => { try { hooks.stage?.(code, s); } catch (error) { hooks.warn('page furniture failed', error); } };
   const texts = new Memo<Promise<{ ward: string; roads: string | null }>>(14);
   const surfaces = new Memo<Promise<WardSurface>>(14);
   const prepares = new Memo<Promise<Prepared>>(4);
@@ -152,6 +184,8 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
   let switches = 0;
   let switchToken = 0;
   let disposed = false;
+  /** The area the person chose last, until it opens: the camera flies there, once. */
+  let chosen: SheetCode | null = null;
 
   // ── fetch helpers ───────────────────────────────────────────────────────────
 
@@ -185,10 +219,17 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
         const blob = await (await get(sheetUrls(code).surface, job)).blob();
         const raster = await decodeSurfaceBlob(blob, code);
         if (raster === null) return { means: { fvc: 0.25, albedo: 0.2 }, surface: null };
+        /* THE EXPORTER'S MEANS, from the area's surface-meta row (P2c), checked against the texture exactly as a registered area's are
+           (`assertSurfaceMatches`); a texture that disagrees is dropped and the area is flat at the mean, as everywhere else. A row that
+           is missing (or no hook) falls back to the raster's own mean, which holds the invariant by construction and claims nothing. */
+        const recorded = (await hooks.surfaceMeans?.(code)) ?? null;
+        if (recorded !== null) {
+          try { assertSurfaceMatches(raster, recorded.fvc, recorded.albedo, 0.01, null); }
+          catch (error) { hooks.warn(`surface of ${code} disagrees with its record`, error); return { means: recorded, surface: null }; }
+          return { means: recorded, surface: raster };
+        }
         let veg = 0, albedo = 0;
         for (let i = 0; i < raster.veg.length; i++) { veg += raster.veg[i]!; albedo += raster.albedo[i]!; }
-        /* No surface-meta row for a sheet yet (P2c), so the means are the raster's own: the invariant `assertSurfaceMatches`
-           checks between a raster and its scalar holds by construction, and is not claimed as a validation. */
         return { means: { fvc: veg / raster.veg.length, albedo: albedo / raster.albedo.length }, surface: raster };
       } catch (error) { surfaces.delete(code); throw error; }
     })());
@@ -207,11 +248,18 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
 
   async function loadLod0(job: LoadJob): Promise<void> {
     const urls = sheetUrls(job.sheet);
+    const done = <T>(s: TileStage) => (v: T): T => { if (!job.signal.aborted) stage(job.sheet, s); return v; };      // the loader's stages are the real ones, as each lands
     const [prepared, surface, t, terrain, water, trees] = await Promise.all([
-      getPrepared(job.sheet, job), getSurface(job.sheet, job), getTexts(job.sheet, job),
-      optional<TerrainField | null>(urls.terrain, job, null, async (r) => asTerrainField(await r.json())),
-      optional<WaterData>(urls.water, job, { polys: [] }, async (r) => (await r.json()) as WaterData),
-      optional<TreesFile | null>(urls.trees, job, null, async (r) => asTreesFile(await r.json())),
+      getPrepared(job.sheet, job).then(done('ward')), getSurface(job.sheet, job).then(done('surface')), getTexts(job.sheet, job),
+      ...(() => {
+        const vector = [
+          optional<TerrainField | null>(urls.terrain, job, null, async (r) => asTerrainField(await r.json())),
+          optional<WaterData>(urls.water, job, { polys: [] }, async (r) => (await r.json()) as WaterData),
+          optional<TreesFile | null>(urls.trees, job, null, async (r) => asTreesFile(await r.json())),
+        ] as const;
+        void Promise.all(vector).then(done('vector'), () => undefined);
+        return vector;
+      })(),
     ]);
     if (job.signal.aborted) throw new DOMException('aborted', 'AbortError');
     terrains.set(job.sheet, terrain);
@@ -219,6 +267,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
     const roads = t.roads === null ? { ways: [] } : (JSON.parse(t.roads) as RoadsData);
     hooks.installBundle(job.sheet, { ward, terrain, water, roads, trees, surface, prepared });
     bundles.add(job.sheet);
+    try { hooks.facts?.(job.sheet, { buildings: ward.count, ...(trees === null ? {} : { trees: trees.trees.length }) }); } catch (error) { hooks.warn('page furniture failed', error); }
   }
 
   async function loadHalo(job: LoadJob): Promise<void> {
@@ -243,6 +292,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
     pendingMesh.set(job.sheet, mesh);
     massingBytes.set(job.sheet, meshBytes(mesh));
     massingResident.add(job.sheet);
+    stage(job.sheet, 'massing');
     syncNeighbours();
   }
 
@@ -315,6 +365,8 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
         const wantMassing = previous !== null && previous !== c.sheet && !massingResident.has(previous)
           && Math.abs(TOPOLOGY.cell(previous).i - TOPOLOGY.cell(c.sheet).i) <= 1 && Math.abs(TOPOLOGY.cell(previous).j - TOPOLOGY.cell(c.sheet).j) <= 1;
         const first = open === null;
+        const fly = chosen === c.sheet;
+        chosen = null;                                    // one fly per choice: any other open ends it
         const bundleTerrain = (await loadedTerrain(c.sheet));
         const [built, massed] = await Promise.all([
           worker.mesh(c.sheet, t.ward, meshTier, bundleTerrain, AO_REQUEST),
@@ -332,7 +384,8 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
           open = c.sheet; switches++;
           supply(c.sheet, halos.get(c.sheet));
           syncNeighbours(); syncSeams();
-        });
+          tap(c);                                          // the building rise is planned HERE, in the commit's own block: it starts with the buildings
+        }, fly);
         if (token === switchToken && !disposed) executor.send({ type: 'opened', sheet: c.sheet });
       })().catch((error) => {
         hooks.warn(`could not open sheet ${c.sheet}`, error);
@@ -369,7 +422,13 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
 
   return {
     start: (code) => send({ type: 'start', sheet: code }),
-    select: (code) => send({ type: 'select', sheet: code }),
+    select(code) {
+      const target = sheetByCode(code)?.code ?? null;
+      chosen = target !== open ? target : null;
+      send({ type: 'select', sheet: code });
+    },
+    retry: (code, level) => send({ type: 'retry', sheet: code, level }),
+    managerState: () => inner.state(),
     camera(lon, lat, gesturing, headingDeg) {
       const t = now();
       if (gesturing && t - lastCameraAt < 100) return;

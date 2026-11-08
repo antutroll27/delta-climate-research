@@ -142,7 +142,11 @@ export function createExecutor(manager: SheetManager, ports: ExecutorPorts): She
     const now = ports.now();
     const wake = manager.nextWakeMs(now);
     if (wake === null) return;
-    cancelTimer = ports.schedule(Math.max(0, wake - now), () => { cancelTimer = null; enqueue({ type: 'tick', atMs: ports.now() }); });
+    /* THE TICK IS STAMPED NO EARLIER THAN THE WAKE TIME IT WAS SET FOR. A host timer may fire a fraction of a millisecond EARLY (Node and
+       browsers both round); the manager would then see a tick just short of the wake time and do nothing, and `rearm` would find that wake
+       time already behind it and set no timer, so the loader's reveal stalled until the next unrelated event (seen in the integration
+       test: a 400 ms quiet window ending at 991 ms). The timer WAS due; saying so costs nothing. */
+    cancelTimer = ports.schedule(Math.max(0, wake - now), () => { cancelTimer = null; enqueue({ type: 'tick', atMs: Math.max(ports.now(), wake) }); });
   };
 
   const drain = (): void => {

@@ -133,3 +133,18 @@ test('dispose cancels everything and stops the clock', async () => {
   assert.equal(f.log.length, before);
   assert.equal(f.exec.inFlight(), 0);
 });
+
+
+test('a host timer that fires a fraction of a millisecond early still ends the manager\'s quiet window (the loader reveal cannot stall)', async () => {
+  const f = new Fake();
+  f.exec.send({ type: 'start', sheet: 'E4' });
+  await f.finish('E4', 'lod0'); await f.finish('E4', 'halo');
+  f.t = 1000;
+  f.exec.send({ type: 'select', sheet: 'F4' });
+  const wake = f.manager.nextWakeMs(f.t);
+  assert.ok(wake !== null && wake > f.t, 'the quiet window ends at a known time');
+  const timer = f.timers.filter((x) => x.live).sort((a, b) => b.at - a.at)[0];
+  f.t = timer.at - 0.6;                  // early by 0.6 ms, as a real timer may be
+  timer.live = false; timer.fn(); await f.settle();
+  assert.ok(f.log.some((l) => l.startsWith('loader:F4/rise')), 'the loader rise was commanded by that early tick');
+});

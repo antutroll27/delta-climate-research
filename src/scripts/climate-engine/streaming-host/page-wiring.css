@@ -1,0 +1,5 @@
+/* page-wiring.css — the few rules the streaming dev wiring adds to the page (city-streaming integration). Loaded with the wiring only,
+   so a build without the dev flag never carries it. Tokens only; nothing here animates. */
+
+.stage .si-host { align-self: flex-start; }
+.stage #pname .obos-area-code { display: inline-block; margin-left: .5em; font-size: .42em; font-weight: 600; letter-spacing: .06em; vertical-align: .55em; opacity: .62; font-style: normal; }

@@ -1,0 +1,106 @@
+/**
+ * area-page.ts — what the page does when an area opens, and how the loader and the picker are fed (city-streaming integration).
+ *
+ * PURE: no DOM, no window, no bundler imports, so node tests drive it with fakes (tests/unit/city-stream-page.test.mjs). The DOM side
+ * (streaming-host/page-wiring.ts) supplies an `AreaWriter` that writes the real header, breadcrumb, Area select and address bar, and the
+ * two finished views; this module is the decision of WHAT they are told, and in which order.
+ *
+ * THE USER'S WORD IS "AREA". "Sheet" is the code's name for a lattice square and never reaches a screen.
+ * THE URL. A streamed area has no page of its own while TILED_CITY_READY is false, so the address stays on Canal Ring's page and the
+ * area is the query parameter `area=F4`, written with replaceState (never a navigation). A refresh reads it back with `areaFromUrl`.
+ */
+import type { ManagerCommand, ManagerState } from './sheet-manager.ts';
+import type { AreaNames, SheetFacts, TileStage } from './loader-model.ts';
+import { indexStateOf, type IndexViewState } from './sheet-index.ts';
+import { sheetByCode, type SheetCode } from '../scope/sheets.ts';
+
+/** "F4" from `?area=F4` (any case), when it names an area that ships; otherwise null and the page opens Canal Ring (E4). */
+export function areaFromUrl(search: string): SheetCode | null {
+  const raw = new URLSearchParams(search).get('area');
+  const row = raw === null ? undefined : sheetByCode(raw.toUpperCase());
+  return row === undefined ? null : row.code;
+}
+
+/** `search` with `area=<code>` set; every other parameter (stream=1, streamtier, look) and its order are kept. */
+export function searchWithArea(search: string, code: SheetCode): string {
+  const params = new URLSearchParams(search);
+  params.set('area', code);
+  return `?${params.toString()}`;
+}
+
+export interface AreaHeader {
+  readonly code: SheetCode;
+  /** the area's name (area-names.json; else the area table's label without its code) */
+  readonly name: string;
+  /** the line under it: "Oost · Area F4" */
+  readonly zone: string;
+}
+
+export function headerOf(code: SheetCode, names: AreaNames): AreaHeader {
+  const n = names[code];
+  const row = sheetByCode(code);
+  const name = n?.name ?? (row === undefined ? code : row.label.slice(row.label.indexOf(' · ') + 3));
+  const stadsdeel = n?.stadsdeel ?? row?.stadsdeel ?? '';
+  return { code, name, zone: stadsdeel === '' ? `Area ${code}` : `${stadsdeel} · Area ${code}` };
+}
+
+/** Where the open area is written. The page supplies the DOM; a test supplies a recorder. */
+export interface AreaWriter {
+  header(header: AreaHeader): void;
+  /** the Area select (and its visible label) names this area's key */
+  areaSelect(code: SheetCode): void;
+  /** replaceState target, path + query + hash */
+  address(url: string): void;
+}
+
+export interface LoaderLike {
+  command(command: ManagerCommand): void;
+  stage(code: SheetCode, stage: TileStage): void;
+  setFacts(code: SheetCode, facts: SheetFacts): void;
+}
+export interface PickerLike {
+  update(state: IndexViewState): void;
+  setDrawnCount(code: string, count: number): void;
+}
+
+export interface PageFurniture {
+  command(command: ManagerCommand): void;
+  stage(code: SheetCode, stage: TileStage): void;
+  facts(code: SheetCode, facts: { readonly buildings: number; readonly trees?: number }): void;
+  dispatched(state: ManagerState): void;
+  /** `code` is now the open area, with `drawn` buildings on screen. */
+  areaShown(code: SheetCode, drawn: number): void;
+}
+
+export function createPageFurniture(parts: {
+  readonly loader: LoaderLike;
+  readonly picker: PickerLike;
+  readonly writer: AreaWriter;
+  readonly names: AreaNames;
+  readonly location: () => { readonly pathname: string; readonly search: string; readonly hash: string };
+}): PageFurniture {
+  const { loader, picker, writer, names } = parts;
+  let lastPicker = '';
+  return {
+    command: (c) => loader.command(c),
+    stage: (code, s) => loader.stage(code, s),
+    facts(code, f) {
+      loader.setFacts(code, { buildings: f.buildings, ...(f.trees === undefined ? {} : { trees: f.trees }) });
+      picker.setDrawnCount(code, f.buildings);
+    },
+    dispatched(state) {
+      /* The manager's state moves on every camera event (about ten a second); the picker shows three things of it. */
+      const key = `${state.current}|${state.displayed}|${state.loader?.sheet ?? ''}|${state.loader?.phase ?? ''}`;
+      if (key === lastPicker) return;
+      lastPicker = key;
+      picker.update(indexStateOf(state));
+    },
+    areaShown(code, drawn) {
+      writer.header(headerOf(code, names));
+      picker.setDrawnCount(code, drawn);
+      writer.areaSelect(code);
+      const loc = parts.location();
+      writer.address(`${loc.pathname}${searchWithArea(loc.search, code)}${loc.hash}`);
+    },
+  };
+}

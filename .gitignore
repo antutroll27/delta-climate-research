@@ -116,3 +116,5 @@ docs/audits/
 /data/cities/amsterdam/ams-*-*.json
 /data/cities/amsterdam/ams-*/build.json
 /public/heat-map/data/ams-*
+/dist-stream/
+/test-results/
