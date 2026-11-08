@@ -8,6 +8,10 @@
  * (`scope/registry.ts` `drawable`), because an air card beside a map that cannot be opened is a promise
  * the page cannot keep. `localAirReady` is that one gate, used by the UI (`isAirCity`) and by the API
  * (an area that is not ready answers 404 like an unknown one). This file does not set `drawable`.
+ *
+ * AMSTERDAM'S 31 STREAMED AREAS (the whole-city stream, dev flag) are the one exception to "drawable": they have no page of their own, the stream
+ * opens each on the Canal Ring page, and the card follows the open one, so they are ready by being a sheet of the table (`streamed`). Their keys
+ * are derived from the sheet ids; the API therefore answers exactly those ids (and Canal Ring, Tokyo) and no other.
  */
 import { AMSTERDAM_SHEET_IDS } from '../../data/sheets/amsterdam.ts';
 import { isDrawable } from '../../scripts/climate-engine/scope/registry.ts';
