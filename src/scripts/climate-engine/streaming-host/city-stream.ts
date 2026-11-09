@@ -57,7 +57,7 @@ export function sheetUrls(code: SheetCode): SheetUrls {
   return streamedAreaUrls(sheetByCode(code)!.id);
 }
 
-/** A downloaded, VERIFIED bundle: the stored bytes (about 0.5 MB, compressed) and what they must be. Nothing is parsed until a use needs it: a neighbour never inflates or parses its water, trees or terrain. */
+/** A downloaded, VERIFIED bundle: the stored bytes (about 0.5 MB, compressed) and what they must be. Nothing is parsed until a use needs it: every section is inflated once at download to check its sha256, but a neighbour never PARSES (or keeps) its water, trees or terrain. */
 interface HeldBundle { readonly bytes: ArrayBuffer; readonly areaId: string; readonly pin: string }
 
 /** Everything the page's own `loadWard` needs for a sheet, so it can open it from cache. */

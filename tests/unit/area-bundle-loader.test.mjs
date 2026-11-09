@@ -359,7 +359,7 @@ test('R2-S1: a bundle the manifest does not pin (its content hash differs) is un
   } finally { r.stop(); }
 });
 
-test('R2-S2: a held bundle is BYTES: a neighbour (halo, massing) never inflates or parses its water, trees or terrain; the open area parses them once', async () => {
+test('R2-S2: a held bundle is BYTES: a neighbour (halo, massing) never parses its water, trees or terrain; the open area parses them once', async () => {
   configure();
   const realParse = JSON.parse;
   const parsed = [];

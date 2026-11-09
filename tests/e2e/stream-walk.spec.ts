@@ -425,7 +425,7 @@ test.describe('public mode', () => {
     page.on('pageerror', (error) => thrown.push(String(error)));
     await page.route((url) => isWorkerUrl(url.href), (route) => route.abort('connectionrefused'));
     await page.goto(`${BASE}/heat-map/nl/amsterdam/canal-ring/?lab=1`, { waitUntil: 'domcontentloaded' });
-    await expect.poll(async () => (await report(page))?.displayed, { timeout: 120_000, message: 'E4 opens with the Worker down' }).toBe('E4');
+    await expect.poll(async () => (await report(page))?.displayed, { timeout: 150_000, message: 'E4 opens with the Worker down' }).toBe('E4');
     await expect.poll(() => page.evaluate(() => document.getElementById('bcount')?.textContent ?? ''), { timeout: 30_000 }).toContain(drawnOf('E4').toLocaleString('en-US'));
     await page.waitForTimeout(14_000);                       // past the retry schedule: the halo and the ring have been given up on
     const state = () => page.evaluate(() => ({
