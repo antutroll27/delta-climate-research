@@ -2725,7 +2725,7 @@ export function mountHeatMap(): () => void {
   function failSwitch(token: WardRequestToken, name: AreaKey, error: unknown): void {
     wardSession.fail(token);
     console.warn(`Ward ${name} could not load:`, error);
-    if (!(STREAM_ON && sheetOf(name) !== null)) loadChip.fail(`${resolve(name).area.name} could not load.`);     // a streamed area's failure is the loader view's plate
+    if (!(STREAM_ON && streamControl !== null && sheetOf(name) !== null)) loadChip.fail(`${resolve(name).area.name} could not load.`);     // a streamed area's failure is the loader view's plate
     try { projectWard(); } catch (projectError) { console.warn('Ward projection failed:', projectError); }
   }
 
@@ -4674,7 +4674,15 @@ export function mountHeatMap(): () => void {
      to touch the style before this moment because doing so stops this very event
      from firing — see the note in `syncSky`. Ordered so the instrument starts
      even if the sky call misbehaves again on a future MapLibre. */
-  const onMapLoad = () => { mapHasLoaded = true; if (STREAM_ON) void startStream(); else void loadWard(INITIAL_AREA); syncSky(); };
+  /* A STREAMING CHUNK THAT CANNOT BE LOADED (a flaky connection, or a deploy that replaced the hashed chunks under an open tab) must not leave Canal Ring undrawn: the page
+     falls back to the classic single-area load, exactly what `?stream=0` gives (public audit S1). Anything half-built is dropped first. */
+  const streamFailed = (error: unknown): void => {
+    if (STREAM_TOOLS) console.warn('streaming could not start; opening the classic page', error);
+    if (appDisposed || wardSession.committedWard !== null) return;      // something is already drawn: leave it
+    streamControl?.dispose(); streamControl = null; streamSurfaces = null; streamShown = null; streamRise = null;
+    void loadWard(INITIAL_AREA);
+  };
+  const onMapLoad = () => { mapHasLoaded = true; if (STREAM_ON) void startStream().catch(streamFailed); else void loadWard(INITIAL_AREA); syncSky(); };
   map.once('load', onMapLoad);
   void capsReady.then((caps) => {
     if (!appDisposed && caps.mode !== 'isotherm') void ensureRelief();   // every tier — see initSimHost

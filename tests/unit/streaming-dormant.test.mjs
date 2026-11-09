@@ -50,7 +50,7 @@ test('heat-map-app.ts reaches streaming only through type imports and dynamic im
   assert.deepEqual(staticValue, [], 'a static value import would put streaming in every bundle');
   assert.match(text, /const STREAM_ON = \(import\.meta\.env\.PUBLIC_OBOS_STREAM === '1' \|\| import\.meta\.env\.PUBLIC_OBOS_STREAM_DEV === '1'\)\s+&& INITIAL_AREA === 'nl\/amsterdam\/canal-ring'\s+&& \(import\.meta\.env\.PUBLIC_OBOS_STREAM === '1' \? streamParam\(\) !== '0' : streamParam\(\) === '1'\);/);
   assert.match(text, /const STREAM_TOOLS = import\.meta\.env\.PUBLIC_OBOS_STREAM_DEV === '1' && STREAM_ON;/);
-  assert.match(text, /if \(STREAM_ON\) void startStream\(\); else void loadWard\(INITIAL_AREA\);/);
+  assert.match(text, /if \(STREAM_ON\) void startStream\(\)\.catch\(streamFailed\); else void loadWard\(INITIAL_AREA\);/);
 });
 
 test('the streaming modules are DOM-free and GL-free: no three.js value import, no window/document', () => {
