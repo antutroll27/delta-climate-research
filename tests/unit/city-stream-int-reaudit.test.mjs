@@ -84,13 +84,18 @@ async function openE4(r) {
 
 test('R2: the fly ends (the person grabs the map) while a SHOWN loader still holds the picked area\'s open; panning on then streams the area under the camera', async () => {
   let slow = false;
-  const r = rig({ holdMs: 1500, delay: (u) => (slow && /ams-f4/.test(u) ? 700 : 0) });   // F4 is not resident: the loader rises at 400 ms
+  // F4 is not resident: the loader rises at 400 ms and F4's files land at 1,400 ms. The gap is far wider than R3's 150 ms
+  // reveal window, so a starved runner (a late 400 ms timer) cannot turn this into a fast open (CI flake, PR #91, 2026-11-09).
+  const r = rig({ holdMs: 1500, delay: (u) => (slow && /ams-f4/.test(u) ? 1400 : 0) });
   try {
     await openE4(r);
     slow = true;
     r.stream.camera(...C.E4, false, null);
     r.stream.select('F4');
     await until(() => r.log.show.some((s) => s.code === 'F4'), 'F4 committed');
+    const commit = r.log.show.find((s) => s.code === 'F4').at;
+    const rise = r.log.commands.find((c) => c.type === 'loader' && c.phase === 'rise' && c.sheet === 'F4');
+    assert.ok(rise && commit - rise.at >= 150, `premise: a SLOW open (the commit came ${rise ? Math.round(commit - rise.at) : '?'} ms after the rise; a fast one is under 150)`);
     await wait(200);                                            // 200 ms into the fly: the person grabs the map over E4
     r.stream.flyEnded();
     assert.equal(r.stream.report().displayed, 'E4', 'premise: the open is still held (a loader was shown), the manager has not been told');
