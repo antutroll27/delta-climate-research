@@ -1,5 +1,5 @@
-/* page-wiring.css — the few rules the streaming dev wiring adds to the page (city-streaming integration). Loaded with the wiring only,
-   so a build without the dev flag never carries it. Tokens only; nothing here animates. */
+/* page-wiring.css — the few rules the streaming wiring adds to the page (city-streaming integration). Loaded with the wiring only,
+   so a build without a streaming flag never carries it. Tokens only; nothing here animates. */
 
 .stage .si-host { align-self: flex-start; }
 .stage #pname .obos-area-code { display: inline-block; margin-left: .5em; font-size: .42em; font-weight: 600; letter-spacing: .06em; vertical-align: .55em; opacity: .62; font-style: normal; }
@@ -14,3 +14,8 @@
   .stage .cl .cl-chip { top: calc(142px + env(safe-area-inset-top, 0px)); left: 50%; }
   .stage .cl { --cl-bottom-phone: 172px; }       /* the progress list sits above the readings sheet, not over its top edge */
 }
+
+/* A link a streamed area cannot use (Compare, the ward brief): withdrawn by the app (no href), dimmed, and it says why in words after its label. */
+.stage a[data-unavailable] { opacity: .55; cursor: not-allowed; pointer-events: none; }
+.stage a[data-unavailable]::after { content: " · " attr(data-unavailable); font-size: .85em; }
+.stage [data-streamed-note] { margin: 0; }

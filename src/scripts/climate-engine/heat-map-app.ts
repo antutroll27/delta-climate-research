@@ -64,6 +64,7 @@ import type { PreparedBuildings, ReliefRenderer, ReliefWardBundle, ReliefVisualS
 import { sheetByCode, sheetKey, sheetOf, type SheetCode } from './scope/sheets';
 import type { CityStream, CityStreamHooks, SheetBundle } from './streaming-host/city-stream';
 import type { NeighbourLayers } from './streaming/halo-solve';
+import type { AreaSurfaces } from './streaming/area-surfaces';
 import {
   attachReliefCustomLayer, isReliefLayerAttached, shouldShowRelief,
 } from './explore/relief-lifecycle';
@@ -260,8 +261,9 @@ export function mountHeatMap(): () => void {
      opens Canal Ring through the stream controller instead of `loadWard(INITIAL_AREA)`, draws its neighbours as grey massing, moves to the next sheet
      when the camera has crossed a seam, and solves each sheet on its 504-cell halo grid. */
   const streamParam = (): string | null => new URLSearchParams(window.location.search).get('stream');      // read inside the condition, so it is removed with it
-  const STREAM_ON = INITIAL_AREA === 'nl/amsterdam/canal-ring'
-    && (import.meta.env.PUBLIC_OBOS_STREAM === '1' ? streamParam() !== '0' : import.meta.env.PUBLIC_OBOS_STREAM_DEV === '1' && streamParam() === '1');
+  const STREAM_ON = (import.meta.env.PUBLIC_OBOS_STREAM === '1' || import.meta.env.PUBLIC_OBOS_STREAM_DEV === '1')
+    && INITIAL_AREA === 'nl/amsterdam/canal-ring'
+    && (import.meta.env.PUBLIC_OBOS_STREAM === '1' ? streamParam() !== '0' : streamParam() === '1');
   const STREAM_TOOLS = import.meta.env.PUBLIC_OBOS_STREAM_DEV === '1' && STREAM_ON;
   /* Installed as early as the page allows (it only sees what is created after it), and only in a dev-tools build. */
   const glMeterReady = STREAM_TOOLS ? import('./streaming-host/gl-meter').then((m) => { m.installGlMeter(); return m; }) : null;
@@ -326,6 +328,11 @@ export function mountHeatMap(): () => void {
     const panel = el('srcPanel');
     if (!panel) return;
     const gen = ++srcGen;
+    const foreign = STREAM_ON ? foreignArea() : null;
+    if (foreign !== null) {      // a streamed area has no provenance manifest (and none is fetched for it): say so, with the area's own name
+      panel.innerHTML = `<h4>Data receipts</h4><div class="src-row"><div class="s">${escHtml(streamSurfaces!.receipts(foreign))}</div></div>`;
+      return;
+    }
     const manifest = await loadLayerManifest(state.ward);
     if (gen !== srcGen) return;
     if (!manifest) {
@@ -1418,7 +1425,8 @@ export function mountHeatMap(): () => void {
     const sum = el('solPaneSum'), list = el('solList'), link = el('solCsv') as HTMLAnchorElement | null;
     if (!sum || !list || !link) return;
     if (!pv) {
-      sum.textContent = `No solar screen ships for ${areaName()}. The screen needs footprints, heights and canopy, and this area ships none.`;
+      const foreign = STREAM_ON ? foreignArea() : null;
+      sum.textContent = foreign !== null ? streamSurfaces!.solar(foreign) : `No solar screen ships for ${areaName()}. The screen needs footprints, heights and canopy, and this area ships none.`;
       list.innerHTML = '';
       link.setAttribute('hidden', '');
       return;
@@ -2075,6 +2083,13 @@ export function mountHeatMap(): () => void {
 
   let wrapHost: ((host: HeatSimHost) => HeatSimHost) | null = null;
   let streamControl: CityStream | null = null;
+  /** What each single-area surface says for a streamed area (streaming/area-surfaces.ts), once the stream chunk is loaded. */
+  let streamSurfaces: AreaSurfaces | null = null;
+  /** The open area's sheet code when it is a streamed area OTHER than the page's own Canal Ring, else null. Callers write `STREAM_ON && foreignArea()` so a build without streaming drops the branch. */
+  const foreignArea = (): SheetCode | null => {
+    const row = streamSurfaces !== null && state.ward !== INITIAL_AREA ? sheetOf(state.ward) : null;
+    return row !== null && streamSurfaces!.isForeign(row.code) ? row.code : null;
+  };
   /** Dev streaming: change the device tier AND tell the controller (set once the controller exists). */
   let setStreamTier: ((tier: ExploreDeviceTier) => void) | null = null;
   /** The sheet being opened by the stream controller, for the span of its commit; null otherwise. */
@@ -3849,6 +3864,8 @@ export function mountHeatMap(): () => void {
     /* `/api/wards/[id]` is generated from src/data/wards.ts, one route per bare
        id, so the key would produce a 404 the page has no way to notice. */
     if (link) link.href = `/api/wards/${areaOf(state.ward)}/metadata.json`;
+    /* A streamed area has no ward record (no /api/wards/ams-f4/ route exists), so the page's own record link is withdrawn while one is open. */
+    if (link && STREAM_ON) link.toggleAttribute('hidden', foreignArea() !== null);
   }
 
   /**
@@ -3999,6 +4016,17 @@ export function mountHeatMap(): () => void {
    * is one this document is deliberately without.
    */
   function updateDocumentMeta() {
+    const foreign = STREAM_ON ? foreignArea() : null;
+    if (foreign !== null) {
+      /* A STREAMED AREA HAS NO PAGE: the address is Canal Ring's with `?area=F4`, and the tags that name the PAGE (canonical, og:url) must go on naming Canal Ring's,
+         query-free. Only what the reader sees (the tab, the description) names the open area; `resolve(state.ward)` would describe it as "registered, no artefacts". */
+      const title = streamSurfaces!.title(foreign), description = streamSurfaces!.description(foreign);
+      document.title = title;
+      for (const { sel, attr, of } of WARD_META) {
+        if (of !== 'url') document.head.querySelector(sel)?.setAttribute(attr, of === 'title' ? title : description);
+      }
+      return;
+    }
     const scope = resolve(state.ward);
     const title = areaPageTitle(scope);
     const description = areaPageDescription(scope);
@@ -4075,6 +4103,17 @@ export function mountHeatMap(): () => void {
        here to deep-link — and there is no instrument there either. */
     const link = document.querySelector<HTMLAnchorElement>('a[data-rail="analysis"]');
     if (!link) return;
+    if (STREAM_ON) {
+      /* COMPARE AND THE WARD BRIEF DO NOT OPEN A STREAMED AREA (they read only drawable areas, and the link would silently open Kolkata's default pair under this area's name).
+         The link is withdrawn and says so; the ward brief links in the page follow it. Canal Ring's own link is exactly what it was. */
+      const foreign = foreignArea();
+      const briefs = document.querySelectorAll<HTMLAnchorElement>('[data-v2-brief], [data-v2-brief-link]');
+      for (const a of [link, ...briefs]) {
+        if (foreign === null) { a.removeAttribute('data-unavailable'); a.removeAttribute('aria-disabled'); }
+        else { a.removeAttribute('href'); a.setAttribute('data-unavailable', streamSurfaces!.compareUnavailable); a.setAttribute('aria-disabled', 'true'); }
+      }
+      if (foreign !== null) return;
+    }
     const params = new URLSearchParams({
       /* ONE function decides this spelling, for the writer here and the reader in
          scenario-url.ts alike. It used to be `areaOf` plus a comment asserting what
@@ -4540,10 +4579,13 @@ export function mountHeatMap(): () => void {
   const streamPaths = (key: AreaKey): AreaPaths => streamedAreaUrls!(splitKey(key).area);
 
   async function startStream(): Promise<void> {
-    const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }, meter, { wirePage }, { areaFromUrl }, { streamedAreaMeans }, { createLateStream }, dataSource] = await Promise.all([
+    const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }, meter, wiringModule, { areaFromUrl }, { streamedAreaMeans }, { createLateStream }, dataSource, surfaces] = await Promise.all([
       import('./streaming-host/city-stream'), import('./streaming-host/sheet-worker-client'), import('./streaming/halo-sim-host'),
       glMeterReady, import('./streaming-host/page-wiring'), import('./streaming/area-page'), import('./surface-raster'), import('./streaming/late-stream'), import('./streaming/data-source'),
+      import('./streaming/area-surfaces'),
     ]);
+    const { wirePage, AREA_NAMES } = wiringModule;
+    streamSurfaces = surfaces.createAreaSurfaces(AREA_NAMES, SCOPE.city.name);
     /* WHERE THE LAYER FILES COME FROM: the manifest (public/heat-map/data/ams-r2-manifest.json) names Cloudflare R2 for every area but Canal Ring. A manifest
        that cannot be read is not a reason to guess: every other area then fails into the loader's failed state, with the reason. */
     await dataSource.readStreamManifest((url, init) => fetch(url, init));           // a failed read is retried by the controller before every load (a Retry works; INT re-audit R4)
