@@ -29,6 +29,7 @@
     "check:cities": "python3 scripts/check-city-artefacts.py --city amsterdam && python3 scripts/export-city-obos.py --city amsterdam --check",
     "check:cities-frame": "python3 scripts/check-city-frame.py --city amsterdam",
     "check:stream-dist": "node scripts/check-stream-dist.mjs",
+    "build:area-bundles": "node scripts/build-area-bundles.mjs",
     "test:stream-public": "PUBLIC_OBOS_STREAM=1 npm run build && rm -rf dist-stream && mv dist dist-stream && node scripts/check-stream-dist.mjs public dist-stream && OBOS_STREAM_PUBLIC=1 OBOS_STREAM_DIST=dist-stream OBOS_STREAM_URL=http://127.0.0.1:${OBOS_E2E_PORT:-4393} OBOS_E2E_PORT=${OBOS_E2E_PORT:-4393} playwright test -c playwright.stream.config.ts stream-walk"
   },
   "engines": {
