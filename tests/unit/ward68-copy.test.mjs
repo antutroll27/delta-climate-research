@@ -22,7 +22,7 @@ test('the landing page states the ward figures the artefacts hold', async () => 
     `the OBOS row should state ${fmt(wardFigures)} buildings (Ward 68 by its boundary + the two boxes)`);
   assert.ok(obos.includes(`Ballygunge · KMC Ward 68 &nbsp;·&nbsp; ${fmt(mask.inWardCount)} real buildings`),
     `the console caption should state Ward 68's ${fmt(mask.inWardCount)} buildings`);
-  assert.ok(obos.includes(`validated against ${SPATIAL.n} ECOSTRESS thermal scenes`),
+  assert.ok(obos.includes(`checked against ${SPATIAL.n} ECOSTRESS thermal scenes`),
     `the OBOS row's scene count is not accuracy.ts SPATIAL.n (${SPATIAL.n})`);
   /* The Studies card restates the same count (85 since Ward 68's re-measurement, 87 before). */
   assert.ok((await read('src/components/sections/Studies.astro')).includes(`${SPATIAL.n} ward-scenes`),
