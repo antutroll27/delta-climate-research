@@ -189,19 +189,6 @@ jobs:
           npm run verify:static
           if [ "$BROWSER" = true ]; then npx playwright test --shard="$SHARD/2"; fi
 
-      # WHOLE-CITY STREAMING, PUBLIC MODE, in CI (stream-public). The plain build `verify:static` just made is checked for ZERO streaming code (check:stream-dist plain, in
-      # verify:static); this builds the SAME source with PUBLIC_OBOS_STREAM=1 and checks that the streaming code is there and none of the dev tools is (GL meter, timings,
-      # ?streamtier=, window.__obosStream), and that the page's URL tags stay query-free. About 1 minute, shard 1 only, no browser. The walk itself (tests/e2e/stream-walk.spec.ts
-      # with OBOS_STREAM_PUBLIC=1) is NOT run here: it reads the live Cloudflare Worker, needs the 504-cell GPU solver (SwiftShader on this runner is far too slow for it)
-      # and takes ~4 minutes, which does not fit a job that already runs to within minutes of its stop. It is the pre-deploy gate, run on a real GPU (npm run test:stream-public).
-      - name: Streaming public build is clean of dev tools
-        if: matrix.shard == 1
-        env:
-          PUBLIC_OBOS_STREAM: '1'
-        run: |
-          npx astro build --outDir dist-stream
-          node scripts/check-stream-dist.mjs public dist-stream
-
       # ON SUCCESS TOO (it was `if: failure()`), for one file: test-results/durations.json, the
       # json reporter's record of how long every test took. A passing run is the baseline a slow
       # one is compared with, and until now passing runs left none. `always()` rather than
@@ -317,3 +304,34 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  # WHOLE-CITY STREAMING, PUBLIC MODE (stream-public). The plain build `verify:static` makes in the job above is checked for ZERO streaming code (check:stream-dist plain, in
+  # verify:static). This job builds the SAME source with PUBLIC_OBOS_STREAM=1 through `npm run build` (so the prune step runs, as on Vercel) and checks that the streaming code
+  # and the manifest are there, none of the dev tools is (GL meter, timings, ?streamtier=, window.__obosStream), and the page's URL tags stay query-free. A job of its own,
+  # in parallel, so it cannot spend the browser job's reporting margin (public audit S2): about 2-4 minutes, no browser. The walk itself (tests/e2e/stream-walk.spec.ts with
+  # OBOS_STREAM_PUBLIC=1) is NOT run in CI: it reads the live Cloudflare Worker, needs the 504-cell GPU solver (SwiftShader on this runner is far too slow) and takes ~4 minutes.
+  # It is the pre-deploy gate, on a real GPU: `npm run test:stream-public`.
+  stream-public-dist:
+    name: Streaming public build is clean of dev tools
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build with PUBLIC_OBOS_STREAM=1
+        env:
+          PUBLIC_OBOS_STREAM: '1'
+        run: npm run build
+
+      - name: Check the public dist
+        run: node scripts/check-stream-dist.mjs public dist

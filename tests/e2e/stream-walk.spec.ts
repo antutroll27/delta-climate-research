@@ -152,6 +152,8 @@ async function publicSurfaces(page: Page, code: string, how: string): Promise<vo
     compare: { href: document.querySelector('a[data-rail="analysis"]')?.getAttribute('href') ?? null, off: document.querySelector('a[data-rail="analysis"]')?.getAttribute('data-unavailable') ?? null },
     brief: { href: document.querySelector('[data-v2-brief]')?.getAttribute('href') ?? null, off: document.querySelector('[data-v2-brief]')?.getAttribute('data-unavailable') ?? null },
     recordNote: document.querySelector('[data-v2-card="record"] [data-streamed-note]')?.textContent ?? null,
+    solar: document.getElementById('solPaneSum')?.textContent ?? '',
+    reportLink: (() => { const a = document.getElementById('report-link'); return a === null ? 'absent' : a.hasAttribute('hidden') ? 'hidden' : 'shown'; })(),
     caveat: (document.getElementById('conf')?.textContent ?? '').includes('Heat accuracy not yet validated for this city'),      // textContent: on a phone the card is folded away, but it is written
     dev: typeof (window as unknown as { __obosStream?: unknown }).__obosStream,
   }));
@@ -173,6 +175,8 @@ async function publicSurfaces(page: Page, code: string, how: string): Promise<vo
     expect(s.brief.href).toBeNull();
     expect(s.brief.off).toContain('Not available');
     expect(s.recordNote, `${how}: the record card names ${code}`).toContain(names[code]!.name);
+    expect(s.solar, `${how}: the solar pane says "not yet" for ${code}, naming it`).toContain(`No solar screen ships for ${names[code]!.name} yet`);
+    expect(s.reportLink, `${how}: no ward-record download for ${code}`).not.toBe('shown');
   }
 }
 
@@ -383,5 +387,48 @@ test.describe('public mode', () => {
     expect(fetched.canal.length, 'Canal Ring came from the page\'s origin').toBeGreaterThan(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(thrown).toEqual([]);
+  });
+
+  /* THE FAILURE PATHS (public audit B1, S1). */
+  test('B1: with the Worker unreachable Canal Ring is usable - no plate, no alert - and PICKING another area fails honestly for that area only', async ({ page }) => {
+    const thrown: string[] = [];
+    page.on('pageerror', (error) => thrown.push(String(error)));
+    await page.route((url) => url.href.startsWith(DATA_ORIGIN), (route) => route.abort('connectionrefused'));
+    await page.goto(`${BASE}/heat-map/nl/amsterdam/canal-ring/?lab=1`, { waitUntil: 'domcontentloaded' });
+    await expect.poll(async () => (await report(page))?.displayed, { timeout: 120_000, message: 'E4 opens with the Worker down' }).toBe('E4');
+    await expect.poll(() => page.evaluate(() => document.getElementById('bcount')?.textContent ?? ''), { timeout: 30_000 }).toContain(drawnOf('E4').toLocaleString('en-US'));
+    await page.waitForTimeout(14_000);                       // past the retry schedule: the halo and the ring have been given up on
+    const state = () => page.evaluate(() => ({
+      plate: !!document.querySelector('.cl-plate.on'),
+      alerts: [...document.querySelectorAll('[role="alert"]')].map((n) => (n.textContent ?? '').trim()).filter((t) => t !== ''),
+      shown: document.querySelector('#pname .obos-area-code')?.textContent ?? null,
+    }));
+    const calm = await state();
+    expect(calm.plate, 'no failure plate over a Canal Ring that is drawn').toBe(false);
+    expect(calm.alerts, 'nothing announced assertively').toEqual([]);
+    expect(calm.shown).toBe('E4');
+    await page.screenshot({ path: `${SHOTS}/public-worker-down-E4.png` });
+    // pick F4: its data cannot be fetched, so THAT area fails, in words, and Canal Ring stays
+    await page.locator('.si-chip').click();
+    await page.locator('.si-grid .si-cell[data-code="F4"]').click();
+    await expect.poll(() => page.evaluate(() => (document.querySelector('.cl-plate.on')?.textContent ?? '')), { timeout: 60_000, message: 'a plate for F4' }).toMatch(/F4/);
+    const plate = await page.evaluate(() => document.querySelector('.cl-plate.on')?.textContent ?? '');
+    expect(plate).toMatch(/could not be loaded/i);
+    expect(plate).not.toMatch(/Canal Ring|E4/);
+    expect((await state()).shown, 'Canal Ring is still the area on screen').toBe('E4');
+    await page.screenshot({ path: `${SHOTS}/public-worker-down-F4-pick.png` });
+    expect(thrown).toEqual([]);
+  });
+
+  test('S1: one streaming chunk that cannot be loaded leaves the classic Canal Ring page, drawn, with no uncaught error', async ({ page }) => {
+    const thrown: string[] = [];
+    page.on('pageerror', (error) => thrown.push(String(error)));
+    await page.route(/\/area-surfaces\.[^/]*\.js$/, (route) => route.abort('failed'));
+    await page.goto(`${BASE}/heat-map/nl/amsterdam/canal-ring/?lab=1`, { waitUntil: 'domcontentloaded' });
+    await expect.poll(() => page.evaluate(() => document.getElementById('bcount')?.textContent ?? ''), { timeout: 90_000, message: 'Canal Ring draws without streaming' }).toContain(drawnOf('E4').toLocaleString('en-US'));
+    await page.waitForTimeout(2_000);
+    expect(await page.locator('.si-chip').count(), 'no picker: this is the classic page').toBe(0);
+    expect(await page.evaluate(() => !!document.querySelector('.cl-plate.on'))).toBe(false);
+    expect(thrown, 'the failed import is caught, not left uncaught').toEqual([]);
   });
 });
