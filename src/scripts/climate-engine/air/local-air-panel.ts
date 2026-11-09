@@ -92,13 +92,13 @@ function nlSubstances(readings: readonly NlReading[]): string {
 
 /**
  * THE MODELLED LINE, set apart from the measurement and worded so it cannot be read as one: "Modelled at the centre of this area (RIVM model via Luchtmeetnet): 4 · Matig · Moderate",
- * then what it is (a forecast calculation by RIVM, published by Luchtmeetnet, for the current hour as Luchtmeetnet's own location page selects it, naming the stamp
- * of the row without calling it the start or the end of the hour) and that the decimal was rounded up as Luchtmeetnet does. The class dot is the LKI's, as on the measured line. No station, no distance: a model has neither.
+ * then what it is (a forecast calculation by RIVM, published by Luchtmeetnet, for the current hour as Luchtmeetnet's own location page selects it) and that the
+ * decimal was rounded up as Luchtmeetnet does. It names NO clock time: beside the measured line's "Hour to 01:00 CET" a "02:00" stamp read as a contradiction
+ * on the founder's review shots (2026-11-09), and whether the model stamp opens or closes its hour is not documented. The class dot is the LKI's, as on the measured line. No station, no distance: a model has neither.
  */
 function nlModelLine(m: NlModel, place: string): string {
-  const from = nowrap(`<b>${esc(localTime(m.hour_start, 'nl-lki'))}</b>`);
   return `<p class="meta aq-model">Modelled at the centre of this area (RIVM model via Luchtmeetnet): <b>${num(m.lki)}</b> <span class="cat"><span class="dot" style="background:${bandColour(m.band)}"></span>${bandWord(m.band)}</span></p>`
-    + `<p class="meta">A forecast calculation by RIVM for the centre of ${esc(place)}, not a measurement · for the current hour (row stamped ${from}) · rounded up to a whole number, as Luchtmeetnet does</p>`;
+    + `<p class="meta">A forecast calculation by RIVM for the centre of ${esc(place)}, not a measurement · for the current hour · rounded up to a whole number, as Luchtmeetnet does</p>`;
 }
 
 function nlLive(p: Extract<Live, { standard: 'nl-lki' }>, title: string, place: string): string {
