@@ -341,17 +341,23 @@ test('S1: production with streaming off serves Canal Ring only; the 31 other ids
   assert.deepEqual([off.code, off.body], [404, { error: 'unknown area' }]);
 });
 
-test('S1: the gate is the page\'s own switch - PUBLIC_OBOS_STREAM_DEV=1 or TILED_CITY_READY - and the function entry point passes the environment', () => {
+test('S1: the gate is the page\'s own switch - PUBLIC_OBOS_STREAM=1, PUBLIC_OBOS_STREAM_DEV=1 or TILED_CITY_READY - and the function entry point passes the environment', () => {
   assert.equal(streamingEnabled({}, false), false);
   assert.equal(streamingEnabled({ PUBLIC_OBOS_STREAM_DEV: '1' }, false), true);
-  for (const v of ['0', 'true', '', undefined, 'yes']) assert.equal(streamingEnabled({ PUBLIC_OBOS_STREAM_DEV: v }, false), false, String(v));
+  assert.equal(streamingEnabled({ PUBLIC_OBOS_STREAM: '1' }, false), true, 'the ONE public variable turns the API on with the page');
+  for (const name of ['PUBLIC_OBOS_STREAM', 'PUBLIC_OBOS_STREAM_DEV']) {
+    for (const v of ['0', 'true', '', undefined, 'yes']) assert.equal(streamingEnabled({ [name]: v }, false), false, `${name}=${String(v)}`);
+  }
   assert.equal(streamingEnabled({}, true), true, 'turning the tiled city on publicly opens the API with no second switch');
   assert.equal(streamingEnabled({}), false, 'today TILED_CITY_READY is false');
   const api = readFileSync('api/air-quality.ts', 'utf8');
   assert.match(api, /local: \{ streaming: streamingEnabled\(process\.env\) \}/);
   const app = readFileSync('src/scripts/climate-engine/heat-map-app.ts', 'utf8');
-  assert.match(app, /const STREAM_DEV = import\.meta\.env\.PUBLIC_OBOS_STREAM_DEV === '1'/);
-  assert.match(readFileSync('src/lib/aqi/local-handler.ts', 'utf8'), /env\['PUBLIC_OBOS_STREAM_DEV'\] === '1'/);
+  assert.match(app, /import\.meta\.env\.PUBLIC_OBOS_STREAM === '1'/);
+  assert.match(app, /import\.meta\.env\.PUBLIC_OBOS_STREAM_DEV === '1'/);
+  const handler = readFileSync('src/lib/aqi/local-handler.ts', 'utf8');
+  assert.match(handler, /env\['PUBLIC_OBOS_STREAM'\] === '1'/);
+  assert.match(handler, /env\['PUBLIC_OBOS_STREAM_DEV'\] === '1'/);
 });
 
 /* ── S4: the model line across the hour, at the CDN ──────────────────────────────────────────────── */

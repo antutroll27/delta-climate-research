@@ -70,11 +70,11 @@ import { makeHeatOverlay } from '../../src/scripts/climate-engine/explore/heat-o
 
 test('S1: `streamed` reaches the renderer from the flag alone, whatever the order of caps, map load and the sim host', () => {
   const app = readFileSync(new URL('../../src/scripts/climate-engine/heat-map-app.ts', import.meta.url), 'utf8');
-  const flag = app.indexOf('const STREAM_DEV = ');
+  const flag = app.indexOf('const STREAM_ON = ');
   const relief = app.indexOf('async function ensureRelief');
   assert.ok(flag > 0 && relief > 0 && flag < relief, 'the flag is declared before the code that builds the renderer');
   const options = app.slice(relief, relief + 2500);
-  assert.match(options, /\.\.\.\(STREAM_DEV \? \{ streamed:/);
+  assert.match(options, /\.\.\.\(STREAM_ON \? \{ streamed:/);
   assert.ok(!/wrapHost \? \{ streamed/.test(app), 'it must not depend on startStream having run');
 });
 

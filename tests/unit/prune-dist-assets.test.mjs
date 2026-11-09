@@ -23,6 +23,7 @@ function prune(env) {
     }
     const clean = { ...process.env };
     delete clean.PUBLIC_OBOS_STREAM_DEV;
+    delete clean.PUBLIC_OBOS_STREAM;
     execFileSync(process.execPath, [script], { cwd: work, env: { ...clean, ...env }, stdio: 'pipe' });
     return { manifest: existsSync(join(work, 'dist', MANIFEST)), glb: existsSync(join(work, 'dist', 'models/river-8k.glb')), ward: existsSync(join(work, 'dist', 'heat-map/data/canal-ring.json')) };
   } finally { rmSync(work, { recursive: true, force: true }); }
@@ -42,7 +43,16 @@ test('R1: a PUBLIC_OBOS_STREAM_DEV=1 build keeps the manifest (the dev page fetc
   assert.equal(kept.ward, true);
 });
 
-test('R1: any other value of the flag is not the dev flag', () => {
-  assert.equal(prune({ PUBLIC_OBOS_STREAM_DEV: '0' }).manifest, false);
-  assert.equal(prune({ PUBLIC_OBOS_STREAM_DEV: 'true' }).manifest, false);
+test('public mode: a PUBLIC_OBOS_STREAM=1 build keeps the manifest too (the public page fetches it), and still prunes the unused models', () => {
+  const kept = prune({ PUBLIC_OBOS_STREAM: '1' });
+  assert.equal(kept.manifest, true, 'the public page reads the manifest on load, or every area but Canal Ring 404s');
+  assert.equal(kept.glb, false);
+  assert.equal(kept.ward, true);
+});
+
+test('R1: any other value of either flag is not a flag', () => {
+  for (const name of ['PUBLIC_OBOS_STREAM_DEV', 'PUBLIC_OBOS_STREAM']) {
+    assert.equal(prune({ [name]: '0' }).manifest, false);
+    assert.equal(prune({ [name]: 'true' }).manifest, false);
+  }
 });
