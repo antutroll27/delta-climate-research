@@ -308,7 +308,8 @@ test('CARD WORDING: "Modelled at the centre of this area (RIVM model via Luchtme
   assert.match(html, /Modelled at the centre of this area \(RIVM model via Luchtmeetnet\): <b>4<\/b>/);
   assert.match(html, /Matig/);
   assert.match(html, /A forecast calculation by RIVM for the centre of Havens-West, not a measurement/);
-  assert.match(html, /for the current hour \(row stamped <span style="white-space:nowrap"><b>21:00 CET<\/b><\/span>\)/);
+  assert.match(html, /not a measurement · for the current hour · rounded up/);
+  assert.ok(!/row stamped|21:00 CET/.test(html.slice(html.indexOf('aq-model'))), 'the modelled line names no clock time beside the measured hour');
   assert.ok(!/hour from|start of the hour|end of the hour/.test(html), 'it does not claim whether the stamp opens or closes its hour');
   assert.match(html, /Modelled line: RIVM model calculation \(a forecast, not a measurement\), via www\.luchtmeetnet\.nl/);
   assert.match(html, /not shown exactly as published/);
