@@ -1,6 +1,6 @@
 {
   "_source": "Frozen from the v1 OBOS UI (tag obos-beta-ui-v1 / branch obos-beta-ui; byte-identical to main 82b513a) when PR 2 deleted its source. Each value is what the v2 honesty tests compare against; v2 must keep every one word for word.",
-  "_amended": "2026-11-09, founder-approved: notYetParts 'Open a validated area →' became 'Open a calibrated area →', with the scope badge 'Validated' -> 'Calibrated' (the ledger says night level calibrated, ward detail unvalidated).",
+  "_amended": "2026-11-09, founder-approved: notYetParts 'Open a validated area →' became 'Open a checked area →', with the scope badge 'Validated' -> 'Checked' (the ledger says night level calibrated, ward detail unvalidated).",
   "stage": {
     "deltaTitle": "Modelled land-cover thermal contrast: this ward's mean surface temperature minus a fully-vegetated reference cell under identical forcing. NOT a measured urban heat island — published Kolkata surface UHI is 0.85–1.5 °C from 1 km satellite data, a different quantity.",
     "tintTitle": "Building colour: continuous ramp, or snapped to the 5 legend classes",
@@ -86,7 +86,7 @@
       "{scope.area.name}",
       "{scope.area.descriptor} · {scope.city.name}, {scope.country.name}",
       "This area is registered in the twin and has a permanent address, but no measured heat artefacts ship for it yet — no footprints, no surface temperature, no canopy. Nothing here would be a reading, so nothing is drawn. The instrument runs where the observations do.",
-      "Open a calibrated area →"
+      "Open a checked area →"
     ]
   },
   "dataHooks": {
