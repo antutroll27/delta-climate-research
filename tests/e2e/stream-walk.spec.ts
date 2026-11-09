@@ -411,10 +411,10 @@ test.describe('public mode', () => {
     // pick F4: its data cannot be fetched, so THAT area fails, in words, and Canal Ring stays
     await page.locator('.si-chip').click();
     await page.locator('.si-grid .si-cell[data-code="F4"]').click();
-    await expect.poll(() => page.evaluate(() => (document.querySelector('.cl-plate.on')?.textContent ?? '')), { timeout: 60_000, message: 'a plate for F4' }).toMatch(/F4/);
-    const plate = await page.evaluate(() => document.querySelector('.cl-plate.on')?.textContent ?? '');
-    expect(plate).toMatch(/could not be loaded/i);
-    expect(plate).not.toMatch(/Canal Ring|E4/);
+    const said = () => page.evaluate(() => [...document.querySelectorAll('[role="alert"]')].map((n) => (n.textContent ?? '').trim()).join(' | '));
+    await expect.poll(said, { timeout: 90_000, message: 'F4 is reported as failed, in words, after its retries' }).toMatch(/F4.*could not be loaded/i);
+    expect(await said()).not.toMatch(/Canal Ring|E4/);
+    expect(await page.evaluate(() => !!document.querySelector('.cl-plate.on button, .cl-plate.on [data-retry]') || (document.querySelector('.cl-plate.on')?.textContent ?? '').includes('Retry')), 'with a Retry').toBe(true);
     expect((await state()).shown, 'Canal Ring is still the area on screen').toBe('E4');
     await page.screenshot({ path: `${SHOTS}/public-worker-down-F4-pick.png` });
     expect(thrown).toEqual([]);
