@@ -36,8 +36,8 @@ import type { TileStage } from '../streaming/loader-model.ts';
 import { AMSTERDAM_TOPOLOGY as TOPOLOGY, DIRECTIONS, type Direction } from '../streaming/sheet-topology.ts';
 import type { NetworkClass } from '../streaming/sheet-budgets.ts';
 import type { AreaPaths } from '../scope/paths.ts';
-import { AreaBundleError, bundleRuntimeSupported, parseAreaBundle, type AreaBundle } from '../streaming/area-bundle.ts';
-import { bundleTarget, ensureStreamData, streamedAreaUrls } from '../streaming/data-source.ts';
+import { AreaBundleError, bundleRuntimeSupported, parseCoreLayers, parseVectorLayers, verifyAreaBundle, type CoreLayers } from '../streaming/area-bundle.ts';
+import { bundleSkew, bundleTarget, ensureStreamData, streamedAreaUrls } from '../streaming/data-source.ts';
 import { sheetByCode, type SheetCode } from '../scope/sheets.ts';
 import type { Prepared, SheetWorker } from './sheet-worker-client.ts';
 import type { MassingMesh } from '../streaming/prism-mesh.ts';
@@ -56,6 +56,9 @@ export type SheetUrls = Pick<AreaPaths, 'ward' | 'terrain' | 'water' | 'roads' |
 export function sheetUrls(code: SheetCode): SheetUrls {
   return streamedAreaUrls(sheetByCode(code)!.id);
 }
+
+/** A downloaded, VERIFIED bundle: the stored bytes (about 0.5 MB, compressed) and what they must be. Nothing is parsed until a use needs it: a neighbour never inflates or parses its water, trees or terrain. */
+interface HeldBundle { readonly bytes: ArrayBuffer; readonly areaId: string; readonly pin: string }
 
 /** Everything the page's own `loadWard` needs for a sheet, so it can open it from cache. */
 export interface SheetBundle {
@@ -187,7 +190,8 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
   };
   const tap = (c: ManagerCommand): void => { try { hooks.command?.(c); } catch (error) { hooks.warn('page furniture failed', error); } };
   const stage = (code: SheetCode, s: TileStage): void => { try { hooks.stage?.(code, s); } catch (error) { hooks.warn('page furniture failed', error); } };
-  const bundleMemo = new Memo<Promise<AreaBundle | null>>(14);
+  const bundleMemo = new Memo<Promise<HeldBundle | null>>(14);        // bytes only (R2-S2): 14 held bundles are about 9 MB of external memory, not 45 MB of parsed heap
+  const cores = new Memo<Promise<CoreLayers | null>>(14);            // the ward, roads and surface of a held bundle: shares its strings with `texts`
   const texts = new Memo<Promise<{ ward: string; roads: string | null }>>(14);
   const surfaces = new Memo<Promise<WardSurface>>(14);
   const prepares = new Memo<Promise<Prepared>>(4);
@@ -229,12 +233,15 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
 
   /** Set once a bundle shows that bundles cannot be used here (a newer format, no crypto.subtle): every later area goes straight to the per-file URLs. */
   let bundlesOff = false;
+  let skewWarned = false;
   /** Downloads in flight, by area: one shared fetch with its own abort controller and the number of jobs still waiting on it. */
   const flights = new Map<SheetCode, { readonly controller: AbortController; askers: number }>();
-  /** The area's bundle, parsed and verified; null = this area is read from its six per-file URLs instead (see the header). One fetch per area while it is held.
+  /** The area's bundle bytes, downloaded and verified (every section's sha256 and the manifest's pin); null = this area is read from its six per-file URLs instead
+   *  (see the header). One fetch per area while it is held.
    *  THE DOWNLOAD IS SHARED, NOT OWNED BY ITS FIRST ASKER: a halo job that asks first and is then cancelled (the camera crossed into that very area) must not cancel
-   *  the download the opening job is about to need, or the Worker would serve the area twice. It is cancelled only when EVERY job that asked for it has been cancelled. */
-  const getBundle = (code: SheetCode, job: { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<AreaBundle | null> => {
+   *  the download the opening job is about to need, or the Worker would serve the area twice. It is cancelled only when EVERY job that asked for it has been cancelled.
+   *  A job with no signal (`rebuildOpen`, `loadedTerrain`) cannot be cancelled, so it keeps the download alive for good: that is intended. */
+  const getBundle = (code: SheetCode, job: { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<HeldBundle | null> => {
     const id = sheetByCode(code)!.id;
     if (bundlesOff || bundleTarget(id) === null) return Promise.resolve(null);      // nothing to download, so nothing to hold: Canal Ring and the fallbacks take no slot in the memo
     let held = bundleMemo.get(code);
@@ -251,42 +258,64 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
       const { signal } = job;
       flight.askers++;
       const leave = (): void => {
-        if (--flight.askers > 0 || flights.get(code) !== flight) return;
+        if (--flight.askers > 0) return;
         /* The manager cancels the old job and starts the new one in the same breath (a halo for the area the person is opening), so the cancel can come BEFORE the
-           new asker. A short grace lets that asker keep the download; only a download that stays unwanted is cancelled. */
+           new asker. A short grace lets that asker keep the download; only a download that stays unwanted is cancelled (even one the memo has evicted meanwhile). */
         setTimeout(() => {
-          if (flight.askers > 0 || flights.get(code) !== flight) return;
-          flights.delete(code); bundleMemo.deleteIf(code, held!); flight.controller.abort();
+          if (flight.askers > 0) return;
+          if (flights.get(code) === flight) { flights.delete(code); bundleMemo.deleteIf(code, held!); }
+          flight.controller.abort();
         }, ABANDON_GRACE_MS);
       };
       if (signal.aborted) leave(); else signal.addEventListener('abort', leave, { once: true });
-    } else if (flight !== undefined) flight.askers++;                                // a job that cannot be cancelled keeps the download alive
+    } else if (flight !== undefined) flight.askers++;
     return held;
   };
 
-  async function downloadBundle(id: string, signal: AbortSignal, priority: 'high' | 'low'): Promise<AreaBundle | null> {
+  /** Fetch and verify one bundle. A 404/410/403 (the object is not there), a bundle that is bad twice, and any other fault of the bundle itself are NOT the area's failure:
+   *  the six per-file copies are still there, so the answer is null (read those). Only a transport fault (the Worker unreachable, a 5xx) is thrown, and the per-file path
+   *  has its own failure if it fails too. */
+  async function downloadBundle(id: string, signal: AbortSignal, priority: 'high' | 'low'): Promise<HeldBundle | null> {
     const target = bundleTarget(id);
     if (target === null) return null;
     if (!bundleRuntimeSupported()) { bundlesOff = true; return null; }
     for (let attempt = 0; ; attempt++) {
-      const bytes = await (await get(target.url, { signal, priority }, attempt === 0 ? undefined : 'reload')).arrayBuffer();
-      try { return await parseAreaBundle(bytes, { expectAreaId: id, expectContentHash: target.contentHash }); }
-      catch (error) {
+      const response = await fetch(target.url, { signal, priority, ...(attempt === 0 ? {} : { cache: 'reload' }) } as RequestInit);
+      if (response.status === 404 || response.status === 410 || response.status === 403) {
+        await response.body?.cancel();
+        bundlesOff = true;
+        hooks.warn(`bundle for ${id} answered ${response.status}; reading the per-file layers from now on`);
+        return null;
+      }
+      if (!response.ok) throw new Error(`${target.url}: ${response.status}`);
+      const bytes = await response.arrayBuffer();
+      try {
+        await verifyAreaBundle(bytes, { expectAreaId: id, expectContentHash: target.contentHash });
+        return { bytes, areaId: id, pin: target.contentHash };
+      } catch (error) {
         if (!(error instanceof AreaBundleError)) throw error;
         if (error.code === 'unsupported-version' || error.code === 'unsupported-runtime') { bundlesOff = true; hooks.warn(`bundles are not usable here (${error.code}); reading the per-file layers`); return null; }
         if (attempt === 0 && (error.code === 'sha-mismatch' || error.code === 'truncated')) continue;      // a bad edge-cached copy is the usual cause: one retry past the cache
-        throw error;
+        hooks.warn(`the bundle for ${id} is unusable (${error.code}); reading its six per-file layers`);
+        return null;
       }
     }
   }
 
-  const terrainOf = (b: AreaBundle): TerrainField | null => { try { return b.terrain === null ? null : asTerrainField(b.terrain); } catch { return null; } };
-  const treesOf = (b: AreaBundle): TreesFile | null => { try { return b.trees === null ? null : asTreesFile(b.trees); } catch { return null; } };
+  /** The ward, roads and surface of a held bundle (parsed once, shared by getTexts and getSurface); null = per-file. */
+  const getCore = (code: SheetCode, job: { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<CoreLayers | null> =>
+    memoised(cores, code, async () => {
+      const held = await getBundle(code, job);
+      return held === null ? null : parseCoreLayers(held.bytes, { expectAreaId: held.areaId, expectContentHash: held.pin });
+    });
+
+  const terrainOf = (raw: unknown): TerrainField | null => { try { return raw === null ? null : asTerrainField(raw); } catch { return null; } };
+  const treesOf = (raw: unknown): TreesFile | null => { try { return raw === null ? null : asTreesFile(raw); } catch { return null; } };
 
   const getTexts = (code: SheetCode, job: LoadJob | { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<{ ward: string; roads: string | null }> =>
     memoised(texts, code, async () => {
-      const bundle = await getBundle(code, job);
-      if (bundle !== null) return { ward: bundle.ward, roads: bundle.roads };
+      const core = await getCore(code, job);
+      if (core !== null) return { ward: core.ward, roads: core.roads };
       const urls = sheetUrls(code);                                   // throws while the data manifest is unavailable: a rejection is not remembered (R4)
       const [ward, roads] = await Promise.all([
         get(urls.ward, job).then((r) => r.text()),
@@ -299,8 +328,8 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
     memoised(surfaces, code, async () => {
       const registered = hooks.registeredSurface(code);
       if (registered !== null) return registered;
-      const bundle = await getBundle(code, job);
-      const blob = bundle !== null ? bundle.surface : await (await get(sheetUrls(code).surface, job)).blob();
+      const core = await getCore(code, job);
+      const blob = core !== null ? core.surface : await (await get(sheetUrls(code).surface, job)).blob();
       const raster = await decodeSurfaceBlob(blob, code);
       if (raster === null) return { means: { fvc: 0.25, albedo: 0.2 }, surface: null };
       /* THE EXPORTER'S MEANS, from the area's surface-meta row (P2c), checked against the texture exactly as a registered area's are
@@ -329,8 +358,11 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
 
   /** The three vector layers of a sheet: out of its bundle when it has one, else from their own files (each optional: a missing or unreadable one is its fallback). */
   async function getVector(job: LoadJob): Promise<readonly [TerrainField | null, WaterData, TreesFile | null]> {
-    const bundle = await getBundle(job.sheet, job);
-    if (bundle !== null) return [terrainOf(bundle), bundle.water ?? { polys: [] }, treesOf(bundle)];
+    const held = await getBundle(job.sheet, job);
+    if (held !== null) {
+      const v = await parseVectorLayers(held.bytes, ['water', 'trees', 'terrain'], { expectAreaId: held.areaId, expectContentHash: held.pin });
+      return [terrainOf(v.terrain), v.water ?? { polys: [] }, treesOf(v.trees)];
+    }
     const urls = sheetUrls(job.sheet);
     return Promise.all([
       optional<TerrainField | null>(urls.terrain, job, null, async (r) => asTerrainField(await r.json())),
@@ -424,6 +456,8 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
     schedule: (ms, fn) => { const id = setTimeout(fn, ms); return () => clearTimeout(id); },
     load: async (job) => {
       await ensureStreamData((url, init) => fetch(url, init));                         // a manifest that could not be read at page load is read again: a Retry can work (R4)
+      const skew = bundleSkew();
+      if (skew !== null && !skewWarned) { skewWarned = true; hooks.warn(`bundles are not used: ${skew}`); }
       switch (job.level) {
         case 'lod0': return loadLod0(job);
         case 'halo': return loadHalo(job);
@@ -522,8 +556,8 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
   async function loadedTerrain(code: SheetCode): Promise<TerrainField | null> {
     if (terrains.has(code)) return terrains.get(code) ?? null;
     const job = { priority: 'high' } as const;
-    const bundle = await getBundle(code, job).catch(() => null);        // like the per-file read below, a layer that cannot be read is no terrain
-    const t = bundle !== null ? terrainOf(bundle) : await optional<TerrainField | null>(sheetUrls(code).terrain, job, null, async (r) => asTerrainField(await r.json()));
+    const held = await getBundle(code, job).catch(() => null);        // like the per-file read below, a layer that cannot be read is no terrain
+    const t = held !== null ? terrainOf((await parseVectorLayers(held.bytes, ['terrain'], { expectAreaId: held.areaId, expectContentHash: held.pin }).catch(() => ({ terrain: null }))).terrain) : await optional<TerrainField | null>(sheetUrls(code).terrain, job, null, async (r) => asTerrainField(await r.json()));
     terrains.set(code, t);
     return t;
   }
@@ -587,7 +621,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
       for (const flight of flights.values()) flight.controller.abort();
       worker.dispose();
       hooks.relief()?.setNeighbours?.([]);
-      bundleMemo.clear(); texts.clear(); surfaces.clear(); prepares.clear(); rims.clear(); halos.clear();
+      bundleMemo.clear(); cores.clear(); texts.clear(); surfaces.clear(); prepares.clear(); rims.clear(); halos.clear();
     },
   };
 }

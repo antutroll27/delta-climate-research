@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createCityStream } from '../../src/scripts/climate-engine/streaming-host/city-stream.ts';
-import { asBundleManifest, asR2Manifest, bundleTarget, configureStreamData, ensureStreamData, readStreamManifest } from '../../src/scripts/climate-engine/streaming/data-source.ts';
-import { encodeBundle } from '../../scripts/build-area-bundles.mjs';
+import { asBundleManifest, asR2Manifest, bundleSkew, bundleTarget, configureStreamData, ensureStreamData, readStreamManifest } from '../../src/scripts/climate-engine/streaming/data-source.ts';
+import { readFileSync } from 'node:fs';
+import { AREA_SECTIONS, encodeBundle, contentHashOf } from '../../scripts/build-area-bundles.mjs';
 
 /* THE LOADER READS ONE BUNDLE PER AREA (streaming-host/city-stream.ts `getBundle`, BUNDLE-FORMAT.md), through the real manager, executor and controller; only the network,
    the worker and the page are faked. Fetches are COUNTED: an area is one request, and the six per-file URLs are a fallback that is taken in exactly the cases the brief lists
@@ -49,7 +50,7 @@ const perFileManifest = (list = ids) => asR2Manifest({
   files: Object.fromEntries(list.flatMap((id) => [`${id}.json`, `${id}-roads.json`, `${id}-water.json`, `${id}-trees.json`, `${id}-terrain.json`, `${id}-surface.png`].map((f) => [f, {}]))),
 });
 const bundleManifest = (list = ids, pins = {}) => asBundleManifest({
-  schema: 2, kind: 'area-bundles', formatVersion: 1, city: 'amsterdam', version: 'vBundles', prefix: BUNDLE_PREFIX, baseUrl: BASE,
+  schema: 2, kind: 'area-bundles', formatVersion: 1, city: 'amsterdam', version: 'vBundles', sourceVersion: 'vFiles', prefix: BUNDLE_PREFIX, baseUrl: BASE,
   files: Object.fromEntries(list.map((id) => [`${id}.obosb`, { sha256: 'x', size: 1, contentHash: pins[id] ?? bundleFor(id).header.contentHash }])),
 });
 const configure = (opts = {}) => configureStreamData(
@@ -299,19 +300,46 @@ for (const [label, bad] of [['sha-mismatch', corrupt], ['truncated', cut]]) {
   });
 }
 
-test('retry: a bundle that is bad TWICE is the failed state (with Retry) - two fetches per attempt, never three - and Retry recovers', async () => {
+test('R2-S1: a bundle that is bad TWICE falls back to the area\'s six per-file URLs (two bundle fetches, never three), says so, and raises no failure', async () => {
+  configure();
+  const r = rig({ serve: (u) => (/ams-f4\.obosb$/.test(u) ? corrupt('ams-f4') : undefined) });
+  try {
+    await openF4(r);
+    assert.equal(r.urlsOf(/ams-f4\.obosb$/).length, 2, 'the bundle once, then once more past the cache');
+    assert.equal(r.urlsOf(/\/ams-f4(-[a-z]+)?\.(json|png)$/).length, 6, 'then the six files');
+    assert.ok(r.log.warn.some((w) => /ams-f4.*unusable.*sha-mismatch/.test(w)), 'and the warning names the fault');
+    assert.deepEqual(r.log.failures, []);
+  } finally { r.stop(); }
+});
+
+for (const status of [404, 410, 403]) {
+  test(`R2-S1: a ${status} on the bundle object falls back to the six per-file URLs, and later areas stop asking for bundles`, async () => {
+    configure();
+    const r = rig({ serve: (u) => (BUNDLE.test(u) ? new Response('gone', { status }) : undefined) });
+    try {
+      await openF4(r);
+      assert.equal(r.urlsOf(/\/ams-f4(-[a-z]+)?\.(json|png)$/).length, 6);
+      assert.deepEqual(r.log.failures, []);
+      assert.ok(r.log.warn.some((w) => new RegExp(`answered ${status}`).test(w)));
+      await wait(300);
+      const before = r.urlsOf(BUNDLE).length;
+      r.stream.select('G5');
+      await until(() => r.stream.report().displayed === 'G5', 'G5 displayed');
+      assert.equal(r.urlsOf(BUNDLE).length, before, 'bundles are off for the session');
+    } finally { r.stop(); }
+  });
+}
+
+test('R2-S1: a bundle that is bad twice AND per-file layers that fail too is the failed state (with Retry), and Retry recovers', async () => {
   configure();
   let broken = true;
-  const r = rig({ serve: (u) => (/ams-f4\.obosb$/.test(u) && broken ? corrupt('ams-f4') : undefined) });
+  const r = rig({ serve: (u) => (broken && /ams-f4(\.obosb|\.json)$/.test(u) ? (BUNDLE.test(u) ? corrupt('ams-f4') : new Response('no', { status: 500 })) : undefined) });
   try {
     r.stream.start('E4');
     await until(() => r.stream.report().displayed === 'E4', 'E4 displayed');
     r.stream.select('F4');
     await until(() => r.log.failures.length > 0, 'F4 to be reported as failed', 30_000);
     assert.ok(r.log.failures.every((f) => f.startsWith('F4:')), r.log.failures.join(' | '));
-    const f4 = r.urlsOf(/ams-f4\.obosb$/);
-    assert.equal(f4.length % 2, 0, 'every attempt is exactly two fetches');
-    assert.equal(f4.filter((f) => f.cache === 'reload').length, f4.length / 2, 'one reload per attempt');
     assert.equal(r.stream.report().displayed, 'E4', 'Canal Ring stays');
     broken = false;
     r.stream.retry('F4', 'lod0');
@@ -319,16 +347,30 @@ test('retry: a bundle that is bad TWICE is the failed state (with Retry) - two f
   } finally { r.stop(); }
 });
 
-test('a bundle the manifest does not name (its content hash differs) is refused, once per attempt, and is not retried as if it were a bad copy', async () => {
+test('R2-S1: a bundle the manifest does not pin (its content hash differs) is unusable too: one fetch, then the six files', async () => {
   configure({ pins: { 'ams-f4': 'a'.repeat(64) } });
   const r = rig();
   try {
-    r.stream.start('E4');
-    await until(() => r.stream.report().displayed === 'E4', 'E4 displayed');
-    r.stream.select('F4');
-    await until(() => r.log.failures.length > 0, 'F4 to be reported as failed', 30_000);
-    assert.ok(r.urlsOf(/ams-f4\.obosb$/).every((f) => f.cache === undefined), 'no cache: reload retry for a hash mismatch');
+    await openF4(r);
+    const f4 = r.urlsOf(/ams-f4\.obosb$/);
+    assert.deepEqual(f4.map((f) => f.cache), [undefined], 'no cache: reload retry for a hash mismatch');
+    assert.equal(r.urlsOf(/\/ams-f4(-[a-z]+)?\.(json|png)$/).length, 6);
+    assert.deepEqual(r.log.failures, []);
   } finally { r.stop(); }
+});
+
+test('R2-S2: a held bundle is BYTES: a neighbour (halo, massing) never inflates or parses its water, trees or terrain; the open area parses them once', async () => {
+  configure();
+  const realParse = JSON.parse;
+  const parsed = [];
+  JSON.parse = (text, reviver) => { if (typeof text === 'string' && text.includes('"canal"')) parsed.push(text.length); return realParse(text, reviver); };       // only the water layer carries "canal"
+  const r = rig();
+  try {
+    await openF4(r);
+    await wait(500);
+    assert.ok(r.urlsOf(BUNDLE).length >= 3, 'neighbours were downloaded');
+    assert.equal(parsed.length, 1, `the water layer was parsed once (the open area F4), not for every neighbour (${parsed.length})`);
+  } finally { JSON.parse = realParse; r.stop(); }
 });
 
 // ── B1 with bundles ──────────────────────────────────────────────────────────────────────────
@@ -361,15 +403,67 @@ test('B1 with bundles: a neighbour\'s (halo) bundle that is corrupt twice never 
 
 // ── the data-source helpers ──────────────────────────────────────────────────────────────────
 
-test('asBundleManifest: validates, keeps only a well-formed content hash, trims slashes', () => {
-  const ok = { schema: 2, kind: 'area-bundles', baseUrl: 'https://x/', prefix: '/amsterdam/v/', files: { 'ams-f4.obosb': { contentHash: 'b'.repeat(64), sha256: 'q' }, 'ams-g5.obosb': { contentHash: 'nope' }, 'ams-h5.obosb': 3 } };
+test('asBundleManifest: validates, trims slashes, keeps sourceVersion, and lists ONLY rows with a valid pin (R2-S4)', () => {
+  const ok = { schema: 2, kind: 'area-bundles', baseUrl: 'https://x/', prefix: '/amsterdam/v/', sourceVersion: 'abc', files: { 'ams-f4.obosb': { contentHash: 'b'.repeat(64), sha256: 'q' }, 'ams-g5.obosb': { contentHash: 'nope' }, 'ams-h5.obosb': 3, 'ams-e5.obosb': {}, 'ams-d4.obosb': { contentHash: 'B'.repeat(64) } } };
   const m = asBundleManifest(ok);
   assert.equal(m.baseUrl, 'https://x');
   assert.equal(m.prefix, 'amsterdam/v');
-  assert.equal(m.files['ams-f4.obosb'].contentHash, 'b'.repeat(64));
-  assert.equal(m.files['ams-g5.obosb'].contentHash, null);
-  assert.equal(m.files['ams-h5.obosb'].contentHash, null);
+  assert.equal(m.sourceVersion, 'abc');
+  assert.deepEqual(Object.keys(m.files), ['ams-f4.obosb'], 'a missing or malformed pin is not "unpinned": the area is simply not in the manifest');
   for (const bad of [null, 5, { ...ok, schema: 1 }, { ...ok, kind: 'x' }, { ...ok, baseUrl: null }, { ...ok, baseUrl: '' }, { ...ok, prefix: '' }, { ...ok, files: null }]) assert.throws(() => asBundleManifest(bad));
+});
+
+test('R2-S4: an area whose pin is missing or malformed reads its six files and is never parsed unpinned', async () => {
+  configureStreamData({ kind: 'manifest', manifest: perFileManifest() }, { kind: 'manifest', manifest: asBundleManifest({
+    schema: 2, kind: 'area-bundles', baseUrl: BASE, prefix: BUNDLE_PREFIX, sourceVersion: 'vFiles',
+    files: { 'ams-f4.obosb': { sha256: 'x' }, 'ams-f5.obosb': { contentHash: 'zz' }, 'ams-e5.obosb': { contentHash: bundleFor('ams-e5').header.contentHash } },
+  }) });
+  assert.equal(bundleTarget('ams-f4'), null);
+  assert.equal(bundleTarget('ams-f5'), null);
+  assert.ok(bundleTarget('ams-e5'));
+  const r = rig();
+  try {
+    await openF4(r);
+    assert.deepEqual(r.urlsOf(/ams-f4\.obosb$/), [], 'the unpinned bundle was never even fetched');
+    assert.equal(r.urlsOf(/\/ams-f4(-[a-z]+)?\.(json|png)$/).length, 6);
+  } finally { r.stop(); }
+});
+
+test('R2-S3: bundles are used only while they were built from the per-file manifest\'s data version; otherwise everything reads per-file, with one warning', async () => {
+  configureStreamData({ kind: 'manifest', manifest: perFileManifest() }, { kind: 'manifest', manifest: asBundleManifest({ ...JSON.parse(JSON.stringify({ schema: 2, kind: 'area-bundles', baseUrl: BASE, prefix: BUNDLE_PREFIX, files: Object.fromEntries(ids.map((id) => [`${id}.obosb`, { contentHash: bundleFor(id).header.contentHash }])) })), sourceVersion: 'vOTHER' }) });
+  assert.match(bundleSkew() ?? '', /vOTHER.*vFiles/);
+  assert.equal(bundleTarget('ams-f4'), null);
+  const r = rig();
+  try {
+    await openF4(r);
+    assert.deepEqual(r.urlsOf(BUNDLE), []);
+    assert.equal(r.urlsOf(/\/ams-f4(-[a-z]+)?\.(json|png)$/).length, 6);
+    assert.equal(r.log.warn.filter((w) => /bundles are not used.*vOTHER/.test(w)).length, 1, 'said once');
+  } finally { r.stop(); }
+  configure();
+  assert.equal(bundleSkew(), null, 'matching versions: bundles on');
+  configureStreamData({ kind: 'manifest', manifest: perFileManifest() }, { kind: 'manifest', manifest: asBundleManifest({ schema: 2, kind: 'area-bundles', baseUrl: BASE, prefix: BUNDLE_PREFIX, files: { 'ams-f4.obosb': { contentHash: 'a'.repeat(64) } } }) });
+  assert.match(bundleSkew() ?? '', /does not say/, 'a bundle manifest with no sourceVersion cannot be shown to match');
+  assert.equal(bundleTarget('ams-f4'), null);
+  configureStreamData({ kind: 'local' });
+});
+
+test('R2-S3: the COMMITTED manifests describe the same data - for every area and layer the bundle\'s section sha256 equals the per-file sha256 (via the pinned contentHash)', async () => {
+  const files = JSON.parse(readFileSync(new URL('../../public/heat-map/data/ams-r2-manifest.json', import.meta.url), 'utf8'));
+  const bundles = JSON.parse(readFileSync(new URL('../../public/heat-map/data/ams-r2-bundles.json', import.meta.url), 'utf8'));
+  assert.equal(bundles.sourceVersion, files.version, 'built from this very per-file dataset');
+  const areas = [...new Set(Object.keys(files.files).map((f) => /^(ams-[a-z0-9]+)/.exec(f)[1]))].sort();
+  assert.equal(areas.length, 31);
+  assert.deepEqual(Object.keys(bundles.files).sort(), areas.map((a) => `${a}.obosb`));
+  for (const area of areas) {
+    const sections = AREA_SECTIONS.map((sec) => {
+      const row = files.files[`${area}${sec.suffix}`];
+      assert.ok(row, `${area}${sec.suffix} is in the per-file manifest`);
+      return { name: sec.name, encoding: sec.encoding, mediaType: sec.mediaType, size: row.size, sha256: row.sha256 };
+    });
+    /* contentHash is a sha256 over every section's name, encoding, media type, decoded size and decoded sha256: if it matches, all six layers are the per-file bytes. */
+    assert.equal(await contentHashOf(area, sections), bundles.files[`${area}.obosb`].contentHash, `${area}: bundle and per-file layers differ`);
+  }
 });
 
 test('bundleTarget: a URL for a listed area only; null for Canal Ring, the local source, an unreadable manifest, an unlisted area, a local per-file manifest', () => {

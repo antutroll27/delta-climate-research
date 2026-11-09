@@ -30,8 +30,8 @@ const PRELUDE_BYTES = 16;
 const ALIGN = 8;
 /** A header is about 1 KB; anything past this is a corrupt length, not a header. */
 const MAX_HEADER_BYTES = 1 << 20;
-/** The most one section may inflate to. The biggest Amsterdam layer is 3 MB; this stops a gzip bomb, not a real layer. */
-const MAX_SECTION_BYTES = 256 << 20;
+/** The most one section may declare or inflate to. The biggest Amsterdam layer is about 3 MB; 32 MB stops a gzip bomb (six sections inflate at once) and never a real layer. */
+export const MAX_SECTION_BYTES = 32 << 20;
 
 export type Encoding = 'gzip' | 'identity';
 
@@ -132,6 +132,7 @@ function parseHeader(json: string, version: number): BundleHeader {
     if (seen.has(name)) throw bad(`Section ${name} is listed twice.`);
     seen.add(name);
     if (!isCount(offset) || !isCount(length) || !isCount(size)) throw bad(`Section ${name} has a bad offset, length or size.`);
+    if (size > MAX_SECTION_BYTES || length > MAX_SECTION_BYTES) throw bad(`Section ${name} declares ${Math.max(size, length)} bytes, over the ${MAX_SECTION_BYTES}-byte limit.`);
     if (!isString(encoding) || !isString(mediaType)) throw bad(`Section ${name} has no encoding or mediaType.`);
     if (!isString(sha256) || !HEX64.test(sha256)) throw bad(`Section ${name} has no valid sha256.`);
     return { name, offset, length, encoding, mediaType, sha256, size };
@@ -275,6 +276,30 @@ function textOf(data: Uint8Array | undefined, name: string): string | null {
   if (data === undefined) return null;
   try { return utf8.decode(data); }
   catch { throw new AreaBundleError('decode-failed', `Section ${name} is not valid UTF-8.`, name); }
+}
+
+/** Every section this reader knows, decoded and sha256-checked, and nothing kept: the integrity check on a download. The bytes are what the loader holds afterwards. */
+export async function verifyAreaBundle(bytes: ArrayBuffer | Uint8Array, options: ParseOptions = {}): Promise<{ readonly areaId: string; readonly contentHash: string }> {
+  const { header } = await readBundleContainer(bytes, AREA_SECTION_NAMES, { ...options, required: options.required ?? ['ward', 'surface'] });
+  return { areaId: header.areaId, contentHash: header.contentHash };
+}
+
+/** The layers a NEIGHBOUR needs (its massing and its halo ground): ward and roads as text, and the surface PNG. The vector layers are not inflated or parsed. */
+export interface CoreLayers { readonly ward: string; readonly roads: string | null; readonly surface: Blob }
+export async function parseCoreLayers(bytes: ArrayBuffer | Uint8Array, options: ReadOptions = {}): Promise<CoreLayers> {
+  const { header, sections } = await readBundleContainer(bytes, ['ward', 'roads', 'surface'], { ...options, required: options.required ?? ['ward', 'surface'] });
+  const ward = textOf(sections.get('ward'), 'ward');
+  const surface = sections.get('surface');
+  if (ward === null) throw new AreaBundleError('missing-section', `The bundle for ${header.areaId} has no ward section.`, 'ward');
+  if (surface === undefined) throw new AreaBundleError('missing-section', `The bundle for ${header.areaId} has no surface section.`, 'surface');
+  return { ward, roads: textOf(sections.get('roads'), 'roads'), surface: new Blob([surface as Uint8Array<ArrayBuffer>], { type: 'image/png' }) };
+}
+
+/** The layers only the OPEN area needs. Each is null where the bundle has no such section (the loader's old per-file fallbacks). */
+export interface VectorLayers { readonly water: WaterData | null; readonly trees: unknown; readonly terrain: unknown }
+export async function parseVectorLayers(bytes: ArrayBuffer | Uint8Array, wanted: readonly ('water' | 'trees' | 'terrain')[] = ['water', 'trees', 'terrain'], options: ReadOptions = {}): Promise<VectorLayers> {
+  const { sections } = await readBundleContainer(bytes, wanted, { ...options, required: options.required ?? [] });
+  return { water: jsonOf(sections.get('water'), 'water') as WaterData | null, trees: jsonOf(sections.get('trees'), 'trees'), terrain: jsonOf(sections.get('terrain'), 'terrain') };
 }
 
 /** Read an area bundle's response body. Throws `AreaBundleError` (a typed `code`) on any fault; a bundle that parses is verified. */

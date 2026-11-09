@@ -29,6 +29,8 @@ export interface R2Manifest {
   readonly baseUrl: string | null;
   /** `amsterdam/<version>`: the content-versioned key prefix */
   readonly prefix: string;
+  /** the dataset version (a hash of every file's bytes), or null in a hand-made manifest */
+  readonly version: string | null;
   readonly files: Readonly<Record<string, unknown>>;
 }
 
@@ -44,7 +46,7 @@ export function asR2Manifest(raw: unknown): R2Manifest {
   if (o.baseUrl !== null && typeof o.baseUrl !== 'string') throw new Error('the data manifest has no usable baseUrl');
   if (typeof o.prefix !== 'string' || o.prefix === '') throw new Error('the data manifest has no prefix');
   if (typeof o.files !== 'object' || o.files === null) throw new Error('the data manifest lists no files');
-  return Object.freeze({ baseUrl: o.baseUrl === null ? null : o.baseUrl.replace(/\/+$/, ''), prefix: o.prefix.replace(/^\/+|\/+$/g, ''), files: o.files as Record<string, unknown> });
+  return Object.freeze({ baseUrl: o.baseUrl === null ? null : o.baseUrl.replace(/\/+$/, ''), prefix: o.prefix.replace(/^\/+|\/+$/g, ''), version: typeof o.version === 'string' ? o.version : null, files: o.files as Record<string, unknown> });
 }
 
 /** The part of the bundle manifest the page reads (the full one also lists every section; `trimBundleManifest` in scripts/ keeps this). */
@@ -52,8 +54,10 @@ export interface BundleManifest {
   readonly baseUrl: string;
   /** `amsterdam/<version>`: the content-versioned key prefix of the bundles */
   readonly prefix: string;
-  /** area file (`ams-f4.obosb`) to its `contentHash` (null = not pinned) */
-  readonly files: Readonly<Record<string, { readonly contentHash: string | null }>>;
+  /** the per-file dataset version these bundles were built from; they are used only while it equals the per-file manifest's (see `bundleSkew`) */
+  readonly sourceVersion: string | null;
+  /** area file (`ams-f4.obosb`) to its PINNED `contentHash`. An area whose row has no valid pin is not listed here: it is read from its six files, never parsed unpinned. */
+  readonly files: Readonly<Record<string, { readonly contentHash: string }>>;
 }
 
 export type BundleSource =
@@ -68,12 +72,16 @@ export function asBundleManifest(raw: unknown): BundleManifest {
   if (typeof o.baseUrl !== 'string' || o.baseUrl === '') throw new Error('the bundle manifest has no baseUrl');
   if (typeof o.prefix !== 'string' || o.prefix === '') throw new Error('the bundle manifest has no prefix');
   if (typeof o.files !== 'object' || o.files === null) throw new Error('the bundle manifest lists no files');
-  const files: Record<string, { readonly contentHash: string | null }> = {};
+  const files: Record<string, { readonly contentHash: string }> = {};
   for (const [name, entry] of Object.entries(o.files as Record<string, unknown>)) {
     const hash = typeof entry === 'object' && entry !== null ? (entry as Record<string, unknown>).contentHash : undefined;
-    files[name] = { contentHash: typeof hash === 'string' && /^[0-9a-f]{64}$/.test(hash) ? hash : null };
+    /* A missing or malformed pin is NOT "unpinned": the row is dropped, so the area reads its six files. A bundle is only ever parsed against a pin. */
+    if (typeof hash === 'string' && /^[0-9a-f]{64}$/.test(hash)) files[name] = { contentHash: hash };
   }
-  return Object.freeze({ baseUrl: o.baseUrl.replace(/\/+$/, ''), prefix: o.prefix.replace(/^\/+|\/+$/g, ''), files: Object.freeze(files) });
+  return Object.freeze({
+    baseUrl: o.baseUrl.replace(/\/+$/, ''), prefix: o.prefix.replace(/^\/+|\/+$/g, ''),
+    sourceVersion: typeof o.sourceVersion === 'string' && o.sourceVersion !== '' ? o.sourceVersion : null, files: Object.freeze(files),
+  });
 }
 
 /** Where the page reads the manifest from: the same flat directory as the layer files. */
@@ -126,11 +134,22 @@ export function ensureStreamData(fetcher: Fetcher): Promise<void> {
 /** Set once by `startStream` (after it has read the manifest), before the first open. Tests set it back to `local`. */
 export function configureStreamData(next: StreamDataSource, bundles: BundleSource = { kind: 'none', reason: 'not configured' }): void { source = next; bundleSource = bundles; }
 
+/** Why the bundles cannot be used with the per-file manifest in hand, or null. The two manifests must describe the SAME data: a bundle built from another dataset version would
+ *  give one area a ward from one build and a terrain from another (the loader falls back to a per-file read for an evicted bundle). Everything then reads per-file, consistently. */
+export function bundleSkew(): string | null {
+  if (bundleSource.kind !== 'manifest' || source.kind !== 'manifest') return null;
+  const mine = bundleSource.manifest.sourceVersion, theirs = source.manifest.version;
+  if (mine === null) return 'the bundle manifest does not say which data version it was built from';
+  if (theirs !== null && mine !== theirs) return `the bundles were built from data version ${mine}, the per-file manifest is ${theirs}`;
+  return null;
+}
+
 /** Where one area's bundle is, or null = use the six per-file URLs (`streamedAreaUrls`): Canal Ring, a local source, no readable bundle manifest, or an area it does not list.
- *  `contentHash` is the manifest's pin for the bundle (the parser checks the bundle's own header against it), or null where the manifest carries none. */
-export function bundleTarget(areaId: string): { readonly url: string; readonly contentHash: string | null } | null {
+ *  `contentHash` is the manifest's PIN for the bundle: the parser refuses a bundle whose own header says otherwise. There is no unpinned bundle. */
+export function bundleTarget(areaId: string): { readonly url: string; readonly contentHash: string } | null {
   if (areaId === SAME_ORIGIN_AREA || source.kind === 'local' || bundleSource.kind !== 'manifest') return null;
   if (source.kind === 'manifest' && source.manifest.baseUrl === null) return null;      // the dev loop with local files
+  if (bundleSkew() !== null) return null;
   const { manifest } = bundleSource;
   const file = `${areaId}.obosb`;
   if (!Object.hasOwn(manifest.files, file)) return null;

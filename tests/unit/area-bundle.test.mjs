@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 
 import { AMSTERDAM_SHEET_IDS } from '../../src/data/sheets/amsterdam.ts';
-import { AREA_SECTION_NAMES, AreaBundleError, FORMAT_VERSION, parseAreaBundle, readBundleContainer } from '../../src/scripts/climate-engine/streaming/area-bundle.ts';
+import { AREA_SECTION_NAMES, AreaBundleError, FORMAT_VERSION, MAX_SECTION_BYTES, parseAreaBundle, parseCoreLayers, parseVectorLayers, readBundleContainer, verifyAreaBundle } from '../../src/scripts/climate-engine/streaming/area-bundle.ts';
 import { ALIGN, AREA_SECTIONS, PRELUDE_BYTES, assembleBundle, buildAll, contentHashOf, encodeBundle } from '../../scripts/build-area-bundles.mjs';
 
 /* THE PER-AREA BUNDLE (BUNDLE-FORMAT.md): one request per streamed Amsterdam area instead of six. The format is a magic, a version, a
@@ -187,6 +188,43 @@ test('a gzip bomb (a stream that inflates past the size the header declares) is 
   const header = { ...b.header, sections: b.header.sections.map((s) => (s.name === 'roads' ? { ...s, size: 100 } : s)) };
   header.contentHash = contentHashOf(header.areaId, header.sections);
   await rejects(parseAreaBundle(assembleBundle(header, stored)), 'size-mismatch', 'roads');
+});
+
+test('R2-S4: a section that DECLARES more than 32 MB is refused before anything is inflated, however self-consistent the table is (gzip or identity)', async () => {
+  const b = make();
+  const { dataStart } = extent(b);
+  const big = 33 << 20;
+  const zeros = gzipSync(Buffer.alloc(big), { level: 9 });                      // 33 MB of zeros is about 33 KB stored: a real bomb, with an honest-looking table
+  for (const target of ['roads', 'surface']) {
+    const stored = b.header.sections.map((s) => (s.name === target ? (target === 'roads' ? zeros : Buffer.alloc(big)) : b.bytes.subarray(dataStart + s.offset, dataStart + s.offset + s.length)));
+    const header = { ...b.header, sections: b.header.sections.map((s) => (s.name === target ? { ...s, size: big, sha256: createHash('sha256').update(Buffer.alloc(big)).digest('hex') } : s)) };
+    header.contentHash = contentHashOf(header.areaId, header.sections);
+    const t0 = Date.now();
+    await rejects(parseAreaBundle(assembleBundle(header, stored)), 'bad-header');
+    assert.ok(Date.now() - t0 < 2_000, 'refused up front, not after inflating');
+  }
+  assert.equal(MAX_SECTION_BYTES, 32 << 20);
+  const ok = { ...b.header, sections: b.header.sections };
+  await parseAreaBundle(assembleBundle(ok, b.header.sections.map((s) => b.bytes.subarray(dataStart + s.offset, dataStart + s.offset + s.length))));         // the real layers are far under it
+});
+
+test('R2-S2: parseCoreLayers and parseVectorLayers read only the sections they name (a corrupt vector section does not touch the core, and vice versa); the whole-bundle parse still catches either', async () => {
+  const b = make();
+  const { dataStart } = extent(b);
+  const flip = (name) => { const m = Buffer.from(b.bytes); const s = b.header.sections.find((x) => x.name === name); m[dataStart + s.offset + s.length - 1] ^= 0xff; return new Uint8Array(m); };
+  const badTrees = flip('trees');
+  const core = await parseCoreLayers(badTrees);
+  assert.equal(core.ward, JSON.stringify(WARD));
+  assert.equal(core.surface.type, 'image/png');
+  await rejects(parseAreaBundle(badTrees), 'decode-failed', 'trees');
+  const v = await parseVectorLayers(bytesOf(b), ['water', 'terrain']);
+  assert.deepEqual(v.water, { polys: [{ k: 'canal', p: [0, 0, 1, 1, 2, 0] }] });
+  assert.equal(v.trees, null, 'not asked for, not read');
+  await parseVectorLayers(flip('ward'), ['water']);                                  // a corrupt ward is not this reader's business
+  const badSurface = flip('surface');
+  await parseVectorLayers(badSurface);
+  await rejects(parseCoreLayers(badSurface), 'sha-mismatch', 'surface');
+  await rejects(verifyAreaBundle(badTrees), 'decode-failed');
 });
 
 test('a truncated file: every cut before the last section ends is `truncated`, every cut after parses', async () => {
