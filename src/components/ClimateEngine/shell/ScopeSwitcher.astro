@@ -85,7 +85,10 @@ const NO_DATA_NOTE = 'no data yet';
  * a fourth tier fails to compile here rather than rendering a blank badge.
  */
 const TIER_LABEL: Record<CityTier, string> = {
-  validated: 'Validated',
+  /* 'Checked', not 'Validated' (founder, 2026-11-09): the methods ledger says "night level calibrated, ward detail unvalidated",
+     and a badge may not claim more. Not 'Calibrated' either: that is the accuracy chip's word and only travels with its band
+     (tests/unit/accuracy-tier-gate.test.mjs). 'Checked' is the methods card's own word (H23). The tier VALUE stays `validated`. */
+  validated: 'Checked',
   zone: 'Zone transfer',
   geometry: 'Geometry only',
 };
