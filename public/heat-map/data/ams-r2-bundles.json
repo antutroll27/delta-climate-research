@@ -1,0 +1,168 @@
+{
+ "schema": 2,
+ "kind": "area-bundles",
+ "formatVersion": 1,
+ "city": "amsterdam",
+ "version": "94d6d1064bf1966b",
+ "prefix": "amsterdam/94d6d1064bf1966b",
+ "baseUrl": "https://obos-city-data.antarixmusic.workers.dev",
+ "cacheControl": "public, max-age=31536000, immutable",
+ "sourceVersion": "b9bfc7a634fef43b",
+ "files": {
+  "ams-b3.obosb": {
+   "sha256": "9e70cb9d46c83344f24b5b65cded4affeaa6259f285f32d2c71c89fe551144d8",
+   "size": 455360,
+   "contentHash": "dfd86bbfeb48b8f5e2aa4b77a11e4b12201264b0da3977b236beef77389865c7"
+  },
+  "ams-b4.obosb": {
+   "sha256": "fec8fb0c2042d180dc69232a404b06581a9630cede6422d984b0a4d2e8777a21",
+   "size": 382520,
+   "contentHash": "91c268b210e2a7c226105fec6193acf875e3a884097a7494bc39c62ae09b0f35"
+  },
+  "ams-b5.obosb": {
+   "sha256": "7198431507b8151d9d587275d25a7c4e477635b7f3bc6b7855eae40fbe364769",
+   "size": 353024,
+   "contentHash": "427c2701ea2941619f9a5cc644a9798575604ac073aaccee2fa9ef3f739a68d1"
+  },
+  "ams-c3.obosb": {
+   "sha256": "e5e9f6aa510c1e5732bd5aebd8834301c1a7654a3f8198af41b87ae723904a6a",
+   "size": 392920,
+   "contentHash": "97ad08616455ca1e431ff0e3f006427a27e6e1299f8d268b14fede3956913165"
+  },
+  "ams-c4.obosb": {
+   "sha256": "bed08ae90d5ef96c6bcf9494615f9559f3ec74e4e046cfc580d9625d5493d35a",
+   "size": 541896,
+   "contentHash": "1bf68fdf163be5bba85920207d644449c2d96a835651b791e77d3fd907fc8902"
+  },
+  "ams-c5.obosb": {
+   "sha256": "686919d47f315baf2426e0edcb5b2e305343399c7153a51dae231f69813ca2ca",
+   "size": 618616,
+   "contentHash": "563ba29cf27d514136ae80928ade61dbbadc594f580fc28c2c4605fdb1dab797"
+  },
+  "ams-d2.obosb": {
+   "sha256": "047e5a82168051cf7716cae47a1b342a4fa0e6eea7bd5ad8522f499aee58a1c9",
+   "size": 306264,
+   "contentHash": "240aa82897c17ddcd2753678b4ecfe3c16b63ec39135e7748d3739555ab8a053"
+  },
+  "ams-d3.obosb": {
+   "sha256": "630dc6ae5076015745c71569ae1601b95436b9deee3d924ce608fc557296bd68",
+   "size": 475112,
+   "contentHash": "6282f85aff3393d32713c6c621b1adf09e1526c812dea1e2de93726fca6beaf1"
+  },
+  "ams-d4.obosb": {
+   "sha256": "151ad76489d092fe74a51834f6816b6c54f41d67e4a504c5dc777b19f0f3d594",
+   "size": 738472,
+   "contentHash": "1f3156d5573b8ecdd953b39fbdaf1f131cd341d963c9ba2c5deceef34c837429"
+  },
+  "ams-d5.obosb": {
+   "sha256": "9f69de290c25739249c734471e563b6395aba2ee86f3787a7f1e0b045df81a73",
+   "size": 515528,
+   "contentHash": "8fc4b6e1259113a462af0dd97ed4b0c6aea1f54da56ac2c1e7fb99ea9443005d"
+  },
+  "ams-e2.obosb": {
+   "sha256": "e5bc3d0b96facfccf73b13d62c3124774c7c86180d5b7ff26b837d22f901a828",
+   "size": 578728,
+   "contentHash": "30334a4de5fc2d7ddf27eb9cb7e786e6078e5c0d014061928fb6d23199d7e221"
+  },
+  "ams-e3.obosb": {
+   "sha256": "78071fdd29b605e7e38af2d8d057afe349261632dd55e684c44f0b3d957b0f51",
+   "size": 505616,
+   "contentHash": "18abcb522aadea46803fa377f6ba3b36fc753c5ef4e5a20a52f18c266a3c264e"
+  },
+  "ams-e5.obosb": {
+   "sha256": "e875b3cf3a96480c4152869b4e95bb698ddf8a22b1d6c7218c33327391cacee5",
+   "size": 705888,
+   "contentHash": "069b6920029e42a83549136d3d2553c565a65060e83ca22860694a2141efe5c8"
+  },
+  "ams-e6.obosb": {
+   "sha256": "e9b0afc7c279db63f06be10b4c4dca6099db2e88bc348a53e60986eb62ea7e41",
+   "size": 565712,
+   "contentHash": "269d69692bbb42e9233663a1e5812d12262cc1f0460bee4f25ed4ad03add86f1"
+  },
+  "ams-f2.obosb": {
+   "sha256": "34215fb64f92e2df90cdccb251dad7bc27a56b1d585b78d111acf2c8f2d72ae2",
+   "size": 476240,
+   "contentHash": "5aaf880527ab3c8e8cf287a240fbbcaf07dd525fb61b9ba3927cca6dbdd273f7"
+  },
+  "ams-f3.obosb": {
+   "sha256": "e9293b302febc26efe32d71b8ba44e084eff56d2bcb083ac00a75810cb0715f2",
+   "size": 643880,
+   "contentHash": "dfe2f1d8f30c80ad17bcdc0a2343473df0657712d40d6ea452c15c2570275542"
+  },
+  "ams-f4.obosb": {
+   "sha256": "85d13d42ce279eaeb4cd1f30b9539eac293e071183caf88f929ab2e3fa510222",
+   "size": 673376,
+   "contentHash": "5c1ea5081aacf7da408077ef07dbb03850bd803880f8ea0f173fe5e117a53d87"
+  },
+  "ams-f5.obosb": {
+   "sha256": "566aba01d20f8d3292d1bbe642e06629562fbe196fe4d42d60af25bca3d9477b",
+   "size": 677264,
+   "contentHash": "82b2a7742844631561cbf683b2ced97976b58524f3eecacb63132d85a2dc55ff"
+  },
+  "ams-f6.obosb": {
+   "sha256": "b9dcde77655f388cac5d8ea9169fefd764f5b17c0fe48ec8242e42e0ee2945fa",
+   "size": 375744,
+   "contentHash": "cb97a692e3783b531954a0e1bfec0fd76ade053cc84b2b2362f5930257432d40"
+  },
+  "ams-g3.obosb": {
+   "sha256": "b58d0842fb37ff7144f3fb0f6456197ac00b078d2726153ea14068e9976744e0",
+   "size": 417288,
+   "contentHash": "d0c03a92438a1708960d7d0b9ef11db75752ef19de2824dc272576e44fada576"
+  },
+  "ams-g4.obosb": {
+   "sha256": "093ed925060f5e54b90404189543f7df111857e1d4145c8077d41d068a1f1953",
+   "size": 362808,
+   "contentHash": "d5d251f8d51657c107ff22f528f7ce349d55f6f199f1091efa750ed2d7491627"
+  },
+  "ams-g5.obosb": {
+   "sha256": "27aa63cbcec15a933404a0e6dc2127b00b019c7c61be969b465551e27bfb9eb7",
+   "size": 808136,
+   "contentHash": "b4a6033acd2260e679c70af424053808b33107eff7842bb2706996d73ae47e3b"
+  },
+  "ams-g6.obosb": {
+   "sha256": "35261ec1893f70e9b0cb1ab1665098d203ccb8aeab8cd4cceb7ae7735fef2a11",
+   "size": 670592,
+   "contentHash": "af50a947ece85dd6b3f9b13f3cecd6fe5077d333f3de3185a512941bd18b9133"
+  },
+  "ams-g7.obosb": {
+   "sha256": "7e7aee46adb9c18fefb09edecf3b7c11e42d0d3393fff1094ac9673fa3eab43e",
+   "size": 489144,
+   "contentHash": "7b2181c3ba271ab0a921723dccfe66dfcda923ad5e5a76e3bd5d2fae9e2dd36e"
+  },
+  "ams-h3.obosb": {
+   "sha256": "e44803763be4ed0a7826632f4476537bf3539c81ab92b8d73413318999d1a810",
+   "size": 281088,
+   "contentHash": "9083c88db3e1419d5aa02882360d8034a930a27d812e30fddf52ad98ef0f8af6"
+  },
+  "ams-h4.obosb": {
+   "sha256": "7b854f5327b51ab7d65eda0ea31d481c7e7761cf29b4135a240f0a2fa8c3787e",
+   "size": 153152,
+   "contentHash": "e3ff861660a76424cd599a7df35ccfb8299a4726448d87476bc90fee2ef51330"
+  },
+  "ams-h5.obosb": {
+   "sha256": "c6f078769930a4380e940517e092109c9ff153e62fe7d6cc823d80958e1f9a27",
+   "size": 458960,
+   "contentHash": "84af6618651d0a0c7f33d8ca87f1a53d27b02a3531221bdf1ea131e52c877365"
+  },
+  "ams-h6.obosb": {
+   "sha256": "654297998c7a6052d7d4c79425720e13392d7d6548f1d7df939f80b6f50ffbc6",
+   "size": 488600,
+   "contentHash": "96566aba1b615cb5504234cb869c1e60b52a103f90c88c9206c46d3ad1f5c11f"
+  },
+  "ams-h7.obosb": {
+   "sha256": "fda7add55264779c7dc09c31b6c279edfec2fc1cf8a62d0c0fa440f049743a48",
+   "size": 310008,
+   "contentHash": "d36831fcfc9b16d53a229b6cacf323dcf11d5b7f2de0d1567976d704935654eb"
+  },
+  "ams-i6.obosb": {
+   "sha256": "5937f6a99f0b976c5aab8b91473a8219b669d321f838aa26bf1b2ff7009372fe",
+   "size": 475392,
+   "contentHash": "2a3a7b76207eb454cbd9dad776e167b2131bf9a700f18ccfacf965a8216d59c8"
+  },
+  "ams-i7.obosb": {
+   "sha256": "6d58d4019d492e7d1d74ea089d292e4bc657326e9a90dcb694ab04eabc197d50",
+   "size": 284392,
+   "contentHash": "b001286a3f3314c0c84f9cbc737c2ff7a75780d24d4cb7430310df3fc8b9ac08"
+  }
+ }
+}

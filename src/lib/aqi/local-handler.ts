@@ -28,15 +28,17 @@ import type { Fetch } from './http.ts';
 
 /**
  * ARE THE STREAMED AREAS SERVED BY THE API? Only where whole-city streaming is on, by the SAME truth the page uses: a build made with
- * PUBLIC_OBOS_STREAM_DEV=1 (the dev flag heat-map-app.ts reads; the same variable reaches the function at run time on a deployment that sets it), or
- * `TILED_CITY_READY` (scope/registry.ts), the constant that publishes the tiled city. Turning streaming on publicly therefore opens the API too,
- * with no second switch to forget; production with streaming off serves Canal Ring (and Tokyo) only.
- * A DEPLOY THAT SHOWS THE STREAMED AREAS NEEDS PUBLIC_OBOS_STREAM_DEV=1 AT FUNCTION RUN TIME AS WELL AS AT BUILD TIME: the page reads it from the build,
- * this API from the function's environment (`process.env`, passed in by api/air-quality.ts). Set it in the Vercel environment of that deployment; a
- * `vercel deploy --prebuilt` of a locally built dev bundle without it shows the areas and the API answers 404 (the card then says it could not be loaded).
+ * PUBLIC_OBOS_STREAM=1 (the public switch heat-map-app.ts reads, Canal Ring's page streaming by default) or PUBLIC_OBOS_STREAM_DEV=1 (the dev build; its
+ * page streams with `?stream=1`), or `TILED_CITY_READY` (scope/registry.ts), the constant that publishes the tiled city. The same variables reach the
+ * function at run time on a deployment that sets them, so ONE Vercel variable, PUBLIC_OBOS_STREAM=1, turns on the page and this API together, with no
+ * second switch to forget; production with streaming off serves Canal Ring (and Tokyo) only.
+ * A DEPLOY THAT SHOWS THE STREAMED AREAS NEEDS THE VARIABLE AT FUNCTION RUN TIME AS WELL AS AT BUILD TIME: the page reads it from the build,
+ * this API from the function's environment (`process.env`, passed in by api/air-quality.ts). Set it in the Vercel environment of that deployment (Production
+ * and Preview each have their own); a `vercel deploy --prebuilt` of a locally built bundle without it shows the areas and the API answers 404 (the card
+ * then says it could not be loaded).
  */
 export function streamingEnabled(env: Readonly<Record<string, string | undefined>> = {}, tiledCityReady: boolean = TILED_CITY_READY): boolean {
-  return tiledCityReady || env['PUBLIC_OBOS_STREAM_DEV'] === '1';
+  return tiledCityReady || env['PUBLIC_OBOS_STREAM'] === '1' || env['PUBLIC_OBOS_STREAM_DEV'] === '1';
 }
 
 interface Res { status(c: number): Res; setHeader(k: string, v: string): void; json(b: unknown): void }
@@ -116,7 +118,7 @@ function payloadFor(area: string, now: Date, d: LocalDeps): Promise<LocalAirPayl
 }
 
 export async function handleLocal(area: string, res: Res, d: LocalDeps = {}): Promise<void> {
-  /* The 31 streamed areas are served only where streaming is on (the dev build's flag, or TILED_CITY_READY): production with streaming off serves Canal Ring (and Tokyo) only. */
+  /* The 31 streamed areas are served only where streaming is on (PUBLIC_OBOS_STREAM, the dev build's flag, or TILED_CITY_READY): production with streaming off serves Canal Ring (and Tokyo) only. */
   if (!localAirReady(area, d.drawable) || (localAirArea(area)?.streamed === true && !(d.streaming ?? streamingEnabled()))) { res.status(404).json({ error: 'unknown area' }); return; }
   const now = (d.now ?? (() => new Date()))();
   const payload = await payloadFor(area, now, d);

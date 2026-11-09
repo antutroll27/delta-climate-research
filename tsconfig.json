@@ -6,6 +6,7 @@
   ],
   "exclude": [
     "dist",
+    "dist-stream",
     "docs",
     "previews",
     "inspiration",

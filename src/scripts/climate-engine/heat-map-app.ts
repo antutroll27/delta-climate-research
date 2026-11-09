@@ -64,6 +64,7 @@ import type { PreparedBuildings, ReliefRenderer, ReliefWardBundle, ReliefVisualS
 import { sheetByCode, sheetKey, sheetOf, type SheetCode } from './scope/sheets';
 import type { CityStream, CityStreamHooks, SheetBundle } from './streaming-host/city-stream';
 import type { NeighbourLayers } from './streaming/halo-solve';
+import type { AreaSurfaces } from './streaming/area-surfaces';
 import {
   attachReliefCustomLayer, isReliefLayerAttached, shouldShowRelief,
 } from './explore/relief-lifecycle';
@@ -247,17 +248,25 @@ export function mountHeatMap(): () => void {
    * re-resolved per switch in `loadWard`.
    */
   const SCOPE = resolve(INITIAL_AREA);
-  /* ── WHOLE-CITY STREAMING, DEV ONLY (city-streaming P3b) ────────────────────────
-     Two keys must both be turned: a build made with PUBLIC_OBOS_STREAM_DEV=1 (a compile-time constant: in every other build the
-     condition below is `false`, the branch is removed, and none of streaming/ or streaming-host/ is in the bundle), and `?stream=1`
-     on Canal Ring's page. TILED_CITY_READY stays false. What it does: the page opens Canal Ring through the stream controller
-     instead of `loadWard(INITIAL_AREA)`, draws its neighbours as grey massing, moves to the next sheet when the camera has
-     crossed a seam, and solves each sheet on its 504-cell halo grid. `?streamtier=low|balanced|full` forces a device tier. */
-  const STREAM_DEV = import.meta.env.PUBLIC_OBOS_STREAM_DEV === '1'
+  /* ── WHOLE-CITY STREAMING (city-streaming P3b; public mode: stream-public) ──────────────────────────────────────────────────────
+     TWO COMPILE-TIME FLAGS, and in a build made with neither the conditions below are `false`, the branches are removed, and none of streaming/
+     or streaming-host/ is in the bundle (tests/unit/streaming-dormant.test.mjs, scripts/check-stream-dist.mjs):
+       PUBLIC_OBOS_STREAM=1      the PUBLIC switch. Canal Ring's page opens through the stream controller with no query; `?stream=0` is the kill
+                                 switch (the classic single-area page, nothing of streaming fetched). The ONE Vercel variable that also reaches the
+                                 Air API at run time (lib/aqi/local-handler.ts `streamingEnabled`), so a deploy turns on page and API together.
+       PUBLIC_OBOS_STREAM_DEV=1  the dev build: streaming only with `?stream=1` on Canal Ring's page (unchanged), plus the dev tools below.
+     STREAM_ON says "this mount streams". STREAM_TOOLS says "and the dev tools exist": the GL meter, `streamTimings`, `?streamtier=`, `window.__obosStream`
+     and the console warnings. They need the DEV flag, so a public-only build contains none of them (scripts/check-stream-dist.mjs greps for them).
+     TILED_CITY_READY stays false: no streamed area has a page of its own, the open area is `?area=F4` on Canal Ring's page. What streaming does: the page
+     opens Canal Ring through the stream controller instead of `loadWard(INITIAL_AREA)`, draws its neighbours as grey massing, moves to the next sheet
+     when the camera has crossed a seam, and solves each sheet on its 504-cell halo grid. */
+  const streamParam = (): string | null => new URLSearchParams(window.location.search).get('stream');      // read inside the condition, so it is removed with it
+  const STREAM_ON = (import.meta.env.PUBLIC_OBOS_STREAM === '1' || import.meta.env.PUBLIC_OBOS_STREAM_DEV === '1')
     && INITIAL_AREA === 'nl/amsterdam/canal-ring'
-    && new URLSearchParams(window.location.search).get('stream') === '1';
-  /* Installed as early as the page allows (it only sees what is created after it), and only in a dev-streaming build. */
-  const glMeterReady = STREAM_DEV ? import('./streaming-host/gl-meter').then((m) => { m.installGlMeter(); return m; }) : Promise.resolve(null as never);
+    && (import.meta.env.PUBLIC_OBOS_STREAM === '1' ? streamParam() !== '0' : streamParam() === '1');
+  const STREAM_TOOLS = import.meta.env.PUBLIC_OBOS_STREAM_DEV === '1' && STREAM_ON;
+  /* Installed as early as the page allows (it only sees what is created after it), and only in a dev-tools build. */
+  const glMeterReady = STREAM_TOOLS ? import('./streaming-host/gl-meter').then((m) => { m.installGlMeter(); return m; }) : null;
 
   /**
    * The unit prices, or NULL for a country that has adopted no cost basis (the
@@ -319,6 +328,11 @@ export function mountHeatMap(): () => void {
     const panel = el('srcPanel');
     if (!panel) return;
     const gen = ++srcGen;
+    const foreign = STREAM_ON ? foreignArea() : null;
+    if (foreign !== null) {      // a streamed area has no provenance manifest (and none is fetched for it): say so, with the area's own name
+      panel.innerHTML = `<h4>Data receipts</h4><div class="src-row"><div class="s">${escHtml(streamSurfaces!.receipts(foreign))}</div></div>`;
+      return;
+    }
     const manifest = await loadLayerManifest(state.ward);
     if (gen !== srcGen) return;
     if (!manifest) {
@@ -1411,7 +1425,8 @@ export function mountHeatMap(): () => void {
     const sum = el('solPaneSum'), list = el('solList'), link = el('solCsv') as HTMLAnchorElement | null;
     if (!sum || !list || !link) return;
     if (!pv) {
-      sum.textContent = `No solar screen ships for ${areaName()}. The screen needs footprints, heights and canopy, and this area ships none.`;
+      const foreign = STREAM_ON ? foreignArea() : null;
+      sum.textContent = foreign !== null ? streamSurfaces!.solar(foreign) : `No solar screen ships for ${areaName()}. The screen needs footprints, heights and canopy, and this area ships none.`;
       list.innerHTML = '';
       link.setAttribute('hidden', '');
       return;
@@ -2068,6 +2083,13 @@ export function mountHeatMap(): () => void {
 
   let wrapHost: ((host: HeatSimHost) => HeatSimHost) | null = null;
   let streamControl: CityStream | null = null;
+  /** What each single-area surface says for a streamed area (streaming/area-surfaces.ts), once the stream chunk is loaded. */
+  let streamSurfaces: AreaSurfaces | null = null;
+  /** The open area's sheet code when it is a streamed area OTHER than the page's own Canal Ring, else null. Callers write `STREAM_ON && foreignArea()` so a build without streaming drops the branch. */
+  const foreignArea = (): SheetCode | null => {
+    const row = streamSurfaces !== null && state.ward !== INITIAL_AREA ? sheetOf(state.ward) : null;
+    return row !== null && streamSurfaces!.isForeign(row.code) ? row.code : null;
+  };
   /** Dev streaming: change the device tier AND tell the controller (set once the controller exists). */
   let setStreamTier: ((tier: ExploreDeviceTier) => void) | null = null;
   /** The sheet being opened by the stream controller, for the span of its commit; null otherwise. */
@@ -2136,7 +2158,7 @@ export function mountHeatMap(): () => void {
     const previous = simHost.backend;
     simHost.dispose();
     simHost = previous === 'gpu-webgl2' ? makeCpuHost() : createStaticHost();
-    if (STREAM_DEV && previous === 'gpu-webgl2' && runtimeTier === 'full') setStreamTier?.('balanced');   // a lost GPU solver is a demotion for the mesh budget too
+    if (STREAM_ON && previous === 'gpu-webgl2' && runtimeTier === 'full') setStreamTier?.('balanced');   // a lost GPU solver is a demotion for the mesh budget too
     if (simHost.backend === 'ts-main') simAnimate = false;
     else if (wrapHost) simHost = wrapHost(simHost);
     setSimBackend(simHost.backend === 'ts-worker' ? 'CPU SIM' : 'CPU STATIC');
@@ -2359,7 +2381,7 @@ export function mountHeatMap(): () => void {
            `resetSim` after the ward loads, while this runs off `capsReady` directly.
            Passing the value measured ZERO `.hdr` requests on a tier-2 machine. */
         deviceTier: () => runtimeTier,
-        ...(STREAM_DEV ? { streamed: { onContextRestored: () => streamControl?.contextRestored() } } : {}),
+        ...(STREAM_ON ? { streamed: { onContextRestored: () => streamControl?.contextRestored() } } : {}),
       });
       relief = instance;
       attachReliefLayer();
@@ -2652,7 +2674,7 @@ export function mountHeatMap(): () => void {
     try {
       streamCommit = stream ?? null;
       commitWard(staged, stream?.rebuild === true);      // a rebuild is framed already: the rollback path's "no fly, nothing grows in again"
-      if (stream?.rebuild) streamTimings.rebuilds++;
+      if (STREAM_TOOLS && stream?.rebuild) streamTimings.rebuilds++;
     } catch (error) {
       const previous = committedBundle;
       if (previous && previous !== staged) {
@@ -2674,7 +2696,7 @@ export function mountHeatMap(): () => void {
     void resetSim();
     fetchLive(name);
     if (!stream) schedulePrefetch(name);
-    if (stream) { streamTimings.stage.push(Math.round(tCommit - tStart)); streamTimings.commit.push(Math.round(tCommitted - tCommit)); streamTimings.after.push(Math.round(performance.now() - tCommitted)); }
+    if (STREAM_TOOLS && stream) { streamTimings.stage.push(Math.round(tCommit - tStart)); streamTimings.commit.push(Math.round(tCommitted - tCommit)); streamTimings.after.push(Math.round(performance.now() - tCommitted)); }
     /* THE LOADER HOLDS UNTIL THE BUILDINGS ARE ON SCREEN AND THE WARD HAS ITS OWN
        FIGURES, not until the data lands. Between the commit and the first solve the
        readouts are blank (see `blankReadouts`), and the chip is what says why. A
@@ -2703,7 +2725,7 @@ export function mountHeatMap(): () => void {
   function failSwitch(token: WardRequestToken, name: AreaKey, error: unknown): void {
     wardSession.fail(token);
     console.warn(`Ward ${name} could not load:`, error);
-    if (!(STREAM_DEV && sheetOf(name) !== null)) loadChip.fail(`${resolve(name).area.name} could not load.`);     // a streamed area's failure is the loader view's plate
+    if (!(STREAM_ON && streamControl !== null && sheetOf(name) !== null)) loadChip.fail(`${resolve(name).area.name} could not load.`);     // a streamed area's failure is the loader view's plate
     try { projectWard(); } catch (projectError) { console.warn('Ward projection failed:', projectError); }
   }
 
@@ -2894,7 +2916,7 @@ export function mountHeatMap(): () => void {
       else console.warn('Heat simulation unavailable:', error);
       return;
     }
-    if (STREAM_DEV) streamTimings.reset.push(Math.round(performance.now() - tReset));
+    if (STREAM_TOOLS) streamTimings.reset.push(Math.round(performance.now() - tReset));
     if (presentSnapshot(request, snapshot)) {
       lastSimulationAt = performance.now();
       requestRuntimeFrame('render');
@@ -3842,6 +3864,8 @@ export function mountHeatMap(): () => void {
     /* `/api/wards/[id]` is generated from src/data/wards.ts, one route per bare
        id, so the key would produce a 404 the page has no way to notice. */
     if (link) link.href = `/api/wards/${areaOf(state.ward)}/metadata.json`;
+    /* A streamed area has no ward record (no /api/wards/ams-f4/ route exists), so the page's own record link is withdrawn while one is open. */
+    if (link && STREAM_ON) link.toggleAttribute('hidden', foreignArea() !== null);
   }
 
   /**
@@ -3861,7 +3885,7 @@ export function mountHeatMap(): () => void {
    * Compare URL the same way, for the same reason.
    */
   function updateAddressBar() {
-    if (STREAM_DEV) return;     // a streamed area has no page of its own (TILED_CITY_READY is false): the dev wiring writes `?area=F4` on Canal Ring's page (streaming-host/page-wiring.ts)
+    if (STREAM_ON) return;     // a streamed area has no page of its own (TILED_CITY_READY is false): the stream wiring writes `?area=F4` on Canal Ring's page (streaming-host/page-wiring.ts)
     history.replaceState(null, '', `${areaPath(state.ward)}${window.location.search}${window.location.hash}`);
   }
 
@@ -3992,6 +4016,17 @@ export function mountHeatMap(): () => void {
    * is one this document is deliberately without.
    */
   function updateDocumentMeta() {
+    const foreign = STREAM_ON ? foreignArea() : null;
+    if (foreign !== null) {
+      /* A STREAMED AREA HAS NO PAGE: the address is Canal Ring's with `?area=F4`, and the tags that name the PAGE (canonical, og:url) must go on naming Canal Ring's,
+         query-free. Only what the reader sees (the tab, the description) names the open area; `resolve(state.ward)` would describe it as "registered, no artefacts". */
+      const title = streamSurfaces!.title(foreign), description = streamSurfaces!.description(foreign);
+      document.title = title;
+      for (const { sel, attr, of } of WARD_META) {
+        if (of !== 'url') document.head.querySelector(sel)?.setAttribute(attr, of === 'title' ? title : description);
+      }
+      return;
+    }
     const scope = resolve(state.ward);
     const title = areaPageTitle(scope);
     const description = areaPageDescription(scope);
@@ -4068,6 +4103,17 @@ export function mountHeatMap(): () => void {
        here to deep-link — and there is no instrument there either. */
     const link = document.querySelector<HTMLAnchorElement>('a[data-rail="analysis"]');
     if (!link) return;
+    if (STREAM_ON) {
+      /* COMPARE AND THE WARD BRIEF DO NOT OPEN A STREAMED AREA (they read only drawable areas, and the link would silently open Kolkata's default pair under this area's name).
+         The link is withdrawn and says so; the ward brief links in the page follow it. Canal Ring's own link is exactly what it was. */
+      const foreign = foreignArea();
+      const briefs = document.querySelectorAll<HTMLAnchorElement>('[data-v2-brief], [data-v2-brief-link]');
+      for (const a of [link, ...briefs]) {
+        if (foreign === null) { a.removeAttribute('data-unavailable'); a.removeAttribute('aria-disabled'); a.removeAttribute('title'); }
+        else { a.removeAttribute('href'); a.setAttribute('data-unavailable', streamSurfaces!.compareUnavailable); a.setAttribute('aria-disabled', 'true'); a.setAttribute('title', streamSurfaces!.compareUnavailable); }
+      }
+      if (foreign !== null) return;
+    }
     const params = new URLSearchParams({
       /* ONE function decides this spelling, for the writer here and the reader in
          scenario-url.ts alike. It used to be `areaOf` plus a comment asserting what
@@ -4110,7 +4156,7 @@ export function mountHeatMap(): () => void {
   /* A streamed area is opened THROUGH THE STREAM CONTROLLER (the manager, the loader, the picker), never by `loadWard` directly: the strip's
      Canal Ring tab and the Area select both land here in the dev streaming build. Everything else is exactly what it was. */
   const openArea = (key: AreaKey): void => {
-    const row = STREAM_DEV && streamControl ? sheetOf(key) : null;
+    const row = STREAM_ON && streamControl ? sheetOf(key) : null;
     if (row) streamControl!.select(row.code); else void loadWard(key);
   };
   document.querySelectorAll('#strip .ward').forEach(t => onEl(t, 'click', () => {
@@ -4533,10 +4579,13 @@ export function mountHeatMap(): () => void {
   const streamPaths = (key: AreaKey): AreaPaths => streamedAreaUrls!(splitKey(key).area);
 
   async function startStream(): Promise<void> {
-    const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }, { measured }, { wirePage }, { areaFromUrl }, { streamedAreaMeans }, { createLateStream }, dataSource] = await Promise.all([
+    const [{ createCityStream }, { spawnSheetWorker }, { createHaloSimHost }, meter, wiringModule, { areaFromUrl }, { streamedAreaMeans }, { createLateStream }, dataSource, surfaces] = await Promise.all([
       import('./streaming-host/city-stream'), import('./streaming-host/sheet-worker-client'), import('./streaming/halo-sim-host'),
       glMeterReady, import('./streaming-host/page-wiring'), import('./streaming/area-page'), import('./surface-raster'), import('./streaming/late-stream'), import('./streaming/data-source'),
+      import('./streaming/area-surfaces'),
     ]);
+    const { wirePage, AREA_NAMES } = wiringModule;
+    streamSurfaces = surfaces.createAreaSurfaces(AREA_NAMES, SCOPE.city.name);
     /* WHERE THE LAYER FILES COME FROM: the manifest (public/heat-map/data/ams-r2-manifest.json) names Cloudflare R2 for every area but Canal Ring. A manifest
        that cannot be read is not a reason to guess: every other area then fails into the loader's failed state, with the reason. */
     await dataSource.readStreamManifest((url, init) => fetch(url, init));           // a failed read is retried by the controller before every load (a Retry works; INT re-audit R4)
@@ -4551,8 +4600,10 @@ export function mountHeatMap(): () => void {
     let supply: (() => NeighbourLayers) | null = null;
     wrapHost = (host) => createHaloSimHost(host, () => supply?.() ?? null);
     await initSimHost();                                  // the device tier is final once the capability probe has run
-    const asked = new URLSearchParams(window.location.search).get('streamtier');
-    if (asked === 'low' || asked === 'balanced' || asked === 'full') runtimeTier = asked;
+    if (STREAM_TOOLS) {
+      const asked = new URLSearchParams(window.location.search).get('streamtier');
+      if (asked === 'low' || asked === 'balanced' || asked === 'full') runtimeTier = asked;
+    }
     const conn = (navigator as Navigator & { connection?: EventTarget & PrefetchConnection }).connection;
     conn?.addEventListener?.('change', () => stream.networkChanged(hooks.network()));
     const keyOf = (code: SheetCode): AreaKey => sheetKey(sheetByCode(code)!);
@@ -4587,7 +4638,7 @@ export function mountHeatMap(): () => void {
       resolve: () => { void resetSim(); },
       loader: () => undefined,                              // the loader view takes the manager's loader and failure commands through `command`
       failure: () => undefined,
-      warn: (message, error) => console.warn(`streaming: ${message}`, error ?? ''),
+      warn: STREAM_TOOLS ? (message, error) => console.warn(`streaming: ${message}`, error ?? '') : () => undefined,     // a failure reaches the reader as the loader's plate; the console is for the dev build
       ...(wiring ? {
         loaderVisible: (code) => wiring.loaderVisible(code),
         command: (c) => wiring.command(c),
@@ -4612,8 +4663,8 @@ export function mountHeatMap(): () => void {
     for (const type of ['mouseup', 'touchend', 'touchcancel'] as const) map.on(type, () => { pointerDown = false; sendCamera(true); });
     map.on('move', () => sendCamera(false));
     map.on('moveend', () => sendCamera(true));
-    (window as unknown as { __obosStream?: unknown }).__obosStream = {
-      report: () => stream.report(), measured, timings: () => streamTimings, select: (code: string) => stream.select(code), setTier: (tier: ExploreDeviceTier) => setStreamTier?.(tier), map, state: () => ({ ward: state.ward, mean: state.lastMean }),
+    if (STREAM_TOOLS) (window as unknown as { __obosStream?: unknown }).__obosStream = {
+      report: () => stream.report(), measured: meter?.measured, timings: () => streamTimings, select: (code: string) => stream.select(code), setTier: (tier: ExploreDeviceTier) => setStreamTier?.(tier), map, state: () => ({ ward: state.ward, mean: state.lastMean }),
     };
     wiring?.dispatched(stream.managerState());
     stream.start(areaFromUrl(window.location.search) ?? 'E4');      // a refresh returns to the area in the address bar
@@ -4623,7 +4674,15 @@ export function mountHeatMap(): () => void {
      to touch the style before this moment because doing so stops this very event
      from firing — see the note in `syncSky`. Ordered so the instrument starts
      even if the sky call misbehaves again on a future MapLibre. */
-  const onMapLoad = () => { mapHasLoaded = true; if (STREAM_DEV) void startStream(); else void loadWard(INITIAL_AREA); syncSky(); };
+  /* A STREAMING CHUNK THAT CANNOT BE LOADED (a flaky connection, or a deploy that replaced the hashed chunks under an open tab) must not leave Canal Ring undrawn: the page
+     falls back to the classic single-area load, exactly what `?stream=0` gives (public audit S1). Anything half-built is dropped first. */
+  const streamFailed = (error: unknown): void => {
+    if (STREAM_TOOLS) console.warn('streaming could not start; opening the classic page', error);
+    if (appDisposed || wardSession.committedWard !== null) return;      // something is already drawn: leave it
+    streamControl?.dispose(); streamControl = null; streamSurfaces = null; streamShown = null; streamRise = null;
+    void loadWard(INITIAL_AREA);
+  };
+  const onMapLoad = () => { mapHasLoaded = true; if (STREAM_ON) void startStream().catch(streamFailed); else void loadWard(INITIAL_AREA); syncSky(); };
   map.once('load', onMapLoad);
   void capsReady.then((caps) => {
     if (!appDisposed && caps.mode !== 'isotherm') void ensureRelief();   // every tier — see initSimHost

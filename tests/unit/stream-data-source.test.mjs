@@ -72,7 +72,7 @@ test('the committed manifest is whole: 186 files, 31 areas, six files each, a ba
 test('R4: a manifest that cannot be read makes the source unavailable (with the reason), and ensureStreamData reads it AGAIN until it can be', async () => {
   configureStreamData({ kind: 'local' });
   let calls = 0, up = false;
-  const fetcher = async () => { calls++; return up ? new Response(JSON.stringify(manifestFor(['ams-f4'])), { status: 200 }) : new Response('no', { status: 503 }); };
+  const fetcher = async (url) => { if (!String(url).endsWith('ams-r2-manifest.json')) return new Response('no', { status: 404 }); calls++; return up ? new Response(JSON.stringify(manifestFor(['ams-f4'])), { status: 200 }) : new Response('no', { status: 503 }); };
   await readStreamManifest(fetcher);
   assert.throws(() => sheetUrls('F4'), /HTTP 503/, 'the failure names its reason');
   assert.equal(sheetUrls('E4').ward, '/heat-map/data/canal-ring.json', 'Canal Ring never needs the manifest');

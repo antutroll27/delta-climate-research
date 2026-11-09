@@ -592,6 +592,32 @@ test('a lost halo still lets the sheet solve, on the edge rule, once it is given
   assert.ok(!h.of('failure').some((c) => c.level === 'lod1'));
 });
 
+test('B1: the halo of the area ON SCREEN can fail for good without a failure report - only its own data (lod0) is a failure of that area', () => {
+  const h = new Host('full');
+  h.start('E4');
+  h.finish('E4', 'lod0');
+  h.advance(2000);
+  assert.equal(h.state().displayed, 'E4');
+  for (let k = 0; k < MAX_ATTEMPTS; k++) {
+    h.fail('E4', 'halo');
+    if (k < MAX_ATTEMPTS - 1) h.advance(RETRY_BACKOFF_MS[k]).tick();
+  }
+  assert.equal(h.of('failure').length, 0, 'no plate over a Canal Ring that is drawn');
+  assert.ok(h.of('solve').length >= 1 && h.of('solve').every((c) => c.haloLoaded === false), 'it solved on the edge rule');
+});
+
+test('B1: a neighbour PICKED while its data cannot be fetched fails honestly for THAT area, and the area on screen is left as it was', () => {
+  const h = settled('E4');
+  h.select('F4');
+  for (let k = 0; k < MAX_ATTEMPTS; k++) {
+    h.fail('F4', 'lod0');
+    if (k < MAX_ATTEMPTS - 1) h.advance(RETRY_BACKOFF_MS[k]).tick();
+  }
+  const failures = h.of('failure');
+  assert.deepEqual(failures.map((c) => [c.sheet, c.level]), [['F4', 'lod0']]);
+  assert.equal(h.state().displayed, 'E4', 'Canal Ring stays on screen');
+});
+
 test('a neighbour whose massing fails is retried quietly: no failure report for a non-current sheet', () => {
   const g = new Host('full');
   g.start('E4'); g.finish('E4', 'lod0'); g.finish('E4', 'halo');

@@ -17,6 +17,7 @@ import { parseAreaNames, type AreaNames } from '../streaming/loader-model.ts';
 import { SELECT_SYNC_EVENT } from '../shell/select-field.ts';
 import { SHEETS, sheetByCode, sheetKey, sheetOf, type SheetCode } from '../scope/sheets.ts';
 import type { ChoosableStream } from '../streaming/late-stream.ts';
+import { createAreaSurfaces } from '../streaming/area-surfaces.ts';
 import indexCss from '../../../styles/obos-v2/screens/sheet-index.css?inline';
 import wiringCss from './page-wiring.css?inline';
 
@@ -91,7 +92,24 @@ export function wirePage(stageEl: HTMLElement, stream: ChoosableStream): PageWir
   };
   doc.addEventListener('change', onAreaSelect, true);
 
+  const surfaces = createAreaSurfaces(AREA_NAMES, 'Amsterdam');
   const writer: AreaWriter = {
+    /* THE STATIC CARDS WRITTEN FOR CANAL RING: the Ward record card's body is per-page markup (`data-v2-for` blocks for the page's own area), which shows nothing for
+       another area's key. A note that names the open area is added under it, and removed again on Canal Ring. Nothing else of the page's markup is touched. */
+    surfaces(code) {
+      const card = doc.querySelector('[data-v2-card="record"]');
+      if (card === null) return;
+      let note = card.querySelector<HTMLElement>('[data-streamed-note]');
+      if (!surfaces.isForeign(code)) { note?.remove(); return; }
+      if (note === null) {
+        note = doc.createElement('p');
+        note.className = 'pane-note';
+        note.setAttribute('data-streamed-note', '');
+        card.querySelector('#report-link')?.before(note);
+        if (note.parentElement === null) card.appendChild(note);
+      }
+      note.textContent = surfaces.record(code);
+    },
     header(h) {
       const pname = doc.getElementById('pname');
       if (pname !== null) {

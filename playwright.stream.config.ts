@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
-/** The dev streaming smoke only (tests/e2e/stream-smoke.spec.ts), against `astro preview` of a build made with
- *  PUBLIC_OBOS_STREAM_DEV=1 (OBOS_STREAM_DIST) with the sheet data copied into it. Headless Metal, no window. */
+/** The streaming specs only (stream-smoke / -crossings / -walk), against `astro preview` of a build made with PUBLIC_OBOS_STREAM_DEV=1 (the dev
+ *  build) or, with OBOS_STREAM_PUBLIC=1, PUBLIC_OBOS_STREAM=1 (the public build; the walk then runs without ?stream=1 and without the dev hooks).
+ *  OBOS_STREAM_DIST names the dist. Headless Metal, no window. */
 const PORT = process.env.OBOS_E2E_PORT ?? '4736';
 export default defineConfig({
   testDir: './tests/e2e',

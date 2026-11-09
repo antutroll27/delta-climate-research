@@ -51,6 +51,8 @@ export interface AreaWriter {
   areaSelect(code: SheetCode): void;
   /** replaceState target, path + query + hash */
   address(url: string): void;
+  /** The cards written for the page's own area (Canal Ring) restate it for the open one (optional: a recorder without it ignores this). */
+  surfaces?(code: SheetCode): void;
 }
 
 export interface LoaderLike {
@@ -143,6 +145,7 @@ export function createPageFurniture(parts: {
       writer.header(headerOf(code, names));
       picker.setDrawnCount(code, drawn);
       writer.areaSelect(code);
+      writer.surfaces?.(code);
       const loc = parts.location();
       writer.address(`${loc.pathname}${searchWithArea(loc.search, code)}${loc.hash}`);
     },
