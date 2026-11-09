@@ -1,0 +1,91 @@
+/* src/styles/obos-v2/screens/pill-controls.css — the two "transport key" controls: the AREA chip (streamed pages) and the NEW CITY toast (every page that
+   announces a city). This file holds what they SHARE: the keycap, the dot-matrix captions, the neon, the attention animations, and every @keyframes
+   (prefixed pi-). The chip's own layout lives in screens/sheet-index.css (injected only on streamed pages); the toast's in shell.css, which must
+   carry no @keyframes (v2's sheet loads on v1 pages and v1's baseline records the keyframes inventory). The markup: sheet-index-view.ts,
+   ToastsV2.astro; the captions are drawn by shell/dot-caption.ts.
+   NO COLOUR LITERALS: tokens, var() and color-mix only. The accent is var(--heat-1), on the primary square key and the dot-matrix captions only.
+   MOTION: transform and OPACITY only. A glow is a STATIC drop-shadow on its own layer (.pc-glow) whose opacity animates; a filter, shadow or
+   colour is never animated. Nothing runs for ever: the neon settles after ~5 s (and re-arms on hover or focus, WCAG 2.2.2), the glint plays
+   three times, everything else once. At most 3 flashes a second. Reduced motion removes every animation (atoms.css does it globally; the
+   block at the end repeats it so this file stands alone). Light theme: ink captions, almost no glow, no flicker. */
+
+html[data-ui="v2"] .obos-v2 { --pc-accent: var(--heat-1); --pc-on-accent: var(--hx-teal-0); --pc-ledge: var(--hx-teal-dock); --pc-gl-o: .55; --pc-pop-pk: 1.04; }
+html[data-ui="v2"] .obos-v2[data-theme="light"] { --pc-ledge: color-mix(in oklch, var(--ink-1) 24%, var(--glass-fill-strong)); --pc-gl-o: .3; }
+
+/* the words a drawn caption stands for: visually hidden, still in the accessible name (never display:none) */
+html[data-ui="v2"] .obos-v2 .pc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ── the keycap: a static ledge under a face that moves 2 px when pressed (transform only) ── */
+html[data-ui="v2"] .obos-v2 .pc-key { position: relative; display: block; flex: none; width: 46px; height: 48px; }
+html[data-ui="v2"] .obos-v2 .pc-key::before { content: ""; position: absolute; left: 0; right: 0; top: 4px; height: 44px; border-radius: 8px; background: var(--pc-ledge); box-shadow: inset 0 0 0 1px var(--line); }
+html[data-ui="v2"] .obos-v2 .pc-cap { position: absolute; left: 0; right: 0; top: 0; height: 44px; display: grid; place-items: center; border-radius: 8px;
+  background: color-mix(in oklch, var(--ink-1) 14%, var(--glass-fill-strong)); border: 1px solid var(--line); box-shadow: inset 0 1px 0 color-mix(in oklch, var(--ink-1) 24%, transparent);
+  color: var(--ink-2); transition: transform .08s linear; }
+html[data-ui="v2"] .obos-v2 .pc-key.is-accent .pc-cap { background: var(--pc-accent); color: var(--pc-on-accent); border-color: transparent; box-shadow: none; }
+html[data-ui="v2"] .obos-v2 .pc-ico, html[data-ui="v2"] .obos-v2 .pc-cap > svg { display: block; }
+html[data-ui="v2"] .obos-v2 :is(.si-chip, .newcity a):is(:hover) .pc-key.is-accent .pc-cap { background: color-mix(in oklch, var(--pc-accent) 86%, var(--hx-snow-1)); }
+html[data-ui="v2"] .obos-v2 .t-x:hover .pc-cap { background: color-mix(in oklch, var(--ink-1) 22%, var(--glass-fill-strong)); }
+html[data-ui="v2"] .obos-v2 :is(.si-chip, .newcity a):is(:active) .pc-key .pc-cap, html[data-ui="v2"] .obos-v2 .t-x:active .pc-cap, html[data-ui="v2"] .obos-v2 .si[data-open="true"] .si-chip .pc-key .pc-cap { transform: translateY(2px); }
+/* loading: the lit pane of the grid pulses (opacity; si-pulse is in sheet-index.css, which is loaded wherever the chip is) */
+html[data-ui="v2"] .obos-v2 .si[data-pending] .pc-lit { animation: si-pulse 1.1s ease-in-out infinite; }
+
+/* ── the dot-matrix caption: two stacked layers. .pc-base is static (62%); .pc-glow carries the STATIC drop-shadow and is the only thing that animates, by opacity ── */
+html[data-ui="v2"] .obos-v2 .pc-dm { position: relative; display: block; flex: none; margin: -6px; color: var(--pc-accent); }
+html[data-ui="v2"] .obos-v2 .pc-dmt { display: block; overflow: visible; }
+html[data-ui="v2"] .obos-v2 .pc-base { opacity: .62; }
+html[data-ui="v2"] .obos-v2 .pc-glow { position: absolute; left: 0; top: 0; will-change: opacity;
+  filter: drop-shadow(0 0 2px color-mix(in oklch, var(--pc-accent) 70%, transparent)) drop-shadow(0 0 4px color-mix(in oklch, var(--pc-accent) 40%, transparent)); }
+/* NEON, SETTLES: the first 5 s after load (fractional iteration counts end inside a steady stretch of the track), then steady; again, for as long as the control is hovered or focused */
+html[data-ui="v2"] .obos-v2 .pc-a .pc-glow { animation: pi-neon-flicker 2.3s linear 0s 2.174; }
+html[data-ui="v2"] .obos-v2 .pc-c .pc-glow { animation: pi-neon-flicker 3.1s linear 0s 1.613; }
+html[data-ui="v2"] .obos-v2 .pc-c .pc-glow-y { animation: pi-neon-tired 2.7s linear 0s 1.852; }
+html[data-ui="v2"] .obos-v2 :is(.si-chip, .newcity a):is(:hover, :focus-visible) .pc-dm .pc-glow { animation-iteration-count: infinite; }
+/* LIGHT: ink captions, almost no glow, no flicker */
+html[data-ui="v2"] .obos-v2[data-theme="light"] .pc-dm { color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2[data-theme="light"] .pc-glow { animation: none !important; filter: drop-shadow(0 0 1px color-mix(in oklch, var(--ink-1) 10%, transparent)); }
+@keyframes pi-neon-flicker { 0% { opacity: 1; } 6% { opacity: .91; } 8% { opacity: 1; } 27% { opacity: .93; } 29% { opacity: .85; } 30% { opacity: 1; } 52% { opacity: .92; } 54%, 71% { opacity: 1; } 72% { opacity: .5; } 74% { opacity: .92; } 76% { opacity: .6; } 79% { opacity: 1; } 90% { opacity: .93; } 92%, 100% { opacity: 1; } }
+@keyframes pi-neon-tired { 0% { opacity: 1; } 4% { opacity: .78; } 7% { opacity: .93; } 9% { opacity: .62; } 12% { opacity: 1; } 35% { opacity: .9; } 38% { opacity: .45; } 41% { opacity: .88; } 44% { opacity: 1; } 60% { opacity: .8; } 62%, 100% { opacity: 1; } }
+
+/* ── attention: transform and opacity only, each animated element its own small layer ── */
+/* a. POWER-ON: the caption lights letter by letter, ~60 ms apart, from 260 ms after load; the glow layer flashes to full strength before the dots finish, then the neon takes over */
+html[data-ui="v2"] .obos-v2 .pc-ltr { will-change: opacity; }
+html[data-ui="v2"] .obos-v2 .pc-base .pc-ltr { animation: pi-poweron-base 200ms linear calc(260ms + var(--i) * 60ms) both; }
+html[data-ui="v2"] .obos-v2 .pc-glow .pc-ltr { animation: pi-poweron-glow 320ms linear calc(260ms + var(--i) * 60ms) both; }
+html[data-ui="v2"] .obos-v2[data-theme="light"] .pc-glow .pc-ltr { animation: pi-poweron-base 200ms linear calc(260ms + var(--i) * 60ms) both; }
+@keyframes pi-poweron-base { 0% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes pi-poweron-glow { 0% { opacity: 0; } 25% { opacity: 1; } 45% { opacity: .55; } 65% { opacity: 1; } 100% { opacity: 1; } }
+/* b. POP: the control arrives (anticipation, overshoot, settle); the accent key lands 80 ms later with a small squash */
+html[data-ui="v2"] .obos-v2 :is(.si-chip, .newcity.toast) { will-change: transform, opacity; animation: pi-pop 420ms linear both; }
+html[data-ui="v2"] .obos-v2 :is(.si-act, .t-act) .pc-key.is-accent { will-change: transform, opacity; animation: pi-key-land 360ms linear 80ms both; }
+@keyframes pi-pop { 0% { transform: translateY(6px) scale(.92); opacity: 0; animation-timing-function: cubic-bezier(.2, .9, .3, 1); } 55% { transform: translateY(-1px) scale(var(--pc-pop-pk, 1.04)); opacity: 1; animation-timing-function: cubic-bezier(.4, 0, .2, 1); } 100% { transform: none; opacity: 1; } }
+@keyframes pi-key-land { 0% { transform: scale(1.06, .94); opacity: 0; animation-timing-function: cubic-bezier(.2, .9, .3, 1); } 35% { transform: scale(.97, 1.04); opacity: 1; animation-timing-function: cubic-bezier(.4, 0, .2, 1); } 100% { transform: none; opacity: 1; } }
+/* c. GLINT: a thin diagonal bar sweeps the accent key at 1.5 s, 6 s and 12 s after load and then never again (::after); hover or focus replays it (::before) */
+html[data-ui="v2"] .obos-v2 .pc-key.is-accent .pc-cap { overflow: hidden; }
+html[data-ui="v2"] .obos-v2 .pc-key.is-accent .pc-cap::before, html[data-ui="v2"] .obos-v2 .pc-key.is-accent .pc-cap::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transform: translateX(-120%) skewX(-20deg); will-change: transform, opacity;
+  background: linear-gradient(105deg, transparent 42%, color-mix(in oklch, var(--hx-snow-1) 90%, transparent) 50%, transparent 58%); }
+html[data-ui="v2"] .obos-v2 .pc-key.is-accent .pc-cap::after { animation: pi-glint-x3 12600ms linear both; }
+html[data-ui="v2"] .obos-v2 :is(.si-chip, .newcity a):is(:hover, :focus-visible) .pc-key.is-accent .pc-cap::before { animation: pi-glint 600ms ease-out both; }
+@keyframes pi-glint { 0% { opacity: 0; transform: translateX(-120%) skewX(-20deg); } 45% { opacity: var(--pc-gl-o, .55); } 100% { opacity: 0; transform: translateX(120%) skewX(-20deg); } }
+@keyframes pi-glint-x3 { 0%, 11.9% { opacity: 0; transform: translateX(-120%) skewX(-20deg); } 14.3% { opacity: var(--pc-gl-o, .55); } 16.7% { opacity: 0; transform: translateX(120%) skewX(-20deg); } 16.8%, 47.6% { opacity: 0; transform: translateX(-120%) skewX(-20deg); } 50% { opacity: var(--pc-gl-o, .55); } 52.4% { opacity: 0; transform: translateX(120%) skewX(-20deg); } 52.5%, 95.2% { opacity: 0; transform: translateX(-120%) skewX(-20deg); } 97.6% { opacity: var(--pc-gl-o, .55); } 100% { opacity: 0; transform: translateX(120%) skewX(-20deg); } }
+/* d. SPEED LINES (the toast): three short lines shoot toward the play key, staggered 40 ms; once after the pop (480 ms), and again on hover or focus from a second, identical set */
+html[data-ui="v2"] .obos-v2 .t-act { position: relative; }
+html[data-ui="v2"] .obos-v2 .pc-lines { position: absolute; right: calc(100% + 6px); top: 50%; width: 14px; height: 24px; margin-top: -12px; pointer-events: none; }
+html[data-ui="v2"] .obos-v2 .pc-lines i { position: absolute; left: 0; height: 1.5px; border-radius: 1px; background: color-mix(in oklch, var(--pc-accent) 85%, transparent); opacity: 0; will-change: transform, opacity; }
+html[data-ui="v2"] .obos-v2 .pc-lines i:nth-child(1) { top: 3px; width: 8px; } html[data-ui="v2"] .obos-v2 .pc-lines i:nth-child(2) { top: 11px; width: 12px; --n: 1; } html[data-ui="v2"] .obos-v2 .pc-lines i:nth-child(3) { top: 19px; width: 8px; --n: 2; }
+html[data-ui="v2"] .obos-v2 .pc-lines.is-sched i { animation: pi-lines 420ms ease-out both; animation-delay: calc(480ms + var(--n, 0) * 40ms); }
+html[data-ui="v2"] .obos-v2 .newcity a:is(:hover, :focus-visible) .pc-lines.is-hov i { animation: pi-lines 420ms ease-out both; animation-delay: calc(var(--n, 0) * 40ms); }
+@keyframes pi-lines { 0% { opacity: .7; transform: translateX(0); } 100% { opacity: 0; transform: translateX(10px); } }
+/* e. SPARKLE (the chip): a four-point star at the area key's top-right corner, 0 to 1 to 0 with a quarter turn; once at load (700 ms), and on hover, focus or open from a second star */
+html[data-ui="v2"] .obos-v2 .pc-spark { position: absolute; right: -7px; top: -7px; width: 18px; height: 18px; color: var(--ink-1); pointer-events: none; opacity: 0; will-change: transform, opacity; }
+html[data-ui="v2"] .obos-v2 .pc-spark svg { display: block; width: 100%; height: 100%; }
+html[data-ui="v2"] .obos-v2 .pc-spark.is-sched { animation: pi-spark 500ms ease-out 700ms both; }
+html[data-ui="v2"] .obos-v2 .si-chip:is(:hover, :focus-visible) .pc-spark.is-on, html[data-ui="v2"] .obos-v2 .si[data-open="true"] .pc-spark.is-on { animation: pi-spark 500ms ease-out both; }
+@keyframes pi-spark { 0% { opacity: 0; transform: scale(0) rotate(-90deg); } 45% { opacity: 1; transform: scale(1) rotate(0deg); } 100% { opacity: 0; transform: scale(0) rotate(90deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui="v2"] .obos-v2 :is(.pc-key, .pc-cap, .pc-dm, .pc-glow, .pc-ltr, .pc-lines i, .pc-spark, .si-chip, .newcity.toast), html[data-ui="v2"] .obos-v2 :is(.pc-cap, .pc-key)::before, html[data-ui="v2"] .obos-v2 .pc-cap::after { animation: none !important; transition: none !important; }
+}
+@media (forced-colors: active) {
+  html[data-ui="v2"] .obos-v2 .pc-cap { border: 1px solid CanvasText; }
+  html[data-ui="v2"] .obos-v2 .pc-dm { color: CanvasText; }
+}

@@ -9,7 +9,7 @@ const noJsx = (s) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
 export const REGIONS = ['MapChips', 'PhoneChrome', 'RailV2', 'ToolbarV2', 'ExploreSide', 'SolarSide', 'AirSide', 'TitleCard', 'CompassV2', 'MapStack',
   'DockV2', 'ToastsV2', 'RightColumn', 'LayersPopover', 'Overlays', 'StreetViewModal', 'SolarSheets'];
 export const CARDS = ['TempCard', 'HeatCards', 'ScenarioCards', 'SolarCards', 'WeatherCards', 'MethodsCards'];
-export const SCREEN_PARTIALS = ['overview', 'heat', 'mapstack', 'building', 'explore', 'scenarios', 'solar', 'air', 'weather', 'methods', 'compare', 'brief'];
+export const SCREEN_PARTIALS = ['overview', 'heat', 'mapstack', 'building', 'explore', 'scenarios', 'solar', 'air', 'weather', 'methods', 'compare', 'brief', 'pill-controls'];
 export const PRINT_PARTIALS = ['page', 'solar', 'brief'];
 
 function inOrder(src, names, what) {

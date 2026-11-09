@@ -1,8 +1,11 @@
 ---
 // src/components/ClimateEngine/v2/ToastsV2.astro — OBOS v2 spec §3.10. Owner: frozen. A1 S2.9 (cut verbatim from HeatMapStageV2; zero DOM change).
 import type { newCityToAnnounce } from '../../../scripts/climate-engine/shell/new-city.ts';
+import { dotCaptionHtml } from '../../../scripts/climate-engine/shell/dot-caption.ts';
 interface Props { newCity: ReturnType<typeof newCityToAnnounce>; hasData: boolean }
 const { newCity, hasData } = Astro.props;
+// One drawing for the chip and the toast (shell/dot-caption.ts). Drawn text is aria-hidden; the words travel in the visually hidden span beside it.
+const caption = dotCaptionHtml('NEW CITY', { variant: 'c', tired: 'Y' });
 ---
 <div class="toasts" id="v2Toasts" data-hud>
 {newCity && (
@@ -10,13 +13,21 @@ const { newCity, hasData } = Astro.props;
     {/* NO aria-label. The visible text already reads "New city Bengaluru", and a
         label of "Bengaluru — newly added city" replaced it with a string those
         visible words are not contained in — Label in Name (WCAG 2.5.3), so
-        "click New city" matched nothing by speech. The eyebrow is CLIPPED rather
-        than display:none on phones, so the name keeps "New city" there too. */}
+        "click New city" matched nothing by speech. The eyebrow is now a drawn
+        dot-matrix caption (aria-hidden SVG) beside a visually hidden "New city"
+        span: clipped, never display:none, so the name keeps "New city". The
+        play key is aria-hidden decoration; the link's name is its text. */}
     <a href={newCity.href}>
-      <span class="t-eyebrow">New city</span>
-      <span class="t-go">{newCity.name} <span aria-hidden="true">→</span></span>
+      <span class="t-slot">
+        <span class="t-eyebrow"><span class="pc-sr">New city</span><Fragment set:html={caption} /></span>
+        <span class="t-go">{newCity.name}</span>
+      </span>
+      <span class="t-act" aria-hidden="true">
+        <span class="pc-lines is-sched"><i></i><i></i><i></i></span><span class="pc-lines is-hov"><i></i><i></i><i></i></span>
+        <span class="pc-key is-accent"><span class="pc-cap"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3.2v9.6l7.4-4.8z" fill="currentColor"/></svg></span></span>
+      </span>
     </a>
-    <button type="button" id="newCityHide" class="t-x" aria-label="Dismiss">×</button>
+    <button type="button" id="newCityHide" class="t-x" aria-label="Dismiss"><span class="pc-key"><span class="pc-cap"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></span></span></button>
   </div>
 )}
 {hasData && <Fragment>

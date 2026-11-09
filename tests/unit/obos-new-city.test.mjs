@@ -317,9 +317,25 @@ test('the toast link and its dismiss button keep a visible focus ring', () => {
  * leaving the button exactly as it was.
  */
 test('the dismiss target is big enough to hit, on a desktop and on a phone', () => {
-  /* v2's toast dismiss is a 24 px square at every width (v1 needed 28/30 px: it was 23.7 px wide). */
-  assert.match(flat(shellCss), /\.toast \.t-x \{ width: 24px; height: 24px; min-width: 24px; min-height: 24px;/,
-    'the dismiss button must stay at the 24 px WCAG 2.5.8 floor in both dimensions');
+  /* The New-city toast's dismiss is now its own SQUARE KEY (transport-keys redesign, preview 14 variant I): 46 x 48 px, well over the 28 px the
+     brief asks for and the 24 px WCAG 2.5.8 floor, at every width (the toast is hidden on phones, phone.css). It was a 24 px circle. */
+  const css = flat(shellCss);
+  const m = css.match(/\.newcity \.t-x \{[^}]*width: (\d+)px; height: (\d+)px; min-width: (\d+)px; min-height: (\d+)px;/);
+  assert.ok(m, 'the New-city dismiss key must pin width, height, min-width and min-height');
+  const [w, h, mw, mh] = m.slice(1).map(Number);
+  assert.ok(w >= 28 && h >= 28 && mw >= 28 && mh >= 28,
+    `the New-city dismiss key is ${w} x ${h} (min ${mw} x ${mh}); it must be at least 28 px in both dimensions`);
+  /* the tip hint's own dismiss (also a .toast .t-x) is untouched: still the 24 px WCAG 2.5.8 floor */
+  assert.match(css, /\.toast \.t-x \{ width: 24px; height: 24px; min-width: 24px; min-height: 24px;/,
+    'the tip hint dismiss button must stay at the 24 px WCAG 2.5.8 floor in both dimensions');
+});
+
+test('the New-city link is at least 44 px tall and carries its words as real text', () => {
+  const css = flat(shellCss);
+  assert.match(css, /\.newcity a \{[^}]*height: 48px;/, 'the New-city link must stay a 48 px target (44 px minimum)');
+  /* the drawn caption is aria-hidden SVG; the words "New city" travel in a visually hidden span inside the eyebrow */
+  const inner = badgeInner(flat(toastsV2));
+  assert.match(inner, /<span class="t-eyebrow"><span class="pc-sr">New city<\/span>/, 'the eyebrow must carry a real "New city" text span');
 });
 
 test('the badge renders only where it can be true', () => {
