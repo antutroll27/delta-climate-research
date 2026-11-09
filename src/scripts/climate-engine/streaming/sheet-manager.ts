@@ -578,7 +578,11 @@ export function reduce(cfg: ManagerConfig, state: ManagerState, event: ManagerEv
         put(d, hit.sheet, hit.level, { status: 'ready', usedSeq: d.seq, sinceMs: now, speculative: hit.level === 'lod0' && hit.sheet !== d.current });
       } else {
         put(d, hit.sheet, hit.level, { status: 'failed', attempts: hit.entry.attempts, atMs: now });
-        if (hit.sheet === d.current && hit.entry.attempts >= MAX_ATTEMPTS) {
+        /* ONLY A SHEET'S OWN DATA (lod0) IS A FAILURE OF THAT SHEET. The halo (its neighbours' rims) and the massing (grey neighbours) are what the area is solved
+           and framed WITH: without them it solves on the edge rule and draws without a ring, and says nothing. Before this a Worker that could not be reached made the
+           halo of the area ON SCREEN fail, and "Canal Ring could not be loaded" covered a Canal Ring that was drawn (public audit B1). Those levels still retry on
+           their backoff, and a halo that arrives late re-solves (`upgrade`). */
+        if (hit.sheet === d.current && hit.level === 'lod0' && hit.entry.attempts >= MAX_ATTEMPTS) {
           out.push({ type: 'failure', sheet: hit.sheet, level: hit.level, attempts: hit.entry.attempts });
         }
       }
