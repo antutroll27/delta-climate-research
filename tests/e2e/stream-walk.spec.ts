@@ -37,6 +37,10 @@ const HOLD_MS = Number(process.env.OBOS_WALK_HOLD_MS ?? 2_400);
 /** The origin the layer files are read from: the committed manifest's `baseUrl/prefix/` (the Cloudflare Worker in front of the R2 bucket). */
 const MANIFEST = JSON.parse(readFileSync(new URL('../../public/heat-map/data/ams-r2-manifest.json', import.meta.url), 'utf8')) as { baseUrl: string; prefix: string };
 const DATA_ORIGIN = `${MANIFEST.baseUrl}/${MANIFEST.prefix}/`;
+/** The per-area bundles (`ams-f4.obosb`, one request per area): the page's default. The per-file origin above is only its fallback, so a bundle run must not touch it. */
+const BUNDLES = JSON.parse(readFileSync(new URL('../../public/heat-map/data/ams-r2-bundles.json', import.meta.url), 'utf8')) as { baseUrl: string; prefix: string };
+const BUNDLE_ORIGIN = `${BUNDLES.baseUrl}/${BUNDLES.prefix}/`;
+const isWorkerUrl = (href: string): boolean => href.startsWith(DATA_ORIGIN) || href.startsWith(BUNDLE_ORIGIN);
 const centre = (lon: number, lat: number) => ({ lon, lat });
 const D_LAT = 0.025330197213674, D_LON = 0.041190546565045;
 const AREA = {
@@ -90,18 +94,21 @@ async function watchLoader(page: Page): Promise<void> {
 }
 /** Real network, one proxy for the whole walk: the R2 origin (every area but Canal Ring) and Canal Ring's own detail files. Holds the detail
  *  files `holdMs`; adds CORS (see the header); records where the files came from. Returns the origins seen, per area file. */
-async function routeData(page: Page, holdMs: number): Promise<{ r2: string[]; sameOriginAreas: string[]; canal: string[]; manifest: string[]; hold: { ms: number } }> {
-  const seen = { r2: [] as string[], sameOriginAreas: [] as string[], canal: [] as string[], manifest: [] as string[], hold: { ms: holdMs } };
+async function routeData(page: Page, holdMs: number): Promise<{ r2: string[]; bundles: string[]; bundlesDone: string[]; bundlesAborted: string[]; perFile: string[]; sameOriginAreas: string[]; canal: string[]; manifest: string[]; bundleManifest: string[]; hold: { ms: number } }> {
+  const seen = { r2: [] as string[], bundles: [] as string[], bundlesDone: [] as string[], bundlesAborted: [] as string[], perFile: [] as string[], sameOriginAreas: [] as string[], canal: [] as string[], manifest: [] as string[], bundleManifest: [] as string[], hold: { ms: holdMs } };
   page.on('request', (request) => {
     const url = request.url();
-    if (url.startsWith(DATA_ORIGIN)) seen.r2.push(url);
+    if (isWorkerUrl(url)) { seen.r2.push(url); (url.startsWith(BUNDLE_ORIGIN) ? seen.bundles : seen.perFile).push(url); }
     else if (/\/heat-map\/data\/ams-r2-manifest\.json$/.test(url)) seen.manifest.push(url);
+    else if (/\/heat-map\/data\/ams-r2-bundles\.json$/.test(url)) seen.bundleManifest.push(url);
     else if (/\/heat-map\/data\/ams-[a-z0-9]+(-[a-z]+)?\.(json|png)$/.test(url)) seen.sameOriginAreas.push(url);
     else if (/\/heat-map\/data\/canal-ring(-[a-z]+)?\.(json|png)$/.test(url)) seen.canal.push(url);
   });
-  await page.route((url) => url.href.startsWith(DATA_ORIGIN) || /\/heat-map\/data\/canal-ring-(terrain|trees|water)\.json$/.test(url.pathname), async (route) => {
+  page.on('requestfinished', (request) => { if (request.url().startsWith(BUNDLE_ORIGIN)) seen.bundlesDone.push(request.url()); });
+  page.on('requestfailed', (request) => { if (request.url().startsWith(BUNDLE_ORIGIN)) seen.bundlesAborted.push(request.url()); });      // the loader cancelled it (the camera moved on)
+  await page.route((url) => isWorkerUrl(url.href) || /\/heat-map\/data\/canal-ring-(terrain|trees|water)\.json$/.test(url.pathname), async (route) => {
     const response = await route.fetch();
-    if (/-(terrain|trees|water)\.json$/.test(route.request().url())) await new Promise((r) => setTimeout(r, seen.hold.ms));
+    if (/-(terrain|trees|water)\.json$|\.obosb$/.test(route.request().url())) await new Promise((r) => setTimeout(r, seen.hold.ms));      // a bundle holds everything the vector files used to
     const headers = { ...response.headers() };
     delete headers['content-encoding']; delete headers['content-length'];          // the body below is already decoded
     await route.fulfill({ status: response.status(), headers: { ...headers, 'access-control-allow-origin': '*' }, body: await response.body() });
@@ -113,7 +120,10 @@ const loaderLate = (page: Page) => page.evaluate(() => [...((window as unknown a
 const resetLoaderSeen = (page: Page) => page.evaluate(() => { const s = (window as unknown as { __cl: Record<string, boolean> }).__cl; s.rise = s.plate = s.sweep = false; });
 const loaderOn = (page: Page) => page.evaluate(() => !!document.querySelector('.cl-chip.on, .cl-plate.on, .cl-sweep.on'));
 
-async function arrived(page: Page, code: Code, thrown: string[], how: string, wasResident: boolean): Promise<void> {
+/** Every Worker request for `ams-<code>.obosb` so far: a newly opened area is exactly ONE (its halo and neighbours are other areas' bundles, each one request too). */
+const bundleRequests = (fetched: { bundles: string[] }, code: string): number => fetched.bundles.filter((u) => u.endsWith(`/${idOf(code)}.obosb`)).length;
+
+async function arrived(page: Page, code: Code, thrown: string[], how: string, wasResident: boolean, fetched?: { bundles: string[] }): Promise<void> {
   await expect.poll(async () => (await report(page))?.displayed, { timeout: 150_000, message: `${how}: ${code} is displayed` }).toBe(code);
   await expect.poll(() => loaderOn(page), { timeout: 30_000, message: `${how}: the loader has ended` }).toBe(false);
   await expect.poll(() => page.evaluate(() => document.getElementById('pname')?.textContent ?? ''), { message: `${how}: the header names ${code}` }).toContain(names[code]!.name);
@@ -138,6 +148,7 @@ async function arrived(page: Page, code: Code, thrown: string[], how: string, wa
   console.log(`[walk] ${how}: ${code} shown; loader appeared=${appeared} ${JSON.stringify(seen)}; resident before=${wasResident}`);
   if (!wasResident) expect(appeared, `${how}: ${code} had nothing resident, so its loader must have been drawn`).toBe(true);
   expect(await loaderLate(page), `${how}: a loader came up over an area that was already on screen`).toEqual([]);
+  if (fetched !== undefined && code !== 'E4') expect(bundleRequests(fetched, code), `${how}: ${code} cost exactly one Worker request (its bundle)`).toBe(1);
   expect(thrown, `page errors: ${thrown.join(' | ')}`).toEqual([]);
 }
 
@@ -236,7 +247,7 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone', tier: 'low' as 
       const wasResident = before?.resident.includes(code) ?? false;
       await resetLoaderSeen(page);
       await panTo(page, code);
-      await arrived(page, code, thrown, `pan ${previous}->${code}`, wasResident);
+      await arrived(page, code, thrown, `pan ${previous}->${code}`, wasResident, fetched);
       await page.waitForTimeout(3_000);
       await page.screenshot({ path: `${SHOTS}/${tag}-3-arrived-${code}.png` });
       const r = (await report(page))!;
@@ -254,7 +265,7 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone', tier: 'low' as 
       await page.locator('.si-chip').click();
       await expect(page.locator('.si[data-open="true"]')).toBeVisible();
       await page.locator('.si-grid .si-cell[data-code="E4"]').click();
-      await arrived(page, 'E4', thrown, 'picker E5->E4', wasResident);
+      await arrived(page, 'E4', thrown, 'picker E5->E4', wasResident, fetched);
       await page.waitForTimeout(2_500);
       await page.screenshot({ path: `${SHOTS}/${tag}-3-arrived-E4-picker.png` });
     }
@@ -278,7 +289,7 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone', tier: 'low' as 
         await page.locator('.si-chip').click();
         await expect(page.locator('.si[data-open="true"]')).toBeVisible();
         await page.locator(`.si-grid .si-cell[data-code="${code}"]`).click();
-        await arrived(page, code, thrown, `picker ->${code} (resident)`, true);
+        await arrived(page, code, thrown, `picker ->${code} (resident)`, true, fetched);
         await page.waitForTimeout(1_500);
         await page.screenshot({ path: `${SHOTS}/${tag}-3-arrived-${code}-resident.png` });
       }
@@ -320,13 +331,31 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone', tier: 'low' as 
     await expect.poll(() => page.evaluate(() => !!document.querySelector('.cl-plate.on')), { timeout: 30_000, message: 'the plate shows' }).toBe(true);
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${SHOTS}/${tag}-5-loader-plate.png` });
-    await arrived(page, target as Code, thrown, `picker ->${target}`, false);
+    await arrived(page, target as Code, thrown, `picker ->${target}`, false, fetched);
     await page.unrouteAll({ behavior: 'ignoreErrors' });        // a held request still in flight must not outlive the test
     console.log(`[walk] ${tag}: ${fetched.r2.length} files from R2, ${fetched.canal.length} Canal Ring files from the page's origin, ${fetched.sameOriginAreas.length} other-area files from the page's origin`);
-    expect(fetched.r2.length, 'the other areas were read from R2').toBeGreaterThan(20);
+    expect(fetched.perFile, 'the six per-file URLs are the fallback: a bundle run never touches them').toEqual([]);
+    expect(fetched.bundles.length, 'the other areas were read from R2 as bundles').toBeGreaterThan(5);
+    /* A bundle is fetched once while the loader holds it (city-stream.ts keeps the last 14 areas' downloads). It may be asked for AGAIN only after at least 14 other bundles
+       came in between, because only then was it evicted (this run bypasses the HTTP cache, which in a real browser answers that repeat from disk: the bundles are immutable). */
+    const MEMO = 14;
+    const perUrl = new Map<string, number>();
+    const last = new Map<string, number>();
+    const early: string[] = [];
+    const done = fetched.bundlesDone;                  // completed downloads: a request the loader cancelled (the camera moved on) was never held, so it is asked for again
+    done.forEach((u, i) => {
+      perUrl.set(u, (perUrl.get(u) ?? 0) + 1);
+      const before = last.get(u);
+      if (before !== undefined && new Set(done.slice(before + 1, i)).size < MEMO) early.push(`${u.slice(u.lastIndexOf('/') + 1)} again after only ${new Set(done.slice(before + 1, i)).size} others`);
+      last.set(u, i);
+    });
+    if (early.length > 0) console.log(`[walk] ${tag}: bundle order ${done.map((u) => u.slice(u.lastIndexOf('/') + 5, -6)).join(' ')} | cancelled ${fetched.bundlesAborted.map((u) => u.slice(u.lastIndexOf('/') + 5, -6)).join(' ')}`);
+    expect(early, 'no bundle is fetched twice while the loader still holds it').toEqual([]);
+    console.log(`[walk] ${tag}: ${perUrl.size} distinct bundles, ${done.length} completed Worker requests + ${fetched.bundlesAborted.length} cancelled in flight; the six-file path would have been ${(done.length + fetched.bundlesAborted.length) * 6}`);
     expect(fetched.sameOriginAreas, 'no area but Canal Ring came from the page\'s own origin').toEqual([]);
     expect(fetched.canal.length, 'Canal Ring stayed same-origin').toBeGreaterThan(0);
     expect(fetched.manifest.length, 'the manifest was read once').toBe(1);
+    expect(fetched.bundleManifest.length, 'and so was the bundle manifest').toBe(1);
     expect(thrown, `page errors: ${thrown.join(' | ')}`).toEqual([]);
   });
 }
@@ -366,8 +395,11 @@ test.describe('public mode', () => {
     const fetched = await routeData(page, 0);
     await watchLoader(page);
     await page.goto(`${BASE}/heat-map/nl/amsterdam/canal-ring/?lab=1&area=F4`, { waitUntil: 'domcontentloaded' });
-    await arrived(page, 'F4', thrown, 'deep link', false);
+    await arrived(page, 'F4', thrown, 'deep link', false, fetched);
     expect(fetched.manifest.length).toBe(1);
+    expect(fetched.bundleManifest.length).toBe(1);
+    expect(fetched.perFile, 'a shared link reads F4 as one bundle, not six files').toEqual([]);
+    expect(bundleRequests(fetched, 'F4')).toBe(1);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     expect(thrown).toEqual([]);
   });
@@ -383,6 +415,7 @@ test.describe('public mode', () => {
     expect(await page.evaluate(() => document.querySelector('#pname')?.textContent ?? ''), 'the header is Canal Ring').toContain('Canal');
     expect(await page.evaluate(() => document.querySelector('#pname .obos-area-code')?.textContent ?? null)).toBeNull();
     expect(fetched.manifest, 'the manifest is not read').toEqual([]);
+    expect(fetched.bundleManifest, 'nor the bundle manifest').toEqual([]);
     expect(fetched.r2, 'nothing from R2').toEqual([]);
     expect(fetched.canal.length, 'Canal Ring came from the page\'s origin').toBeGreaterThan(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
@@ -393,7 +426,7 @@ test.describe('public mode', () => {
   test('B1: with the Worker unreachable Canal Ring is usable - no plate, no alert - and PICKING another area fails honestly for that area only', async ({ page }) => {
     const thrown: string[] = [];
     page.on('pageerror', (error) => thrown.push(String(error)));
-    await page.route((url) => url.href.startsWith(DATA_ORIGIN), (route) => route.abort('connectionrefused'));
+    await page.route((url) => isWorkerUrl(url.href), (route) => route.abort('connectionrefused'));
     await page.goto(`${BASE}/heat-map/nl/amsterdam/canal-ring/?lab=1`, { waitUntil: 'domcontentloaded' });
     await expect.poll(async () => (await report(page))?.displayed, { timeout: 120_000, message: 'E4 opens with the Worker down' }).toBe('E4');
     await expect.poll(() => page.evaluate(() => document.getElementById('bcount')?.textContent ?? ''), { timeout: 30_000 }).toContain(drawnOf('E4').toLocaleString('en-US'));

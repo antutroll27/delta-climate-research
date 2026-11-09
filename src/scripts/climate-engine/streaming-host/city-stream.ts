@@ -45,6 +45,8 @@ import { meshBytes } from '../streaming/prism-mesh.ts';
 import { CLAY } from '../explore/look.ts';
 
 export const SHEET_M = 2_800;
+/** How long a bundle download with no job waiting on it is kept before it is cancelled (see `getBundle`). */
+const ABANDON_GRACE_MS = 250;
 /** The contact-occlusion bake the renderer wants (1024 texels, the editorial look's near radius), done in the worker. */
 const AO_REQUEST = { n: 1024, nearM: CLAY.aoNearM } as const;
 
@@ -227,24 +229,56 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
 
   /** Set once a bundle shows that bundles cannot be used here (a newer format, no crypto.subtle): every later area goes straight to the per-file URLs. */
   let bundlesOff = false;
-  /** The area's bundle, parsed and verified; null = this area is read from its six per-file URLs instead (see the header). One fetch per area while it is held. */
-  const getBundle = (code: SheetCode, job: { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<AreaBundle | null> =>
-    memoised(bundleMemo, code, async () => {
-      const id = sheetByCode(code)!.id;
-      const target = bundlesOff ? null : bundleTarget(id);
-      if (target === null) return null;
-      if (!bundleRuntimeSupported()) { bundlesOff = true; return null; }
-      for (let attempt = 0; ; attempt++) {
-        const bytes = await (await get(target.url, job, attempt === 0 ? undefined : 'reload')).arrayBuffer();
-        try { return await parseAreaBundle(bytes, { expectAreaId: id, expectContentHash: target.contentHash }); }
-        catch (error) {
-          if (!(error instanceof AreaBundleError)) throw error;
-          if (error.code === 'unsupported-version' || error.code === 'unsupported-runtime') { bundlesOff = true; hooks.warn(`bundles are not usable here (${error.code}); reading the per-file layers`); return null; }
-          if (attempt === 0 && (error.code === 'sha-mismatch' || error.code === 'truncated')) continue;      // a bad edge-cached copy is the usual cause: one retry past the cache
-          throw error;
-        }
+  /** Downloads in flight, by area: one shared fetch with its own abort controller and the number of jobs still waiting on it. */
+  const flights = new Map<SheetCode, { readonly controller: AbortController; askers: number }>();
+  /** The area's bundle, parsed and verified; null = this area is read from its six per-file URLs instead (see the header). One fetch per area while it is held.
+   *  THE DOWNLOAD IS SHARED, NOT OWNED BY ITS FIRST ASKER: a halo job that asks first and is then cancelled (the camera crossed into that very area) must not cancel
+   *  the download the opening job is about to need, or the Worker would serve the area twice. It is cancelled only when EVERY job that asked for it has been cancelled. */
+  const getBundle = (code: SheetCode, job: { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<AreaBundle | null> => {
+    const id = sheetByCode(code)!.id;
+    if (bundlesOff || bundleTarget(id) === null) return Promise.resolve(null);      // nothing to download, so nothing to hold: Canal Ring and the fallbacks take no slot in the memo
+    let held = bundleMemo.get(code);
+    if (held === undefined) {
+      const flight = { controller: new AbortController(), askers: 0 };
+      flights.set(code, flight);
+      const made = bundleMemo.set(code, downloadBundle(id, flight.controller.signal, job.priority));
+      held = made;
+      const landed = (): void => { if (flights.get(code) === flight) flights.delete(code); };
+      made.then(landed, () => { landed(); bundleMemo.deleteIf(code, made); });      // a failed or cancelled download is not remembered
+    }
+    const flight = flights.get(code);
+    if (flight !== undefined && job.signal !== undefined) {
+      const { signal } = job;
+      flight.askers++;
+      const leave = (): void => {
+        if (--flight.askers > 0 || flights.get(code) !== flight) return;
+        /* The manager cancels the old job and starts the new one in the same breath (a halo for the area the person is opening), so the cancel can come BEFORE the
+           new asker. A short grace lets that asker keep the download; only a download that stays unwanted is cancelled. */
+        setTimeout(() => {
+          if (flight.askers > 0 || flights.get(code) !== flight) return;
+          flights.delete(code); bundleMemo.deleteIf(code, held!); flight.controller.abort();
+        }, ABANDON_GRACE_MS);
+      };
+      if (signal.aborted) leave(); else signal.addEventListener('abort', leave, { once: true });
+    } else if (flight !== undefined) flight.askers++;                                // a job that cannot be cancelled keeps the download alive
+    return held;
+  };
+
+  async function downloadBundle(id: string, signal: AbortSignal, priority: 'high' | 'low'): Promise<AreaBundle | null> {
+    const target = bundleTarget(id);
+    if (target === null) return null;
+    if (!bundleRuntimeSupported()) { bundlesOff = true; return null; }
+    for (let attempt = 0; ; attempt++) {
+      const bytes = await (await get(target.url, { signal, priority }, attempt === 0 ? undefined : 'reload')).arrayBuffer();
+      try { return await parseAreaBundle(bytes, { expectAreaId: id, expectContentHash: target.contentHash }); }
+      catch (error) {
+        if (!(error instanceof AreaBundleError)) throw error;
+        if (error.code === 'unsupported-version' || error.code === 'unsupported-runtime') { bundlesOff = true; hooks.warn(`bundles are not usable here (${error.code}); reading the per-file layers`); return null; }
+        if (attempt === 0 && (error.code === 'sha-mismatch' || error.code === 'truncated')) continue;      // a bad edge-cached copy is the usual cause: one retry past the cache
+        throw error;
       }
-    });
+    }
+  }
 
   const terrainOf = (b: AreaBundle): TerrainField | null => { try { return b.terrain === null ? null : asTerrainField(b.terrain); } catch { return null; } };
   const treesOf = (b: AreaBundle): TreesFile | null => { try { return b.trees === null ? null : asTreesFile(b.trees); } catch { return null; } };
@@ -550,6 +584,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
     dispose() {
       disposed = true;
       executor.dispose();
+      for (const flight of flights.values()) flight.controller.abort();
       worker.dispose();
       hooks.relief()?.setNeighbours?.([]);
       bundleMemo.clear(); texts.clear(); surfaces.clear(); prepares.clear(); rims.clear(); halos.clear();

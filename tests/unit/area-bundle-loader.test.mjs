@@ -152,6 +152,41 @@ test('one request per area: every bundle URL (the opened area, its halo, its nei
   } finally { r.stop(); }
 });
 
+// ── the download is shared ───────────────────────────────────────────────────────────────────
+
+/** A fetch that takes `ms` and honours its AbortSignal, recording whether it was cancelled. */
+const slow = (ms, cancelled) => (u, init) => new Promise((resolve, reject) => {
+  const done = setTimeout(() => resolve(undefined), ms);
+  init.signal?.addEventListener('abort', () => { clearTimeout(done); cancelled.push(u); reject(new DOMException('aborted', 'AbortError')); }, { once: true });
+});
+
+test('shared download: a halo job that asked first and is cancelled does not cancel or repeat the download the opening job needs (F4 stays ONE request)', async () => {
+  configure();
+  const cancelled = [];
+  const r = rig({ serve: (u, init) => (/ams-f4\.obosb$/.test(u) ? slow(700, cancelled)(u, init) : undefined) });
+  try {
+    r.stream.start('E4');
+    await until(() => r.urlsOf(/ams-f4\.obosb$/).length > 0, 'E4\'s halo to ask for F4');           // the halo job asked first (low priority)
+    r.stream.select('F4');                                                                         // the person goes there: the opening job asks for the same bundle
+    await until(() => r.stream.report().displayed === 'F4', 'F4 displayed', 15_000);
+    assert.equal(r.urlsOf(/ams-f4\.obosb$/).length, 1, 'one request for F4, however many jobs wanted it');
+    assert.deepEqual(cancelled.filter((u) => /ams-f4/.test(u)), [], 'and it was never cancelled and restarted');
+    assert.deepEqual(r.log.failures, []);
+  } finally { r.stop(); }
+});
+
+test('shared download: when EVERY job that asked for a bundle has been cancelled, the download is cancelled too (no bandwidth for an area nobody is going to)', async () => {
+  configure();
+  const cancelled = [];
+  const r = rig({ serve: (u, init) => (/ams-(f4|e5|f5)\.obosb$/.test(u) ? slow(30_000, cancelled)(u, init) : undefined) });
+  try {
+    r.stream.start('E4');
+    await until(() => r.urlsOf(/ams-f4\.obosb$/).length > 0, 'E4\'s halo to ask for F4');
+    r.stream.select('I7');                                                                         // far away: E4's halo job is dropped, and with it every asker of F4
+    await until(() => cancelled.some((u) => /ams-f4/.test(u)), 'F4\'s in-flight download to be cancelled', 15_000);
+  } finally { r.stop(); }
+});
+
 // ── the fallback matrix ──────────────────────────────────────────────────────────────────────
 
 test('fallback 1: no usable bundle manifest (missing, malformed, wrong kind) - the six per-file URLs, no bundle fetch', async () => {
