@@ -183,14 +183,15 @@ html[data-ui="v2"] .obos-v2 .tree-why { color: var(--ink-2); }
 html[data-ui="v2"] .obos-v2 .toasts { position: absolute; z-index: 32; top: 16px; left: calc(var(--lead) + var(--title-w) + 16px); display: none; flex-direction: column; gap: 8px; align-items: flex-start; pointer-events: none; }
 html[data-ui="v2"] .obos-v2[data-section="overview"] .toasts { display: flex; }
 html[data-ui="v2"] .obos-v2[data-side-shown="1"]:not([data-side-current="explore"]) .toasts { display: none; }
-/* S2 audit F7 (rc3: re-measured for the 184 px rail): while the labelled menu and the Explore panel are both shown, the pills (229 px, left at 848) end on the right column (320 px + 2 x 16 gutters)
-   below 1413 px (532 + 316 + 229 + 336). To 1429 px they drop under the compass instead: the title column's own left, below the compass tile. */
-@media (min-width: 1366px) and (max-width: 1429px) {
+/* S2 audit F7 (rc3: re-measured for the 184 px rail): while the labelled menu and the Explore panel are both shown, the pills (left at 848) end on the right column (320 px + 2 x 16 gutters)
+   below 1413 px when they were 229 px wide (532 + 316 + 229 + 336). The New-city toast is now transport keys, 252 px wide with "Amsterdam" (re-measured, pill-controls), so it ends on the column below 1436 px
+   (532 + 316 + 252 + 336). To 1436 px the pills drop under the compass instead: the title column's own left, below the compass tile. */
+@media (min-width: 1366px) and (max-width: 1436px) {
   html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"][data-menu-eff="labels"] .toasts { left: var(--lead); top: 282px; }
 }
 /* rc1 R1: the ward card's header now carries two always-visible honesty rows (24 px taller), which lifts the Sun card onto the pills' 282 px row at 1366 x 640 with the labelled menu and
    Explore both shown. The Sun card and the honesty rows never step aside; on that one short window the pills do (the New-city link is also in the crumb). */
-@media (min-width: 1366px) and (max-width: 1429px) and (max-height: 700px) {
+@media (min-width: 1366px) and (max-width: 1436px) and (max-height: 700px) {
   html[data-ui="v2"] .obos-v2[data-side-shown="1"][data-side-current="explore"][data-menu-eff="labels"] .toasts { display: none; }
 }
 html[data-ui="v2"] .obos-v2 .toasts > * { pointer-events: auto; }

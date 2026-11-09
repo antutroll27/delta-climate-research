@@ -13,8 +13,10 @@ const caption = dotCaptionHtml('NEW CITY', { variant: 'c', tired: 'Y' });
     {/* NO aria-label. The visible text already reads "New city Bengaluru", and a
         label of "Bengaluru — newly added city" replaced it with a string those
         visible words are not contained in — Label in Name (WCAG 2.5.3), so
-        "click New city" matched nothing by speech. The eyebrow is CLIPPED rather
-        than display:none on phones, so the name keeps "New city" there too. */}
+        "click New city" matched nothing by speech. The eyebrow is now a drawn
+        dot-matrix caption (aria-hidden SVG) beside a visually hidden "New city"
+        span: clipped, never display:none, so the name keeps "New city". The
+        play key is aria-hidden decoration; the link's name is its text. */}
     <a href={newCity.href}>
       <span class="t-slot">
         <span class="t-eyebrow"><span class="pc-sr">New city</span><Fragment set:html={caption} /></span>
