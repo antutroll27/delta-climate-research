@@ -27,7 +27,8 @@
     "check:bangalore": "python3 scripts/check-bangalore-artefacts.py && python3 scripts/export-bangalore-obos.py --check",
     "check:bangalore-frame": "python3 scripts/check-bangalore-frame.py",
     "check:cities": "python3 scripts/check-city-artefacts.py --city amsterdam && python3 scripts/export-city-obos.py --city amsterdam --check",
-    "check:cities-frame": "python3 scripts/check-city-frame.py --city amsterdam"
+    "check:cities-frame": "python3 scripts/check-city-frame.py --city amsterdam",
+    "check:stream-dist": "node scripts/check-stream-dist.mjs"
   },
   "engines": {
     "node": ">=22.12.0",
