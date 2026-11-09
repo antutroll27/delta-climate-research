@@ -10,17 +10,17 @@
  *
  * NO STALE FIGURE. `judge` re-reads the payload's age on the viewer's clock: a live payload past its window
  * (the CDN may hold one for a few minutes) is painted as "Not reporting", with the TIME of the last hour and no
- * value. A body that fails `isLocalAirPayload` is the failure view.
+ * value. A body whose measured part fails `isLocalAirPayload` is the failure view (a malformed OPTIONAL modelled line is dropped instead).
  *
  * Every network string goes through `esc()`, every number through `num()`; an unknown class or pollutant falls back
  * to a dash. Pure; no DOM.
  */
 import { JP_BASIS_NOTE, JP_POLLUTANTS, JP_ROADSIDE_NOTE, JP_ROW_NOTE, JP_STANDARDS } from '../../../lib/aqi/jp-standards.ts';
-import { LKI_COLOUR, LKI_KEY, LKI_LABEL } from '../../../lib/aqi/lki.ts';
+import { LKI_COLOUR, LKI_KEY, LKI_LABEL, LKI_MODEL_CREDIT } from '../../../lib/aqi/lki.ts';
 import { localAirArea, LOCAL_LIVE_MS, LOCAL_STANDARD_TZ } from '../../../lib/aqi/local-areas.ts';
-import type { JpReading, LkiBand, LocalAirPayload, LocalStation, NlReading } from '../../../lib/aqi/local-types.ts';
+import type { JpReading, LkiBand, LocalAirPayload, LocalStation, NlModel, NlReading } from '../../../lib/aqi/local-types.ts';
 import { judge } from '../../../lib/aqi/local-judge.ts';
-import { isLocalAirPayload } from '../../../lib/aqi/local-valid.ts';
+import { readLocalAirPayload } from '../../../lib/aqi/local-valid.ts';
 import type { AirIo, AirPaint } from './air-panel.ts';
 
 type NotReporting = Extract<LocalAirPayload, { state: 'not_reporting' }>;
@@ -55,7 +55,9 @@ const link = (url: string, text: string): string =>
 
 function creditHtml(p: LocalAirPayload): string {
   const c = p.credit;
-  const edit = c.edit === null ? '' : `<br>${esc(c.edit)}`;
+  /* The modelled line is RIVM's model, rounded up: its credit is said whenever the line is on the card. */
+  const model = p.state === 'live' && p.standard === 'nl-lki' && p.model ? `<br>${esc(LKI_MODEL_CREDIT)}` : '';
+  const edit = (c.edit === null ? '' : `<br>${esc(c.edit)}`) + model;
   /* The licence is indicated with a hyperlink to its text (CC BY-ND 4.0 §3(a)(1)(C)), and the terms page it was read on is shown. */
   const at = c.licence.indexOf(c.licence_link_text);
   const licence = at < 0 || c.licence_link_text === '' ? esc(c.licence)
@@ -80,12 +82,23 @@ const bandWord = (b: unknown): string => (has(LKI_LABEL, b) ? `${LKI_LABEL[b as 
 const LKI_NOTE = 'The LKI (luchtkwaliteitsindex) is the Dutch national air-quality index, published by Luchtmeetnet. Each of nitrogen dioxide, '
   + 'PM10, PM2.5 and ozone is turned into a number from 1 (little pollution) to 11 (much); the highest number is the index; if all the substances have the same number, the index is one point higher. It is sorted into five classes. '
   + 'Other indices, such as the US AQI or the European index, use other scales and other substances, so their numbers are not interchangeable with this one. '
-  + 'This card shows the Dutch regulator\'s own figure, as published, for the nearest monitor that measures all four substances.';
+  + 'The headline is the Dutch regulator\'s own measured figure, as published, for the nearest monitor that measures all four substances. A separate, labelled modelled line (RIVM\'s model, via Luchtmeetnet) may sit beneath it; it is a forecast calculation, not a measurement.';
 
 function nlSubstances(readings: readonly NlReading[]): string {
   if (readings.length === 0) return '';
   const row = readings.map((r) => `${esc(NL_FORMULA[r.formula] ?? '—')} <b>${num(r.value)}</b>`).join(' · ');
   return `<p class="meta">${row} <span style="opacity:.85">µg/m³, hourly, as published</span></p>`;
+}
+
+/**
+ * THE MODELLED LINE, set apart from the measurement and worded so it cannot be read as one: "Modelled at the centre of this area (RIVM model via Luchtmeetnet): 4 · Matig · Moderate",
+ * then what it is (a forecast calculation by RIVM, published by Luchtmeetnet, for the current hour as Luchtmeetnet's own location page selects it) and that the
+ * decimal was rounded up as Luchtmeetnet does. It names NO clock time: beside the measured line's "Hour to 01:00 CET" a "02:00" stamp read as a contradiction
+ * on the founder's review shots (2026-11-09), and whether the model stamp opens or closes its hour is not documented. The class dot is the LKI's, as on the measured line. No station, no distance: a model has neither.
+ */
+function nlModelLine(m: NlModel, place: string): string {
+  return `<p class="meta aq-model">Modelled at the centre of this area (RIVM model via Luchtmeetnet): <b>${num(m.lki)}</b> <span class="cat"><span class="dot" style="background:${bandColour(m.band)}"></span>${bandWord(m.band)}</span></p>`
+    + `<p class="meta">A forecast calculation by RIVM for the centre of ${esc(place)}, not a measurement · for the current hour · rounded up to a whole number, as Luchtmeetnet does</p>`;
 }
 
 function nlLive(p: Extract<Live, { standard: 'nl-lki' }>, title: string, place: string): string {
@@ -95,6 +108,7 @@ function nlLive(p: Extract<Live, { standard: 'nl-lki' }>, title: string, place: 
     + `<p class="meta">LKI, the Dutch air-quality index · 1 to 11, five classes</p>`
     + nlSubstances(p.readings) + stationLine(p.station, place)
     + `<p class="meta">Hour to ${time} · unvalidated, indicative</p>`
+    + (p.model ? nlModelLine(p.model, place) : '')
     + `<details class="aq-why"><summary>What is the LKI?</summary><p>${esc(LKI_NOTE)}</p></details>`
     + creditHtml(p);
 }
@@ -200,7 +214,9 @@ export function localPaneHtml(p: LocalAirPayload, place: string, now: Date = new
   if (c.state === 'live' && c.standard === 'nl-lki') {
     s += nlTable(c.readings) + `<p class="pane-h">The five LKI classes</p>${lkiKey()}`
       + `<p class="pane-note">The LKI is Luchtmeetnet's own published figure for this monitor and hour, shown unaltered. It is the highest of the four substances' index numbers (NO₂, PM10, PM2.5, O₃). When some but not all of the substances tie for the highest, the index is that number. Luchtmeetnet adds one point only when all the substances share the same number. `
-      + `Values are unvalidated hourly data and may be corrected later. Air quality is a separate layer: it does not enter the heat model.</p>`;
+      + `Values are unvalidated hourly data and may be corrected later. Air quality is a separate layer: it does not enter the heat model.</p>`
+      + (c.model ? `<p class="pane-note">The modelled line is a forecast calculation by RIVM (published by Luchtmeetnet) for the centre of this area, for the current hour, the row Luchtmeetnet's own location page would pick; it is not a measurement and no monitor stands behind it. `
+        + `Luchtmeetnet publishes it as a decimal and rounds decimal LKI values up to the whole number, as this card does. It never replaces, and is not mixed into, the measured figure above.</p>` : '');
   } else if (c.state === 'live') {
     s += `<p class="pane-note">Values are the latest provisional hour from the Ministry of the Environment's national stations (国設局) only; other stations belong to local governments and are not shown. `
       + `A standard is judged on its own average, not on one hour. Air quality is a separate layer: it does not enter the heat model.</p>`;
@@ -221,7 +237,7 @@ export function localStatusText(p: LocalAirPayload, place: string, now: Date = n
 /**
  * FETCH AND CHOOSE for a local-regulator area (the door `loadAir` hands these areas to). Null means paint nothing: the
  * request was aborted or its answer is for an area the reader has already left. Any failure, or a body that fails
- * `isLocalAirPayload`, is the designed failure view.
+ * `isLocalAirPayload` (bar a malformed modelled line, which is dropped), is the designed failure view.
  */
 export async function loadLocalAir(area: string, place: string, io: AirIo): Promise<AirPaint | null> {
   let body: unknown = null, ok = false;
@@ -230,11 +246,13 @@ export async function loadLocalAir(area: string, place: string, io: AirIo): Prom
     if (r.ok) { body = await r.json(); ok = true; }
   } catch { ok = false; }
   if (io.signal.aborted || !io.isCurrent()) return null;
-  if (!ok || localAirArea(area) === null || !isLocalAirPayload(body) || body.area_id !== area) {
+  /* `readLocalAirPayload` drops a malformed OPTIONAL modelled line and keeps the measured card; any other fault is the failure view. */
+  const parsed = ok ? readLocalAirPayload(body) : null;
+  if (parsed === null || localAirArea(area) === null || parsed.area_id !== area) {
     return { block: localUnavailableHtml(place), pane: failedPane(place), days: [], status: `Air quality, ${place}: could not be loaded just now.` };
   }
   const now = io.now ?? new Date();
   /* `refresh` re-judges the payload the app KEPT on the viewer's clock, so a tab left open flips to "Not reporting" when the window passes. */
-  const paint = (at: Date) => ({ block: localCardHtml(body, place, at), pane: localPaneHtml(body, place, at), status: localStatusText(body, place, at) });
+  const paint = (at: Date) => ({ block: localCardHtml(parsed, place, at), pane: localPaneHtml(parsed, place, at), status: localStatusText(parsed, place, at) });
   return { ...paint(now), days: [], refresh: paint };
 }

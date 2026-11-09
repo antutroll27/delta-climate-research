@@ -3,8 +3,12 @@
  * (the counterpart of valid.ts for CPCB's). A body that fails is the designed failure view, never a
  * half-painted card. Strict on purpose: unknown states, a band that disagrees with its LKI number,
  * a non-finite value or an unparseable time are all refusals. Pure.
+ *
+ * THE OPTIONAL MODELLED LINE is strict too (`isNlModel`: its whole number must be the published decimal rounded up, its band must be that number's,
+ * its hour must start on the hour), so `isLocalAirPayload` refuses a payload carrying a malformed one. But the line is optional and must never
+ * take the measured card with it: `readLocalAirPayload` is the door the browser uses, and it DROPS a malformed model block and keeps the rest.
  */
-import { lkiBand } from './lki.ts';
+import { LKI_MODEL_HOUR_MS, lkiBand, lkiClass } from './lki.ts';
 import { LOCAL_SCHEMA, type LocalAirPayload } from './local-types.ts';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -18,6 +22,12 @@ const REASONS: readonly string[] = ['source_down', 'no_current_hour', 'no_statio
 const NL_FORMULAS: readonly string[] = ['PM25', 'PM10', 'NO2', 'O3'];
 const JP_POLLUTANTS: readonly string[] = ['pm25', 'no2', 'ox'];
 const JP_UNITS: Readonly<Record<string, string>> = { pm25: 'ug_m3', no2: 'ppm', ox: 'ppm' };
+
+/** A modelled-LKI block: the decimal has a class, `lki` is that class, `band` is that class's band, and `hour_start` is an instant on the hour. */
+export function isNlModel(v: unknown): boolean {
+  return isObj(v) && isNum(v['value']) && lkiClass(v['value']) === v['lki'] && lkiBand(v['lki']) === v['band']
+    && isTime(v['hour_start']) && Date.parse(v['hour_start'] as string) % LKI_MODEL_HOUR_MS === 0;
+}
 
 export function isLocalStation(v: unknown): boolean {
   return isObj(v) && isStr(v['id']) && isStr(v['name']) && isNum(v['lat']) && isNum(v['lon'])
@@ -42,10 +52,22 @@ export function isLocalAirPayload(v: unknown): v is LocalAirPayload {
   if (standard === 'nl-lki') {
     const lki = v['lki'];
     if (!isLocalStation(v['station']) || !isObj(lki) || lkiBand(lki['value']) !== lki['band']) return false;
+    if (v['model'] !== undefined && !isNlModel(v['model'])) return false;
     return (v['readings'] as unknown[]).every((r) => isObj(r) && NL_FORMULAS.includes(r['formula'] as string) && isNum(r['value']) && isTime(r['observed_at']));
   }
   if (v['provisional'] !== true) return false;
   return (v['readings'] as unknown[]).length > 0 && (v['readings'] as unknown[]).every((r) => isObj(r)
     && JP_POLLUTANTS.includes(r['pollutant'] as string) && isNum(r['value']) && r['value'] >= 0
     && r['unit'] === JP_UNITS[r['pollutant'] as string] && isLocalStation(r['station']));
+}
+
+/**
+ * The payload to paint, or null when the measured part is not one. A malformed OPTIONAL `model` block is dropped, not fatal: the measured card
+ * is exactly what it would have been without the line. Any other fault is a refusal, as in `isLocalAirPayload`.
+ */
+export function readLocalAirPayload(v: unknown): LocalAirPayload | null {
+  if (isLocalAirPayload(v)) return v;
+  if (!isObj(v) || !('model' in v)) return null;
+  const { model: _dropped, ...rest } = v;
+  return isLocalAirPayload(rest) ? rest : null;
 }

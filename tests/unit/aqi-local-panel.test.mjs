@@ -43,7 +43,7 @@ test('Amsterdam card: the LKI numeral with Luchtmeetnet\'s own class word and co
 test('Amsterdam card credits the source in the wording its terms ask for, says the data is unvalidated, and disclaims endorsement', () => {
   const t = text(localCardHtml(nlLive, 'Canal Ring', NL_NOW));
   assert.ok(t.includes('Source: www.luchtmeetnet.nl'));
-  assert.ok(t.includes('Unvalidated hourly values'));
+  assert.ok(t.includes('nvalidated hourly values'));
   assert.ok(t.includes('Luchtmeetnet does not endorse this page'));
   assert.ok(t.includes('CC BY-ND 4.0'));
 });

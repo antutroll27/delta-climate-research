@@ -1,0 +1,460 @@
+[
+ {
+  "id": "NL49704",
+  "name": "Zaanstad-Hoogtij",
+  "lat": 52.428,
+  "lon": 4.773,
+  "type": "Industrial",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "C6H6",
+   "C7H8",
+   "C8H10",
+   "NO",
+   "NO2",
+   "PM10",
+   "PM25",
+   "SO2"
+  ]
+ },
+ {
+  "id": "NL49703",
+  "name": "Spaarnwoude-Machineweg",
+  "lat": 52.398437,
+  "lon": 4.728581,
+  "type": "Regional",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "C6H6",
+   "C7H8",
+   "C8H10",
+   "NO",
+   "NO2",
+   "PM10",
+   "PM25"
+  ]
+ },
+ {
+  "id": "NL49701",
+  "name": "Zaandam-Wagenschotpad",
+  "lat": 52.448011,
+  "lon": 4.816706,
+  "type": "Municipal",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "PM25",
+   "NO",
+   "FN",
+   "PM10",
+   "PS",
+   "BCWB",
+   "NO2"
+  ]
+ },
+ {
+  "id": "NL49680",
+  "name": "Almere-Boomgaardweg",
+  "lat": 52.373572,
+  "lon": 5.239257,
+  "type": "Municipal",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "PM25",
+   "NO",
+   "PM10",
+   "O3",
+   "PS",
+   "NO2"
+  ]
+ },
+ {
+  "id": "NL49573",
+  "name": "Velsen-Reyndersweg",
+  "lat": 52.478871,
+  "lon": 4.579343,
+  "type": "Industrial",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "PM10",
+   "PM25"
+  ]
+ },
+ {
+  "id": "NL49572",
+  "name": "Velsen-Staalstraat",
+  "lat": 52.4744,
+  "lon": 4.6288,
+  "type": "Industrial",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "PM10",
+   "PM25"
+  ]
+ },
+ {
+  "id": "NL49570",
+  "name": "Beverwijk-Creutzberglaan",
+  "lat": 52.489303,
+  "lon": 4.640531,
+  "type": "Other",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "PM10",
+   "PM25"
+  ]
+ },
+ {
+  "id": "NL49565",
+  "name": "Oude Meer-Aalsmeerderdijk",
+  "lat": 52.28013,
+  "lon": 4.77082,
+  "type": "Regional",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "NO",
+   "NO2",
+   "PM10"
+  ]
+ },
+ {
+  "id": "NL49564",
+  "name": "Hoofddorp-Hoofdweg",
+  "lat": 52.3274501787129,
+  "lon": 4.71507132053375,
+  "type": "Other",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "NO",
+   "NO2",
+   "PM10"
+  ]
+ },
+ {
+  "id": "NL49561",
+  "name": "Badhoevedorp-Sloterweg",
+  "lat": 52.334003,
+  "lon": 4.774006,
+  "type": "Other",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "PM25",
+   "NO",
+   "CO",
+   "PM10",
+   "NO2"
+  ]
+ },
+ {
+  "id": "NL49557",
+  "name": "Wijk aan Zee-Bosweg",
+  "lat": 52.490052,
+  "lon": 4.599313,
+  "type": "Industrial",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "C6H6",
+   "C7H8",
+   "C8H10",
+   "PM25",
+   "PM10",
+   "C10H8"
+  ]
+ },
+ {
+  "id": "NL49556",
+  "name": "De Rijp-Oostdijkje",
+  "lat": 52.56359,
+  "lon": 4.8617,
+  "type": "Regional",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "PM25",
+   "FN",
+   "PM10",
+   "BCWB"
+  ]
+ },
+ {
+  "id": "NL49553",
+  "name": "Wijk aan Zee-De Banjaert",
+  "lat": 52.493992,
+  "lon": 4.601986,
+  "type": "Industrial",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "CO",
+   "FN",
+   "H2S",
+   "NO",
+   "NO2",
+   "PM10",
+   "PM25",
+   "SO2"
+  ]
+ },
+ {
+  "id": "NL49551",
+  "name": "IJmuiden-Kanaalstraat",
+  "lat": 52.463039,
+  "lon": 4.6018419999999995,
+  "type": "Industrial",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "CO",
+   "FN",
+   "H2S",
+   "NO",
+   "NO2",
+   "PM10",
+   "PM25",
+   "SO2"
+  ]
+ },
+ {
+  "id": "NL49546",
+  "name": "Zaanstad-Hemkade",
+  "lat": 52.42023,
+  "lon": 4.83206,
+  "type": "Industrial",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "C6H6",
+   "C7H8",
+   "C8H10",
+   "NO",
+   "PM10",
+   "NO2"
+  ]
+ },
+ {
+  "id": "NL49022",
+  "name": "Amsterdam-Ookmeer",
+  "lat": 52.366811,
+  "lon": 4.793344,
+  "type": "Municipal",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "NO",
+   "NO2"
+  ]
+ },
+ {
+  "id": "NL49021",
+  "name": "Amsterdam -Kantershof",
+  "lat": 52.320692,
+  "lon": 4.988397,
+  "type": "Municipal",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "NO",
+   "NO2"
+  ]
+ },
+ {
+  "id": "NL49020",
+  "name": "Amsterdam-Jan van Galenstraat",
+  "lat": 52.374786,
+  "lon": 4.860319,
+  "type": "Traffic",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "NO",
+   "FN",
+   "PM10",
+   "BCWB",
+   "NO2"
+  ]
+ },
+ {
+  "id": "NL49019",
+  "name": "Amsterdam-Oude Schans",
+  "lat": 52.372056,
+  "lon": 4.9044,
+  "type": "Municipal",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "NO",
+   "NO2"
+  ]
+ },
+ {
+  "id": "NL49017",
+  "name": "Amsterdam-Stadhouderskade",
+  "lat": 52.358039,
+  "lon": 4.8997,
+  "type": "Traffic",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "C6H6",
+   "C7H8",
+   "C8H10",
+   "FN",
+   "NO",
+   "NO2",
+   "PM10",
+   "PM25"
+  ]
+ },
+ {
+  "id": "NL49016",
+  "name": "Amsterdam-Westerpark",
+  "lat": 52.393972,
+  "lon": 4.870157,
+  "type": "Municipal",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "PM10",
+   "PM25",
+   "SO2"
+  ]
+ },
+ {
+  "id": "NL49014",
+  "name": "Amsterdam-Vondelpark",
+  "lat": 52.359714,
+  "lon": 4.866208,
+  "type": "Municipal",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "CO",
+   "FN",
+   "NO",
+   "NO2",
+   "O3",
+   "PM10",
+   "PM25",
+   "BCWB"
+  ]
+ },
+ {
+  "id": "NL49012",
+  "name": "Amsterdam-Van Diemenstraat",
+  "lat": 52.389983,
+  "lon": 4.887811,
+  "type": "Traffic",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "CO",
+   "FN",
+   "NO",
+   "NO2",
+   "O3",
+   "PM10",
+   "PM25",
+   "BCWB"
+  ]
+ },
+ {
+  "id": "NL49007",
+  "name": "Amsterdam-Einsteinweg",
+  "lat": 52.381331,
+  "lon": 4.845233,
+  "type": "Traffic",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "PM25",
+   "NO",
+   "CO",
+   "FN",
+   "PM10",
+   "NO2"
+  ]
+ },
+ {
+  "id": "NL49003",
+  "name": "Amsterdam-Nieuwendammerdijk",
+  "lat": 52.389314,
+  "lon": 4.943822,
+  "type": "Municipal",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "FN",
+   "NO",
+   "NO2",
+   "O3",
+   "BCWB",
+   "PM10",
+   "PM25"
+  ]
+ },
+ {
+  "id": "NL49002",
+  "name": "Amsterdam-Haarlemmerweg",
+  "lat": 52.385422,
+  "lon": 4.87575,
+  "type": "Traffic",
+  "org": "GGD Amsterdam",
+  "comp": [
+   "NO",
+   "NO2"
+  ]
+ },
+ {
+  "id": "NL10641",
+  "name": "Breukelen-A2",
+  "lat": 52.20153,
+  "lon": 4.987444,
+  "type": "Traffic",
+  "org": "RIVM",
+  "comp": [
+   "FN",
+   "NO",
+   "NO2",
+   "O3",
+   "PM10",
+   "PM25",
+   "BCWB"
+  ]
+ },
+ {
+  "id": "NL10633",
+  "name": "Zegveld-Oude Meije",
+  "lat": 52.13795,
+  "lon": 4.83819,
+  "type": "Regional",
+  "org": "RIVM",
+  "comp": [
+   "FN",
+   "NH3",
+   "NO",
+   "NO2",
+   "O3",
+   "PM10",
+   "BCWB"
+  ]
+ },
+ {
+  "id": "NL10552",
+  "name": "Haarlem-Freddie Oversteegenstraat ",
+  "lat": 52.37029,
+  "lon": 4.651789,
+  "type": "Other",
+  "org": "RIVM",
+  "comp": [
+   "PM25",
+   "NO",
+   "PM10",
+   "O3",
+   "NO2"
+  ]
+ },
+ {
+  "id": "NL10444",
+  "name": "De Zilk-Vogelaarsdreef",
+  "lat": 52.296556,
+  "lon": 4.510817,
+  "type": "Regional",
+  "org": "RIVM",
+  "comp": [
+   "FN",
+   "NH3",
+   "NO",
+   "NO2",
+   "O3",
+   "PM10",
+   "PM25",
+   "SO2",
+   "BCWB"
+  ]
+ }
+]

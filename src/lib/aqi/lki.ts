@@ -26,6 +26,15 @@
  * A published value that is not a whole number from 1 to 11 has no class here (null): the card then prints
  * no class word rather than guess. (The page: "Decimale LKI-waarden worden naar bovenafgerond"; the API
  * serves integers, so a fraction would be a format change worth noticing, not rounding.)
+ *
+ * THE ONE DECIMAL LKI is the MODELLED one (`/open_api/concentrations?formula=lki`, a float such as 3.5499999523), and for it the
+ * rounding rule is Luchtmeetnet's, not OBOS's, found in two places (read 2026-11-09):
+ *  a. the same page: "Decimale LKI-waarden worden naar bovenafgerond. Zo valt bijvoorbeeld een LKI van 0,9 in klasse 1 en een LKI van
+ *     3,1 in klasse 4." (Decimal LKI values are rounded UP: 0.9 is number 1, 3.1 is number 4.)
+ *  b. the site's own "Mijn locatie" script (chunk mijn-locatie-110b313d0e348113cdf2.js), which turns this very endpoint's row into the
+ *     headline number with `Math.ceil(n.value)`, and shows no number for 0.
+ * `lkiClass` is that rule: ceil, for a value above 0 and not above 11; anything else (0, a negative, 11.2, NaN) has no class.
+ * A float32 artefact above an integer (4.0000002) therefore rounds up exactly as the site's does; it is not second-guessed.
  */
 import type { LkiBand } from './local-types.ts';
 
@@ -40,6 +49,18 @@ export function lkiBand(value: unknown): LkiBand | null {
   if (value < 9) return 'insufficient';
   if (value < 11) return 'bad';
   return 'very_bad';
+}
+
+/** The credit line of the MODELLED line, printed beside the source credit whenever the card shows it: the model is RIVM's, via Luchtmeetnet, and its value is not shown as published (rounded up). */
+export const LKI_MODEL_CREDIT = 'Modelled line: RIVM model calculation (a forecast, not a measurement), via www.luchtmeetnet.nl. Indicative; the model value is rounded up to a whole number by the rule Luchtmeetnet publishes, so it is not shown exactly as published.';
+
+/** The span a modelled LKI row is current for, from its stamp (the hour's start): one clock hour. Client-safe, so the judge and the validator share it with the reader. */
+export const LKI_MODEL_HOUR_MS = 3_600_000;
+
+/** The whole-number LKI (1-11) of a DECIMAL modelled value, by Luchtmeetnet's rule (rounded up, see the header); null when it has none. */
+export function lkiClass(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || !(value > 0) || value > LKI_MAX) return null;
+  return Math.ceil(value);
 }
 
 /** Luchtmeetnet's own class labels, Dutch first (the regulator's word) with its English string. */
