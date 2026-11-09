@@ -68,6 +68,8 @@ test('heat-map-app: Compare, the ward brief links and the record link are withdr
   assert.match(cmp, /\[data-v2-brief\], \[data-v2-brief-link\]/);
   assert.match(cmp, /a\.removeAttribute\('href'\)/);
   assert.match(cmp, /a\.setAttribute\('aria-disabled', 'true'\)/);
+  assert.match(cmp, /a\.setAttribute\('title', streamSurfaces!\.compareUnavailable\)/);
+  assert.match(cmp, /a\.removeAttribute\('title'\)/, 'and restored for Canal Ring');
   assert.match(cmp, /if \(foreign !== null\) return;/, 'a streamed area never gets a Compare query');
   assert.ok(cmp.indexOf('if (foreign !== null) return;') < cmp.indexOf('a: toLegacyWard(state.ward)'));
   const rep = app.slice(app.indexOf('function updateReportHref()'), app.indexOf('function updateAddressBar()'));

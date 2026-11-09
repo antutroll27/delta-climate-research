@@ -189,6 +189,19 @@ jobs:
           npm run verify:static
           if [ "$BROWSER" = true ]; then npx playwright test --shard="$SHARD/2"; fi
 
+      # WHOLE-CITY STREAMING, PUBLIC MODE, in CI (stream-public). The plain build `verify:static` just made is checked for ZERO streaming code (check:stream-dist plain, in
+      # verify:static); this builds the SAME source with PUBLIC_OBOS_STREAM=1 and checks that the streaming code is there and none of the dev tools is (GL meter, timings,
+      # ?streamtier=, window.__obosStream), and that the page's URL tags stay query-free. About 1 minute, shard 1 only, no browser. The walk itself (tests/e2e/stream-walk.spec.ts
+      # with OBOS_STREAM_PUBLIC=1) is NOT run here: it reads the live Cloudflare Worker, needs the 504-cell GPU solver (SwiftShader on this runner is far too slow for it)
+      # and takes ~4 minutes, which does not fit a job that already runs to within minutes of its stop. It is the pre-deploy gate, run on a real GPU (npm run test:stream-public).
+      - name: Streaming public build is clean of dev tools
+        if: matrix.shard == 1
+        env:
+          PUBLIC_OBOS_STREAM: '1'
+        run: |
+          npx astro build --outDir dist-stream
+          node scripts/check-stream-dist.mjs public dist-stream
+
       # ON SUCCESS TOO (it was `if: failure()`), for one file: test-results/durations.json, the
       # json reporter's record of how long every test took. A passing run is the baseline a slow
       # one is compared with, and until now passing runs left none. `always()` rather than

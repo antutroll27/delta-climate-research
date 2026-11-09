@@ -4109,8 +4109,8 @@ export function mountHeatMap(): () => void {
       const foreign = foreignArea();
       const briefs = document.querySelectorAll<HTMLAnchorElement>('[data-v2-brief], [data-v2-brief-link]');
       for (const a of [link, ...briefs]) {
-        if (foreign === null) { a.removeAttribute('data-unavailable'); a.removeAttribute('aria-disabled'); }
-        else { a.removeAttribute('href'); a.setAttribute('data-unavailable', streamSurfaces!.compareUnavailable); a.setAttribute('aria-disabled', 'true'); }
+        if (foreign === null) { a.removeAttribute('data-unavailable'); a.removeAttribute('aria-disabled'); a.removeAttribute('title'); }
+        else { a.removeAttribute('href'); a.setAttribute('data-unavailable', streamSurfaces!.compareUnavailable); a.setAttribute('aria-disabled', 'true'); a.setAttribute('title', streamSurfaces!.compareUnavailable); }
       }
       if (foreign !== null) return;
     }

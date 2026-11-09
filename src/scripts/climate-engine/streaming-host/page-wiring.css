@@ -16,6 +16,6 @@
 }
 
 /* A link a streamed area cannot use (Compare, the ward brief): withdrawn by the app (no href), dimmed, and it says why in words after its label. */
-.stage a[data-unavailable] { opacity: .55; cursor: not-allowed; pointer-events: none; }
+.stage a[data-unavailable] { opacity: .55; cursor: not-allowed; }       /* no href, so it cannot be followed; the title says why on hover */
 .stage a[data-unavailable]::after { content: " · " attr(data-unavailable); font-size: .85em; }
 .stage [data-streamed-note] { margin: 0; }

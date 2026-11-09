@@ -26,7 +26,13 @@ import { mkdirSync, readFileSync } from 'node:fs';
  */
 const BASE = process.env.OBOS_STREAM_URL;
 const SHOTS = process.env.OBOS_STREAM_SHOTS ?? '/Volumes/PortableSSD/OBOS Lab/previews/city-streaming/int';
-const TIER = process.env.OBOS_STREAM_TIER;                    // optional ?streamtier=
+const TIER = process.env.OBOS_STREAM_TIER;                    // optional ?streamtier= (dev build only)
+/** PUBLIC MODE (OBOS_STREAM_PUBLIC=1): the build was made with PUBLIC_OBOS_STREAM=1 only. No `?stream=1`, no `?streamtier=`, and none of the dev hooks exist
+ *  (`window.__obosStream` is absent by design), so the walk reads what a visitor sees: the header, the Area select, the address, the drawn count, the loader. The
+ *  steps that need the dev read-out (resident set, massing, tier demotion) are the dev run's and are skipped here, said out loud. */
+const PUBLIC = process.env.OBOS_STREAM_PUBLIC === '1';
+/** `?lab=1` (localhost only, explore/look.ts) puts the page's MapLibre map on `window.__obosMap` in ANY build: a public run pans with it. It changes nothing else. */
+const QUERY = PUBLIC ? '?lab=1' : '?stream=1';
 const HOLD_MS = Number(process.env.OBOS_WALK_HOLD_MS ?? 2_400);
 /** The origin the layer files are read from: the committed manifest's `baseUrl/prefix/` (the Cloudflare Worker in front of the R2 bucket). */
 const MANIFEST = JSON.parse(readFileSync(new URL('../../public/heat-map/data/ams-r2-manifest.json', import.meta.url), 'utf8')) as { baseUrl: string; prefix: string };
@@ -48,7 +54,15 @@ const build = JSON.parse(readFileSync(new URL('../../data/cities/amsterdam/sheet
 const drawnOf = (code: string): number => build.find((s) => s.code === code)!.buildings;
 
 interface Report { tier: string; current: string | null; displayed: string | null; open: string | null; resident: string[]; massing: string[]; switches: number; modelMB: number; ceilingMB: number }
-const report = (page: Page): Promise<Report | null> => page.evaluate(() => (window as unknown as { __obosStream?: { report(): unknown } }).__obosStream?.report() as Report | null ?? null);
+const report = (page: Page): Promise<Report | null> => page.evaluate((pub) => {
+  const hook = (window as unknown as { __obosStream?: { report(): unknown } }).__obosStream;
+  if (!pub) return hook?.report() as Report | null ?? null;
+  /* public: the page itself says which area is on screen (the header code), and the address says which one was asked for */
+  const code = document.querySelector('#pname .obos-area-code')?.textContent ?? null;      // written by the stream when an area is on screen (Canal Ring's static header has none)
+  return { tier: '?', current: new URL(location.href).searchParams.get('area') ?? 'E4', displayed: code, open: code, resident: [], massing: [], switches: 0, modelMB: 0, ceilingMB: 1 } as Report;
+}, PUBLIC);
+/** The map to pan: the dev hook's in a dev build, the lab hook's in a public one. */
+const MAP_EXPR = PUBLIC ? 'window.__obosMap' : 'window.__obosStream.map';
 
 test.describe.configure({ timeout: 420_000 });
 
@@ -118,6 +132,7 @@ async function arrived(page: Page, code: Code, thrown: string[], how: string, wa
   await expect.poll(() => page.evaluate(() => document.getElementById('bcount')?.textContent ?? ''), { timeout: 20_000, message: `${how}: drawn count` }).toContain(drawnOf(code).toLocaleString('en-US'));
   const words = await page.evaluate(() => [...document.querySelectorAll('.st-title, .si-host, .cl, #pname, #pzone')].map((n) => (n as HTMLElement).innerText ?? n.textContent ?? '').join('\n'));
   expect(words, `${how}: no screen text says "sheet"`).not.toMatch(/\bsheets?\b/i);
+  if (PUBLIC) await publicSurfaces(page, code, how);
   const seen = await loaderSeen(page);
   const appeared = seen.rise || seen.plate || seen.sweep;
   console.log(`[walk] ${how}: ${code} shown; loader appeared=${appeared} ${JSON.stringify(seen)}; resident before=${wasResident}`);
@@ -126,31 +141,67 @@ async function arrived(page: Page, code: Code, thrown: string[], how: string, wa
   expect(thrown, `page errors: ${thrown.join(' | ')}`).toEqual([]);
 }
 
+/** PUBLIC MODE, on every arrival: the surfaces that were written for ONE area say what they do for this one (stream-public, scripts/.../streaming/area-surfaces.ts),
+ *  and the heat-accuracy caveat is on screen. Canal Ring (E4) keeps what the page always showed. */
+async function publicSurfaces(page: Page, code: string, how: string): Promise<void> {
+  const s = await page.evaluate(() => ({
+    title: document.title,
+    description: document.querySelector('meta[name="description"]')?.getAttribute('content') ?? '',
+    ogUrl: document.querySelector('meta[property="og:url"]')?.getAttribute('content') ?? '',
+    canonical: document.querySelector('link[rel="canonical"]')?.getAttribute('href') ?? '',
+    compare: { href: document.querySelector('a[data-rail="analysis"]')?.getAttribute('href') ?? null, off: document.querySelector('a[data-rail="analysis"]')?.getAttribute('data-unavailable') ?? null },
+    brief: { href: document.querySelector('[data-v2-brief]')?.getAttribute('href') ?? null, off: document.querySelector('[data-v2-brief]')?.getAttribute('data-unavailable') ?? null },
+    recordNote: document.querySelector('[data-v2-card="record"] [data-streamed-note]')?.textContent ?? null,
+    caveat: (document.getElementById('conf')?.textContent ?? '').includes('Heat accuracy not yet validated for this city'),      // textContent: on a phone the card is folded away, but it is written
+    dev: typeof (window as unknown as { __obosStream?: unknown }).__obosStream,
+  }));
+  expect(s.dev, `${how}: no dev hook in a public build`).toBe('undefined');
+  expect(s.caveat, `${how}: ${code} shows the Amsterdam heat-accuracy caveat`).toBe(true);
+  for (const url of [s.ogUrl, s.canonical]) if (url !== '') expect(url.endsWith('/heat-map/nl/amsterdam/canal-ring/'), `${how}: URL tag ${url} is Canal Ring's page, not a page of ${code}`).toBe(true);
+  if (code === 'E4') {
+    expect(s.title).toContain('Canal Ring');
+    expect(s.compare.href, `${how}: Canal Ring keeps its Compare link`).toContain('/heat-map/compare/');
+    expect(s.compare.off).toBeNull();
+    expect(s.recordNote).toBeNull();
+  } else {
+    expect(s.title, `${how}: the tab names ${code}`).toContain(`Area ${code}`);
+    expect(s.title).toContain(names[code]!.name);
+    expect(s.title + s.description, `${how}: nothing says Canal Ring for ${code}`).not.toContain('Canal Ring');
+    expect(s.description).toContain('not yet validated');
+    expect(s.compare.href, `${how}: Compare is withdrawn for ${code} (it would open Kolkata's pair)`).toBeNull();
+    expect(s.compare.off).toContain('Not available');
+    expect(s.brief.href).toBeNull();
+    expect(s.brief.off).toContain('Not available');
+    expect(s.recordNote, `${how}: the record card names ${code}`).toContain(names[code]!.name);
+  }
+}
+
 async function panTo(page: Page, code: Code): Promise<void> {
   const c = AREA[code];
-  await page.evaluate(({ lon, lat }) => {
-    const map = (window as unknown as { __obosStream: { map: { easeTo(o: unknown): void } } }).__obosStream.map;
+  await page.evaluate(({ lon, lat, expr }) => {
+    const map = new Function(`return ${expr}`)() as { easeTo(o: unknown): void };
     map.easeTo({ center: [lon, lat], duration: 1_800 });
-  }, { lon: c.lon, lat: c.lat });
+  }, { lon: c.lon, lat: c.lat, expr: MAP_EXPR });
 }
 
 for (const viewport of [{ width: 390, height: 844, tag: 'phone', tier: 'low' as string | undefined }, { width: 1440, height: 900, tag: 'desktop', tier: TIER }]) {
   test(`streaming walk E4 -> F4 -> F5 -> E5 by panning, E4 by the picker: ${viewport.tag}`, async ({ page }) => {
     test.skip(!BASE, 'set OBOS_STREAM_URL to a server running a PUBLIC_OBOS_STREAM_DEV=1 build');
-    const tag = viewport.tier ? `${viewport.tag}-${viewport.tier}` : viewport.tag;
+    const tag = PUBLIC ? `public-${viewport.tag}` : viewport.tier ? `${viewport.tag}-${viewport.tier}` : viewport.tag;
     mkdirSync(SHOTS, { recursive: true });
     const thrown: string[] = [];
     page.on('pageerror', (error) => thrown.push(String(error)));
+    if (PUBLIC) page.on('console', (m) => { if (m.type() === 'warning' && /^streaming:|sheet executor/.test(m.text())) thrown.push(`console: ${m.text()}`); });
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     /* A held network for the detail files of every area (Canal Ring's too, so coming back to it is a real load), so a loader is on screen long enough to be seen and shot. */
     const fetched = await routeData(page, HOLD_MS);
     await watchLoader(page);
-    await page.goto(`${BASE}/heat-map/nl/amsterdam/canal-ring/?stream=1${viewport.tier ? `&streamtier=${viewport.tier}` : ''}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/heat-map/nl/amsterdam/canal-ring/${QUERY}${viewport.tier && !PUBLIC ? `&streamtier=${viewport.tier}` : ''}`, { waitUntil: 'domcontentloaded' });
 
     // first entry: E4, design C
     await expect.poll(async () => (await report(page))?.displayed, { timeout: 150_000, message: 'E4 opens through the stream' }).toBe('E4');
     await arrived(page, 'E4', thrown, 'first entry', false);
-    await expect.poll(async () => (await report(page))?.massing.length ?? 0, { timeout: 90_000, message: 'the ring arrives' }).toBeGreaterThanOrEqual(4);
+    if (!PUBLIC) await expect.poll(async () => (await report(page))?.massing.length ?? 0, { timeout: 90_000, message: 'the ring arrives' }).toBeGreaterThanOrEqual(4);
     await page.waitForTimeout(2_500);
     await page.screenshot({ path: `${SHOTS}/${tag}-1-E4.png` });
 
@@ -166,7 +217,7 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone', tier: 'low' as 
     await expect(page.locator('.si[data-open="false"]')).toHaveCount(1);
 
     // Shift + arrow on the MAP must still reach MapLibre (rotate), not the picker
-    const bearing = async () => page.evaluate(() => (window as unknown as { __obosStream: { map: { getBearing(): number } } }).__obosStream.map.getBearing());
+    const bearing = async () => page.evaluate((expr) => (new Function(`return ${expr}`)() as { getBearing(): number }).getBearing(), MAP_EXPR);
     const b0 = await bearing();
     await page.evaluate(() => (document.querySelector('.maplibregl-canvas') as HTMLElement).focus());
     await page.keyboard.press('Shift+ArrowRight');
@@ -185,8 +236,10 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone', tier: 'low' as 
       await page.waitForTimeout(3_000);
       await page.screenshot({ path: `${SHOTS}/${tag}-3-arrived-${code}.png` });
       const r = (await report(page))!;
-      expect(r.massing, `${previous} is now grey massing`).toContain(previous);
-      expect(r.modelMB).toBeLessThanOrEqual(r.ceilingMB);
+      if (!PUBLIC) {
+        expect(r.massing, `${previous} is now grey massing`).toContain(previous);
+        expect(r.modelMB).toBeLessThanOrEqual(r.ceilingMB);
+      }
       previous = code;
     }
 
@@ -206,14 +259,15 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone', tier: 'low' as 
     // A low-tier phone keeps only the area on screen resident (maxLod0), so there is nothing to pick there and the step is skipped, said out loud.
     {
       /* Make one: on a tier that prefetches by heading, drift toward E4's east edge (about 1 km, inside E4, so no crossing) and wait for F4's data to be held. */
-      if ((await report(page))!.resident.every((c) => c === 'E4') && (await report(page))!.tier !== 'low') {
+      if (!PUBLIC && (await report(page))!.resident.every((c) => c === 'E4') && (await report(page))!.tier !== 'low') {
         await page.evaluate(({ lon, lat }) => (window as unknown as { __obosStream: { map: { easeTo(o: unknown): void } } }).__obosStream.map.easeTo({ center: [lon, lat], duration: 1_500 }), { lon: AREA.E4.lon + 0.0150, lat: AREA.E4.lat });
         await expect.poll(async () => (await report(page))!.resident.length, { timeout: 60_000, message: 'a heading prefetch left a neighbour resident' }).toBeGreaterThan(1);
       }
       const r = (await report(page))!;
       const resident = r.resident.filter((c) => c !== r.displayed);
       console.log(`[walk] ${tag}: resident ${r.resident.join(',')} (displayed ${r.displayed}, tier ${r.tier})`);
-      if (resident.length === 0) console.log(`[walk] ${tag}: no other area is resident (tier ${r.tier}): resident-pick step skipped`);
+      if (PUBLIC) console.log(`[walk] ${tag}: public run - no resident read-out, the resident-pick step is the dev run's`);
+      else if (resident.length === 0) console.log(`[walk] ${tag}: no other area is resident (tier ${r.tier}): resident-pick step skipped`);
       else {
         const code = resident[0] as Code;
         await resetLoaderSeen(page);
@@ -230,7 +284,8 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone', tier: 'low' as 
     {
       const tier = (await report(page))!.tier;
       const rebuilds = () => page.evaluate(() => (window as unknown as { __obosStream: { timings(): { rebuilds: number } } }).__obosStream.timings().rebuilds);
-      if (tier !== 'low') {
+      if (PUBLIC) console.log('[walk] public run - no tier hook, the demotion step is the dev run\'s');
+      else if (tier !== 'low') {
         const before = await rebuilds();
         const shown = (await report(page))!.displayed;
         await page.evaluate(() => (window as unknown as { __obosStream: { setTier(t: string): void } }).__obosStream.setTier('low'));
@@ -243,7 +298,8 @@ for (const viewport of [{ width: 390, height: 844, tag: 'phone', tier: 'low' as 
     // the loader on screen: the picker sends the camera to an area with NOTHING resident (G5 when it is not, else the first that is not), under the held
     // network. A resident area opens inside the quiet window and must show no plate (that is the F1 fix), so the target is chosen from the report.
     const r0 = (await report(page))!;
-    const target = (['G5', 'F5', 'F4', 'E5'] as const).find((c) => !r0.resident.includes(c) && c !== r0.displayed)!;
+    /* public run: no resident read-out, so the farthest area from where the walk ended (E4 after the picker, F4-ish): I7 is five cells away, never prefetched */
+    const target = PUBLIC ? ('I7' as Code) : (['G5', 'F5', 'F4', 'E5'] as const).find((c) => !r0.resident.includes(c) && c !== r0.displayed)!;
     console.log(`[walk] ${tag}: loader target ${target} (resident ${r0.resident.join(',')}, displayed ${r0.displayed})`);
     fetched.hold.ms = 7_000;                                     // long enough that the shots below (slow on a busy machine) find the loader still up
     await resetLoaderSeen(page);
@@ -293,4 +349,39 @@ test('streaming walk, phone recording', async ({ browser }) => {
   await context.close();
   await video!.saveAs(`${SHOTS}/walk-phone.webm`);
   expect(thrown).toEqual([]);
+});
+
+/* PUBLIC MODE ONLY: the two doors that are not the walk. */
+test.describe('public mode', () => {
+  test.skip(!BASE || !PUBLIC, 'set OBOS_STREAM_URL to a PUBLIC_OBOS_STREAM=1 build and OBOS_STREAM_PUBLIC=1');
+  test.describe.configure({ timeout: 240_000 });
+
+  test('a shared link opens its area: ?area=F4 is F4 on first paint, with nothing else asked', async ({ page }) => {
+    const thrown: string[] = [];
+    page.on('pageerror', (error) => thrown.push(String(error)));
+    const fetched = await routeData(page, 0);
+    await watchLoader(page);
+    await page.goto(`${BASE}/heat-map/nl/amsterdam/canal-ring/?lab=1&area=F4`, { waitUntil: 'domcontentloaded' });
+    await arrived(page, 'F4', thrown, 'deep link', false);
+    expect(fetched.manifest.length).toBe(1);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(thrown).toEqual([]);
+  });
+
+  test('the kill switch: ?stream=0 is the classic single-area page - no picker, no manifest, nothing from R2, ?area= ignored', async ({ page }) => {
+    const thrown: string[] = [];
+    page.on('pageerror', (error) => thrown.push(String(error)));
+    const fetched = await routeData(page, 0);
+    await page.goto(`${BASE}/heat-map/nl/amsterdam/canal-ring/?stream=0&area=F4`, { waitUntil: 'domcontentloaded' });
+    await expect.poll(() => page.evaluate(() => document.getElementById('bcount')?.textContent ?? ''), { timeout: 90_000, message: 'Canal Ring draws' }).toMatch(/\d/);
+    await page.waitForTimeout(3_000);
+    expect(await page.locator('.si-chip').count(), 'no area picker').toBe(0);
+    expect(await page.evaluate(() => document.querySelector('#pname')?.textContent ?? ''), 'the header is Canal Ring').toContain('Canal');
+    expect(await page.evaluate(() => document.querySelector('#pname .obos-area-code')?.textContent ?? null)).toBeNull();
+    expect(fetched.manifest, 'the manifest is not read').toEqual([]);
+    expect(fetched.r2, 'nothing from R2').toEqual([]);
+    expect(fetched.canal.length, 'Canal Ring came from the page\'s origin').toBeGreaterThan(0);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    expect(thrown).toEqual([]);
+  });
 });
