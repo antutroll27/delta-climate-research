@@ -224,6 +224,8 @@ for (const [country, entry] of Object.entries(REGISTRY)) {
 
 /** The dev streaming build's pointer to the Amsterdam layer files on R2 (streaming/data-source.ts); same flat directory as the files it lists. */
 export const STREAM_MANIFEST = `${DATA}ams-r2-manifest.json`;
+/** The same for the per-area bundles (`.obosb`, streaming/area-bundle.ts): one object per area instead of six. Missing or malformed, the loader falls back to STREAM_MANIFEST's files. */
+export const STREAM_BUNDLE_MANIFEST = `${DATA}ams-r2-bundles.json`;
 
 /**
  * The artefact URLs of a SHEET of a streamed city, by area id: the same flat directory and file names as `paths()`, for an

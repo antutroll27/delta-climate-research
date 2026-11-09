@@ -92,6 +92,11 @@ function hex(bytes: ArrayBuffer): string {
   return out;
 }
 
+/** Can this runtime check a bundle? False without `crypto.subtle` (an insecure origin: a plain-http LAN preview). The loader then never downloads a bundle it could not verify. */
+export function bundleRuntimeSupported(): boolean {
+  return (globalThis as { crypto?: Crypto }).crypto?.subtle !== undefined;
+}
+
 function subtle(): SubtleCrypto {
   const s = (globalThis as { crypto?: Crypto }).crypto?.subtle;
   if (s === undefined) throw new AreaBundleError('unsupported-runtime', 'This page cannot check data integrity here: crypto.subtle needs a secure context (https or localhost).');
@@ -166,6 +171,8 @@ async function gunzip(stored: Uint8Array, limit: number, section: string): Promi
 export interface ReadOptions {
   /** The area this bundle must be for; a different id is `area-mismatch` (a CDN serving the wrong file under the right name). */
   readonly expectAreaId?: string;
+  /** The content hash the manifest pins for this bundle; a bundle with another one (a stale or swapped object under the right name) is `content-hash-mismatch`. null = not pinned. */
+  readonly expectContentHash?: string | null;
   /** Sections that must be present; a missing one is `missing-section`. Names not in `wanted` are not decoded, but are still required to be listed. */
   readonly required?: readonly string[];
 }
@@ -198,6 +205,9 @@ export async function readBundleContainer(input: ArrayBuffer | Uint8Array, wante
   }
   if (await contentHashOf(header.areaId, header.sections) !== header.contentHash) {
     throw new AreaBundleError('content-hash-mismatch', 'The section table does not match the bundle\'s content hash.');
+  }
+  if (options.expectContentHash != null && header.contentHash !== options.expectContentHash) {
+    throw new AreaBundleError('content-hash-mismatch', `The bundle for ${header.areaId} is not the one the manifest names (its content hash differs).`);
   }
   const byName = new Map(header.sections.map((s) => [s.name, s]));
   for (const name of options.required ?? []) {

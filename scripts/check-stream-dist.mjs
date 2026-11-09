@@ -18,13 +18,13 @@ const dist = resolve(distArg ?? 'dist');
 
 /** Strings that exist only because streaming is compiled in. */
 const STREAMING = [
-  'obos-city-data', 'ams-r2-manifest', 'sheet-worker', 'halo-sim', 'obos-area-code', 'data-streamed-note', 'data-unavailable',
+  'obos-city-data', 'ams-r2-manifest', 'ams-r2-bundles', 'obos-area-bundle', 'sheet-worker', 'halo-sim', 'obos-area-code', 'data-streamed-note', 'data-unavailable',
   'has not been run for this one', 'Data receipts are not available for', 'Not available for this area yet',
 ];
 /** Strings that exist only because the DEV tools are compiled in. */
 const DEV_TOOLS = ['streamtier', '__obosStream', 'jsHeapMB', 'glBufferMB', 'glTextureMB', 'canvas swap chain', 'streaming: '];
 /** Chunk names (Rollup names a dynamic chunk after its source file). */
-const STREAMING_CHUNKS = /(city-stream|page-wiring|sheet-worker|gl-meter|area-surfaces|halo-sim|sheet-manager|loader-view)/;
+const STREAMING_CHUNKS = /(city-stream|area-bundle|page-wiring|sheet-worker|gl-meter|area-surfaces|halo-sim|sheet-manager|loader-view)/;
 const DEV_CHUNKS = /gl-meter/;
 
 function* walk(dir) {
@@ -44,13 +44,16 @@ const problems = [];
 const expect = (ok, message) => { if (!ok) problems.push(message); };
 
 const MANIFEST = 'heat-map/data/ams-r2-manifest.json';
+const BUNDLE_MANIFEST = 'heat-map/data/ams-r2-bundles.json';
 if (mode === 'plain') {
   for (const s of STREAMING) expect(where(s).length === 0, `streaming string "${s}" is in ${where(s).join(', ')}`);
   for (const s of DEV_TOOLS) expect(where(s).length === 0, `dev-tool string "${s}" is in ${where(s).join(', ')}`);
   expect(!files.some((f) => STREAMING_CHUNKS.test(f)), `streaming chunks in the plain build: ${files.filter((f) => STREAMING_CHUNKS.test(f)).join(', ')}`);
   expect(!files.includes(MANIFEST), 'the plain build carries the R2 manifest (prune-dist-assets should have removed it)');
+  expect(!files.includes(BUNDLE_MANIFEST), 'the plain build carries the R2 bundle manifest (prune-dist-assets should have removed it)');
 } else {
   expect(files.includes(MANIFEST), 'the streaming build lost its manifest: every area but Canal Ring would fail');
+  expect(files.includes(BUNDLE_MANIFEST), 'the streaming build lost its bundle manifest: every area would be six requests instead of one');
   expect(files.some((f) => /city-stream/.test(f)) && files.some((f) => /page-wiring/.test(f)), 'the streaming chunks are missing');
 }
 if (mode === 'public') {

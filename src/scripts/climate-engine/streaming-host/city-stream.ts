@@ -12,6 +12,11 @@
  * own per-ward caches (hooks.installBundle), so the staging, the atomic commit and the rollback are the ones every other
  * city uses. What differs is that nothing is parsed, rasterised or extruded on the main thread: the worker did it.
  *
+ * ONE REQUEST PER AREA. An area's six layers are one bundle object (`<area>.obosb`, streaming/area-bundle.ts): `getBundle` fetches it once (memoised, so the
+ * ward text, the surface, the vector layers and the terrain all read the same download) and parses it; the six per-file URLs (`sheetUrls`) are the FALLBACK, used when
+ * the bundle manifest is unreadable or lacks the area, when the bundle's format version is newer than this page reads, and when the runtime cannot verify a bundle
+ * (no crypto.subtle). A bundle that arrives corrupt or cut short is fetched ONCE more, past the HTTP cache; after that it is the area's failed state, with Retry.
+ *
  * ARTEFACTS TODAY. The pipeline ships one set of files per sheet and no `-lod1.bin` or `-halo.bin` yet (P2c). So a
  * neighbour's massing and a sheet's halo are DERIVED here from the neighbour's own ward JSON and surface PNG, in the worker.
  * That fetches about 0.7 MB per neighbour instead of the 50-100 KB a baked file would; the file format is the same
@@ -31,7 +36,8 @@ import type { TileStage } from '../streaming/loader-model.ts';
 import { AMSTERDAM_TOPOLOGY as TOPOLOGY, DIRECTIONS, type Direction } from '../streaming/sheet-topology.ts';
 import type { NetworkClass } from '../streaming/sheet-budgets.ts';
 import type { AreaPaths } from '../scope/paths.ts';
-import { ensureStreamData, streamedAreaUrls } from '../streaming/data-source.ts';
+import { AreaBundleError, bundleRuntimeSupported, parseAreaBundle, type AreaBundle } from '../streaming/area-bundle.ts';
+import { bundleTarget, ensureStreamData, streamedAreaUrls } from '../streaming/data-source.ts';
 import { sheetByCode, type SheetCode } from '../scope/sheets.ts';
 import type { Prepared, SheetWorker } from './sheet-worker-client.ts';
 import type { MassingMesh } from '../streaming/prism-mesh.ts';
@@ -179,6 +185,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
   };
   const tap = (c: ManagerCommand): void => { try { hooks.command?.(c); } catch (error) { hooks.warn('page furniture failed', error); } };
   const stage = (code: SheetCode, s: TileStage): void => { try { hooks.stage?.(code, s); } catch (error) { hooks.warn('page furniture failed', error); } };
+  const bundleMemo = new Memo<Promise<AreaBundle | null>>(14);
   const texts = new Memo<Promise<{ ward: string; roads: string | null }>>(14);
   const surfaces = new Memo<Promise<WardSurface>>(14);
   const prepares = new Memo<Promise<Prepared>>(4);
@@ -208,8 +215,8 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
 
   // ── fetch helpers ───────────────────────────────────────────────────────────
 
-  const get = async (url: string, job: { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<Response> => {
-    const response = await fetch(url, { signal: job.signal, priority: job.priority } as RequestInit);
+  const get = async (url: string, job: { signal?: AbortSignal; priority: 'high' | 'low' }, cache?: RequestCache): Promise<Response> => {
+    const response = await fetch(url, { signal: job.signal, priority: job.priority, ...(cache === undefined ? {} : { cache }) } as RequestInit);
     if (!response.ok) throw new Error(`${url}: ${response.status}`);
     return response;
   };
@@ -218,8 +225,34 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
     catch (error) { if (job.signal?.aborted) throw error; return fallback; }
   };
 
+  /** Set once a bundle shows that bundles cannot be used here (a newer format, no crypto.subtle): every later area goes straight to the per-file URLs. */
+  let bundlesOff = false;
+  /** The area's bundle, parsed and verified; null = this area is read from its six per-file URLs instead (see the header). One fetch per area while it is held. */
+  const getBundle = (code: SheetCode, job: { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<AreaBundle | null> =>
+    memoised(bundleMemo, code, async () => {
+      const id = sheetByCode(code)!.id;
+      const target = bundlesOff ? null : bundleTarget(id);
+      if (target === null) return null;
+      if (!bundleRuntimeSupported()) { bundlesOff = true; return null; }
+      for (let attempt = 0; ; attempt++) {
+        const bytes = await (await get(target.url, job, attempt === 0 ? undefined : 'reload')).arrayBuffer();
+        try { return await parseAreaBundle(bytes, { expectAreaId: id, expectContentHash: target.contentHash }); }
+        catch (error) {
+          if (!(error instanceof AreaBundleError)) throw error;
+          if (error.code === 'unsupported-version' || error.code === 'unsupported-runtime') { bundlesOff = true; hooks.warn(`bundles are not usable here (${error.code}); reading the per-file layers`); return null; }
+          if (attempt === 0 && (error.code === 'sha-mismatch' || error.code === 'truncated')) continue;      // a bad edge-cached copy is the usual cause: one retry past the cache
+          throw error;
+        }
+      }
+    });
+
+  const terrainOf = (b: AreaBundle): TerrainField | null => { try { return b.terrain === null ? null : asTerrainField(b.terrain); } catch { return null; } };
+  const treesOf = (b: AreaBundle): TreesFile | null => { try { return b.trees === null ? null : asTreesFile(b.trees); } catch { return null; } };
+
   const getTexts = (code: SheetCode, job: LoadJob | { signal?: AbortSignal; priority: 'high' | 'low' }): Promise<{ ward: string; roads: string | null }> =>
     memoised(texts, code, async () => {
+      const bundle = await getBundle(code, job);
+      if (bundle !== null) return { ward: bundle.ward, roads: bundle.roads };
       const urls = sheetUrls(code);                                   // throws while the data manifest is unavailable: a rejection is not remembered (R4)
       const [ward, roads] = await Promise.all([
         get(urls.ward, job).then((r) => r.text()),
@@ -232,7 +265,8 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
     memoised(surfaces, code, async () => {
       const registered = hooks.registeredSurface(code);
       if (registered !== null) return registered;
-      const blob = await (await get(sheetUrls(code).surface, job)).blob();
+      const bundle = await getBundle(code, job);
+      const blob = bundle !== null ? bundle.surface : await (await get(sheetUrls(code).surface, job)).blob();
       const raster = await decodeSurfaceBlob(blob, code);
       if (raster === null) return { means: { fvc: 0.25, albedo: 0.2 }, surface: null };
       /* THE EXPORTER'S MEANS, from the area's surface-meta row (P2c), checked against the texture exactly as a registered area's are
@@ -259,20 +293,23 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
 
   // ── the three levels ────────────────────────────────────────────────────────
 
-  async function loadLod0(job: LoadJob): Promise<void> {
+  /** The three vector layers of a sheet: out of its bundle when it has one, else from their own files (each optional: a missing or unreadable one is its fallback). */
+  async function getVector(job: LoadJob): Promise<readonly [TerrainField | null, WaterData, TreesFile | null]> {
+    const bundle = await getBundle(job.sheet, job);
+    if (bundle !== null) return [terrainOf(bundle), bundle.water ?? { polys: [] }, treesOf(bundle)];
     const urls = sheetUrls(job.sheet);
+    return Promise.all([
+      optional<TerrainField | null>(urls.terrain, job, null, async (r) => asTerrainField(await r.json())),
+      optional<WaterData>(urls.water, job, { polys: [] }, async (r) => (await r.json()) as WaterData),
+      optional<TreesFile | null>(urls.trees, job, null, async (r) => asTreesFile(await r.json())),
+    ]);
+  }
+
+  async function loadLod0(job: LoadJob): Promise<void> {
     const done = <T>(s: TileStage) => (v: T): T => { if (!job.signal.aborted) stage(job.sheet, s); return v; };      // the loader's stages are the real ones, as each lands
-    const [prepared, surface, t, terrain, water, trees] = await Promise.all([
+    const [prepared, surface, t, [terrain, water, trees]] = await Promise.all([
       getPrepared(job.sheet, job).then(done('ward')), getSurface(job.sheet, job).then(done('surface')), getTexts(job.sheet, job),
-      ...(() => {
-        const vector = [
-          optional<TerrainField | null>(urls.terrain, job, null, async (r) => asTerrainField(await r.json())),
-          optional<WaterData>(urls.water, job, { polys: [] }, async (r) => (await r.json()) as WaterData),
-          optional<TreesFile | null>(urls.trees, job, null, async (r) => asTreesFile(await r.json())),
-        ] as const;
-        void Promise.all(vector).then(done('vector'), () => undefined);
-        return vector;
-      })(),
+      getVector(job).then(done('vector')),
     ]);
     if (job.signal.aborted) throw new DOMException('aborted', 'AbortError');
     terrains.set(job.sheet, terrain);
@@ -450,7 +487,9 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
   /** The terrain of a sheet that has been loaded (the worker needs it for ground heights); null where it has none. */
   async function loadedTerrain(code: SheetCode): Promise<TerrainField | null> {
     if (terrains.has(code)) return terrains.get(code) ?? null;
-    const t = await optional<TerrainField | null>(sheetUrls(code).terrain, { priority: 'high' }, null, async (r) => asTerrainField(await r.json()));
+    const job = { priority: 'high' } as const;
+    const bundle = await getBundle(code, job).catch(() => null);        // like the per-file read below, a layer that cannot be read is no terrain
+    const t = bundle !== null ? terrainOf(bundle) : await optional<TerrainField | null>(sheetUrls(code).terrain, job, null, async (r) => asTerrainField(await r.json()));
     terrains.set(code, t);
     return t;
   }
@@ -513,7 +552,7 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
       executor.dispose();
       worker.dispose();
       hooks.relief()?.setNeighbours?.([]);
-      texts.clear(); surfaces.clear(); prepares.clear(); rims.clear(); halos.clear();
+      bundleMemo.clear(); texts.clear(); surfaces.clear(); prepares.clear(); rims.clear(); halos.clear();
     },
   };
 }

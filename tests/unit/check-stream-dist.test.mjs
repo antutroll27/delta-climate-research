@@ -20,18 +20,23 @@ function run(mode, files) {
     return { code: r.status, out: r.stdout + r.stderr };
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
-const STREAMING = { 'heat-map/data/ams-r2-manifest.json': '{}', '_astro/city-stream.a.js': 'x', '_astro/page-wiring.b.js': 'y' };
+const STREAMING = { 'heat-map/data/ams-r2-manifest.json': '{}', 'heat-map/data/ams-r2-bundles.json': '{}', '_astro/city-stream.a.js': 'x', '_astro/page-wiring.b.js': 'y' };
 
 test('plain: a clean dist passes; a streaming string, a streaming chunk or the manifest fails it', () => {
   assert.equal(run('plain', { '_astro/app.js': 'console.log(1)' }).code, 0);
   assert.equal(run('plain', { '_astro/app.js': 'fetch("https://obos-city-data.example")' }).code, 1);
   assert.equal(run('plain', { '_astro/app.js': 'x', '_astro/city-stream.z.js': 'y' }).code, 1);
   assert.equal(run('plain', { '_astro/app.js': 'x', 'heat-map/data/ams-r2-manifest.json': '{}' }).code, 1);
+  assert.equal(run('plain', { '_astro/app.js': 'x', 'heat-map/data/ams-r2-bundles.json': '{}' }).code, 1, 'the bundle manifest too');
+  assert.equal(run('plain', { '_astro/app.js': 'x', '_astro/area-bundle.q.js': 'y' }).code, 1, 'and the bundle reader chunk');
+  assert.equal(run('plain', { '_astro/app.js': 'fetch("/heat-map/data/ams-r2-bundles.json")' }).code, 1, 'and its URL');
 });
 
 test('public: the streaming code is required, and each dev tool fails it', () => {
   assert.equal(run('public', { ...STREAMING, '_astro/app.js': 'x' }).code, 0);
   assert.equal(run('public', { '_astro/app.js': 'x' }).code, 1, 'no manifest, no chunks');
+  const { 'heat-map/data/ams-r2-bundles.json': _gone, ...noBundles } = STREAMING;
+  assert.equal(run('public', { ...noBundles, '_astro/app.js': 'x' }).code, 1, 'no bundle manifest');
   for (const dev of ['streamtier', 'window.__obosStream=1', 'jsHeapMB', 'glBufferMB']) assert.equal(run('public', { ...STREAMING, '_astro/app.js': dev }).code, 1, dev);
   assert.equal(run('public', { ...STREAMING, '_astro/app.js': 'x', '_astro/gl-meter.q.js': 'z' }).code, 1);
 });
