@@ -9,7 +9,7 @@ import { join } from 'node:path';
    live only in tokens.css (stylesheets) or symbols.ts (marks), each at most once. */
 const STYLES = 'src/styles/obos-v2';
 const REQUIRED = ['tokens.css', 'atoms.css', 'shell.css', 'screens.css', 'phone.css', 'print.css',
-  ...['overview', 'heat', 'mapstack', 'building', 'explore', 'scenarios', 'solar', 'air', 'weather', 'methods', 'compare', 'brief'].map((p) => `screens/${p}.css`),
+  ...['overview', 'heat', 'mapstack', 'building', 'explore', 'scenarios', 'solar', 'air', 'weather', 'methods', 'compare', 'brief', 'pill-controls'].map((p) => `screens/${p}.css`),
   'print/solar.css', 'print/brief.css'];
 const SHEETS = readdirSync(STYLES, { recursive: true }).map(String).filter((f) => f.endsWith('.css') && !f.split('/').pop().startsWith('._')).sort();
 const COMPONENTS = 'src/components/ClimateEngine/v2';

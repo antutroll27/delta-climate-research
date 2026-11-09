@@ -5,16 +5,24 @@
    dimmed outline.
    MOTION: only transform and opacity ever animate. A hover or press is a ::before veil whose OPACITY fades (a colour transition would repaint).
    Reduced motion removes every transition and animation (atoms.css does it globally; the block at the end repeats it so this file stands alone).
+   THE CHIP'S LOOK (the keycap, the dot-matrix caption, the neon and the attention animations, and their keyframes) is screens/pill-controls.css, which loads on every v2 page.
    TO LOAD IT: add `@import './screens/sheet-index.css';` to screens.css (one line; deliberately not done in this phase, so no flag-off page changes). */
 
-html[data-ui="v2"] .obos-v2 .si { position: relative; display: inline-block; font-family: var(--sans); }
-html[data-ui="v2"] .obos-v2 .si .si-chip { height: 34px; padding: 0 12px 0 13px; gap: 8px; font-size: 12.5px; color: var(--ink-1); }
-html[data-ui="v2"] .obos-v2 .si .si-chip-code { font-weight: 700; letter-spacing: 0.03em; font-variant-numeric: tabular-nums; }
-html[data-ui="v2"] .obos-v2 .si .si-chip-name { font-weight: 400; color: var(--ink-2); }
-html[data-ui="v2"] .obos-v2 .si .si-chip-name:empty { display: none; }
-html[data-ui="v2"] .obos-v2 .si .si-chev { transition: transform .24s var(--ease); color: var(--ink-3); }
-html[data-ui="v2"] .obos-v2 .si[data-open="true"] .si-chev { transform: rotate(180deg); }
-html[data-ui="v2"] .obos-v2 .si[data-pending] .si-chip-code { animation: si-pulse 1.1s ease-in-out infinite; }
+html[data-ui="v2"] .obos-v2 .si { position: relative; display: inline-block; max-width: 260px; font-family: var(--sans); }
+/* THE CHIP (approved preview 14, variant I accent): ONE button = a readout slot [drawn dot-matrix "AREA" / the area NAME + its code as a mono keycap] and a square accent key with the dotted-grid picture.
+   58 px tall (4 px padding + a 1 px edge = a 48 px key), 12 px radius; the keycap, caption, neon and attention animations are in screens/pill-controls.css. */
+html[data-ui="v2"] .obos-v2 .si .si-chip { position: relative; display: inline-flex; align-items: stretch; gap: 8px; max-width: 100%; height: 58px; padding: 4px; border: 1px solid var(--glass-border); border-radius: 12px; font-size: 12.5px; text-align: left; white-space: nowrap; color: var(--ink-1); }
+html[data-ui="v2"] .obos-v2 .si .si-slot { flex: 1 1 auto; min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 0 12px; }
+html[data-ui="v2"] .obos-v2 .si .si-lab { display: block; line-height: 0; color: var(--ink-2); }
+html[data-ui="v2"] .obos-v2 .si .si-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+html[data-ui="v2"] .obos-v2 .si .si-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 15px; font-weight: 600; line-height: 1.25; color: var(--ink-1); }
+/* the code: a small mono keycap, second after the name */
+html[data-ui="v2"] .obos-v2 .si .si-chip-code { flex: none; align-self: center; padding: 3px 5px 2px; border: 1px solid var(--line); border-radius: 5px; background: color-mix(in oklch, var(--ink-1) 12%, var(--glass-fill-strong)); box-shadow: 0 2px 0 var(--pc-ledge, var(--line));
+  font: 400 11px/1 var(--mono); letter-spacing: 0.06em; color: var(--ink-1); font-variant-numeric: tabular-nums; }
+html[data-ui="v2"] .obos-v2 .si .si-chip-code[hidden] { display: none; }
+html[data-ui="v2"] .obos-v2 .si .si-act { flex: none; align-self: center; display: block; }
+/* the focus ring is the global v2 one; it keeps the chip's own 12 px corner (the global rule's 8 px would reshape it) */
+html[data-ui="v2"] .obos-v2 .si .si-chip:focus-visible { border-radius: 12px; }
 
 /* ── the panel: a popover under the chip on a desktop ── */
 html[data-ui="v2"] .obos-v2 .si .si-panel { position: absolute; z-index: 30; top: calc(100% + 8px); left: 0; width: 640px; max-width: calc(100vw - 32px); padding: 14px 16px 14px;
@@ -65,7 +73,7 @@ html[data-ui="v2"] .obos-v2 .si .si-list { display: none; }
 
 /* ── a phone (and a phone on its side): the panel is a bottom sheet over a scrim; the list joins the grid ── */
 @media (max-width: 699px), (pointer: coarse) and (max-height: 560px) {
-  html[data-ui="v2"] .obos-v2 .si .si-chip { height: 40px; }
+  /* the chip keeps its 58 px height on a phone (a 48 px key: well over the 44 px tap target) */
   html[data-ui="v2"] .obos-v2 .si .si-scrim { position: fixed; inset: 0; z-index: 29; background: var(--scrim-drawer); opacity: 0; transition: opacity .26s var(--ease); }
   html[data-ui="v2"] .obos-v2 .si[data-open="true"] .si-scrim { opacity: 1; }
   html[data-ui="v2"] .obos-v2 .si .si-panel { position: fixed; z-index: 30; top: auto; left: 0; right: 0; bottom: 0; width: auto; max-width: none; max-height: 86%; overflow-y: auto; overscroll-behavior: contain;

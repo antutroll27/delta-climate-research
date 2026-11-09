@@ -30,6 +30,7 @@ import {
   formatCount, isArrow, withDrawnCounts, type IndexExtras, keyAction, selectable, type IndexCell, type IndexModel, type IndexViewState, type KeyAction,
 } from '../streaming/sheet-index.ts';
 import { loadIndexExtras } from './sheet-index-data.ts';
+import { SPARK_HTML, areaKeyIconHtml, dotCaptionNode } from '../shell/dot-caption.ts';
 
 export interface SheetIndexOptions {
   /** The manager's `select`. Called with a shipping sheet code, never with a skipped or outside one. */
@@ -54,7 +55,6 @@ export interface SheetIndexHandle {
   destroy(): void;
 }
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 const PHONE_QUERY = '(max-width: 699px), (pointer: coarse) and (max-height: 560px)';   // the query phone.css and phone-v2.ts use
 const CLOSE_MS = 260;
 let serial = 0;
@@ -65,17 +65,6 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent?:
   if (text !== undefined) n.textContent = text;
   parent?.appendChild(n);
   return n;
-}
-
-function chevron(): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 12 12'); svg.setAttribute('width', '12'); svg.setAttribute('height', '12'); svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('class', 'si-chev');
-  const p = document.createElementNS(SVG_NS, 'path');
-  p.setAttribute('d', 'M2.5 4.5 6 8l3.5-3.5'); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'currentColor'); p.setAttribute('stroke-width', '1.5');
-  p.setAttribute('stroke-linecap', 'round'); p.setAttribute('stroke-linejoin', 'round');
-  svg.appendChild(p);
-  return svg;
 }
 
 /** "21,342 buildings", or empty when the drawn count is not known (the lattice count is never shown). */
@@ -114,9 +103,21 @@ export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): She
   chip.setAttribute('aria-haspopup', 'dialog');
   chip.setAttribute('aria-expanded', 'false');
   chip.setAttribute('aria-controls', `${uid}-panel`);
-  const chipCode = el('b', 'si-chip-code', chip);
-  const chipName = el('span', 'si-chip-name', chip);
-  chip.appendChild(chevron());
+  // One button. Left: a readout slot (the drawn dot-matrix "AREA", its words in a visually hidden span, then the area NAME and its code as a small mono keycap).
+  // Right: the square accent key with the dotted-grid picture, aria-hidden. Everything inside is decoration for the one accessible name (the aria-label in paint()).
+  const slot = el('span', 'si-slot', chip);
+  const lab = el('span', 'si-lab', slot);
+  el('span', 'pc-sr', lab, 'Area');
+  lab.appendChild(dotCaptionNode('AREA', { variant: 'a' }));
+  const line = el('span', 'si-line', slot);
+  const chipName = el('span', 'si-chip-name', line);
+  const chipCode = el('b', 'si-chip-code', line);
+  const act = el('span', 'si-act', chip);
+  act.setAttribute('aria-hidden', 'true');
+  const key = el('span', 'pc-key is-accent', act);
+  const cap = el('span', 'pc-cap', key);
+  cap.insertAdjacentHTML('beforeend', areaKeyIconHtml());
+  for (const k of ['is-sched', 'is-on']) el('span', `pc-spark ${k}`, key).insertAdjacentHTML('beforeend', SPARK_HTML);
 
   const scrim = el('div', 'si-scrim', root);
   scrim.hidden = true;
@@ -231,8 +232,10 @@ export function mountSheetIndex(host: HTMLElement, opts: SheetIndexOptions): She
   function paint(): void {
     const cur = state.current !== null ? model.byCode.get(state.current) ?? null : null;
     const pend = state.pending !== null ? model.byCode.get(state.pending) ?? null : null;
-    chipCode.textContent = cur?.code ?? '··';
-    chipName.textContent = cur !== null && cur.name !== cur.code ? cur.name : '';
+    const named = cur !== null && cur.name !== cur.code;
+    chipName.textContent = named ? cur.name : cur?.code ?? '··';   // the NAME leads; a code-only area shows its code there instead
+    chipCode.textContent = named ? cur.code : '';
+    chipCode.hidden = !named;
     chip.setAttribute('aria-label', cur === null ? 'Choose an area' : `Area ${cur.code}${cur.name === cur.code ? '' : `, ${cur.name}`}. Choose another area`);
     root.toggleAttribute('data-pending', pend !== null);
     chip.setAttribute('aria-busy', pend !== null ? 'true' : 'false');
