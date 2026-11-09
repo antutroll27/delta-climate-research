@@ -51,8 +51,9 @@ function rig({ holdMs = 5, fail = () => false, hold = () => null, dispatchedThro
     writer: { header() {}, areaSelect: (c) => log.areaSelect.push(c), address() {} },
   });
   let committed = null;
+  let tierNow = 'full';       // the page sets its tier BEFORE it tells the controller (heat-map-app `setStreamTier`)
   const hooks = {
-    tier: () => 'full', network: () => 'fast', relief: () => ({ setNeighbours() {}, setSeamFade() {} }),
+    tier: () => tierNow, network: () => 'fast', relief: () => ({ setNeighbours() {}, setSeamFade() {} }),
     registeredSurface: () => Promise.resolve({ means: { fvc: 0.2, albedo: 0.2 }, surface: null }),
     installBundle() {}, dropBundle() {},
     async showSheet(code, prepared, ao, first, afterCommit, fly = false, rebuild = false) {
@@ -68,7 +69,7 @@ function rig({ holdMs = 5, fail = () => false, hold = () => null, dispatchedThro
   const timer = setInterval(() => {
     if (isVisible(loaderModel.state(), clock())) log.visible.push({ at: Math.round(clock()), committed, sheet: loaderModel.state().sheet, mode: loaderModel.state().mode });
   }, 10);
-  return { stream, log, loaderModel, committed: () => committed, stop: () => { clearInterval(timer); stream.dispose(); globalThis.fetch = realFetch; } };
+  return { stream, log, loaderModel, setTier: (t) => { tierNow = t; }, committed: () => committed, stop: () => { clearInterval(timer); stream.dispose(); globalThis.fetch = realFetch; } };
 }
 
 async function openE4(r) {
@@ -221,6 +222,7 @@ test('F3: a tier demotion rebuilds the open area through showSheet as a REBUILD 
   try {
     await openE4(r);
     const hooksShow = r.log.show.length;
+    r.setTier('balanced');
     r.stream.tierChanged('balanced');
     await until(() => r.log.show.length > hooksShow, 'the rebuild to reach showSheet');
     const last = r.log.show.at(-1);

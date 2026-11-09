@@ -336,14 +336,14 @@ export function createCityStream(hooks: CityStreamHooks, worker: SheetWorker, op
 
   // ── the ports ───────────────────────────────────────────────────────────────
 
-  /** Build the open sheet's mesh again in the worker at `tier` and show it through the page's own commit. 
-   *  KNOWN LIMITATION (INT re-audit R6, accepted): two rebuilds in flight (two demotions in quick succession) can commit out of order, leaving the higher tier on
-   *  screen while the manager records the lower one. Demotions are spaced, so it is rare; the fix, when wanted, is to drop a result whose tier is no longer `hooks.tier()`. */
+  /** Build the open sheet's mesh again in the worker at `tier` and show it through the page's own commit.
+   *  A RESULT WHOSE TIER IS NO LONGER THE DEVICE'S IS DROPPED (INT re-audit R6, public audit S3): two demotions in quick succession start two rebuilds, and the
+   *  slower, higher-tier one used to commit last, leaving more mesh on screen than the tier allows while the manager recorded the lower one. */
   function rebuildOpen(code: SheetCode, tier: ExploreDeviceTier): void {
     void (async () => {
       const t = await getTexts(code, { priority: 'high' });
       const built = await worker.mesh(code, t.ward, tier, await loadedTerrain(code), AO_REQUEST);
-      if (disposed || open !== code) return;
+      if (disposed || open !== code || hooks.tier() !== tier) return;
       await hooks.showSheet(code, built.mesh, built.ao, false, () => { syncNeighbours(); syncSeams(); }, false, true);
     })().catch((error) => hooks.warn(`could not rebuild sheet ${code}`, error));
   }
