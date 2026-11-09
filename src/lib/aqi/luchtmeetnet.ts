@@ -61,7 +61,7 @@ import { LKI_MODEL_HOUR_MS, lkiBand, lkiClass } from './lki.ts';
 import type { LocalAirPayload, LocalCredit, LocalStation, NlComponent, NlModel, NlReading, NotReportingReason } from './local-types.ts';
 import { LOCAL_SCHEMA } from './local-types.ts';
 import { LOCAL_LIVE_MS } from './local-areas.ts';
-import { cooling, COOLDOWN_MS, currentModelRow, modelStale, newNlCache, stationFresh, type ModelRun, type NlCache, type StationRows } from './nl-cache.ts';
+import { cooling, COOLDOWN_MS, MEAS_RETRY_MS, currentModelRow, modelStale, newNlCache, stationFresh, type ModelRun, type NlCache, type StationRows } from './nl-cache.ts';
 import { CANAL_RING, nlLadder } from './nl-stations.ts';
 
 export const LM_BASE = 'https://api.luchtmeetnet.nl/open_api';
@@ -212,7 +212,7 @@ export interface AmsterdamDeps {
 }
 
 /**
- * One Luchtmeetnet request. During the cooldown none is made. A 429 starts the cooldown for every caller and is logged (the path, never the
+ * One Luchtmeetnet request. During the cooldown none is made. A 429 (or a 403, which is how a fair-use block may look) starts the cooldown for every caller and is logged (the path, never the
  * query); the error is rethrown so the caller treats the source as unreadable. The request is NOT tied to the caller's signal (a shared read
  * must not be poisoned by one caller going away): `getText` has its own timeout, and a caller stops WAITING with `waitFor`.
  */
@@ -221,9 +221,9 @@ async function lmGet(url: string, d: AmsterdamDeps, nl: NlCache): Promise<string
   try {
     return await getText(url, d.fetch);
   } catch (e) {
-    if (e instanceof SourceError && e.status === 429) {
+    if (e instanceof SourceError && (e.status === 429 || e.status === 403)) {
       nl.coolUntil = d.now.getTime() + COOLDOWN_MS;
-      console.error('luchtmeetnet 429', url.split('?')[0], `cooling down ${COOLDOWN_MS / 1000} s`);
+      console.error(`luchtmeetnet ${e.status}`, url.split('?')[0], `cooling down ${COOLDOWN_MS / 1000} s`);
     }
     throw e;
   }
@@ -249,8 +249,14 @@ async function readStation(id: string, d: AmsterdamDeps, nl: NlCache, prev: Stat
   if (top && at - top.endMs <= LIVE_MS) {
     /* the same newest hour as the last read: its substances are already in hand (a station being looked at every minute for a due hour costs one request, not two) */
     if (prev?.measFor === top.endMs) return { at, lki, meas: prev.meas, measFor: top.endMs };
-    try { meas = parseMeasurements(await lmGet(measurementsUrl(id, d.now), d, nl), id, d.now); } catch { /* the LKI stands without the substances beside it */ }
-    return { at, lki, meas, measFor: top.endMs };
+    /* a read that FAILED is not "read": it is tried again, but not within MEAS_RETRY_MS of the failure (the budget) */
+    const failed = prev?.measFailed;
+    if (failed?.for === top.endMs && at - failed.at < MEAS_RETRY_MS) return { at, lki, meas: [], measFailed: failed };
+    try {
+      meas = parseMeasurements(await lmGet(measurementsUrl(id, d.now), d, nl), id, d.now);
+      return { at, lki, meas, measFor: top.endMs };
+    } catch { /* the LKI stands without the substances beside it */ }
+    return { at, lki, meas: [], measFailed: { for: top.endMs, at } };
   }
   return { at, lki, meas };
 }
@@ -331,6 +337,7 @@ export async function readAmsterdam(area: string, d: AmsterdamDeps): Promise<Loc
   let answered = false;
   let newestSeen: number | null = null;
   for (let i = 0; i < ladder.length; i++) {
+    if (d.signal?.aborted) break; // the caller has gone: walking on would only spend requests
     const { ref, station } = ladder[i]!;
     let rows: StationRows;
     try { rows = await waitFor(stationRows(ref.id, d, nl), d.signal); } catch { continue; }

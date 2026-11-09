@@ -77,3 +77,12 @@ Per instance only: N warm instances multiply it. The 31 streamed ids are additio
 The first version cached the chosen row inside the area payload for 10 minutes and the judge dropped it when its hour ended, so for up to ~20 minutes after :00 the card
 had no line. Now the whole run is cached and the row is chosen by the request's clock, so the line changes hour exactly at the boundary; it is absent only when the run
 has no row for the current hour (then it is re-read, at most once per 5 minutes). The CDN header is capped at the end of the model's hour.
+
+## 6. Re-audit fixes
+
+* A failed `/measurements` read is no longer recorded as "read for this hour": it is retried no sooner than every 5 minutes (`MEAS_RETRY_MS`), so one 500 hides the substances for
+  at most ~5 minutes instead of up to ~1 h 20 min. Busiest 5 minutes with `/measurements` failing every time: 56 (hour due) and 40 (healthy). New designed ceiling 74
+  (6 stations at one `/lki` read a minute = 30, their substance reads and failed-read retries 12, 32 model locations once = 32); measured worst case still 62.
+* A 403 from Luchtmeetnet starts the same cooldown as a 429 (a fair-use block may look like either; a 503 is an outage and does not).
+* A caller that has gone away stops walking the ladder and cannot poison a shared read (tested).
+* Deploy note: `PUBLIC_OBOS_STREAM_DEV=1` must be set at function RUN time as well as build time for the API to serve the streamed ids.

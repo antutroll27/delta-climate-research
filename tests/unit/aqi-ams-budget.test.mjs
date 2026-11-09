@@ -6,7 +6,7 @@ import { AMSTERDAM_SHEETS, AMSTERDAM_SHEET_IDS } from '../../src/data/sheets/ams
 import { LOCAL_LIVE_MS } from '../../src/lib/aqi/local-areas.ts';
 import { liveCacheControl, newLocalCache, streamingEnabled } from '../../src/lib/aqi/local-handler.ts';
 import { LKI_MODEL_HOUR_MS } from '../../src/lib/aqi/lki.ts';
-import { COOLDOWN_MS, MODEL_RETRY_MS, MODEL_RUN_MAX_MS, NEGATIVE_MS, STATION_TTL_MS, currentModelRow, modelStale, stationFresh } from '../../src/lib/aqi/nl-cache.ts';
+import { COOLDOWN_MS, MEAS_RETRY_MS, MODEL_RETRY_MS, MODEL_RUN_MAX_MS, NEGATIVE_MS, STATION_TTL_MS, currentModelRow, modelStale, stationFresh } from '../../src/lib/aqi/nl-cache.ts';
 import { nlLadder } from '../../src/lib/aqi/nl-stations.ts';
 import { readFileSync } from 'node:fs';
 
@@ -42,7 +42,12 @@ function upstream(sim, opts = {}) {
       return { ok: true, status: 200, text: async () => JSON.stringify({ data: rows }) };
     }
     const id = /station_number=(NL\d+)/.exec(url)[1];
-    if (url.includes('/measurements?')) return { ok: true, status: 200, text: async () => '{"data":[]}' };
+    if (url.includes('/measurements?')) {
+      if (mode.meas === 'down') return { ok: false, status: 500, text: async () => '' };
+      const e = Math.floor((now - 30 * MIN) / HOUR) * HOUR;
+      const rows = ['PM25', 'PM10', 'NO2', 'O3'].map((f, i) => ({ station_number: id, formula: f, value: 10 + i, timestamp_measured: iso(e), timestamp_measured_end: iso(e) }));
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: rows }) };
+    }
     let end = Math.floor((now - 30 * MIN) / HOUR) * HOUR;
     if (m === 'stale') end -= 3 * HOUR;
     if (m === 'lag') end -= HOUR;
@@ -92,6 +97,8 @@ test('WORST CASE, MEASURED: the busiest 5 minutes per instance for each scenario
     ['a new hour is due: stations lag one hour behind, 5 min of polling', { station: 'lag' }, 5 * MIN],
     ['the model answer is cut short every time, 5 min of polling', { cut: true }, 5 * MIN],
     ['rate limit: Luchtmeetnet answers 429 to everything', { station: '429', model: '429' }, 5 * MIN],
+    ['/measurements fails every time (500) while the nearest hour is due', { station: 'lag', meas: 'down' }, 5 * MIN],
+    ['/measurements fails every time (500), healthy otherwise', { meas: 'down' }, 5 * MIN],
   ]) {
     const h = harness(opts);
     await poll(h, span, 10_000);
@@ -104,7 +111,7 @@ test('WORST CASE, MEASURED: the busiest 5 minutes per instance for each scenario
   for (const [name, n] of Object.entries(results)) console.log(`budget: ${String(n).padStart(3)} requests  ${name}`);
   for (const [name, n] of Object.entries(results)) assert.ok(n < 100, `${name}: ${n}`);
   /* the ceiling the code is designed to: 6 stations asked once a minute (30) + their substance reads (6) + 32 model locations once (32) */
-  const ceiling = 6 * 5 + 6 + 32;
+  const ceiling = 6 * 5 + 6 * 2 + 32;
   for (const [name, n] of Object.entries(results)) assert.ok(n <= ceiling, `${name}: ${n} <= ${ceiling}`);
 });
 
@@ -366,4 +373,89 @@ test('S4: the line is present right after the hour (the cached run has the new r
     const left = (Date.parse(live.model.hour_start) + LKI_MODEL_HOUR_MS - now.getTime()) / 1000;
     if (left <= 0) assert.equal(hd, 'no-store'); else assert.ok(total(hd) <= left + 1e-9 && Number(/max-age=(\d+)/.exec(hd)[1]) <= left, `${sec}: ${hd}`);
   }
+});
+
+/* ── R1, N-R2, N-R4 (re-audit) ──────────────────────────────────────────────────────────────────── */
+
+test('R1: a failed /measurements read is NOT marked as read - the substances are retried (within the budget), and appear once the read succeeds', async () => {
+  const h = harness({ meas: 'down' });
+  const meas = () => h.up.log.filter((r) => r.url.includes('/measurements?')).length;
+  const a = await h.call('nl/amsterdam/canal-ring');
+  assert.equal(a.body.state, 'live');
+  assert.deepEqual(a.body.readings, [], 'the LKI stands without the substances');
+  assert.equal(meas(), 1);
+  /* inside the retry gap: no second request, whatever the polling */
+  for (let s = 10; s < 290; s += 10) { h.sim.now = T0 + s * 1000; await h.call('nl/amsterdam/canal-ring'); }
+  assert.equal(meas(), 1, 'one failed read per station per MEAS_RETRY_MS at most');
+  /* upstream recovers; the retry comes at the gap, long before the old 1 h 20 min hole closed */
+  h.up.mode.meas = 'ok';
+  h.sim.now = T0 + MEAS_RETRY_MS + 1_000;
+  const b = await h.call('nl/amsterdam/canal-ring');
+  assert.equal(meas(), 2, 'retried');
+  assert.deepEqual(b.body.readings.map((r) => r.formula), ['PM25', 'PM10', 'NO2', 'O3']);
+  /* and once read, it is not asked again for the same hour */
+  h.sim.now += 6 * MIN;
+  await h.call('nl/amsterdam/canal-ring');
+  assert.equal(meas(), 2);
+});
+
+test('R1: the same holds while a due hour makes the station be re-read every minute - one failed substance read per 5 minutes, not one per minute', async () => {
+  const h = harness({ station: 'lag', meas: 'down' });
+  await poll(h, 5 * MIN, 10_000);
+  const per = {};
+  for (const r of h.up.log.filter((x) => x.url.includes('/measurements?'))) per[/NL\d+/.exec(r.url)[0]] = (per[/NL\d+/.exec(r.url)[0]] ?? 0) + 1;
+  for (const [id, n] of Object.entries(per)) assert.ok(n <= 2, `${id}: ${n} substance reads in 5 minutes`);
+});
+
+test('N-R2: an aborted caller cannot poison a shared in-flight read - the other caller gets the rows and the cache entry is good', async () => {
+  const sim = { now: T0 };
+  const up = upstream(sim);
+  const honest = async (url, init) => {
+    if (init.signal.aborted) throw new Error('aborted');
+    const r = await up.fetch(url, init);
+    if (init.signal.aborted) throw new Error('aborted');
+    return r;
+  };
+  const cache = newLocalCache();
+  const dead = new AbortController();
+  const { readAmsterdam } = await import('../../src/lib/aqi/luchtmeetnet.ts');
+  const from = AMSTERDAM_SHEETS.find((s) => s.id === 'canal-ring').centre;
+  /* A starts the shared read, then goes away while it is in flight; B joins the same read */
+  const pa = readAmsterdam('nl/amsterdam/canal-ring', { fetch: honest, now: new Date(sim.now), from, nl: cache.nl, signal: dead.signal });
+  const pb = readAmsterdam('nl/amsterdam/canal-ring', { fetch: honest, now: new Date(sim.now), from, nl: cache.nl });
+  dead.abort();
+  const [a, b] = await Promise.all([pa, pb]);
+  assert.equal(a.state, 'not_reporting', 'the caller that gave up got nothing');
+  assert.equal(up.log.filter((r) => r.url.includes('/lki?')).length, 1, 'and walked no further rungs');
+  assert.equal(b.state, 'live', 'the other caller got its rows');
+  assert.ok(cache.nl.stations.get('NL49014').lki, 'and the cache entry is good');
+  assert.equal(up.log.filter((r) => r.url.includes('/lki?')).length, 1, 'one shared read');
+});
+
+test('N-R4: a 403 is treated like a 429 - a global cooldown, logged with the status, the path only', async () => {
+  const logged = []; const real = console.error; console.error = (...a) => logged.push(a.join(' '));
+  try {
+    const h = harness({ station: 'ok', model: 'ok' });
+    const orig = h.up.fetch;
+    let block = true;
+    const fetch = async (url, init) => (block ? (h.up.log.push({ t: h.sim.now, url, kind: 'blocked' }), { ok: false, status: 403, text: async () => '' }) : orig(url, init));
+    const call = async (a) => { const r = res(); await handle({ method: 'GET', query: { area: a } }, r, { key: '', local: { fetch, now: () => new Date(h.sim.now), cache: h.cache, streaming: true } }); return r; };
+    const r = await call('nl/amsterdam/canal-ring');
+    assert.deepEqual([r.body.state, r.body.reason], ['not_reporting', 'source_down']);
+    const n = h.up.log.length;
+    assert.ok(n <= 2);
+    for (let i = 0; i < 20; i++) { h.sim.now += 10_000; for (const a of AREAS) await call(a); }
+    assert.equal(h.up.log.length, n, 'nothing asked for the whole cooldown');
+    assert.ok(logged.some((l) => l.includes('luchtmeetnet 403') && !l.includes('?')));
+    block = false;
+    h.sim.now = T0 + COOLDOWN_MS + 1_000;
+    assert.equal((await call('nl/amsterdam/canal-ring')).body.state, 'live');
+  } finally { console.error = real; }
+  /* a 503 is NOT a block: it is how an outage looks, and the negative entries bound it */
+  const h503 = harness({ station: 'down', model: 'down' });
+  await h503.call('nl/amsterdam/canal-ring');
+  h503.sim.now += 61_000;
+  const before = h503.up.log.length;
+  await h503.call('nl/amsterdam/canal-ring');
+  assert.ok(h503.up.log.length > before, 'a 503 does not start the cooldown');
 });

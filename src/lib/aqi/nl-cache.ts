@@ -23,9 +23,9 @@
  *   hour (one answer in eight was cut short), or a run that has run out, is read again no sooner than MODEL_RETRY_MS.
  *   Concurrent requests share one in-flight read per station and per model location.
  *
- * THE COOLDOWN. A 429 from Luchtmeetnet sets a module-level cooldown (COOLDOWN_MS) that stops EVERY further request, rungs and model alike; the
+ * THE COOLDOWN. A 429 (or 403) from Luchtmeetnet sets a module-level cooldown (COOLDOWN_MS) that stops EVERY further request, rungs and model alike; the
  * cards then answer from what is still current in the caches or say "not reporting / could not be read" (the existing honest source_down state,
- * never a value). Each 429 is logged (path only). 403/503 are not treated as a block: 503 is how an outage looks, and the negative entries bound it.
+ * never a value). Each 429 or 403 is logged (path only): a fair-use block may come back as either. 503 is not treated as a block: it is how an outage looks, and the negative entries bound it.
  *
  * PER INSTANCE ONLY: another warm instance has its own caches, so the bound is the figure below times the instances (tests/unit/aqi-ams-budget.test.mjs
  * counts fetches for the worst cases).
@@ -39,6 +39,8 @@ export const LATE_MS = 20 * 60_000;
 export const MODEL_RUN_MAX_MS = 60 * 60_000;
 export const MODEL_RETRY_MS = 5 * 60_000;
 export const COOLDOWN_MS = 5 * 60_000;
+/** A substance read that failed is retried no sooner than this (the LKI headline is unaffected meanwhile). */
+export const MEAS_RETRY_MS = 5 * 60_000;
 const HOUR_MS = 3_600_000;
 
 export interface StationRows {
@@ -50,6 +52,8 @@ export interface StationRows {
   meas: MeasurementRow[];
   /** The hour (end, ms) the substance rows were read for; a re-read of the LKI that finds the same newest hour reuses them instead of asking again. */
   measFor?: number;
+  /** A substance read that FAILED for this newest hour, and when: it is not marked as read (`measFor`), and is tried again no sooner than MEAS_RETRY_MS. */
+  measFailed?: { for: number; at: number };
 }
 
 export interface ModelRun {
@@ -78,6 +82,7 @@ export function stationFresh(e: StationRows, nowMs: number, liveMs: number): boo
   if (top === undefined) return age < NEGATIVE_MS;                         // unreadable, or no row
   if (nowMs - top.endMs > liveMs) return age < NEGATIVE_MS;                // stale: look again soon
   if (nowMs > top.endMs + HOUR_MS + LATE_MS) return age < NEGATIVE_MS;     // the next hour's row is due
+  if (e.measFailed?.for === top.endMs) return age < MEAS_RETRY_MS;          // its substances failed to read: try them again soon
   return age < STATION_TTL_MS;
 }
 
