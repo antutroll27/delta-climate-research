@@ -161,6 +161,8 @@ def predict(p: dict[str, float], r: Row, night_release: bool) -> float:
         # model's floor `release_base` (zero for a candidate with no storage term).
         L = _physics.night_latent(L, k, pull, r.tAir, r.rh,
                                   p["release_base"] if night_release else 0.0)
+    else:
+        L *= _physics.dewpoint_taper(k, pull, r.tAir, r.rh, sun, 0.0)
 
     stored = 0.0
     if night and night_release:
