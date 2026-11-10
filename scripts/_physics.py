@@ -18,7 +18,7 @@ calibration changes rather than when the physics does, and moving them would mak
 measure-accuracy.py silently depend on the fit's bounds. fit-physics.py remains
 the documented entrypoint.
 
-THE MODEL MIRRORS TypeScript. `eqCell` and `nightLatent` in
+THE MODEL MIRRORS TypeScript. `eqCell`, `dewpointTaper` and `nightLatent` in
 src/scripts/climate-engine/heat-map-model.ts are the shipping implementation;
 this is the same arithmetic in Python so the constants can be fitted against
 observation. Changing one without the other silently decalibrates the product.
@@ -236,15 +236,42 @@ def solar_factor(hour: float, doy: int, lat: float = 22.55) -> float:
     return float(np.maximum(0, cz))
 
 
+#: Albedo of the fixed reference cell the dewpoint taper is evaluated on. Mirrors the
+#: `0.18` in dewpointTaper(); its vegetation (0.6) is irrelevant because L is 0 there.
+TAPER_REF_ALBEDO = 0.18
+
+
+def dewpoint_taper(k: float, pull: float, t_air: float, rh: float,
+                   sun: float, store: float) -> float:
+    """The 0-1 factor that closes evapotranspiration as the surface reaches the dewpoint.
+
+    Mirrors dewpointTaper() in heat-map-model.ts EXACTLY, and is the one definition night
+    and day share. The reference cell is the product's fixed `eqCell(dry, 0.18, 0.6, 0)`:
+    no ET, no built fabric, so it reduces to (S(1-a)sun + store + pull) / k. At night
+    `sun` is 0 and that is (store + pull) / k; by day `store` is 0.
+
+    By day it only bites in cold saturated air (Amsterdam, 0 C, RH 100 %, low sun: the
+    greenest cell read -16 C, -9.1 K of it from ET); in Kolkata's daytime validation
+    scenes it is inactive, so no calibrated number moves.
+
+    The LIVE "now" view does change outside those scenes, in humid low-sun moments in every
+    city (Kolkata monsoon mornings and evenings). The width stays at DEWPOINT_TAPER_K because
+    the tightest validation scene has only 1.76 K of headroom: widening it would move a
+    calibrated figure. See the doc comment on dewpointTaper() for the steepness cost.
+    """
+    surface = (S_SOLAR * (1 - TAPER_REF_ALBEDO) * sun + store + pull) / k
+    headroom = (surface - dewpoint(t_air, rh)) / DEWPOINT_TAPER_K
+    return min(1.0, max(0.0, headroom))
+
+
 def night_latent(L: float, k: float, pull: float, t_air: float, rh: float,
                  store: float) -> float:
     """Night latent coefficient, K per unit vegetation. Mirrors nightLatent() in
     heat-map-model.ts EXACTLY, and is the one definition every offline site shares.
 
     `L` is the full-strength coefficient (`L_ET * evap_scale(rh)`). The taper is
-    evaluated on a FIXED reference cell, `eqCell(dry, 0.18, 0.6, 0)`: no sun, no
-    built fabric, no ET, so it reduces to (store + pull) / k. It is NOT the ward's
-    own built fraction and it is NOT Q * built -- four Python copies used
+    `dewpoint_taper` at sun = 0, evaluated on a FIXED reference cell. It is NOT the
+    ward's own built fraction and it is NOT Q * built -- four Python copies used
     (Q*built + pull)/k and left `store` out, which put the reference cell up to
     0.52 K away from the one the product tapers on (humid Kolkata) and 0.18 K in
     Amsterdam.
@@ -252,8 +279,7 @@ def night_latent(L: float, k: float, pull: float, t_air: float, rh: float,
     `store` is the nocturnal release at the reference cell (built = 0): the
     product's STORE_NIGHT, or whatever store the model being scored carries.
     """
-    headroom = ((store + pull) / k - dewpoint(t_air, rh)) / DEWPOINT_TAPER_K
-    return L * NIGHT_ET_FRACTION * min(1.0, max(0.0, headroom))
+    return L * NIGHT_ET_FRACTION * dewpoint_taper(k, pull, t_air, rh, 0.0, store)
 
 
 def _eq(cover: LandCoverClass, sun: float, Q: float, L: float,
@@ -294,6 +320,8 @@ def predict(sc: Scene, lc: LandCoverClasses,
     if night:
         store = STORE_NIGHT
         L = night_latent(L, k, pull, tAir, rh, store)
+    else:
+        L *= dewpoint_taper(k, pull, tAir, rh, sun, store)
 
     return Prediction(urban=_eq(lc["urban"], sun, Q, L, pull, k, store),
                       rural=_eq(lc["rural"], sun, Q, L, pull, k, store))
@@ -359,3 +387,51 @@ def load(all_angles: bool) -> tuple[list[Scene], LandCoverClasses, int]:
             rural=float(r["rural_strict"]),
         ))
     return scenes, lc, dropped
+
+
+def _self_test() -> None:
+    """dewpoint_taper is 0 / linear / 1, night_latent is unchanged, and predict only moves
+    where the surface is within the taper width of the dewpoint."""
+    # A reference cell 0.5 K above the dewpoint tapers to half; below it to 0; 1 K+ above to 1.
+    k, t_air, rh = 0.05, 10.0, 80.0
+    dew = dewpoint(t_air, rh)
+    def taper_at(offset: float) -> float:
+        return dewpoint_taper(k, k * (dew + offset), t_air, rh, 0.0, 0.0)
+    assert taper_at(-3.0) == 0.0 and taper_at(0.0) == 0.0
+    assert math.isclose(taper_at(0.25), 0.25) and math.isclose(taper_at(0.5), 0.5)
+    assert taper_at(DEWPOINT_TAPER_K) == 1.0 and taper_at(9.0) == 1.0
+
+    # night_latent against the implementation it replaced, verbatim.
+    def old_night_latent(L: float, k: float, pull: float, t_air: float, rh: float,
+                         store: float) -> float:
+        headroom = ((store + pull) / k - dewpoint(t_air, rh)) / DEWPOINT_TAPER_K
+        return L * NIGHT_ET_FRACTION * min(1.0, max(0.0, headroom))
+    for t in (-5.0, 5.0, 15.0, 30.0):
+        for r in (40.0, 80.0, 95.0, 100.0):
+            for st in (0.0, STORE_NIGHT):
+                pull = 0.05 * (t - 3.0)
+                assert night_latent(0.4, 0.05, pull, t, r, st) == old_night_latent(0.4, 0.05, pull, t, r, st)
+
+    # predict: a normal Kolkata day scene equals the untapered arithmetic bit for bit.
+    scenes, lc, _ = load(False)
+    q_day, ratio, c = 0.6, 0.15, 1.4
+    kRad = K_SUM * ratio / (1 + ratio)
+    h = K_SUM - kRad
+    def untapered(sc: Scene) -> Prediction:
+        k_ = kRad + h * sc.wind
+        pull_ = kRad * sky_temp(sc.tAir, sc.rh, sc.cloud, c) + h * sc.wind * sc.tAir
+        sun_ = sc.sun * (1 - 0.6 * sc.cloud)
+        L_ = L_ET * evap_scale(sc.rh)
+        return Prediction(urban=_eq(lc["urban"], sun_, q_day, L_, pull_, k_),
+                          rural=_eq(lc["rural"], sun_, q_day, L_, pull_, k_))
+    days = [sc for sc in scenes if sc.phase == "day"]
+    assert days and all(predict(sc, lc, q_day, ratio, c) == untapered(sc) for sc in days)
+
+    # ...and cold saturated low sun is where it bites: ET closes, so the green mask warms.
+    cold = days[0]._replace(tAir=0.0, rh=100.0, wind=0.33, cloud=0.0, sun=0.1)
+    assert predict(cold, lc, q_day, ratio, c).rural > untapered(cold).rural
+    print("  _physics self-test: ok")
+
+
+if __name__ == "__main__":
+    _self_test()

@@ -182,8 +182,32 @@ export const SUN_LIT = 0.05;
 const DEWPOINT_TAPER_K = 1.0;
 
 /**
- * Night latent term: below the dewpoint the surface is condensing rather than
- * evaporating, so ET cannot keep removing heat.
+ * The 0-1 factor that closes evapotranspiration as the surface reaches the dewpoint:
+ * once the surface is at or below it the air is saturated against the surface, so there
+ * is no vapour-pressure deficit and nothing to evaporate. `p.L` is ignored; the factor is
+ * a property of the forcing.
+ *
+ * The same rule the night branch always had, now shared by day. By day it only bites in
+ * cold saturated air: Amsterdam, air 0 C, RH 100 %, low sun, the greenest cell read
+ * -16 C, of which -9.1 K was "evaporation" into air that could not take it (`evapScale`
+ * floors at 0.6 even at RH 100 %). In Kolkata's daytime validation scenes it is inactive
+ * (taper = 1 for all 14 near-nadir mask scenes and all 244 ward-scale day rows, ECOSTRESS
+ * and Landsat; the tightest has 1.76 K of headroom against the 1.0 K taper width), so no
+ * calibrated figure moves.
+ *
+ * THE LIVE VIEW DOES CHANGE. The calibrated validation scenes are untouched, but the live
+ * "now" view changes outside them, in humid low-sun moments in every city: Kolkata monsoon
+ * mornings and evenings (sun factor about 0.06 to 0.35, RH above about 90 to 96 %) are the
+ * ordinary example. Nothing here is validated against a measurement in that regime.
+ *
+ * THE COST IS STEEPNESS. By day the taper scales the whole latent term, so near the dewpoint
+ * a 1 % change in humidity can move the greenest cell by up to about 0.8 K in Kolkata and
+ * about 1.5 K in cold calm Amsterdam (3.3 K in the most extreme cold, dry-air, calm case
+ * measured), against about 0.07 K before. It is continuous, not a step.
+ *
+ * THE WIDTH WAS LEFT AT DEWPOINT_TAPER_K because the tightest validation scene has only
+ * 1.76 K of headroom: widening the taper past that would start to bite on it and move a
+ * calibrated figure.
  *
  * The taper depends on the answer it modifies, so it is evaluated on the no-ET
  * equilibrium of a representative vegetated cell and applied to the whole field.
@@ -191,11 +215,16 @@ const DEWPOINT_TAPER_K = 1.0;
  * night, so a per-cell taper would only differ on those straddling the
  * dewpoint; move it into eqCell/the shader if that edge ever matters.
  */
-function nightLatent(p: SimParams, rh: number): number {
+export function dewpointTaper(p: SimParams, rh: number): number {
   const dry: SimParams = { ...p, L: 0 };
   const surface = eqCell(dry, 0.18, 0.6, 0);   // eqCell(p, albedo, veg, built)
   const headroom = (surface - dewpointC(p.tAir, rh)) / DEWPOINT_TAPER_K;
-  return p.L * NIGHT_ET_FRACTION * Math.min(1, Math.max(0, headroom));
+  return Math.min(1, Math.max(0, headroom));
+}
+
+/** Night latent term: the daytime coefficient times NIGHT_ET_FRACTION, tapered to the dewpoint. */
+function nightLatent(p: SimParams, rh: number): number {
+  return p.L * NIGHT_ET_FRACTION * dewpointTaper(p, rh);
 }
 const TREES_PER_KM = 110;
 export const PARK_HA = 0.785;
@@ -910,7 +939,10 @@ export function currentParams(s: ScenarioState): SimParams {
     /* RAIN IS A PROPERTY OF THIS MINUTE, so it acts on "now" only — never on the
        canonical 13:00 / 22:00 scenarios, which describe a representative day. */
     const wet = L?.observed?.wet ?? 0;
-    if (lit) return wetSurfaceParams({ ...b, sun: s.sunNow * trans, tAir: baseTair, tSky }, wet);
+    if (lit) {
+      const day: SimParams = { ...b, sun: s.sunNow * trans, tAir: baseTair, tSky };
+      return wetSurfaceParams({ ...day, L: day.L * dewpointTaper(day, rh) }, wet);
+    }
     /* Night-air correction: the airport's air less the month's measured offset, here only. */
     const tAirN = baseTair - nightAirAppliedK(s);
     const dark: SimParams = { ...b, sun: 0, tAir: tAirN, Q: Q * Q_NIGHT_RATIO,
@@ -920,7 +952,8 @@ export function currentParams(s: ScenarioState): SimParams {
 
   if (s.phase === 'peak') {
     /* THE CALIBRATED FORMULA, ALWAYS: a scenario is not this minute (asScenarioAmbient). */
-    return { ...b, sun: 1 * legacyCloudTransmission(cloud), tAir: baseTair, tSky: skyTemperatureC(baseTair, rh, cloud) };
+    const day: SimParams = { ...b, sun: 1 * legacyCloudTransmission(cloud), tAir: baseTair, tSky: skyTemperatureC(baseTair, rh, cloud) };
+    return { ...day, L: day.L * dewpointTaper(day, rh) };
   }
   const tAir = baseTair - 2.5;
   const night: SimParams = { ...b, sun: 0, tAir, Q: Q * Q_NIGHT_RATIO,
@@ -943,7 +976,10 @@ export function currentParamsForReference(
   const Q = DEFAULT_PARAMS.Q * (1 - FACADE_Q * (iv.facades / 15));
   const base: SimParams = { ...DEFAULT_PARAMS, D: SIM_D, Q, wind, L: DEFAULT_PARAMS.L * evap, tAir: ambient.tAir };
   const tSky = skyTemperatureC(ambient.tAir, ambient.rh, cloud);
-  if (phase === 'peak') return { ...base, sun: 1 * legacyCloudTransmission(cloud), tSky };
+  if (phase === 'peak') {
+    const day: SimParams = { ...base, sun: 1 * legacyCloudTransmission(cloud), tSky };
+    return { ...day, L: day.L * dewpointTaper(day, ambient.rh) };
+  }
   // store: the compare view runs the same physics as the explorer. Omitting it
   // here would make the two views disagree at night by ~1.7 K, and only one of
   // them would be right.

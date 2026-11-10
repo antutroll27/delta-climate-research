@@ -453,6 +453,8 @@ def modelled_field(sc: _physics.Scene, veg: npt.NDArray[np.float32],
         # One taper for the whole field, on nightLatent()'s fixed reference cell
         # rather than a per-cell dewpoint -- see the note in heat-map-model.ts.
         L = _physics.night_latent(L, k, pull, sc.tAir, sc.rh, store)
+    else:
+        L *= _physics.dewpoint_taper(k, pull, sc.tAir, sc.rh, sun, 0.0)
 
     stored = store if night else 0.0
     field: npt.NDArray[np.float32] = (
@@ -507,6 +509,9 @@ def model_terms(sc: _physics.Scene, veg: npt.NDArray[np.float32],
     Q = q_day * (_physics.Q_NIGHT_RATIO if night else 1.0)
     k = kRad + h * sc.wind
     L = _physics.L_ET * _physics.evap_scale(sc.rh)
+    # Deliberately the full-strength coefficient, with NO dewpoint taper by day or by night: this is a
+    # term-by-term decomposition for per-term r and spatial SD (a scalar taper leaves r unchanged and
+    # taper = 1 on every scene it scores), not the field; `modelled_field` carries the taper.
     if night:
         L = L * _physics.NIGHT_ET_FRACTION
     return {

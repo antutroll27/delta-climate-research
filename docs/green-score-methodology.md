@@ -125,7 +125,7 @@ against our own output · **Placeholder** = explicitly temporary.
 | **Facade heat reduction** | **0.03** | **Cited — corrected from 0.30** | Gunawardena & Steemers 2023 |
 | Influence kernel λ | ≈47 m | Empirical, honestly labelled | See §4.4 |
 | **Sky temperature** | **computed, not fixed** | **Cited** | Brutsaert (1975) clear-sky emissivity, cloud-screened; replaced two hard-coded values |
-| **Night evapotranspiration** | **10 % of daytime** | **Cited** | Stomata close after dark; tapers to zero below the dewpoint |
+| **Night evapotranspiration** | **10 % of daytime** | **Cited** | Stomata close after dark; tapers to zero below the dewpoint. The same dewpoint taper also applies by day (since 2026-11-10), where it bites only in cold or saturated low-sun conditions (Amsterdam, air 0 °C, RH 100 %: greenest cell −16.1 → −7.0 °C); no validation scene is affected (taper 1 on all 14 mask-scale and 244 ward-scale day scenes, minimum headroom 1.76 K), but the live view is steeper near the dewpoint, up to about 0.8 K per 1 % RH in Kolkata and 1.5 K in cold calm Amsterdam. See `heat-map-intervention-model.md` §4.2 |
 | **Night anthropogenic heat** | **50 % of daytime** | **Estimated, bounded** | Diurnal load profiles, South and East Asian cities |
 | **Warming pathways** | **+1.25 / +4.1 °C** | **Cited — corrected** | Dhara et al. 2025, PLOS Climate |
 
