@@ -84,6 +84,14 @@ function stationLine(s: AqiStation, owner: string | null, place: string): string
 /** O₃ and CO are the maximum rolling 8-hour mean; every other pollutant the 24-hour mean. Read from the dominant reading itself. */
 const windowOf = (r: AqiResult): string => (r.pollutants.find((q) => q.parameter === r.dominant)?.window_h === 8 ? 'maximum 8-hour mean' : '24-hour mean');
 
+/** The hero's small window label, from the result's own window: a CPCB result carries `window_h`; an OBOS one reads it off the dominant pollutant, as `windowOf` does.
+    A STALE card never says "last": its window ends at the last reading, not now (a test pins this for the pane's PM2.5 label too). */
+const heroWindow = (r: Result, stale: boolean): string => {
+  const h = r.origin === 'cpcb' ? r.window_h : r.pollutants.find((q) => q.parameter === r.dominant)?.window_h;
+  if (h === 8) return '8-hour peak';
+  return stale ? `${h ?? 24}-hour window` : `last ${h ?? 24} hours`;
+};
+
 /* The fallback names no cause: the feed may be down, the station missing from it (register AQI-R47), stale, moved,
    or its published figure rejected by `pick` (off-scale, ambiguous, or not the largest sub-index). */
 function hero(r: Result, muted: boolean, pm: string, us: string, city = ''): string {
@@ -91,27 +99,35 @@ function hero(r: Result, muted: boolean, pm: string, us: string, city = ''): str
     ? `Led by <b>${pol(r.dominant)}</b> · CPCB published AQI · <span style="white-space:nowrap">${r.window_h === 8 ? '8-hour average' : '24-hour average'}</span>`
     : `Led by <b>${pol(r.dominant)}</b> · AQI computed by OBOS from OpenAQ (no usable current CPCB figure for this station) · <span style="white-space:nowrap">${windowOf(r)}</span>`;
   return `<div class="hero"><span class="num${muted ? ' muted' : ''}" style="color:${col(r.category)}">${num(r.aqi)}</span>
-    <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}</span></div>${pm}${us}${city}
+    <span class="cat"><span class="dot" style="background:${col(r.category)}"></span>${word(r.category)}<span class="aq-win">${heroWindow(r, muted)}</span></span></div>${pm}${us}${city}
     <p class="meta">${meta}</p>`;
 }
 
-const NOWCAST_NOTE = "Same air on the US EPA scale (NowCast, recent hours weighted, as used by AirNow), converted from this CPCB station's hourly PM2.5/PM10. The official Indian AQI above is the legal standard.";
+const NOWCAST_NOTE = "Same air on the US EPA scale. \"Right now\" is the US EPA NowCast (recent hours weighted, as used by AirNow), converted from this CPCB station's hourly PM2.5/PM10. \"Last 24 h\", where shown, is the same US scale applied to the 24-hour means, the same window as the Indian AQI above. The official Indian AQI above is the legal standard.";
 const US_NOTE = {
   cpcb: "Same air, US EPA scale: converted from CPCB's 24-hour PM2.5/PM10. The official Indian AQI above is the legal standard.",
   obos: 'Same air, US EPA scale: computed from the same 24-hour PM2.5/PM10 means. The official Indian AQI above is the legal standard.',
 } as const;
 
 /* THE US EPA EQUIVALENT, one small muted line under the official number, so a reader
-   who has seen IQAir's figure does not take OBOS's for a mistake. NowCast (`nc`, the
-   recent-hours figure AirNow shows) when the API sent one; otherwise the 24-hour
-   equivalent, labelled so; nothing when neither exists: never a guess. A <details>, so
-   the note opens by tap and keyboard as well as by hover (the title). */
-function usLine(r: Result, nc?: UsNowcast): string {
-  const u = nc ? { aqi: nc.aqi, capped: false, category: nc.category } : usAqiOf(r);
+   who has seen another app's figure sees which window each number covers. With a NowCast
+   (`nc`, the recent-hours figure AirNow shows) the line leads with it, labelled "right now",
+   and, when the 24-hour means also give a US figure (`usAqiOf`), appends it as
+   "last 24 h: N", the window of the Indian AQI above. Without a NowCast it is the 24-hour
+   equivalent alone, labelled "last 24 h" ("24-h" on a stale card, whose window ends at the last reading, not now); nothing when neither exists: never a guess. A
+   <details>, so the note opens by tap and keyboard as well as by hover (the title). */
+function usLine(r: Result, nc?: UsNowcast, stale = false): string {
+  const day = usAqiOf(r);
+  const u = nc ? { aqi: nc.aqi, capped: false, category: nc.category } : day;
   if (!u) return '';
   const note = nc ? NOWCAST_NOTE : US_NOTE[r.origin];
-  /* The info mark rides with the basis label, so it never wraps onto a line alone. */
-  return `<details class="aq-us"><summary title="${esc(note)}">≈ US AQI ${u.capped ? '500+' : num(u.aqi)} · ${US_WORD[u.category]} · <span style="white-space:nowrap">${nc ? 'NowCast' : '24-h'}<span class="aq-us-i" aria-hidden="true">i</span></span></summary><p>${esc(note)}</p></details>`;
+  const val = (x: { aqi: number; capped: boolean }): string => (x.capped ? '500+' : num(x.aqi));
+  /* The info mark rides with the last label, so it never wraps onto a line alone. */
+  const mark = '<span class="aq-us-i" aria-hidden="true">i</span>';
+  const tail = !nc ? `<span style="white-space:nowrap">${stale ? '24-h' : 'last 24 h'}${mark}</span>`
+    : day ? `right now · <span style="white-space:nowrap">last 24 h: ${val(day)}${mark}</span>`
+      : `<span style="white-space:nowrap">right now${mark}</span>`;
+  return `<details class="aq-us"><summary title="${esc(note)}">≈ US AQI ${val(u)} · ${US_WORD[u.category]} · ${tail}</summary><p>${esc(note)}</p></details>`;
 }
 
 /* THE PM2.5 CONCENTRATION, in the one unit every air-quality app can be checked against. It is
@@ -226,7 +242,7 @@ function block(c: Current, title: string, place: string, city?: CityAqi, nc?: Us
       const live = !stale && c.result.origin === 'cpcb';
       const cityHtml = live ? cityLine(city, c.station.fallback === true) : '';
       const pm = live ? pmLine(c.result) : '';
-      const us = usLine(c.result, live ? nc : undefined);
+      const us = usLine(c.result, live ? nc : undefined, stale);
       /* The question rides with the US line: with no US figure on the card there is nothing to explain. */
       return head(title, chip) + hero(c.result, stale, pm, us, cityHtml) + stationLine(c.station, c.source.owner, place) + `<p class="meta">${when}</p>`
         + (us ? why(pm !== '') : '');

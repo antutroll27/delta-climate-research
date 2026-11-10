@@ -119,8 +119,8 @@ test('the answer drops its last clause when there is no PM2.5 line to point at',
 
 test('the question rides with the US line: both forms have it, a card with no US line does not', () => {
   const nowcast = { ...cpcb(), us_nowcast: { aqi: 137, category: 'usg', dominant: 'pm25', hours_used: 12 } };
-  assert.match(cardHtml(nowcast, 'Ballygunge', NOW), /NowCast[\s\S]*aq-why/);
-  assert.match(cardHtml(cpcb(), 'Ballygunge', NOW), /24-h[\s\S]*aq-why/);
+  assert.match(cardHtml(nowcast, 'Ballygunge', NOW), /right now[\s\S]*aq-why/);
+  assert.match(cardHtml(cpcb(), 'Ballygunge', NOW), /last 24 h[\s\S]*aq-why/);
   // No PM sub-index at all: no US line, so nothing to explain.
   const gases = cpcb(); gases.current.result.subindices = [{ parameter: 'no2', avg: 65, min: 34, max: 130, hourly: 74 }];
   const html = cardHtml(gases, 'Ballygunge', NOW);
