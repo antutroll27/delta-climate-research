@@ -90,6 +90,10 @@ html[data-ui="v2"] .obos-v2 .hk.h2 { background: var(--heat-2); }
 html[data-ui="v2"] .obos-v2 .hk.h3 { background: var(--heat-3); }
 html[data-ui="v2"] .obos-v2 .hk.h4 { background: var(--heat-4); }
 html[data-ui="v2"] .obos-v2 .hk.h5 { background: var(--heat-5); }
+html[data-ui="v2"] .obos-v2 .hk.hc { background: var(--heat-1); }
+html[data-ui="v2"] .obos-v2 .hk.hw { background: var(--heat-5); }
+/* legend words: syncRamp sets data-ramp-words; the relative pair (.rk-rel) shows only when the ramp tops out below RAMP_WORDS_MIN */
+html[data-ui="v2"] .obos-v2 [data-ramp-words]:not([data-ramp-words="rel"]) .rk-rel, html[data-ui="v2"] .obos-v2 [data-ramp-words="rel"] .rk-abs { display: none !important; }
 /* the diverging bar (twin .dbar), re-used for "vs reference" readings */
 html[data-ui="v2"] .obos-v2 .dbar { position: relative; margin-top: 12px; padding-top: 18px; }
 html[data-ui="v2"] .obos-v2 .dbar .ends { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); }

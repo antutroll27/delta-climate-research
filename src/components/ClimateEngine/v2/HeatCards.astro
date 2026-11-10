@@ -9,10 +9,12 @@ const { scope } = Astro.props;
 /* The tier decides whether this city may print Kolkata's bands, caveats and "checked" wording (scope/accuracy-claim.ts). */
 const claim = heatAccuracyClaim(scope.tier, scope.city.id);
 ---
-<article class="card" data-v2-card="heat-legend" data-sections="heat">
+<article class="card" data-v2-card="heat-legend" data-sections="heat" data-ramp-words="abs">
   <div class="row"><span class="micro">What the colours mean</span><span class="kind modelled">modelled</span></div>
-  <div class="classes"><span><i class="hk h1"></i>Comfortable</span><span><i class="hk h2"></i>Warm</span><span><i class="hk h3"></i>Hot</span><span><i class="hk h4"></i>Severe</span><span><i class="hk h5"></i>Extreme</span></div>
-  <p class="foot">Building colour: continuous ramp, or snapped to the 5 legend classes</p>
+  <div class="classes rk-abs"><span><i class="hk h1"></i>Comfortable</span><span><i class="hk h2"></i>Warm</span><span><i class="hk h3"></i>Hot</span><span><i class="hk h4"></i>Severe</span><span><i class="hk h5"></i>Extreme</span></div>
+  <div class="classes rk-rel"><span><i class="hk hc"></i>Cooler</span><span><i class="hk hw"></i>Warmer</span></div>
+  <p class="foot rk-abs">Building colour: continuous ramp, or snapped to the 5 legend classes</p>
+  <p class="foot rk-rel">Colours show cooler to warmer within the numbers printed on the scale; at these temperatures they are not heat-stress bands.</p>
   <p class="foot pattern-note" id="patternNote"></p>
   <p class="foot">{claim.footLine}</p>
 </article>

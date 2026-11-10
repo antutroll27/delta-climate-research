@@ -49,11 +49,26 @@ const REF = { vegHi: 0.878, vegLo: 0.0, albHi: 0.190, albLo: 0.088, builtHi: 1.0
  * weather and the pathway; it does not move with the ward. The legend always
  * prints the numbers, so a reader is never guessing what a colour means.
  */
-export function rampBounds(p: SimParams): [number, number] {
+export function rampBounds(p: SimParams, hotFloorC: number | null = null): [number, number] {
   const lo = eqCell(p, REF.albHi, REF.vegHi, REF.builtLo);   // shaded, green, unbuilt
   const hi = eqCell(p, REF.albLo, REF.vegLo, REF.builtHi);   // dark, bare, fully built
   // A degenerate span would divide by ~zero in the shader and flatten the map.
-  return hi - lo < 1 ? [lo - 0.5, lo + 0.5] : [lo, hi];
+  const bounds: [number, number] = hi - lo < 1 ? [lo - 0.5, lo + 0.5] : [lo, hi];
+  /* THE HOT-END FLOOR (`ClimateConstants.rampHotFloorC`, a COUNTRY's value). Applied
+     AFTER the guard, to its result, so that with no floor this function returns exactly
+     what it always did and a floor can only ever raise `hi`. Raising `hi` from below
+     `hotFloorC` leaves the span above 1: the pair was already at least 1 wide. */
+  return hotFloorC !== null && bounds[1] < hotFloorC ? [bounds[0], hotFloorC] : bounds;
+}
+
+/**
+ * Below this top-of-ramp temperature, °C, the legend does not use the heat-stress
+ * words (Comfortable … Extreme): a ramp topping out at 22 °C has no Extreme in it.
+ */
+export const RAMP_WORDS_MIN = 35;
+/** Which legend row is true for a ramp whose hot end is `hi` °C: the absolute words, or a relative pair. */
+export function rampWords(hi: number): 'abs' | 'rel' {
+  return hi >= RAMP_WORDS_MIN ? 'abs' : 'rel';
 }
 /**
  * Empirical spatial-influence kernel — NOT a thermal diffusivity.
@@ -994,6 +1009,7 @@ export function assertInterventionLogic(): void {
     airNormals: { station: 'fixture', period: 'fixture', source: 'fixture', measured: false,
       maxC: Array(12).fill(32), minC: Array(12).fill(32) },
     parkRadiusM: 50,
+    rampHotFloorC: null,
     /* `XTS` IS ISO 4217'S RESERVED TEST CODE, and it is here rather than the real
        code for the same reason the note above gives about the numbers: this is a
        fixture, and the self-check never formats it. Naming a real currency would
@@ -1013,7 +1029,7 @@ export function assertInterventionLogic(): void {
      scope object, and a scope naming a pathway that does not exist must be refused
      rather than quietly warmed by zero. */
   const zeroIv = { trees: 0, roof: 0, parks: 0, facades: 0 };
-  const gulf: ClimateConstants = { pathDelta: {}, parkRadiusM: 50, costs: null,
+  const gulf: ClimateConstants = { pathDelta: {}, parkRadiusM: 50, costs: null, rampHotFloorC: null,
     airNormals: { station: 'fixture', period: 'fixture', source: 'fixture', measured: false,
       maxC: Array(12).fill(40), minC: Array(12).fill(40) } };
   const noFeed = (c: ClimateConstants) =>
