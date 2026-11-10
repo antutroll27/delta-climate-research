@@ -159,6 +159,8 @@ def veg_coefficients() -> dict[str, dict[str, float]]:
         for sc in scenes:
             if sc.phase != phase:
                 continue
+            # NOTE: this copy has no daytime dewpoint taper; on the calibration scenes it loads the
+            # taper is 1, so its figures are unaffected (see `_physics.dewpoint_taper`).
             latent = _physics.L_ET * _physics.evap_scale(sc.rh)
             if phase == "night":
                 latent *= _physics.NIGHT_ET_FRACTION

@@ -11,18 +11,30 @@
  *   (b) ordinary daytime "now" params are bit-identical to the old arithmetic, field by field;
  *   (c) the saturated cold case: latent is 0, the greenest cell is the old value plus the term;
  *   (d) a partial taper is strictly between, and continuous in RH (steep, not flat: see the test);
- *   (e) the canonical peak / night / Compare builders are unchanged for ordinary forcing.
+ *   (e) the canonical peak / night / Compare builders are unchanged for ordinary forcing;
+ *   (f) OLD-vs-NEW over a grid: every field but `L` is Object.is-identical, `L` is identical
+ *       wherever the taper is 1 and strictly smaller wherever it is below 1 (lit, peak and
+ *       reference-peak builders, an Indian and a Dutch scope);
+ *   (g) heatwave: the taper reads the vapour-preserving humidity, not the observed one;
+ *   (h) wet surface: the taper is applied to the dry params and wetting comes after;
+ *   (i) the committed TS oracle for the Python parity check (scripts/check-dewpoint-taper-parity.py)
+ *       is current.
  */
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import * as M from '../../src/scripts/climate-engine/heat-map-model.ts';
-import { DEFAULT_PARAMS, STORE_NIGHT } from '../../src/scripts/climate-engine/types.ts';
-import { dewpointC, skyTemperatureC } from '../../src/scripts/climate-engine/sky.ts';
+import { DEFAULT_PARAMS } from '../../src/scripts/climate-engine/types.ts';
+import { dewpointC, skyTemperatureC, shiftAirPreservingVapour } from '../../src/scripts/climate-engine/sky.ts';
 import { resolve } from '../../src/scripts/climate-engine/scope/resolve.ts';
 
 const IV = { trees: 0, roof: 0, parks: 0, facades: 0 };
-const NIGHT_ET_FRACTION = 0.10, Q_NIGHT_RATIO = 0.5, TAPER_K = 1.0;   // mirrored from the model
+const NIGHT_ET_FRACTION = 0.10, TAPER_K = 1.0;   // mirrored from the model
+const FACADE_Q = 0.03;                           // mirrored; facades are 0 in every grid here
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const SCOPES = {
   kolkata: resolve('in/kolkata/ballygunge'),
@@ -45,13 +57,28 @@ function oldNightLatent(p, rh) {
   const headroom = (surface - dewpointC(p.tAir, rh)) / TAPER_K;
   return p.L * NIGHT_ET_FRACTION * Math.min(1, Math.max(0, headroom));
 }
-/** The old lit "now" branch: no taper, no observed block. */
+/** The humidity the model uses: observed, or (under a heatwave) the vapour-preserving value. */
+const rhOf = (s) => s.heatTairC == null ? s.live.rh : shiftAirPreservingVapour(s.live.tAir, s.live.rh, s.heatTairC);
+/** The old lit "now" branch: no taper, no wetting. Heatwave rides the same path as the model's. */
 function oldLit(s) {
-  const L = s.live, baseTair = L.tAir + delta(s), cloud = L.cloud / 100, rh = L.rh;
+  const L = s.live, baseTair = (s.heatTairC ?? L.tAir) + delta(s), cloud = L.cloud / 100, rh = rhOf(s);
   const evap = M.evapScale(rh);
   const b = { ...DEFAULT_PARAMS, D: M.SIM_D, Q: DEFAULT_PARAMS.Q, wind: windOf(L.wind), L: DEFAULT_PARAMS.L * evap };
   return { ...b, sun: s.sunNow * M.legacyCloudTransmission(cloud), tAir: baseTair,
     tSky: skyTemperatureC(baseTair, rh, cloud) };
+}
+/** The old canonical peak (phase 'peak', no sunNow): no taper. */
+function oldPeak(s) {
+  const L = s.live, baseTair = (s.heatTairC ?? L.tAir) + delta(s), cloud = L.cloud / 100, rh = rhOf(s);
+  const b = { ...DEFAULT_PARAMS, D: M.SIM_D, Q: DEFAULT_PARAMS.Q, wind: windOf(L.wind), L: DEFAULT_PARAMS.L * M.evapScale(rh) };
+  return { ...b, sun: 1 * M.legacyCloudTransmission(cloud), tAir: baseTair, tSky: skyTemperatureC(baseTair, rh, cloud) };
+}
+/** The old Compare peak (currentParamsForReference): no taper. */
+function oldRefPeak(ambient, iv) {
+  const wind = windOf(ambient.wind), cloud = ambient.cloud / 100;
+  const Q = DEFAULT_PARAMS.Q * (1 - FACADE_Q * (iv.facades / 15));
+  const base = { ...DEFAULT_PARAMS, D: M.SIM_D, Q, wind, L: DEFAULT_PARAMS.L * M.evapScale(ambient.rh), tAir: ambient.tAir };
+  return { ...base, sun: 1 * M.legacyCloudTransmission(cloud), tSky: skyTemperatureC(ambient.tAir, ambient.rh, cloud) };
 }
 const sameFields = (a, b, msg) => {
   assert.deepEqual(Object.keys(a).sort(), Object.keys(b).sort(), `${msg}: key set`);
@@ -77,11 +104,6 @@ test('(a) nightLatent is bit-identical to the old implementation', () => {
       n += 3;
     }
   assert.equal(n, 8 * 8 * 5 * 4 * 3);
-  // and the helper is the same factor the old function clamped
-  const p = M.currentParams(state(SCOPES.kolkata, { tAir: 26, rh: 97, wind: 3, cloud: 0, feels: 26 }, 0));
-  const taper = M.dewpointTaper({ ...p, L: 123 }, 97);               // p.L is ignored
-  assert.ok(taper >= 0 && taper <= 1);
-  assert.ok(Object.is(taper, M.dewpointTaper({ ...p, L: 0 }, 97)));
 });
 
 /* ── (b) ordinary daytime "now": every field identical ─────────────────────── */
@@ -153,7 +175,7 @@ test('(d) a partial taper lands strictly between, and is continuous in RH', () =
 });
 
 /* ── (e) canonical builders unchanged ──────────────────────────────────────── */
-test('(e) peak, night and Compare builders are unchanged for ordinary forcing, and peak never tapers', () => {
+test('(e) peak, night and Compare builders are unchanged, and peak does not taper for the realistic forcings listed', () => {
   for (const sc of ['kolkata', 'bengaluru', 'amsterdam']) for (const live of [
     { tAir: 34, rh: 50, wind: 9, cloud: 10, feels: 37 }, { tAir: 30, rh: 90, wind: 6, cloud: 70, feels: 38 },
     { tAir: 0, rh: 100, wind: 1, cloud: 0, feels: 0 }, { tAir: -5, rh: 100, wind: 0, cloud: 100, feels: -8 }]) {
@@ -166,8 +188,95 @@ test('(e) peak, night and Compare builders are unchanged for ordinary forcing, a
     assert.ok(Object.is(ref.L, DEFAULT_PARAMS.L * M.evapScale(rh)), 'compare peak L');
     assert.ok(headroomOf(oldPeak, rh) > TAPER_K, 'full noon sun keeps the surface well above the dewpoint');
   }
-  // heatwave override rides the same path
-  const hw = state(SCOPES.kolkata, { tAir: 31, rh: 80, wind: 6, cloud: 20, feels: 36 }, 0.7, { heatTairC: 41 });
-  assert.ok(M.currentParams(hw).L > 0);
-  assert.ok(STORE_NIGHT > 0 && Q_NIGHT_RATIO === 0.5);
+  /* NOT LITERALLY "never": canonical peak does taper in extreme forcing. The audit found it at
+     RH 100 %, clear sky, strong wind, air -30 to -27 C (16 of 38,880 grid points). Pinned so the
+     claim above stays honest: here Amsterdam, -30 C, 9 m/s, taper 0.88. */
+  const extreme = state(SCOPES.amsterdam, { tAir: -30, rh: 100, wind: 9, cloud: 0, feels: -35 }, null, { phase: 'peak' });
+  const ex = M.currentParams(extreme), exOld = oldPeak(extreme), exTaper = M.dewpointTaper(exOld, 100);
+  assert.ok(exTaper > 0 && exTaper < 1, `taper ${exTaper}`);
+  assert.ok(Object.is(ex.L, exOld.L * exTaper) && ex.L < exOld.L);
+  console.log(`    extreme canonical peak: taper ${exTaper.toFixed(4)}`);
+});
+
+/* ── (f) old-vs-new over a grid ────────────────────────────────────────────── */
+function checkAgainstOracle(now, old, rh, msg, tally) {
+  const taper = M.dewpointTaper(old, rh);
+  for (const k of Object.keys(old)) if (k !== 'L') assert.ok(Object.is(now[k], old[k]), `${msg}: ${k} ${now[k]} vs ${old[k]}`);
+  assert.deepEqual(Object.keys(now).sort(), Object.keys(old).sort(), `${msg}: key set`);
+  assert.ok(old.L > 0, `${msg}: old L is positive`);
+  if (taper === 1) { assert.ok(Object.is(now.L, old.L), `${msg}: taper 1 leaves L identical`); tally.same++; }
+  else { assert.ok(now.L < old.L, `${msg}: taper ${taper} must lower L (${now.L} vs ${old.L})`); tally.lower++; }
+  assert.ok(Object.is(now.L, old.L * taper), `${msg}: L is old L x taper`);
+}
+test('(f) OLD vs NEW over a grid: only L differs; identical where the taper is 1, strictly smaller below it', () => {
+  const tally = { same: 0, lower: 0 };
+  let n = 0;
+  for (const sc of ['kolkata', 'amsterdam'])
+    for (const tAir of [-10, -5, 0, 5, 10, 15, 20, 25, 30, 35, 40, 45])
+      for (const rh of [5, 20, 40, 60, 80, 90, 95, 98, 100])
+        for (const wind of [0, 3, 8, 15]) for (const cloud of [0, 50, 100]) {
+          const live = { tAir, rh, wind, cloud, feels: tAir };
+          const tag = `${sc} ${JSON.stringify(live)}`;
+          for (const sunNow of [0.06, 0.2, 0.5, 1]) {
+            const s = state(SCOPES[sc], live, sunNow);
+            checkAgainstOracle(M.currentParams(s), oldLit(s), rh, `${tag} lit ${sunNow}`, tally); n++;
+          }
+          const pk = state(SCOPES[sc], live, null, { phase: 'peak' });
+          checkAgainstOracle(M.currentParams(pk), oldPeak(pk), rh, `${tag} peak`, tally); n++;
+          checkAgainstOracle(M.currentParamsForReference(live, 'peak', IV), oldRefPeak(live, IV), rh, `${tag} ref peak`, tally); n++;
+        }
+  console.log(`    ${n} comparisons: ${tally.same} with taper 1 (L identical), ${tally.lower} with taper < 1 (L strictly lower)`);
+  assert.equal(n, 2 * 12 * 9 * 4 * 3 * 6);
+  assert.ok(tally.same > 1000 && tally.lower > 100, 'the grid exercises both sides');
+});
+
+/* ── (g) heatwave: the taper reads the recomputed humidity ─────────────────── */
+test('(g) heatwave: lit and peak tapers use the vapour-preserving humidity, not the observed one', () => {
+  let n = 0, differs = 0, partial = 0;
+  for (const [tObs, rhObs, tHeat] of [[5, 100, 12], [8, 100, 14], [0, 100, 6], [3, 100, 10], [10, 95, 20], [15, 90, 28], [31, 80, 41]])
+    for (const wind of [1, 6]) for (const sunNow of [0.06, 0.35, null]) {
+      const live = { tAir: tObs, rh: rhObs, wind, cloud: 0, feels: tObs };
+      const s = state(SCOPES.amsterdam, live, sunNow, { heatTairC: tHeat });
+      const rhNew = shiftAirPreservingVapour(tObs, rhObs, tHeat);
+      assert.ok(rhNew < rhObs, 'the shifted air is drier in relative terms');
+      const old = sunNow == null ? oldPeak(s) : oldLit(s), now = M.currentParams(s);
+      const taperNew = M.dewpointTaper(old, rhNew), taperNaive = M.dewpointTaper(old, rhObs);
+      checkAgainstOracle(now, old, rhNew, `heatwave ${JSON.stringify([tObs, rhObs, tHeat, wind, sunNow])}`, { same: 0, lower: 0 });
+      assert.ok(Object.is(now.L, old.L * taperNew));
+      if (taperNew !== taperNaive) { differs++; assert.ok(!Object.is(now.L, old.L * taperNaive), 'would catch the stale observed humidity'); }
+      if (taperNew > 0 && taperNew < 1) partial++;
+      n++;
+    }
+  console.log(`    ${n} heatwave cases, ${differs} where the observed humidity would give a different taper, ${partial} partial`);
+  assert.equal(n, 7 * 2 * 3);
+  assert.ok(differs >= 5, 'the stale-humidity bug would be caught');
+  assert.ok(partial >= 1, 'a partial taper rides the recomputed humidity too');
+});
+
+/* ── (h) wet surface: taper on the dry params, wetting after ───────────────── */
+test('(h) wet surface: the taper is applied to the dry params and wetting comes after', () => {
+  let n = 0;
+  for (const [sc, live, sunNow] of [
+    ['amsterdam', { tAir: 0, rh: 100, wind: 3, cloud: 0, feels: 0 }, 0.06],      // taper 0
+    ['amsterdam', { tAir: 0, rh: 90, wind: 3, cloud: 0, feels: 0 }, 0.1],        // partial or 1
+    ['amsterdam', { tAir: -3, rh: 98, wind: 3, cloud: 20, feels: -3 }, 0.2],
+    ['kolkata', { tAir: 31, rh: 88, wind: 6, cloud: 60, feels: 38 }, 0.55],      // taper 1
+  ]) for (const wet of [0.25, 0.6, 1]) {
+    const s = state(SCOPES[sc], { ...live, observed: { wet } }, sunNow);
+    const old = oldLit({ ...s, live });                                           // dry oracle
+    const taper = M.dewpointTaper(old, live.rh);
+    const now = M.currentParams(s);
+    const oldWet = M.wetSurfaceParams(old, wet);
+    for (const k of Object.keys(oldWet)) if (k !== 'L') assert.ok(Object.is(now[k], oldWet[k]), `${sc} wet ${wet}: ${k}`);
+    assert.ok(Object.is(now.L, old.L * taper * (1 - wet)), `${sc} wet ${wet}: L ${now.L} vs ${old.L * taper * (1 - wet)}`);
+    if (wet === 1) assert.equal(now.L, 0);
+    n++;
+  }
+  assert.equal(n, 12);
+});
+
+/* ── (i) the Python mirror's oracle ────────────────────────────────────────── */
+test('(i) the committed TS oracle for scripts/check-dewpoint-taper-parity.py is current', () => {
+  assert.doesNotThrow(() => execFileSync('node', ['--import', 'tsx', 'scripts/dump-dewpoint-taper-parity.mjs', '--check'],
+    { cwd: ROOT, stdio: 'pipe' }));
 });

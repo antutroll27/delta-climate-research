@@ -169,6 +169,8 @@ def main() -> None:
         night = sc.phase == "night"
         kRad = _physics.K_SUM * ratio / (1 + ratio)
         h = _physics.K_SUM - kRad
+        # NOTE: this copy has no daytime dewpoint taper; on the calibration scenes it loads the
+        # taper is 1, so its figures are unaffected (see `_physics.dewpoint_taper`).
         L = _physics.L_ET * _physics.evap_scale(sc.rh)
         if night:
             L *= _physics.NIGHT_ET_FRACTION

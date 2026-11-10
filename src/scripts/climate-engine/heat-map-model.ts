@@ -195,6 +195,20 @@ const DEWPOINT_TAPER_K = 1.0;
  * and Landsat; the tightest has 1.76 K of headroom against the 1.0 K taper width), so no
  * calibrated figure moves.
  *
+ * THE LIVE VIEW DOES CHANGE. The calibrated validation scenes are untouched, but the live
+ * "now" view changes outside them, in humid low-sun moments in every city: Kolkata monsoon
+ * mornings and evenings (sun factor about 0.06 to 0.35, RH above about 90 to 96 %) are the
+ * ordinary example. Nothing here is validated against a measurement in that regime.
+ *
+ * THE COST IS STEEPNESS. By day the taper scales the whole latent term, so near the dewpoint
+ * a 1 % change in humidity can move the greenest cell by up to about 0.8 K in Kolkata and
+ * about 1.5 K in cold calm Amsterdam (3.3 K in the most extreme cold, dry-air, calm case
+ * measured), against about 0.07 K before. It is continuous, not a step.
+ *
+ * THE WIDTH WAS LEFT AT DEWPOINT_TAPER_K because the tightest validation scene has only
+ * 1.76 K of headroom: widening the taper past that would start to bite on it and move a
+ * calibrated figure.
+ *
  * The taper depends on the answer it modifies, so it is evaluated on the no-ET
  * equilibrium of a representative vegetated cell and applied to the whole field.
  * ponytail: one scalar evaluation per frame, not per cell. Cells span ~2 K at

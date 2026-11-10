@@ -120,6 +120,8 @@ def _et(sc: _physics.Scene, l_et: float, k: float, pull: float) -> float:
     Every candidate here carries no nocturnal storage, so the taper's reference cell
     (built = 0, the product's own) has store = 0.
     """
+    # NOTE: this copy has no daytime dewpoint taper; on the calibration scenes it loads the
+    # taper is 1, so its figures are unaffected (see `_physics.dewpoint_taper`).
     L = l_et * _physics.evap_scale(sc.rh)
     if sc.phase == "night":
         L = _physics.night_latent(L, k, pull, sc.tAir, sc.rh, 0.0)

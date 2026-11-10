@@ -253,6 +253,11 @@ def dewpoint_taper(k: float, pull: float, t_air: float, rh: float,
     By day it only bites in cold saturated air (Amsterdam, 0 C, RH 100 %, low sun: the
     greenest cell read -16 C, -9.1 K of it from ET); in Kolkata's daytime validation
     scenes it is inactive, so no calibrated number moves.
+
+    The LIVE "now" view does change outside those scenes, in humid low-sun moments in every
+    city (Kolkata monsoon mornings and evenings). The width stays at DEWPOINT_TAPER_K because
+    the tightest validation scene has only 1.76 K of headroom: widening it would move a
+    calibrated figure. See the doc comment on dewpointTaper() for the steepness cost.
     """
     surface = (S_SOLAR * (1 - TAPER_REF_ALBEDO) * sun + store + pull) / k
     headroom = (surface - dewpoint(t_air, rh)) / DEWPOINT_TAPER_K

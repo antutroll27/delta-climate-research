@@ -276,6 +276,37 @@ L_night  = L₀·evap(rh)·0.10·clamp((T_dry − Td)/1.0, 0, 1)            (12)
 answer it modifies, so it is evaluated once per frame rather than per cell (cells span ~2 K at
 night; only those straddling the dewpoint would differ).
 
+**The same taper applies by day** (added 2026-11-10; `dewpointTaper` in `heat-map-model.ts`,
+mirrored by `dewpoint_taper` in `scripts/_physics.py`). Equation (12) is the night form; by day
+the factor multiplies the full daytime `L₀·evap(rh)` instead of the 10 % night fraction. It
+bites only where the no-ET surface is within 1 K of the dewpoint, that is in cold or saturated
+low-sun conditions. The case that prompted it was Amsterdam at air 0 °C, RH 100 %, sun just up:
+`evap(rh)` floors at 0.6, so the greenest cell read **−16.1 °C**, of which 9.1 K was
+"evaporation" into air that could not take it. With the taper it reads **−7.0 °C**.
+
+- **No validation scene is affected.** The taper is 1 for all 14 mask-scale day scenes and all
+  244 ward-scale day rows (ECOSTRESS and Landsat); the tightest has 1.76 K of headroom against
+  the 1.0 K width. `measure-accuracy.py` and `model-accuracy.json` are unchanged.
+- **The live "now" view does change**, outside those scenes, in humid low-sun moments in every
+  city, for example Kolkata monsoon mornings and evenings (sun factor about 0.06 to 0.35, RH
+  above about 90 to 96 %). The canonical peak and the Compare peak run the same helper but it
+  is inert there for realistic forcing, because full noon sun keeps the surface well above the
+  dewpoint.
+- **The cost is steepness.** By day the taper scales the whole latent term, so near the
+  dewpoint a 1 % change in humidity can move the greenest cell by up to about 0.8 K in Kolkata
+  and about 1.5 K in cold calm Amsterdam (3.3 K in the most extreme cold, dry-air, calm case
+  measured), against about 0.07 K before. It is continuous, not a step, but a live humidity
+  feed will show it.
+- **The width was left at 1.0 K** because the tightest validation scene has only 1.76 K of
+  headroom; widening the taper past that would move a calibrated figure.
+
+**Known limitation: sunrise is still a step.** At low sun the model switches from night terms
+to day terms in one step (stored heat off, building heat at full strength, full plant cooling
+when the air is not saturated), which makes green cells jump by about 6 K at sunrise in
+Kolkata. A sun-dependent ramp was tested against the five low-sun validation scenes: it helped
+the two morning scenes and worsened the three afternoon ones, so it was not adopted. It needs a
+pre-registered test on sealed data before it is tried again.
+
 **A hard cutoff was tried first and rejected**: it put a 0.388 K step on park cells at
 RH ≈ 86 %, inside the 85–95 % band Kolkata monsoon nights occupy, so the live humidity feed
 would have visibly jerked the map. The taper reduces the worst step to 0.024 K, and
@@ -418,7 +449,7 @@ canonical 192×192 grid did not.
 | (8)(9) score | replaces `score = round(cooling·38)` | instrument `refreshStats()` |
 | §4 forcing | `currentParams()`, `currentParamsForReference()` | `climate-engine/heat-map-model.ts` |
 | (10) sky temperature | `skyTemperatureC`, `saturationVapourPressure` | `climate-engine/sky.ts` |
-| (11)(12) night ET taper | `dewpointC`, `nightLatent`, `NIGHT_ET_FRACTION`, `DEWPOINT_TAPER_K` | `sky.ts` + `heat-map-model.ts` |
+| (11)(12) ET dewpoint taper (night and day) | `dewpointC`, `dewpointTaper`, `nightLatent`, `NIGHT_ET_FRACTION`, `DEWPOINT_TAPER_K` | `sky.ts` + `heat-map-model.ts` |
 | §4.3 night Q | `Q_NIGHT_RATIO` | `heat-map-model.ts` |
 | (13) solar geometry | `solarElevationFactor` | `climate-engine/sky.ts` (calibration only) |
 | §0.1 accuracy bands | `ACCURACY`, `bandLabel` | `climate-engine/accuracy.ts` |
