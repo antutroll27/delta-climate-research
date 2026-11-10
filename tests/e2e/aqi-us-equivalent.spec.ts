@@ -13,8 +13,8 @@ import { openSection } from './fixtures/obos-nav';
 const BALLYGUNGE = '/heat-map/in/kolkata/ballygunge/';
 const SHOTS = process.env['US_AQI_SHOTS'];
 /* No NowCast in the stub: the 24-hour line, labelled so. */
-const LINE = '≈ US AQI 142 · Unhealthy for Sensitive Groups · 24-h';
-const NOWCAST_LINE = '≈ US AQI 154 · Unhealthy · NowCast';
+const LINE = '≈ US AQI 142 · Unhealthy for Sensitive Groups · last 24 h';
+const NOWCAST_LINE = '≈ US AQI 154 · Unhealthy · right now · last 24 h: 142';
 
 async function toClay(page: Page): Promise<void> {
   /* On a phone the env chip can sit under the HUD; the click is the same control either way. */
@@ -93,7 +93,7 @@ test.describe('US AQI equivalent', () => {
       await expect(us).toBeVisible({ timeout: 60_000 });
       await expect(card.locator('.num')).toHaveText('107');
       await expect(us).toContainText(NOWCAST_LINE);
-      await expect(us).toHaveAttribute('title', /NowCast, recent hours weighted, as used by AirNow/);
+      await expect(us).toHaveAttribute('title', /US EPA NowCast \(recent hours weighted, as used by AirNow\)/);
       for (const env of ['dark', 'clay'] as const) {
         if (env === 'clay') await toClay(page);
         const [c, u] = await Promise.all([card.boundingBox(), us.boundingBox()]);

@@ -253,21 +253,41 @@ test('API: a live CPCB answer carries us_nowcast; without a history it has none'
   const bare = await api(await storeAt11(false));
   assert.equal(bare.current.state, 'live');
   assert.equal(bare.us_nowcast, undefined);
-  assert.match(cardHtml(bare, 'Ward 68', NOW11), /≈ US AQI \d+ · [A-Za-z ]+ · <span[^>]*>24-h/);
+  assert.match(cardHtml(bare, 'Ward 68', NOW11), /≈ US AQI \d+ · [A-Za-z ]+ · <span[^>]*>last 24 h<span/);
+});
+
+test('card: the hero names its window, and the US line names both windows: right now, and last 24 h', async () => {
+  const body = await api(await storeAt11());
+  assert.equal(body.current.state, 'live');
+  const html = cardHtml(body, 'Ward 68', NOW11);
+  const hero = html.match(/<div class="hero">[\s\S]*?<\/div>/)[0];
+  assert.match(hero, /<span class="aq-win">last 24 hours<\/span>/, 'the hero carries the window of the big number');
+  const us = html.match(/<summary title="[^"]*">(≈ US AQI[\s\S]*?)<\/summary>/)[1].replace(/<[^>]+>/g, '');
+  assert.match(us, /^≈ US AQI 70 · Moderate · right now · last 24 h: \d+i$/);
+  assert.doesNotMatch(html, /NowCast<span/, 'the old basis label is gone from the line');
+  /* Stale by the viewer's clock: its window ends at the last reading, so neither label says "last". */
+  const old = cardHtml(body, 'Ward 68', new Date(NOW11.getTime() + 3 * 3_600_000));
+  assert.match(old, /<span class="aq-win">24-hour window<\/span>/);
+  assert.doesNotMatch(old, /last 24 h/);
+  /* The note explains both figures and never says another app is wrong. */
+  const note = html.match(/<details class="aq-us">[\s\S]*?<p>([\s\S]*?)<\/p>/)[1];
+  assert.match(note, /Right now/);
+  assert.match(note, /Last 24 h/);
+  assert.doesNotMatch(note, /wrong|incorrect|inaccurate/i);
 });
 
 test('card: NowCast line and note; a malformed us_nowcast is dropped, never fails the payload', async () => {
   const body = await api(await storeAt11());
   const html = cardHtml(body, 'Ward 68', NOW11);
-  assert.match(html, /≈ US AQI 70 · Moderate · <span[^>]*>NowCast/);
-  assert.match(html, /NowCast, recent hours weighted, as used by AirNow/);
+  assert.match(html, /≈ US AQI 70 · Moderate · right now · <span[^>]*>last 24 h: \d+<span/);
+  assert.match(html, /US EPA NowCast \(recent hours weighted, as used by AirNow\)/);
   for (const bad of [{ ...body.us_nowcast, aqi: 'x' }, { ...body.us_nowcast, aqi: 600 }, { ...body.us_nowcast, category: 'hazardous' },
     { ...body.us_nowcast, dominant: 'o3' }, { ...body.us_nowcast, hours_used: 1 }, null, 'NowCast 70']) {
     const b = { ...body, us_nowcast: bad };
     assert.ok(isAirPayload(b), 'the payload stays valid');
     assert.equal(isUsNowcast(bad), false, JSON.stringify(bad));
-    assert.match(cardHtml(b, 'Ward 68', NOW11), /24-h<span/);
+    assert.match(cardHtml(b, 'Ward 68', NOW11), /last 24 h<span/);
   }
   /* Stale by the viewer's clock: the NowCast line goes with the live figure. */
-  assert.doesNotMatch(cardHtml(body, 'Ward 68', new Date(NOW11.getTime() + 3 * 3_600_000)), /NowCast/);
+  assert.doesNotMatch(cardHtml(body, 'Ward 68', new Date(NOW11.getTime() + 3 * 3_600_000)), /right now/);
 });
