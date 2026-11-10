@@ -380,6 +380,9 @@ function build(key: AreaKey): ResolvedScope {
          a country that has adopted none would put a budget of nothing on screen —
          see ClimateConstants.costs and `requireCosts` below. */
       costs: countryEntry.costs,
+      /* Kept as declared, INCLUDING the null: null is "no floor", and a number
+         substituted for it would move that country's colours. */
+      rampHotFloorC: countryEntry.rampHotFloorC,
     }),
   });
 }

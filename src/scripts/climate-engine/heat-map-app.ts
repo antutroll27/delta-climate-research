@@ -3557,7 +3557,12 @@ export function mountHeatMap(): () => void {
   /* Push the bounds to every consumer AND to the legend, so the printed numbers
      can never disagree with the colours above them. */
   function syncRamp(p: SimParams) {
-    ramp = M.rampBounds(p);
+    ramp = M.rampBounds(p, state.climate.rampHotFloorC);
+    /* The legend WORDS follow the same top-of-ramp the numbers print, so they cannot
+       disagree: below RAMP_WORDS_MIN the five heat-stress words give way to a relative
+       pair (CSS keys on this attribute; both rows ship in the markup). */
+    const words = M.rampWords(ramp[1]);
+    document.querySelectorAll('[data-ramp-words]').forEach(e => e.setAttribute('data-ramp-words', words));
     const sc = el('rampSc');
     // A narrow span needs a decimal: the retained phase can be 3 K wide, where
     // whole degrees print "24 · 24 · 25 · 26 · 27" — a repeated label reads as a

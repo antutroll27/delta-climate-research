@@ -128,6 +128,9 @@ export const REGISTRY = {
        facadeM2 was in fact absent from the first draft of this entry, and is the
        largest of the four at ₹9,500/m². */
     costs: { currency: 'INR', roofM2: 150, tree: 1500, park: 15_000_000, facadeM2: 9500 },
+    /* No hot-end floor on the colour ramp: India's maps keep the ramp the weather gives
+       them (see the Netherlands entry for what the floor is). Null, not a number. */
+    rampHotFloorC: null,
     cities: {
       kolkata: {
         koppen: 'Aw',
@@ -224,6 +227,7 @@ export const REGISTRY = {
     name: 'United Arab Emirates',
     pathway: null,
     costs: null,
+    rampHotFloorC: null,
     cities: {
       dubai: {
         koppen: 'BWh',
@@ -268,6 +272,17 @@ export const REGISTRY = {
     name: 'Netherlands',
     pathway: null,
     costs: null,
+    /* THE HOT END OF THE COLOUR RAMP NEVER SITS BELOW 25 °C HERE, in °C. The ramp is
+       not fixed: `rampBounds` evaluates it from the weather, so on a freezing morning
+       it is the span of the coolest and hottest PLAUSIBLE cell, which measured in
+       Amsterdam at air -1 °C before sunrise as -5.3 to +2.4 °C. The uniform 0.0 °C
+       ground then painted orange-red under a legend reading Comfortable to Extreme.
+       With the floor that morning reads -5.3 to 25 and 0 °C lands in the cool greens.
+       It is set for the Netherlands only: a floor applied everywhere would have moved
+       ordinary Indian night maps (Bengaluru 8 months a year, Kolkata Dec to Feb).
+       CONSEQUENCE: colours are comparable WITHIN a country but not ACROSS countries;
+       the legend always prints its numbers, so a reader is never guessing. */
+    rampHotFloorC: 25,
     cities: {
       amsterdam: {
         /* MEASURED: Beck et al. (2023) 1 km Köppen-Geiger, 1991-2020 map, class
@@ -427,6 +442,8 @@ interface CountryEntry {
   readonly name: string;
   readonly pathway: string | null;
   readonly costs: CountryCosts | null;
+  /** hot-end floor of the colour ramp, °C; null = none (never a placeholder number) */
+  readonly rampHotFloorC: number | null;
   readonly cities: Readonly<Record<string, CityEntry>>;
 }
 

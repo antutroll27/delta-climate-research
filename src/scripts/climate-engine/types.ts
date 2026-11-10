@@ -277,6 +277,14 @@ export interface ClimateConstants {
    * signature therefore demands a real `Costs`.
    */
   readonly costs: Costs | null;
+  /**
+   * Floor under the HOT end of the colour ramp, °C, or `null` for none (see
+   * `rampBounds`). It exists because the ramp follows the weather, so a freezing
+   * morning would otherwise stretch orange-red over ground near 0 °C. NULL IS NOT A
+   * NUMBER: a placeholder such as 0 would silently clamp every ramp that sits below
+   * it. Colours are comparable within a country, not across countries.
+   */
+  readonly rampHotFloorC: number | null;
 }
 
 /**
